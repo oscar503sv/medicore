@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medicore"
+version = "0.1.0"
+description = "Medicore — multi-tenant clinical management system (Clean Architecture)"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{ name = "Oscar" }]
+dependencies = [
+    # La capa de dominio (fase 1) es Python puro: sin dependencias de runtime.
+    # Las dependencias de infraestructura (FastAPI, SQLAlchemy, etc.) se añaden en fases posteriores.
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+src = ["src", "tests"]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.coverage.run]
+source = ["medicore.domain"]
