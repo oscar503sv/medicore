@@ -17,11 +17,13 @@ ENV/
 dist/
 build/
 pip-wheel-metadata/
+uv.lock          # uv lockfile — commit if you switch to uv for reproducible builds
 
 # Test / coverage / type / lint caches
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.pyright/
 .pytype/
 .coverage
 .coverage.*
@@ -41,18 +43,58 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# ── Bases de datos locales (desarrollo / SQLite) ──
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Claves, certificados y secretos ──
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+jwt_secret*
+secrets.toml
+
 # ── Environment / secrets ──
 .env
 .env.*
 !.env.example
 
-# ── Editors / OS ──
-.DS_Store
-Thumbs.db
+# ── Logs y temporales ──
+*.log
+*.bak
+*.orig
+*.tmp
+*.temp
+
+# ── Editores / IDEs ──
 .idea/
 *.swp
 *.swo
-# VS Code: ignore personal settings but allow shared ones if added explicitly
+*.iml
+# VS Code: ignorar configuración personal, permitir ajustes de equipo si se agregan explícitamente
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.shared.json
+
+# ── macOS ──
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon
+
+# ── Windows ──
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
