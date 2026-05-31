@@ -1,0 +1,53 @@
+"""Shared domain primitives: errors and identifiers."""
+
+from medicore.domain.shared.errors import (
+    ConsultationNotSignable,
+    DomainError,
+    InvalidStateTransition,
+    InvalidValueObject,
+    PermissionDenied,
+    RecordAlreadySigned,
+    SlotUnavailable,
+)
+from medicore.domain.shared.identifiers import (
+    AppointmentId,
+    AuditLogId,
+    AvailabilityId,
+    ConsultationId,
+    DoctorProfileId,
+    DocumentId,
+    ExceptionId,
+    Identifier,
+    LocationId,
+    NotificationId,
+    PatientId,
+    PrescriptionId,
+    RecordId,
+    TenantId,
+    UserId,
+)
+
+__all__ = [
+    "ConsultationNotSignable",
+    "DomainError",
+    "InvalidStateTransition",
+    "InvalidValueObject",
+    "PermissionDenied",
+    "RecordAlreadySigned",
+    "SlotUnavailable",
+    "AppointmentId",
+    "AuditLogId",
+    "AvailabilityId",
+    "ConsultationId",
+    "DocumentId",
+    "DoctorProfileId",
+    "ExceptionId",
+    "Identifier",
+    "LocationId",
+    "NotificationId",
+    "PatientId",
+    "PrescriptionId",
+    "RecordId",
+    "TenantId",
+    "UserId",
+]
