@@ -1,1 +1,1 @@
-"""Infrastructure layer — ORM, auth, multi-tenant filtering, storage. [fase 3]"""
+"""Infrastructure layer — ORM (SQLAlchemy), auth (JWT/bcrypt), multi-tenant filtering, storage."""
