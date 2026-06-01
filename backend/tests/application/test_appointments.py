@@ -11,10 +11,11 @@ from medicore.application.use_cases.appointments import (
     CreateAppointment,
     CreateAppointmentCommand,
     GetAvailableSlots,
+    GetBookingOptions,
 )
 from medicore.domain.enums import AppointmentStatus, AppointmentType
 from medicore.domain.services.slot_resolver import SlotStatus
-from medicore.domain.shared.errors import SlotUnavailable
+from medicore.domain.shared.errors import PermissionDenied, SlotUnavailable
 from tests.support.builders import seed_clinic
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
@@ -120,3 +121,31 @@ def test_cancelled_slot_frees_up():
     # Re-booking the freed slot now succeeds
     again = create.execute(seed.receptionist_actor, booking_cmd(seed, start=MONDAY_9AM))
     assert again.status == AppointmentStatus.SCHEDULED
+
+
+def test_nurse_cannot_create_appointment():
+    seed = seed_clinic()
+    create, _ = make_create(seed)
+    with pytest.raises(PermissionDenied):
+        create.execute(seed.actor(seed.nurse), booking_cmd(seed))
+
+
+class TestBookingOptions:
+    def test_receptionist_sees_doctors_and_locations(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        opts = GetBookingOptions(uow).execute(seed.receptionist_actor)
+        assert any(d.id == seed.doctor.id for d in opts.doctors)
+        assert len(opts.locations) == 1
+
+    def test_doctor_can_get_booking_options(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        opts = GetBookingOptions(uow).execute(seed.doctor_actor)
+        assert len(opts.doctors) >= 1
+
+    def test_nurse_cannot_get_booking_options(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        with pytest.raises(PermissionDenied):
+            GetBookingOptions(uow).execute(seed.actor(seed.nurse))

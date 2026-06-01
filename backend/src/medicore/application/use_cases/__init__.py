@@ -1,11 +1,13 @@
 """Use cases (interactors) for the application layer."""
 
 from medicore.application.use_cases.appointments import (
+    BookingOptions,
     CancelAppointment,
     ConfirmAppointment,
     CreateAppointment,
     CreateAppointmentCommand,
     GetAvailableSlots,
+    GetBookingOptions,
     GetWeeklySchedule,
     ListAppointmentsForDay,
     MarkNoShow,
@@ -87,11 +89,13 @@ __all__ = [
     "SearchPatients",
     "UpdatePatient",
     # appointments
+    "BookingOptions",
     "CancelAppointment",
     "ConfirmAppointment",
     "CreateAppointment",
     "CreateAppointmentCommand",
     "GetAvailableSlots",
+    "GetBookingOptions",
     "GetWeeklySchedule",
     "ListAppointmentsForDay",
     "MarkNoShow",

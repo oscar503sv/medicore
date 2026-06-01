@@ -43,6 +43,16 @@ class BusyInterval:
     end: datetime
 
 
+def _naive(dt: datetime) -> datetime:
+    """Drop tzinfo so naive (request/slot) and aware (clock/DB ``timestamptz``) datetimes
+    can be compared. Scheduling operates in a single wall-clock reference."""
+    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
+def _normalize_busy(busy: list[BusyInterval]) -> list[BusyInterval]:
+    return [BusyInterval(_naive(b.start), _naive(b.end)) for b in busy]
+
+
 def _blocks_for_date(availability: DoctorAvailability, on: date) -> list[TimeRange]:
     """The effective availability blocks for ``on``, applying weekly schedule + exceptions."""
     exception = availability.exception_on(on)
@@ -87,8 +97,8 @@ def resolve_available_slots(
     that overlaps an existing appointment is ``TAKEN``; one that breaks a booking-rule window
     is ``OUT_OF_HOURS``; otherwise ``FREE``.
     """
-    busy = busy or []
-    now = now or datetime.now()
+    busy = _normalize_busy(busy or [])
+    now = _naive(now or datetime.now())
     slot_minutes = availability.rules.slot_minutes
     step = timedelta(minutes=slot_minutes)
 
@@ -121,8 +131,9 @@ def is_available(
     Requires the interval to fit entirely within an availability block, not overlap any busy
     interval (respecting buffer), and satisfy the booking rules.
     """
-    busy = busy or []
-    now = now or datetime.now()
+    busy = _normalize_busy(busy or [])
+    now = _naive(now or datetime.now())
+    start = _naive(start)
     end = start + timedelta(minutes=duration_minutes)
 
     requested = TimeRange(start.time(), _safe_time(end, start))

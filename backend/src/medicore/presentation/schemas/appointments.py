@@ -6,6 +6,9 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from medicore.presentation.schemas.organization import LocationResponse
+from medicore.presentation.schemas.users import UserResponse
+
 
 class CreateAppointmentRequest(BaseModel):
     patient_id: str
@@ -50,3 +53,8 @@ class SlotResponse(BaseModel):
 
 class WeeklyScheduleResponse(BaseModel):
     schedule: dict[str, list[AppointmentResponse]]  # date ISO → appointments
+
+
+class BookingOptionsResponse(BaseModel):
+    doctors: list[UserResponse]
+    locations: list[LocationResponse]

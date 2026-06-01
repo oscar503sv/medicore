@@ -2,7 +2,8 @@
 
 Mapping of the DOMAIN_MODEL permission rules:
   * receptionist → manage appointments + view basic data; NOT full clinical records.
-  * nurse        → view patients/appointments, upload files, record vitals; NOT sign records.
+  * nurse        → view patients/appointments, upload files, record vitals;
+                   NOT sign records and NOT create/manage appointments.
   * doctor       → all clinical work for their patients + their own availability.
   * admin        → user & organization management; full access.
 """
@@ -15,7 +16,8 @@ from medicore.domain.shared.errors import PermissionDenied
 
 # Everyone clinical may *view* records except the receptionist.
 CLINICAL_VIEWERS = (Role.ADMIN, Role.DOCTOR, Role.NURSE)
-APPOINTMENT_MANAGERS = (Role.ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
+# Who can create/manage appointments. Nurses may *view* the agenda but not book.
+APPOINTMENT_MANAGERS = (Role.ADMIN, Role.DOCTOR, Role.RECEPTIONIST)
 
 
 def ensure_role(actor: ActorContext, *allowed: Role) -> None:

@@ -12,6 +12,7 @@ from medicore.application.use_cases.appointments import (
     CreateAppointment,
     CreateAppointmentCommand,
     GetAvailableSlots,
+    GetBookingOptions,
     GetWeeklySchedule,
     ListAppointmentsForDay,
     MarkNoShow,
@@ -22,14 +23,33 @@ from medicore.domain.shared.identifiers import AppointmentId, LocationId, Patien
 from medicore.presentation.dependencies import Actor, Clock, Codes, UoW
 from medicore.presentation.schemas.appointments import (
     AppointmentResponse,
+    BookingOptionsResponse,
     CreateAppointmentRequest,
     RescheduleRequest,
     SlotResponse,
     WeeklyScheduleResponse,
 )
-from medicore.presentation.serializers import ser_appointment, ser_slot
+from medicore.presentation.serializers import ser_appointment, ser_slot, ser_user
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
+
+
+@router.get("/booking-options", response_model=BookingOptionsResponse)
+def booking_options(actor: Actor, uow: UoW):
+    with uow:
+        opts = GetBookingOptions(uow).execute(actor)
+    return BookingOptionsResponse(
+        doctors=[ser_user(d) for d in opts.doctors],
+        locations=[
+            {
+                "id": str(loc.id),
+                "name": loc.name,
+                "address": loc.address,
+                "is_primary": loc.is_primary,
+            }
+            for loc in opts.locations
+        ],
+    )
 
 
 @router.get("", response_model=list[AppointmentResponse])

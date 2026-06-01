@@ -13,7 +13,10 @@ from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.appointment import Appointment
+from medicore.domain.entities.tenant import Location
+from medicore.domain.entities.user import User
 from medicore.domain.enums import AppointmentStatus, AppointmentType
+from medicore.domain.repositories._support import UserFilter
 from medicore.domain.services.slot_resolver import (
     BusyInterval,
     Slot,
@@ -53,6 +56,29 @@ class CreateAppointmentCommand:
     duration_minutes: int
     reason: str
     room: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BookingOptions:
+    """Everything the create-appointment UI needs to populate its selectors."""
+
+    doctors: list[User]
+    locations: list[Location]
+
+
+class GetBookingOptions:
+    """Doctors + locations available for booking. Accessible to appointment managers
+    (admin, doctor, receptionist) — unlike the admin-only user/organization endpoints."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self._uow = uow
+
+    def execute(self, actor: ActorContext) -> BookingOptions:
+        ensure_can_manage_appointments(actor)
+        doctors = self._uow.users.list(UserFilter(role="doctor", status="active")).items
+        tenant = self._uow.tenants.get_by_id(actor.tenant_id)
+        locations = list(tenant.locations) if tenant else []
+        return BookingOptions(doctors=doctors, locations=locations)
 
 
 class ListAppointmentsForDay:
