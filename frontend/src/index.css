@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design tokens — light mode ────────────────────────────────────────── */
+:root {
+  --accent: #7c3aed;
+  --accent-hover: #8b5cf6;
+  --accent-10: rgb(124 58 237 / .10);
+
+  --text: #262130;
+  --text-2: #5c5668;
+  --text-3: #857f92;
+  --text-4: #a8a2b3;
+
+  --bg: #fcfcfd;
+  --surface: #fafafb;
+  --surface-2: #f2f1f4;
+
+  --line: #e7e5eb;
+  --line-soft: #efeef2;
+
+  --ok: #2e9e6b;
+  --ok-10: rgb(46 158 107 / .12);
+  --warn: #d6952b;
+  --warn-10: rgb(214 149 43 / .12);
+  --danger: #d64a3c;
+  --danger-10: rgb(214 74 60 / .12);
+  --info: #3d8bd4;
+  --info-10: rgb(61 139 212 / .12);
+
+  --sidebar-width: 240px;
+  --sidebar-collapsed: 56px;
+  --topbar-height: 56px;
+  --density-row: 48px;
+  --density-pad: 12px;
+}
+
+/* ─── Dark mode ──────────────────────────────────────────────────────────── */
+[data-theme='dark'] {
+  --accent: #8b5cf6;
+  --accent-hover: #7c3aed;
+  --accent-10: rgb(139 92 246 / .15);
+
+  --text: #f7f6f9;
+  --text-2: #b8b3c8;
+  --text-3: #7e7891;
+  --text-4: #554f63;
+
+  --bg: #1a1722;
+  --surface: #211d2b;
+  --surface-2: #2c2738;
+
+  --line: #322d3e;
+  --line-soft: #2a2535;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: 'Geist', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-4); }
+
+/* ─── Typography helpers ─────────────────────────────────────────────────── */
+.eyebrow {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+/* ─── Focus ring ─────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
