@@ -1,15 +1,27 @@
-"""bcrypt-backed PasswordHasher."""
+"""bcrypt-backed PasswordHasher (uses the bcrypt library directly).
+
+We call ``bcrypt`` directly rather than through passlib because passlib 1.7.x is
+incompatible with bcrypt 5.x. bcrypt rejects secrets longer than 72 bytes, so we
+truncate defensively (the standard bcrypt behavior).
+"""
 
 from __future__ import annotations
 
-from passlib.context import CryptContext
+import bcrypt
 
-_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_MAX_BYTES = 72
+
+
+def _prepare(plain: str) -> bytes:
+    return plain.encode("utf-8")[:_MAX_BYTES]
 
 
 class BcryptPasswordHasher:
     def hash(self, plain: str) -> str:
-        return _ctx.hash(plain)
+        return bcrypt.hashpw(_prepare(plain), bcrypt.gensalt()).decode("utf-8")
 
     def verify(self, plain: str, hashed: str) -> bool:
-        return _ctx.verify(plain, hashed)
+        try:
+            return bcrypt.checkpw(_prepare(plain), hashed.encode("utf-8"))
+        except (ValueError, TypeError):
+            return False

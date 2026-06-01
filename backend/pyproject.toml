@@ -16,7 +16,6 @@ dependencies = [
     "psycopg[binary]>=3.1",      # adaptador PostgreSQL (psycopg3)
     "pydantic-settings>=2.0",
     "pyjwt>=2.8",
-    "passlib>=1.7",
     "bcrypt>=4.0",
     "python-dotenv>=1.0",
     # Presentación (fase 4)
