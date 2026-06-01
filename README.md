@@ -14,10 +14,12 @@ Cubre el ciclo completo de atención: autenticación, dashboard, gestión de pac
 | ORM | SQLAlchemy 2.0 (sync) |
 | Migraciones | Alembic 1.18 |
 | Base de datos | PostgreSQL (psycopg3) |
-| Auth | PyJWT 2.13 + passlib/bcrypt |
+| Auth | PyJWT 2.13 + bcrypt 5 |
 | Validación config | pydantic-settings |
 | API | FastAPI 0.136 |
-| Frontend *(pendiente)* | React + TypeScript + Vite |
+| Frontend | React 18 + TypeScript + Vite 6 |
+| Estado / datos (FE) | Zustand + TanStack Query + Axios |
+| Estilos (FE) | Tailwind CSS + design tokens |
 | Tests | pytest 9 + in-memory adapters |
 | Lint | ruff |
 
@@ -89,7 +91,15 @@ medicore_v1/
 │       ├── domain/           # Tests de dominio (VOs, FSM, slot_resolver…)
 │       ├── application/      # Tests de casos de uso con repos en memoria
 │       └── support/          # InMemoryStore, repos, UoW, fakes, builders
-└── frontend/                 # SPA React + TS + Vite  [fase 4]
+└── frontend/                 # SPA React + TS + Vite
+    └── src/
+        ├── api/              # Cliente Axios + módulo por recurso
+        ├── stores/           # Zustand: auth (sesión) + ui (tema/idioma/sidebar)
+        ├── lib/              # i18n ES/EN, formato, QueryClient, cn()
+        ├── types/            # Tipos TS espejo del dominio backend
+        ├── components/       # ui/ (Button, Modal, Drawer…) + shell/ (Sidebar/Topbar)
+        └── pages/            # Login, Dashboard, Patients, Appointments, Schedule,
+                              # Consultation, Records, Availability, Users, Settings
 ```
 
 ---
@@ -102,7 +112,7 @@ medicore_v1/
 | **2** | 53 casos de uso + 37 tests (repos en memoria) | ✅ Completada |
 | **3** | SQLAlchemy, Alembic, JWT, bcrypt, multi-tenant | ✅ Completada |
 | **4** | API FastAPI — 47 endpoints, 37 tests | ✅ Completada |
-| **5** | UI pantalla por pantalla (React + TS + Vite) | 🔜 Pendiente |
+| **5** | Frontend React — todas las pantallas del prototipo | ✅ Completada |
 
 ---
 
@@ -136,7 +146,7 @@ cp .env.example .env
 .venv/bin/ruff check src tests
 ```
 
-### Levantar el servidor
+### Levantar el backend
 
 ```bash
 cd backend
@@ -145,22 +155,30 @@ cd backend
 # Docs interactivos en http://localhost:8000/api/v1/docs
 ```
 
+### Levantar el frontend
+
+```bash
+cd frontend
+npm install            # primera vez
+npm run dev            # http://localhost:3000 (proxy /api → :8000)
+npm run build          # type-check + build de producción → dist/
+```
+
 ### Comandos habituales
 
 ```bash
-# Tests
-.venv/bin/pytest                          # suite completa (110 tests)
+# Backend
+.venv/bin/pytest                          # suite completa (147 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
-.venv/bin/pytest tests/application/      # solo tests de aplicación
-
-# Lint
-.venv/bin/ruff check src tests            # verificar
-.venv/bin/ruff check --fix src tests      # corregir
+.venv/bin/ruff check src tests            # lint (--fix para corregir)
 
 # Migraciones
 .venv/bin/alembic upgrade head            # aplicar migraciones pendientes
 .venv/bin/alembic revision --autogenerate -m "descripción"  # nueva migración
-.venv/bin/alembic downgrade -1            # revertir última migración
+
+# Frontend
+npm run dev                               # servidor de desarrollo
+npm run build                             # type-check (tsc -b) + build
 ```
 
 ---
