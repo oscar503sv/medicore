@@ -110,8 +110,7 @@ export function LoginPage() {
               label={t('login.org')}
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
-              placeholder="clinica-norte"
-              suffix=".medicore.health"
+              placeholder="clinica-demo"
               autoFocus
               required
             />
