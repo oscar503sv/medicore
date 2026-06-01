@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
+from medicore.domain.shared.errors import InvalidValueObject
+
 
 @dataclass(frozen=True, slots=True)
 class Identifier:
@@ -28,8 +30,17 @@ class Identifier:
 
     @classmethod
     def parse(cls, raw: str | UUID) -> Identifier:
-        """Build an identifier from a string or UUID."""
-        return cls(raw if isinstance(raw, UUID) else UUID(str(raw)))
+        """Build an identifier from a string or UUID.
+
+        A malformed value raises ``InvalidValueObject`` (mapped to HTTP 422) instead of
+        letting a raw ``ValueError`` bubble up as a 500.
+        """
+        if isinstance(raw, UUID):
+            return cls(raw)
+        try:
+            return cls(UUID(str(raw)))
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise InvalidValueObject(f"Invalid {cls.__name__}: {raw!r}") from exc
 
     def __str__(self) -> str:
         return str(self.value)

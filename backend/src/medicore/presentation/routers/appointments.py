@@ -89,9 +89,12 @@ def available_slots(
     clock: Clock,
     doctor_id: str = Query(...),
     on: date = Query(...),
+    duration: int = Query(30, ge=5, le=240),
 ):
     with uow:
-        slots = GetAvailableSlots(uow, clock).execute(actor, UserId.parse(doctor_id), on)
+        slots = GetAvailableSlots(uow, clock).execute(
+            actor, UserId.parse(doctor_id), on, duration
+        )
     return [ser_slot(s) for s in slots]
 
 

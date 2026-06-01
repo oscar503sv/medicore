@@ -118,13 +118,19 @@ class GetAvailableSlots:
         actor: ActorContext,
         doctor_id: UserId,
         on: date,
-        appointment_type: AppointmentType | None = None,
+        duration_minutes: int = 30,
     ) -> list[Slot]:
         availability = self._uow.availability.get_by_doctor(doctor_id)
         if availability is None:
             return []
         busy = _busy_intervals(self._uow.appointments.list_by_day(on, doctor_id))
-        return resolve_available_slots(availability, on, busy=busy, now=self._clock.now())
+        return resolve_available_slots(
+            availability,
+            on,
+            desired_duration_minutes=duration_minutes,
+            busy=busy,
+            now=self._clock.now(),
+        )
 
 
 class CreateAppointment:

@@ -46,10 +46,16 @@ export function NewAppointmentModal({
     enabled: open,
   })
   const { data: slots } = useQuery({
-    queryKey: ['slots', doctorId, date],
-    queryFn: () => appointmentsApi.slots(doctorId, date),
+    queryKey: ['slots', doctorId, date, duration],
+    queryFn: () => appointmentsApi.slots(doctorId, date, duration),
     enabled: open && step === 2 && !!doctorId,
   })
+
+  // The doctor isn't available at all that day (off exception or non-working weekday):
+  // every candidate in the fixed grid came back out_of_hours.
+  const doctorOffThatDay =
+    !!slots && slots.length > 0 && slots.every((s) => s.status === 'out_of_hours')
+  const doctorName = options?.doctors.find((d) => d.id === doctorId)?.name
 
   const create = useMutation({
     mutationFn: () =>
@@ -164,7 +170,10 @@ export function NewAppointmentModal({
               <Select
                 label={t('appt.duration')}
                 value={duration}
-                onChange={(e) => setDuration(Number(e.target.value))}
+                onChange={(e) => {
+                  setDuration(Number(e.target.value))
+                  setSelectedSlot(null) // slot length changed → previous pick is stale
+                }}
               >
                 <option value={15}>15 min</option>
                 <option value={30}>30 min</option>
@@ -179,41 +188,72 @@ export function NewAppointmentModal({
         {/* Step 3: slot */}
         {step === 2 && (
           <div>
-            <p className="mb-3 text-[13px] text-tx-3">
-              {t('appt.date')}: <span className="font-mono text-tx">{date}</span>
-            </p>
-            <div className="grid grid-cols-4 gap-2">
-              {slots?.map((slot) => {
-                const disabled = slot.status !== 'free'
-                return (
-                  <button
-                    key={slot.start}
-                    disabled={disabled}
-                    onClick={() => setSelectedSlot(slot)}
-                    className={cn(
-                      'rounded-lg border py-2 text-[13px] font-mono transition-colors',
-                      slot.status === 'free' &&
-                        selectedSlot?.start === slot.start &&
-                        'border-accent bg-accent text-white',
-                      slot.status === 'free' &&
-                        selectedSlot?.start !== slot.start &&
-                        'border-line hover:border-accent text-tx',
-                      slot.status === 'taken' && 'border-line-soft text-tx-4 line-through',
-                      slot.status === 'out_of_hours' &&
-                        'border-line-soft bg-surface-2 text-tx-4 cursor-not-allowed',
-                    )}
-                    title={t(`appt.slot_${slot.status === 'out_of_hours' ? 'out' : slot.status}`)}
-                  >
-                    {fmtTime(slot.start)}
-                  </button>
-                )
-              })}
-              {slots?.length === 0 && (
-                <p className="col-span-4 py-6 text-center text-sm text-tx-3">
-                  Sin disponibilidad este día
-                </p>
-              )}
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[13px] text-tx-3">
+                {t('appt.date')}: <span className="font-mono text-tx">{date}</span>
+                <span className="text-tx-4"> · {duration}m</span>
+              </p>
+              <div className="flex items-center gap-3 text-[11px] text-tx-3">
+                <span className="flex items-center gap-1">
+                  <span className="h-2.5 w-2.5 rounded-sm border border-line bg-bg" />
+                  {t('appt.slot_free')}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-surface-2" />
+                  {t('appt.slot_taken')}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2.5 w-2.5 rounded-sm border border-line-soft bg-surface-2" />
+                  {t('appt.slot_out')}
+                </span>
+              </div>
             </div>
+
+            {doctorOffThatDay ? (
+              <p className="py-10 text-center text-sm text-tx-3">
+                {doctorName ? `${doctorName}: ` : ''}
+                {t('appt.doctor_off_day')}
+              </p>
+            ) : (
+              <div className="grid max-h-[320px] grid-cols-4 gap-2 overflow-y-auto pr-1">
+                {slots?.map((slot) => {
+                  const disabled = slot.status !== 'free'
+                  const titleKey =
+                    slot.status === 'out_of_hours'
+                      ? 'appt.slot_out'
+                      : slot.status === 'blocked_rules'
+                        ? 'appt.slot_blocked'
+                        : `appt.slot_${slot.status}`
+                  return (
+                    <button
+                      key={slot.start}
+                      disabled={disabled}
+                      onClick={() => setSelectedSlot(slot)}
+                      className={cn(
+                        'rounded-lg border py-2 text-[13px] font-mono transition-colors',
+                        slot.status === 'free' &&
+                          selectedSlot?.start === slot.start &&
+                          'border-accent bg-accent text-white',
+                        slot.status === 'free' &&
+                          selectedSlot?.start !== slot.start &&
+                          'border-line text-tx hover:border-accent',
+                        slot.status === 'taken' && 'border-line-soft text-tx-4 line-through',
+                        (slot.status === 'out_of_hours' || slot.status === 'blocked_rules') &&
+                          'cursor-not-allowed border-line-soft bg-surface-2 text-tx-4',
+                      )}
+                      title={t(titleKey)}
+                    >
+                      {fmtTime(slot.start)}
+                    </button>
+                  )
+                })}
+                {slots?.length === 0 && (
+                  <p className="col-span-4 py-6 text-center text-sm text-tx-3">
+                    {t('appt.no_slots')}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

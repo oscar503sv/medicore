@@ -48,7 +48,7 @@ class AppointmentResponse(BaseModel):
 class SlotResponse(BaseModel):
     start: datetime
     end: datetime
-    status: str  # free | taken | out_of_hours
+    status: str  # free | taken | out_of_hours | blocked_rules
 
 
 class WeeklyScheduleResponse(BaseModel):

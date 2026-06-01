@@ -21,11 +21,18 @@ from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.enums import AvailabilityExceptionKind
 from medicore.domain.value_objects.time_range import TimeRange
 
+# Fixed grid the slot resolver paints, regardless of the doctor's actual blocks. Candidates
+# outside the effective availability are returned as OUT_OF_HOURS (not omitted) so the UI can
+# draw the full day and the user sees *why* a time isn't offered. (SPEC PARTE B, paso 2.)
+HORIZON_START = time(8, 0)
+HORIZON_END = time(19, 0)
+
 
 class SlotStatus(StrEnum):
     FREE = "free"
     TAKEN = "taken"
-    OUT_OF_HOURS = "out_of_hours"
+    OUT_OF_HOURS = "out_of_hours"  # outside the doctor's effective availability
+    BLOCKED_RULES = "blocked_rules"  # inside hours & free, but breaks a booking rule
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,37 +92,52 @@ def _violates_rules(start: datetime, availability: DoctorAvailability, now: date
     return bool(rules.max_advance_days and start.date() > max_advance)
 
 
+def _fits_in_block(start: datetime, end: datetime, blocks: list[TimeRange]) -> bool:
+    """True if ``[start, end)`` is fully contained in some effective availability block."""
+    requested = TimeRange(start.time(), _safe_time(end, start))
+    return any(block.contains_range(requested) for block in blocks)
+
+
 def resolve_available_slots(
     availability: DoctorAvailability,
     on: date,
+    desired_duration_minutes: int = 30,
     busy: list[BusyInterval] | None = None,
     now: datetime | None = None,
 ) -> list[Slot]:
-    """Generate the bookable slots for ``on`` with their status.
+    """Generate the day's candidate slots for an appointment of ``desired_duration_minutes``.
 
-    Slots are stepped by ``rules.slot_minutes`` within each availability block. A candidate
-    that overlaps an existing appointment is ``TAKEN``; one that breaks a booking-rule window
-    is ``OUT_OF_HOURS``; otherwise ``FREE``.
+    Candidates are stepped by ``rules.slot_minutes`` across a fixed horizon
+    (``HORIZON_START``–``HORIZON_END``), not just inside the doctor's blocks, so the UI can
+    paint the full day. Status precedence (SPEC PARTE B):
+
+    * not inside an effective block  → ``OUT_OF_HOURS``
+    * overlaps an existing appointment (with buffer) → ``TAKEN``
+    * breaks a booking rule (advance window / same-day) → ``BLOCKED_RULES``
+    * otherwise → ``FREE``
     """
     busy = _normalize_busy(busy or [])
     now = _naive(now or datetime.now())
-    slot_minutes = availability.rules.slot_minutes
-    step = timedelta(minutes=slot_minutes)
+    blocks = _blocks_for_date(availability, on)
+    buffer_minutes = availability.rules.buffer_minutes
+    duration = timedelta(minutes=desired_duration_minutes)
+    step = timedelta(minutes=availability.rules.slot_minutes)
 
     slots: list[Slot] = []
-    for block in _blocks_for_date(availability, on):
-        cursor = datetime.combine(on, block.start)
-        block_end = datetime.combine(on, block.end)
-        while cursor + step <= block_end:
-            slot_end = cursor + step
-            if _overlaps_busy(cursor, slot_end, busy, availability.rules.buffer_minutes):
-                status = SlotStatus.TAKEN
-            elif _violates_rules(cursor, availability, now):
-                status = SlotStatus.OUT_OF_HOURS
-            else:
-                status = SlotStatus.FREE
-            slots.append(Slot(start=cursor, end=slot_end, status=status))
-            cursor += step
+    cursor = datetime.combine(on, HORIZON_START)
+    horizon_end = datetime.combine(on, HORIZON_END)
+    while cursor < horizon_end:
+        slot_end = cursor + duration
+        if not _fits_in_block(cursor, slot_end, blocks):
+            status = SlotStatus.OUT_OF_HOURS
+        elif _overlaps_busy(cursor, slot_end, busy, buffer_minutes):
+            status = SlotStatus.TAKEN
+        elif _violates_rules(cursor, availability, now):
+            status = SlotStatus.BLOCKED_RULES
+        else:
+            status = SlotStatus.FREE
+        slots.append(Slot(start=cursor, end=slot_end, status=status))
+        cursor += step
     return slots
 
 
@@ -136,11 +158,7 @@ def is_available(
     start = _naive(start)
     end = start + timedelta(minutes=duration_minutes)
 
-    requested = TimeRange(start.time(), _safe_time(end, start))
-    inside_block = any(
-        block.contains_range(requested) for block in _blocks_for_date(availability, start.date())
-    )
-    if not inside_block:
+    if not _fits_in_block(start, end, _blocks_for_date(availability, start.date())):
         return False
     if _overlaps_busy(start, end, busy, availability.rules.buffer_minutes):
         return False

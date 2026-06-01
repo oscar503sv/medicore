@@ -33,9 +33,11 @@ export const appointmentsApi = {
       })
       .then((r) => r.data.schedule),
 
-  slots: (doctorId: string, on: string) =>
+  slots: (doctorId: string, on: string, duration = 30) =>
     api
-      .get<Slot[]>('/appointments/slots', { params: { doctor_id: doctorId, on } })
+      .get<Slot[]>('/appointments/slots', {
+        params: { doctor_id: doctorId, on, duration },
+      })
       .then((r) => r.data),
 
   create: (payload: CreateAppointmentPayload) =>

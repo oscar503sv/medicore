@@ -54,19 +54,34 @@ def make_availability(
     )
 
 
-class TestResolveSlots:
-    def test_generates_free_slots_within_block(self):
-        slots = resolve_available_slots(make_availability(), THE_DAY, now=LONG_AGO)
-        assert len(slots) == 8  # 240 min / 30
-        assert all(s.status == SlotStatus.FREE for s in slots)
-        assert slots[0].start == datetime(2026, 6, 1, 9, 0)
-        assert slots[-1].end == datetime(2026, 6, 1, 13, 0)
+def _at(slots, hour, minute=0):
+    """Find the slot starting at a given time (slots now span a fixed daily horizon)."""
+    target = datetime(2026, 6, 1, hour, minute)
+    return next(s for s in slots if s.start == target)
 
-    def test_disabled_day_yields_no_slots(self):
+
+def _free(slots):
+    return [s for s in slots if s.status == SlotStatus.FREE]
+
+
+class TestResolveSlots:
+    def test_free_slots_only_within_block_rest_out_of_hours(self):
+        slots = resolve_available_slots(make_availability(), THE_DAY, now=LONG_AGO)
+        # The grid spans the fixed horizon; only the 09:00–13:00 block is bookable.
+        free = _free(slots)
+        assert len(free) == 8  # 240 min / 30
+        assert free[0].start == datetime(2026, 6, 1, 9, 0)
+        assert free[-1].end == datetime(2026, 6, 1, 13, 0)
+        # 08:00 is before the block, 13:00 spills past it → out of hours.
+        assert _at(slots, 8, 0).status == SlotStatus.OUT_OF_HOURS
+        assert _at(slots, 13, 0).status == SlotStatus.OUT_OF_HOURS
+
+    def test_disabled_day_is_all_out_of_hours(self):
         slots = resolve_available_slots(
             make_availability(monday_enabled=False), THE_DAY, now=LONG_AGO
         )
-        assert slots == []
+        assert slots  # the grid is still emitted
+        assert all(s.status == SlotStatus.OUT_OF_HOURS for s in slots)
 
     def test_off_exception_blocks_whole_day(self):
         av = make_availability(
@@ -76,7 +91,8 @@ class TestResolveSlots:
                 )
             ]
         )
-        assert resolve_available_slots(av, THE_DAY, now=LONG_AGO) == []
+        slots = resolve_available_slots(av, THE_DAY, now=LONG_AGO)
+        assert all(s.status == SlotStatus.OUT_OF_HOURS for s in slots)
 
     def test_extra_exception_enables_slots_on_disabled_day(self):
         av = make_availability(
@@ -90,37 +106,40 @@ class TestResolveSlots:
                 )
             ],
         )
-        slots = resolve_available_slots(av, THE_DAY, now=LONG_AGO)
-        assert len(slots) == 4  # 120 / 30
-        assert slots[0].start == datetime(2026, 6, 1, 16, 0)
+        free = _free(resolve_available_slots(av, THE_DAY, now=LONG_AGO))
+        assert len(free) == 4  # 120 / 30
+        assert free[0].start == datetime(2026, 6, 1, 16, 0)
 
     def test_busy_interval_marks_slot_taken(self):
         busy = [BusyInterval(datetime(2026, 6, 1, 9, 0), datetime(2026, 6, 1, 9, 30))]
         slots = resolve_available_slots(make_availability(), THE_DAY, busy=busy, now=LONG_AGO)
-        assert slots[0].status == SlotStatus.TAKEN
-        assert slots[1].status == SlotStatus.FREE
+        assert _at(slots, 9, 0).status == SlotStatus.TAKEN
+        assert _at(slots, 9, 30).status == SlotStatus.FREE
 
     def test_buffer_blocks_adjacent_slot(self):
         av = make_availability(rules=BookingRules(slot_minutes=30, buffer_minutes=15))
         busy = [BusyInterval(datetime(2026, 6, 1, 9, 0), datetime(2026, 6, 1, 9, 30))]
         slots = resolve_available_slots(av, THE_DAY, busy=busy, now=LONG_AGO)
         # 09:30 slot now falls inside the 15-min buffer after the 09:00–09:30 appointment.
-        assert slots[0].status == SlotStatus.TAKEN
-        assert slots[1].status == SlotStatus.TAKEN
-        assert slots[2].status == SlotStatus.FREE
+        assert _at(slots, 9, 0).status == SlotStatus.TAKEN
+        assert _at(slots, 9, 30).status == SlotStatus.TAKEN
+        assert _at(slots, 10, 0).status == SlotStatus.FREE
 
-    def test_min_advance_marks_early_slots_out_of_hours(self):
+    def test_min_advance_marks_in_hours_slots_blocked_by_rules(self):
         av = make_availability(rules=BookingRules(slot_minutes=30, min_advance_hours=24))
-        # "now" is the same morning → all slots are within 24h → out of hours.
+        # "now" is the same morning → in-block slots are within 24h → blocked by rules.
         now = datetime(2026, 6, 1, 8, 0)
         slots = resolve_available_slots(av, THE_DAY, now=now)
-        assert all(s.status == SlotStatus.OUT_OF_HOURS for s in slots)
+        assert _at(slots, 9, 0).status == SlotStatus.BLOCKED_RULES
+        # A time outside the block is still out_of_hours, not blocked_rules.
+        assert _at(slots, 14, 0).status == SlotStatus.OUT_OF_HOURS
 
-    def test_same_day_disallowed(self):
+    def test_same_day_disallowed_blocks_in_hours_slots(self):
         av = make_availability(rules=BookingRules(slot_minutes=30, allow_same_day=False))
         now = datetime(2026, 6, 1, 7, 0)
         slots = resolve_available_slots(av, THE_DAY, now=now)
-        assert all(s.status == SlotStatus.OUT_OF_HOURS for s in slots)
+        assert _at(slots, 9, 0).status == SlotStatus.BLOCKED_RULES
+        assert not _free(slots)
 
 
 class TestIsAvailable:

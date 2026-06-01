@@ -35,6 +35,7 @@ from medicore.domain.enums import (
     Role,
     UserStatus,
 )
+from medicore.domain.services.slot_resolver import SlotStatus
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.value_objects.time_range import TimeRange
 from tests.support.builders import seed_clinic
@@ -122,8 +123,9 @@ class TestAvailability:
             seed.doctor_actor, date(2026, 6, 1)
         )
         assert len(preview) == 7
-        # Monday has the 09:00–13:00 block → 8 slots
-        assert len(preview[date(2026, 6, 1)]) == 8
+        # The preview paints the full daily grid; Monday's 09:00–13:00 block → 8 free slots.
+        monday = preview[date(2026, 6, 1)]
+        assert len([s for s in monday if s.status == SlotStatus.FREE]) == 8
 
     def test_receptionist_cannot_manage_availability(self):
         seed = seed_clinic()

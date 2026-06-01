@@ -45,7 +45,9 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(SlotUnavailable)
     async def handle_slot(request: Request, exc: SlotUnavailable):
-        return _json(422, str(exc))
+        # The requested slot is not bookable (out of hours, overlapping, or breaks rules).
+        # A conflict with the doctor's current availability/agenda → 409. (SPEC C.3)
+        return _json(409, str(exc))
 
     @app.exception_handler(InvalidStateTransition)
     async def handle_state_transition(request: Request, exc: InvalidStateTransition):

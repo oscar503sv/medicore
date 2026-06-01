@@ -81,10 +81,10 @@ def test_available_slots_reflect_existing_appointment():
         seed.receptionist_actor, seed.doctor.id, MONDAY_9AM.date()
     )
 
-    assert len(slots) == 8  # 09:00–13:00 in 30-min steps
-    assert slots[0].start == MONDAY_9AM
-    assert slots[0].status == SlotStatus.TAKEN
-    assert slots[1].status == SlotStatus.FREE
+    nine = next(s for s in slots if s.start == MONDAY_9AM)
+    nine_thirty = next(s for s in slots if s.start == datetime(2026, 6, 1, 9, 30))
+    assert nine.status == SlotStatus.TAKEN
+    assert nine_thirty.status == SlotStatus.FREE
 
 
 def test_doctor_without_availability_cannot_be_booked():

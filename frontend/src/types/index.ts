@@ -31,7 +31,7 @@ export type RecordType =
   | 'lab_report'
   | 'generic'
 export type DocumentKind = 'lab' | 'imaging' | 'rx' | 'consent' | 'other'
-export type SlotStatus = 'free' | 'taken' | 'out_of_hours'
+export type SlotStatus = 'free' | 'taken' | 'out_of_hours' | 'blocked_rules'
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 export interface User {

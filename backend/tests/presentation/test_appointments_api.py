@@ -24,8 +24,17 @@ def test_get_slots_within_availability(seed, client, auth_headers):
     )
     assert resp.status_code == 200
     slots = resp.json()
-    assert len(slots) == 8  # 240 min / 30
-    assert slots[0]["status"] == "free"
+    free = [s for s in slots if s["status"] == "free"]
+    assert len(free) == 8  # 240 min / 30 within the 09:00–13:00 block
+    assert free[0]["start"].endswith("09:00:00")
+
+
+def test_invalid_uuid_returns_422(seed, client, auth_headers):
+    resp = client.get(
+        f"/api/v1/appointments/slots?doctor_id=not-a-uuid&on={MONDAY}",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
 
 
 def test_create_appointment(seed, client, auth_headers):
@@ -44,8 +53,10 @@ def test_slot_shows_taken_after_booking(seed, client, auth_headers):
         f"/api/v1/appointments/slots?doctor_id={seed.doctor.id}&on={MONDAY}",
         headers=auth_headers,
     ).json()
-    assert slots[0]["status"] == "taken"
-    assert slots[1]["status"] == "free"
+    nine = next(s for s in slots if s["start"].endswith("09:00:00"))
+    nine_thirty = next(s for s in slots if s["start"].endswith("09:30:00"))
+    assert nine["status"] == "taken"
+    assert nine_thirty["status"] == "free"
 
 
 def test_booking_outside_hours_rejected(seed, client, auth_headers):
@@ -54,7 +65,7 @@ def test_booking_outside_hours_rejected(seed, client, auth_headers):
         json=_booking_payload(seed, start="2026-06-01T15:00:00"),
         headers=auth_headers,
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 409
 
 
 def test_overlapping_booking_rejected(seed, client, auth_headers):
@@ -64,7 +75,7 @@ def test_overlapping_booking_rejected(seed, client, auth_headers):
         json=_booking_payload(seed, start="2026-06-01T09:15:00"),
         headers=auth_headers,
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 409
 
 
 def test_confirm_and_cancel_appointment(seed, client, auth_headers):
