@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Monitor, Moon, ShieldCheck, Sun } from 'lucide-react'
+import { Eye, EyeOff, Monitor, Moon, ShieldCheck, Sun } from 'lucide-react'
 import { authApi } from '@/api/auth'
 import { errorMessage } from '@/api/client'
 import { Button } from '@/components/ui/Button'
@@ -18,6 +18,7 @@ export function LoginPage() {
   const [slug, setSlug] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -123,14 +124,27 @@ export function LoginPage() {
               required
             />
             <div>
-              <Input
-                label={t('login.password')}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-              />
+              <span className="mb-1.5 block text-[13px] font-medium text-tx-2">
+                {t('login.password')}
+              </span>
+              <div className="relative flex items-center">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="h-10 w-full rounded-lg border border-line bg-bg px-3 pr-10 text-sm text-tx placeholder:text-tx-4 transition-colors focus:border-accent focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-2 rounded-md p-1.5 text-tx-3 hover:text-tx"
+                  aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <button type="button" className="mt-1.5 text-[13px] text-accent hover:underline">
                 {t('login.forgot')}
               </button>
