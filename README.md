@@ -16,8 +16,8 @@ Cubre el ciclo completo de atención: autenticación, dashboard, gestión de pac
 | Base de datos | PostgreSQL (psycopg3) |
 | Auth | PyJWT 2.13 + passlib/bcrypt |
 | Validación config | pydantic-settings |
-| API *(fase 4)* | FastAPI |
-| Frontend *(fase 4)* | React + TypeScript + Vite |
+| API | FastAPI 0.136 |
+| Frontend *(pendiente)* | React + TypeScript + Vite |
 | Tests | pytest 9 + in-memory adapters |
 | Lint | ruff |
 
@@ -52,7 +52,14 @@ src/medicore/
 │   │   └── repositories/  # Implementaciones SQLAlchemy de los 12 puertos
 │   └── auth/         # JwtTokenIssuer, BcryptPasswordHasher, DbSequentialCodeGenerator
 │
-└── presentation/     # API FastAPI / controllers  [fase 4]
+└── presentation/
+    ├── app.py           # Factory: crea FastAPI + CORS + error handlers + routers
+    ├── main.py          # Entry point (uvicorn medicore.presentation.main:app)
+    ├── dependencies.py  # DI: get_actor (JWT→ActorContext), get_uow, get_codes, get_clock
+    ├── serializers.py   # domain entity → dict (sin tocar el dominio)
+    ├── error_handlers.py# DomainError/AppError → HTTP 4xx/5xx
+    ├── schemas/         # Pydantic request + response por recurso
+    └── routers/         # 8 routers, 47 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -94,7 +101,8 @@ medicore_v1/
 | **1** | Dominio completo + 73 tests | ✅ Completada |
 | **2** | 53 casos de uso + 37 tests (repos en memoria) | ✅ Completada |
 | **3** | SQLAlchemy, Alembic, JWT, bcrypt, multi-tenant | ✅ Completada |
-| **4** | API FastAPI + UI pantalla por pantalla | 🔜 Pendiente |
+| **4** | API FastAPI — 47 endpoints, 37 tests | ✅ Completada |
+| **5** | UI pantalla por pantalla (React + TS + Vite) | 🔜 Pendiente |
 
 ---
 
@@ -126,6 +134,15 @@ cp .env.example .env
 
 # 5. Lint
 .venv/bin/ruff check src tests
+```
+
+### Levantar el servidor
+
+```bash
+cd backend
+.venv/bin/uvicorn medicore.presentation.main:app --reload
+# API disponible en http://localhost:8000/api/v1/
+# Docs interactivos en http://localhost:8000/api/v1/docs
 ```
 
 ### Comandos habituales
@@ -174,9 +191,10 @@ cp .env.example .env
 La suite de pruebas es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy.
 
 ```
-110 tests en verde
+147 tests en verde
   73  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
   37  — aplicación (auth, citas, consultas, records, permisos, aislamiento multi-tenant)
+  37  — presentación (endpoints HTTP: auth guards, booking, lifecycle, rol 403)
 ```
 
 Los tests de la capa de aplicación verifican:
