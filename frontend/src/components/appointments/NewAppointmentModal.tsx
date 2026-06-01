@@ -3,9 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
 import { errorMessage } from '@/api/client'
-import { organizationApi } from '@/api/organization'
 import { patientsApi } from '@/api/patients'
-import { usersApi } from '@/api/users'
 import { Button } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
@@ -42,16 +40,10 @@ export function NewAppointmentModal({
     queryFn: () => patientsApi.list({ q: search || undefined, limit: 8 }),
     enabled: open && step === 0,
   })
-  const { data: doctors } = useQuery({
-    queryKey: ['users', { role: 'doctor' }],
-    queryFn: () => usersApi.list({ role: 'doctor' }),
+  const { data: options } = useQuery({
+    queryKey: ['booking-options'],
+    queryFn: () => appointmentsApi.bookingOptions(),
     enabled: open,
-  })
-  const { data: org } = useQuery({
-    queryKey: ['organization'],
-    queryFn: () => organizationApi.get(),
-    enabled: open,
-    retry: false,
   })
   const { data: slots } = useQuery({
     queryKey: ['slots', doctorId, date],
@@ -64,7 +56,7 @@ export function NewAppointmentModal({
       appointmentsApi.create({
         patient_id: patient!.id,
         doctor_id: doctorId,
-        location_id: org!.locations[0].id,
+        location_id: options!.locations[0].id,
         type,
         scheduled_start: selectedSlot!.start,
         duration_minutes: duration,
@@ -156,7 +148,7 @@ export function NewAppointmentModal({
           <div className="space-y-4">
             <Select label={t('appt.col_doctor')} value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
               <option value="">—</option>
-              {doctors?.items.map((d) => (
+              {options?.doctors.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name} {d.specialty ? `· ${d.specialty}` : ''}
                 </option>

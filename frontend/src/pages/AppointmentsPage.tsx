@@ -24,6 +24,7 @@ export function AppointmentsPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const canConsult = useAuthStore((s) => s.hasRole('doctor', 'admin'))
+  const canBook = useAuthStore((s) => s.hasRole('admin', 'doctor', 'receptionist'))
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -46,10 +47,12 @@ export function AppointmentsPage() {
       <PageHeader
         title={t('appt.title')}
         action={
-          <Button onClick={() => setModalOpen(true)}>
-            <Plus className="h-4 w-4" />
-            {t('appt.new')}
-          </Button>
+          canBook ? (
+            <Button onClick={() => setModalOpen(true)}>
+              <Plus className="h-4 w-4" />
+              {t('appt.new')}
+            </Button>
+          ) : undefined
         }
       />
 

@@ -1,5 +1,10 @@
 import { api } from './client'
-import type { Appointment, Slot } from '@/types'
+import type { Appointment, Location, Slot, User } from '@/types'
+
+export interface BookingOptions {
+  doctors: User[]
+  locations: Location[]
+}
 
 export interface CreateAppointmentPayload {
   patient_id: string
@@ -13,6 +18,9 @@ export interface CreateAppointmentPayload {
 }
 
 export const appointmentsApi = {
+  bookingOptions: () =>
+    api.get<BookingOptions>('/appointments/booking-options').then((r) => r.data),
+
   listForDay: (on: string, doctorId?: string) =>
     api
       .get<Appointment[]>('/appointments', { params: { on, doctor_id: doctorId } })
