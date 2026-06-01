@@ -52,7 +52,12 @@ class FakeTokenIssuer:
         return f"{claims.user_id}|{claims.tenant_id}|{claims.role}"
 
     def decode(self, token: str) -> SessionClaims:
-        user_id, tenant_id, role = token.split("|")
+        import jwt
+
+        try:
+            user_id, tenant_id, role = token.split("|")
+        except ValueError as exc:
+            raise jwt.DecodeError("invalid fake token format") from exc
         return SessionClaims(user_id=user_id, tenant_id=tenant_id, role=role)
 
 
