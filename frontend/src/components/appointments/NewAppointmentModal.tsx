@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check } from 'lucide-react'
+import { format } from 'date-fns'
+import { CalendarDays, Check, Clock, Stethoscope, User as UserIcon } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
 import { errorMessage } from '@/api/client'
 import { patientsApi } from '@/api/patients'
@@ -9,11 +10,18 @@ import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
-import { fmtTime } from '@/lib/format'
+import { fmtDate, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { Patient, Slot } from '@/types'
 
 const STEPS = ['appt.step_patient', 'appt.step_details', 'appt.step_slot']
+
+const TYPE_LABELS: Record<string, string> = {
+  consult: 'Consulta',
+  follow_up: 'Seguimiento',
+  check_up: 'Control',
+  procedure: 'Procedimiento',
+}
 
 export function NewAppointmentModal({
   open,
@@ -26,14 +34,21 @@ export function NewAppointmentModal({
 }) {
   const t = useT()
   const qc = useQueryClient()
+  const today = format(new Date(), 'yyyy-MM-dd')
   const [step, setStep] = useState(0)
   const [patient, setPatient] = useState<Patient | null>(null)
   const [doctorId, setDoctorId] = useState('')
   const [type, setType] = useState('consult')
   const [duration, setDuration] = useState(30)
   const [reason, setReason] = useState('')
+  const [day, setDay] = useState(date)
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
   const [search, setSearch] = useState('')
+
+  // Keep the modal's calendar in sync with the day picked on the page when (re)opening.
+  useEffect(() => {
+    if (open) setDay(date)
+  }, [open, date])
 
   const { data: patients } = useQuery({
     queryKey: ['patients', { q: search }],
@@ -45,9 +60,9 @@ export function NewAppointmentModal({
     queryFn: () => appointmentsApi.bookingOptions(),
     enabled: open,
   })
-  const { data: slots } = useQuery({
-    queryKey: ['slots', doctorId, date, duration],
-    queryFn: () => appointmentsApi.slots(doctorId, date, duration),
+  const { data: slots, isFetching: slotsLoading } = useQuery({
+    queryKey: ['slots', doctorId, day, duration],
+    queryFn: () => appointmentsApi.slots(doctorId, day, duration),
     enabled: open && step === 2 && !!doctorId,
   })
 
@@ -70,6 +85,7 @@ export function NewAppointmentModal({
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
+      qc.invalidateQueries({ queryKey: ['slots'] })
       toast('Cita agendada')
       reset()
       onClose()
@@ -81,7 +97,10 @@ export function NewAppointmentModal({
     setStep(0)
     setPatient(null)
     setDoctorId('')
+    setType('consult')
+    setDuration(30)
     setReason('')
+    setDay(date)
     setSelectedSlot(null)
     setSearch('')
   }
@@ -128,6 +147,7 @@ export function NewAppointmentModal({
               {patients?.items.map((p) => (
                 <button
                   key={p.id}
+                  type="button"
                   onClick={() => setPatient(p)}
                   className={cn(
                     'flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors',
@@ -162,10 +182,11 @@ export function NewAppointmentModal({
             </Select>
             <div className="grid grid-cols-2 gap-4">
               <Select label={t('appt.type')} value={type} onChange={(e) => setType(e.target.value)}>
-                <option value="consult">Consulta</option>
-                <option value="follow_up">Seguimiento</option>
-                <option value="check_up">Control</option>
-                <option value="procedure">Procedimiento</option>
+                {Object.entries(TYPE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </Select>
               <Select
                 label={t('appt.duration')}
@@ -185,17 +206,25 @@ export function NewAppointmentModal({
           </div>
         )}
 
-        {/* Step 3: slot */}
+        {/* Step 3: date + slots + summary */}
         {step === 2 && (
-          <div>
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-[13px] text-tx-3">
-                {t('appt.date')}: <span className="font-mono text-tx">{date}</span>
-                <span className="text-tx-4"> · {duration}m</span>
-              </p>
-              <div className="flex items-center gap-3 text-[11px] text-tx-3">
+          <div className="space-y-4">
+            {/* Calendar */}
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <Input
+                label={t('appt.date')}
+                type="date"
+                min={today}
+                value={day}
+                onChange={(e) => {
+                  setDay(e.target.value)
+                  setSelectedSlot(null) // new day → previous pick is stale
+                }}
+                className="w-44 font-mono"
+              />
+              <div className="flex items-center gap-3 pb-2 text-[11px] text-tx-3">
                 <span className="flex items-center gap-1">
-                  <span className="h-2.5 w-2.5 rounded-sm border border-line bg-bg" />
+                  <span className="h-2.5 w-2.5 rounded-sm border border-accent bg-[var(--accent-10)]" />
                   {t('appt.slot_free')}
                 </span>
                 <span className="flex items-center gap-1">
@@ -209,15 +238,19 @@ export function NewAppointmentModal({
               </div>
             </div>
 
-            {doctorOffThatDay ? (
+            {/* Slots */}
+            {slotsLoading ? (
+              <p className="py-10 text-center text-sm text-tx-3">…</p>
+            ) : doctorOffThatDay ? (
               <p className="py-10 text-center text-sm text-tx-3">
                 {doctorName ? `${doctorName}: ` : ''}
                 {t('appt.doctor_off_day')}
               </p>
-            ) : (
-              <div className="grid max-h-[320px] grid-cols-4 gap-2 overflow-y-auto pr-1">
-                {slots?.map((slot) => {
-                  const disabled = slot.status !== 'free'
+            ) : slots && slots.length > 0 ? (
+              <div className="grid max-h-[240px] grid-cols-4 gap-2 overflow-y-auto pr-1">
+                {slots.map((slot) => {
+                  const isFree = slot.status === 'free'
+                  const isSelected = selectedSlot?.start === slot.start
                   const titleKey =
                     slot.status === 'out_of_hours'
                       ? 'appt.slot_out'
@@ -227,16 +260,17 @@ export function NewAppointmentModal({
                   return (
                     <button
                       key={slot.start}
-                      disabled={disabled}
+                      type="button"
+                      disabled={!isFree}
                       onClick={() => setSelectedSlot(slot)}
                       className={cn(
                         'rounded-lg border py-2 text-[13px] font-mono transition-colors',
-                        slot.status === 'free' &&
-                          selectedSlot?.start === slot.start &&
-                          'border-accent bg-accent text-white',
-                        slot.status === 'free' &&
-                          selectedSlot?.start !== slot.start &&
-                          'border-line text-tx hover:border-accent',
+                        isFree &&
+                          isSelected &&
+                          'border-accent bg-accent text-white shadow-sm',
+                        isFree &&
+                          !isSelected &&
+                          'border-accent bg-[var(--accent-10)] text-tx hover:bg-accent hover:text-white',
                         slot.status === 'taken' && 'border-line-soft text-tx-4 line-through',
                         (slot.status === 'out_of_hours' || slot.status === 'blocked_rules') &&
                           'cursor-not-allowed border-line-soft bg-surface-2 text-tx-4',
@@ -247,13 +281,41 @@ export function NewAppointmentModal({
                     </button>
                   )
                 })}
-                {slots?.length === 0 && (
-                  <p className="col-span-4 py-6 text-center text-sm text-tx-3">
-                    {t('appt.no_slots')}
-                  </p>
-                )}
               </div>
+            ) : (
+              <p className="py-10 text-center text-sm text-tx-3">{t('appt.no_slots')}</p>
             )}
+
+            {/* Summary */}
+            <div className="rounded-lg border border-line bg-surface-2/40 p-3">
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-tx-3">
+                {t('appt.summary')}
+              </p>
+              <div className="grid grid-cols-2 gap-y-2 text-[13px]">
+                <span className="flex items-center gap-2 text-tx-3">
+                  <UserIcon className="h-3.5 w-3.5" /> {t('appt.patient')}
+                </span>
+                <span className="text-right text-tx">
+                  {patient ? `${patient.first_name} ${patient.last_name}` : '—'}
+                </span>
+                <span className="flex items-center gap-2 text-tx-3">
+                  <Stethoscope className="h-3.5 w-3.5" /> {t('appt.col_doctor')}
+                </span>
+                <span className="text-right text-tx">{doctorName ?? '—'}</span>
+                <span className="flex items-center gap-2 text-tx-3">
+                  <CalendarDays className="h-3.5 w-3.5" /> {t('appt.type')}
+                </span>
+                <span className="text-right text-tx">{TYPE_LABELS[type] ?? type}</span>
+                <span className="flex items-center gap-2 text-tx-3">
+                  <Clock className="h-3.5 w-3.5" /> {t('appt.date')}
+                </span>
+                <span className="text-right font-mono text-tx">
+                  {fmtDate(day, 'd MMM')}
+                  {selectedSlot ? ` · ${fmtTime(selectedSlot.start)}` : ''}
+                  <span className="text-tx-4"> · {duration}m</span>
+                </span>
+              </div>
+            </div>
           </div>
         )}
       </div>

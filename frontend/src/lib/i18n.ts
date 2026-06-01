@@ -95,6 +95,8 @@ const es: Dict = {
   'appt.slot_legend': 'Disponibilidad',
   'appt.no_slots': 'Sin disponibilidad este día',
   'appt.doctor_off_day': 'El doctor no atiende este día. Elige otra fecha.',
+  'appt.summary': 'Resumen',
+  'appt.patient': 'Paciente',
   // consultation
   'consult.title': 'Consulta en curso',
   'consult.exit': 'Salir',
@@ -248,6 +250,8 @@ const en: Dict = {
   'appt.slot_legend': 'Availability',
   'appt.no_slots': 'No availability this day',
   'appt.doctor_off_day': "The doctor doesn't work this day. Pick another date.",
+  'appt.summary': 'Summary',
+  'appt.patient': 'Patient',
   'consult.title': 'Consultation in progress',
   'consult.exit': 'Exit',
   'consult.in_progress': 'In progress',
