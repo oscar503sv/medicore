@@ -1,1 +1,1 @@
-"""Presentation layer — FastAPI API / controllers. [fase 4]"""
+"""Presentation layer — FastAPI API / controllers."""

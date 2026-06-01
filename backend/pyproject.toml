@@ -19,6 +19,10 @@ dependencies = [
     "passlib>=1.7",
     "bcrypt>=4.0",
     "python-dotenv>=1.0",
+    # Presentación (fase 4)
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "httpx>=0.27",          # TestClient de FastAPI lo requiere
 ]
 
 [project.optional-dependencies]
@@ -43,6 +47,7 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["B008"]  # Depends/Query defaults are idiomatic in FastAPI handlers
 
 [tool.coverage.run]
 source = ["medicore.domain"]
