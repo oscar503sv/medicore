@@ -1,10 +1,36 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { usePlatformAuthStore } from '@/stores/platformAuth'
 
 export const api = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
 })
+
+// Separate instance for the superadmin console: it carries the platform token and never
+// touches the tenant session, so the two consoles can be used independently.
+export const platformApi = axios.create({
+  baseURL: '/api/v1',
+  headers: { 'Content-Type': 'application/json' },
+})
+
+platformApi.interceptors.request.use((config) => {
+  const token = usePlatformAuthStore.getState().session?.token
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+platformApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && usePlatformAuthStore.getState().session) {
+      usePlatformAuthStore.getState().logout()
+    }
+    return Promise.reject(error)
+  },
+)
 
 // Attach the bearer token to every request.
 api.interceptors.request.use((config) => {

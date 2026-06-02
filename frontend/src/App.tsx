@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/components/shell/AppLayout'
+import { PlatformLayout } from '@/components/shell/PlatformLayout'
 import { RequireAuth } from '@/components/RequireAuth'
+import { RequirePlatformAuth } from '@/components/RequirePlatformAuth'
 import { ToastViewport } from '@/components/ui/Toast'
 import { AppointmentsPage } from '@/pages/AppointmentsPage'
 import { AvailabilityPage } from '@/pages/AvailabilityPage'
@@ -12,6 +14,9 @@ import { InsurersPage } from '@/pages/InsurersPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PatientDetailPage } from '@/pages/PatientDetailPage'
 import { PatientsPage } from '@/pages/PatientsPage'
+import { ClinicDetailPage } from '@/pages/platform/ClinicDetailPage'
+import { ClinicsListPage } from '@/pages/platform/ClinicsListPage'
+import { PlatformLoginPage } from '@/pages/platform/PlatformLoginPage'
 import { RecordsPage } from '@/pages/RecordsPage'
 import { SchedulePage } from '@/pages/SchedulePage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -34,6 +39,20 @@ export function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+
+        {/* Platform (superadmin) console — its own auth, no tenant shell */}
+        <Route path="/platform/login" element={<PlatformLoginPage />} />
+        <Route
+          element={
+            <RequirePlatformAuth>
+              <PlatformLayout />
+            </RequirePlatformAuth>
+          }
+        >
+          <Route path="/platform" element={<Navigate to="/platform/clinics" replace />} />
+          <Route path="/platform/clinics" element={<ClinicsListPage />} />
+          <Route path="/platform/clinics/:id" element={<ClinicDetailPage />} />
+        </Route>
 
         {/* Forced password change after a temporary-password invite (no shell chrome) */}
         <Route

@@ -20,6 +20,45 @@ export interface MyProfile {
   bio: string | null
 }
 
+// ── Platform (superadmin) ──────────────────────────────────────────────────────
+export type TenantStatus = 'active' | 'suspended' | 'archived'
+export type IcdVersion = 'cie10' | 'cie11'
+
+export interface PlatformSession {
+  token: string
+  admin_id: string
+  name: string
+  email: string
+}
+
+export interface PlatformAdminProfile {
+  id: string
+  name: string
+  email: string
+  avatar_initials: string
+  last_seen_at: string | null
+}
+
+export interface TenantLocation {
+  id: string
+  name: string
+  address: string | null
+  is_primary: boolean
+}
+
+export interface Tenant {
+  id: string
+  legal_name: string
+  tax_id: string
+  slug: string
+  timezone: string
+  plan: string
+  seat_limit: number
+  status: TenantStatus
+  icd_version: IcdVersion
+  locations: TenantLocation[]
+}
+
 // ── Enums ─────────────────────────────────────────────────────────────────────
 export type Role = 'admin' | 'doctor' | 'nurse' | 'receptionist'
 export type UserStatus = 'active' | 'pending' | 'suspended'
