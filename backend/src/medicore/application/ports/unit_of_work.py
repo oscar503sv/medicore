@@ -17,6 +17,7 @@ from medicore.domain.repositories import (
     ConsultationRepository,
     DoctorAvailabilityRepository,
     DoctorProfileRepository,
+    InsurerRepository,
     MedicalDocumentRepository,
     MedicalRecordRepository,
     NotificationRepository,
@@ -33,6 +34,7 @@ class UnitOfWork(Protocol):
     tenant_id: TenantId
 
     patients: PatientRepository
+    insurers: InsurerRepository
     appointments: AppointmentRepository
     consultations: ConsultationRepository
     medical_records: MedicalRecordRepository

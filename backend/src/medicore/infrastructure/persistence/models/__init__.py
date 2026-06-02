@@ -8,6 +8,7 @@ from medicore.infrastructure.persistence.models.availability import (
 )
 from medicore.infrastructure.persistence.models.consultation import ConsultationModel
 from medicore.infrastructure.persistence.models.counters import TenantCounterModel
+from medicore.infrastructure.persistence.models.insurer import InsurerModel
 from medicore.infrastructure.persistence.models.medical_document import MedicalDocumentModel
 from medicore.infrastructure.persistence.models.medical_record import MedicalRecordModel
 from medicore.infrastructure.persistence.models.notification import NotificationModel
@@ -23,6 +24,7 @@ __all__ = [
     "ConsultationModel",
     "DoctorAvailabilityModel",
     "DoctorProfileModel",
+    "InsurerModel",
     "LocationModel",
     "MedicalDocumentModel",
     "MedicalRecordModel",

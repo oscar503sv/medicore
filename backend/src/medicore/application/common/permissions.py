@@ -57,5 +57,9 @@ def ensure_can_manage_organization(actor: ActorContext) -> None:
     ensure_role(actor, Role.ADMIN)
 
 
+def ensure_can_manage_insurers(actor: ActorContext) -> None:
+    ensure_role(actor, Role.ADMIN)
+
+
 def ensure_can_manage_availability(actor: ActorContext) -> None:
     ensure_role(actor, Role.DOCTOR, Role.ADMIN)

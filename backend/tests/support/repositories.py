@@ -191,6 +191,24 @@ class InMemoryAppointmentRepository(_Scoped):
         self._store.appointments[appointment.id.value] = appointment
 
 
+class InMemoryInsurerRepository(_Scoped):
+    def get_by_id(self, insurer_id) -> object | None:
+        ins = self._store.insurers.get(insurer_id.value)
+        return ins if ins and ins.tenant_id == self._tenant else None
+
+    def list(self, active_only: bool = False) -> list:
+        result = [
+            i
+            for i in self._mine(self._store.insurers.values())
+            if not active_only or i.active
+        ]
+        result.sort(key=lambda i: i.name)
+        return result
+
+    def save(self, insurer) -> None:
+        self._store.insurers[insurer.id.value] = insurer
+
+
 class InMemoryConsultationRepository(_Scoped):
     def get_by_id(self, consultation_id: ConsultationId) -> Consultation | None:
         c = self._store.consultations.get(consultation_id.value)

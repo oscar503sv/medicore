@@ -10,6 +10,7 @@ from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
+from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
@@ -31,6 +32,7 @@ class InMemoryStore:
     users: dict[UUID, User] = field(default_factory=dict)
     doctor_profiles: dict[UUID, DoctorProfile] = field(default_factory=dict)
     patients: dict[UUID, Patient] = field(default_factory=dict)
+    insurers: dict[UUID, Insurer] = field(default_factory=dict)
     appointments: dict[UUID, Appointment] = field(default_factory=dict)
     consultations: dict[UUID, Consultation] = field(default_factory=dict)
     medical_records: dict[UUID, MedicalRecord] = field(default_factory=dict)

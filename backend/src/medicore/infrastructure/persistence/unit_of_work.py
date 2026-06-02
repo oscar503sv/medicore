@@ -14,6 +14,7 @@ from medicore.infrastructure.persistence.repositories.clinical import (
     SqlMedicalRecordRepository,
     SqlPrescriptionRepository,
 )
+from medicore.infrastructure.persistence.repositories.insurer import SqlInsurerRepository
 from medicore.infrastructure.persistence.repositories.other import (
     SqlAuditLogRepository,
     SqlDoctorAvailabilityRepository,
@@ -37,6 +38,7 @@ class SqlAlchemyUnitOfWork:
         self.tenant_id = tenant_id
 
         self.patients = SqlPatientRepository(session, tenant_id)
+        self.insurers = SqlInsurerRepository(session, tenant_id)
         self.appointments = SqlAppointmentRepository(session, tenant_id)
         self.consultations = SqlConsultationRepository(session, tenant_id)
         self.medical_records = SqlMedicalRecordRepository(session, tenant_id)
