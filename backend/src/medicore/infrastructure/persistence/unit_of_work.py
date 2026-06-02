@@ -21,6 +21,10 @@ from medicore.infrastructure.persistence.repositories.other import (
     SqlNotificationRepository,
 )
 from medicore.infrastructure.persistence.repositories.patient import SqlPatientRepository
+from medicore.infrastructure.persistence.repositories.platform import (
+    SqlPlatformAdminRepository,
+    SqlPlatformAuditLogRepository,
+)
 from medicore.infrastructure.persistence.repositories.tenant import SqlTenantRepository
 from medicore.infrastructure.persistence.repositories.user import (
     SqlDoctorProfileRepository,
@@ -50,10 +54,50 @@ class SqlAlchemyUnitOfWork:
         self.notifications = SqlNotificationRepository(session, tenant_id)
         self.audit = SqlAuditLogRepository(session, tenant_id)
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
+        self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
 
         self._committed = False
 
     def __enter__(self) -> SqlAlchemyUnitOfWork:
+        self._committed = False
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool:
+        if exc_type is not None or not self._committed:
+            self._session.rollback()
+        self._session.close()
+        return False
+
+    def commit(self) -> None:
+        self._session.commit()
+        self._committed = True
+
+    def rollback(self) -> None:
+        self._session.rollback()
+        self._committed = False
+
+
+class PlatformUnitOfWork:
+    """A non-tenant-scoped transactional boundary for superadmin operations.
+
+    Exposes only the global repositories a platform admin needs (tenants, platform admins and
+    the platform audit trail). Tenant-targeting operations (creating a clinic's first user,
+    resetting a password) use ``for_tenant`` instead.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+        self.tenants = SqlTenantRepository(session)
+        self.platform_admins = SqlPlatformAdminRepository(session)
+        self.platform_audit = SqlPlatformAuditLogRepository(session)
+        self._committed = False
+
+    def __enter__(self) -> PlatformUnitOfWork:
         self._committed = False
         return self
 
@@ -86,3 +130,9 @@ class SqlAlchemyUnitOfWorkFactory:
 
     def global_tenants(self) -> SqlTenantRepository:
         return SqlTenantRepository(self._factory())
+
+    def platform_uow(self) -> PlatformUnitOfWork:
+        return PlatformUnitOfWork(self._factory())
+
+    def platform_admins(self) -> SqlPlatformAdminRepository:
+        return SqlPlatformAdminRepository(self._factory())

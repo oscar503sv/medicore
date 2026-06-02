@@ -41,6 +41,11 @@ class UserFilter:
 
 
 @dataclass(frozen=True, slots=True)
+class TenantFilter:
+    status: str | None = None  # TenantStatus value
+
+
+@dataclass(frozen=True, slots=True)
 class RecordFilter:
     patient_id: str | None = None
     type: str | None = None

@@ -18,6 +18,7 @@ from medicore.domain.enums import (
     AppointmentType,
     ConsultationStatus,
     DocumentKind,
+    IcdVersion,
     LangPref,
     NotificationChannel,
     PatientStatus,
@@ -26,6 +27,7 @@ from medicore.domain.enums import (
     RecordType,
     Role,
     Sex,
+    TenantStatus,
     ThemePref,
     UserStatus,
 )
@@ -93,6 +95,8 @@ def to_tenant(row: TenantModel) -> Tenant:
         timezone=row.timezone,
         plan=row.plan,
         seat_limit=row.seat_limit,
+        status=TenantStatus(row.status),
+        icd_version=IcdVersion(row.icd_version),
         locations=locations,
         created_at=row.created_at,
     )

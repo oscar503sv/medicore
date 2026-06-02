@@ -119,3 +119,10 @@ class NotificationId(Identifier):
 @dataclass(frozen=True, slots=True)
 class AuditLogId(Identifier):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformAdminId(Identifier):
+    """Identity of a platform-level superadmin (belongs to no tenant)."""
+
+    pass

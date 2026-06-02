@@ -16,6 +16,8 @@ from tests.support.repositories import (
     InMemoryMedicalRecordRepository,
     InMemoryNotificationRepository,
     InMemoryPatientRepository,
+    InMemoryPlatformAdminRepository,
+    InMemoryPlatformAuditLogRepository,
     InMemoryPrescriptionRepository,
     InMemoryTenantRepository,
     InMemoryUserRepository,
@@ -43,6 +45,7 @@ class InMemoryUnitOfWork:
         self.notifications = InMemoryNotificationRepository(store, tenant_id)
         self.audit = InMemoryAuditLogRepository(store, tenant_id)
         self.tenants = InMemoryTenantRepository(store)
+        self.platform_audit = InMemoryPlatformAuditLogRepository(store)
         self._snapshot: dict | None = None
         self._committed = False
 
@@ -71,6 +74,42 @@ class InMemoryUnitOfWork:
         self._committed = False
 
 
+class InMemoryPlatformUnitOfWork:
+    """Non-tenant-scoped UoW for superadmin operations, with snapshot/rollback semantics."""
+
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+        self.tenants = InMemoryTenantRepository(store)
+        self.platform_admins = InMemoryPlatformAdminRepository(store)
+        self.platform_audit = InMemoryPlatformAuditLogRepository(store)
+        self._snapshot: dict | None = None
+        self._committed = False
+
+    def __enter__(self) -> InMemoryPlatformUnitOfWork:
+        self._snapshot = self._store.snapshot()
+        self._committed = False
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool:
+        if (exc_type is not None or not self._committed) and self._snapshot is not None:
+            self._store.restore(self._snapshot)
+        self._snapshot = None
+        return False
+
+    def commit(self) -> None:
+        self._committed = True
+
+    def rollback(self) -> None:
+        if self._snapshot is not None:
+            self._store.restore(self._snapshot)
+        self._committed = False
+
+
 class InMemoryUnitOfWorkFactory:
     def __init__(self, store: InMemoryStore | None = None) -> None:
         self.store = store or InMemoryStore()
@@ -80,3 +119,9 @@ class InMemoryUnitOfWorkFactory:
 
     def global_tenants(self) -> InMemoryTenantRepository:
         return InMemoryTenantRepository(self.store)
+
+    def platform_uow(self) -> InMemoryPlatformUnitOfWork:
+        return InMemoryPlatformUnitOfWork(self.store)
+
+    def platform_admins(self) -> InMemoryPlatformAdminRepository:
+        return InMemoryPlatformAdminRepository(self.store)

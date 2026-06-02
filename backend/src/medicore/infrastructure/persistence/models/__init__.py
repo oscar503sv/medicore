@@ -13,6 +13,10 @@ from medicore.infrastructure.persistence.models.medical_document import MedicalD
 from medicore.infrastructure.persistence.models.medical_record import MedicalRecordModel
 from medicore.infrastructure.persistence.models.notification import NotificationModel
 from medicore.infrastructure.persistence.models.patient import PatientModel
+from medicore.infrastructure.persistence.models.platform import (
+    PlatformAdminModel,
+    PlatformAuditLogModel,
+)
 from medicore.infrastructure.persistence.models.prescription import PrescriptionModel
 from medicore.infrastructure.persistence.models.tenant import LocationModel, TenantModel
 from medicore.infrastructure.persistence.models.user import DoctorProfileModel, UserModel
@@ -30,6 +34,8 @@ __all__ = [
     "MedicalRecordModel",
     "NotificationModel",
     "PatientModel",
+    "PlatformAdminModel",
+    "PlatformAuditLogModel",
     "PrescriptionModel",
     "TenantCounterModel",
     "TenantModel",

@@ -41,6 +41,28 @@ def ser_user(u: User) -> dict:
     }
 
 
+def ser_platform_admin(a) -> dict:
+    return {
+        "id": str(a.id),
+        "name": a.name,
+        "email": a.email,
+        "avatar_initials": a.avatar_initials,
+        "last_seen_at": a.last_seen_at,
+    }
+
+
+def ser_platform_audit(e) -> dict:
+    return {
+        "id": str(e.id),
+        "actor_id": str(e.actor_id),
+        "action": e.action,
+        "entity_type": e.entity_type,
+        "entity_id": e.entity_id,
+        "metadata": dict(e.metadata),
+        "timestamp": e.timestamp,
+    }
+
+
 def ser_my_profile(p: MyProfileDTO) -> dict:
     return {
         "name": p.name,
@@ -245,6 +267,8 @@ def ser_tenant(t: Tenant) -> dict:
         "timezone": t.timezone,
         "plan": t.plan,
         "seat_limit": t.seat_limit,
+        "status": str(t.status),
+        "icd_version": str(t.icd_version),
         "locations": [
             {
                 "id": str(loc.id),

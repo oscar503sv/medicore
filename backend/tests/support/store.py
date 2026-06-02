@@ -15,6 +15,8 @@ from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
+from medicore.domain.entities.platform_admin import PlatformAdmin
+from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
@@ -41,6 +43,8 @@ class InMemoryStore:
     availability: dict[UUID, DoctorAvailability] = field(default_factory=dict)
     notifications: dict[UUID, Notification] = field(default_factory=dict)
     audit: dict[UUID, AuditLog] = field(default_factory=dict)
+    platform_admins: dict[UUID, PlatformAdmin] = field(default_factory=dict)
+    platform_audit: dict[UUID, PlatformAuditLog] = field(default_factory=dict)
 
     def snapshot(self) -> dict[str, dict]:
         return {f.name: copy.deepcopy(getattr(self, f.name)) for f in fields(self)}

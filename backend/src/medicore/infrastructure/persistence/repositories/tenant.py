@@ -5,6 +5,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.tenant import Tenant
+from medicore.domain.repositories._support import Page, Paging, TenantFilter
 from medicore.domain.shared.identifiers import TenantId
 from medicore.domain.value_objects.slug import Slug
 from medicore.infrastructure.persistence.mappers.entities import to_tenant
@@ -25,6 +26,19 @@ class SqlTenantRepository:
         )
         return to_tenant(row) if row else None
 
+    def list(
+        self, filter: TenantFilter | None = None, paging: Paging | None = None
+    ) -> Page[Tenant]:
+        q = self._s.query(TenantModel).order_by(TenantModel.legal_name)
+        if filter and filter.status:
+            q = q.filter(TenantModel.status == filter.status)
+        total = q.count()
+        pg = paging or Paging()
+        rows = q.offset(pg.offset).limit(pg.limit).all()
+        return Page(
+            items=[to_tenant(r) for r in rows], total=total, offset=pg.offset, limit=pg.limit
+        )
+
     def save(self, tenant: Tenant) -> None:
         row = self._s.get(TenantModel, tenant.id.value)
         if row is None:
@@ -36,6 +50,8 @@ class SqlTenantRepository:
         row.timezone = tenant.timezone
         row.plan = tenant.plan
         row.seat_limit = tenant.seat_limit
+        row.status = str(tenant.status)
+        row.icd_version = str(tenant.icd_version)
         row.created_at = tenant.created_at
 
         # Sync locations

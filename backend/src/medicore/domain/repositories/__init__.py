@@ -9,6 +9,7 @@ from medicore.domain.repositories._support import (
     Paging,
     PatientFilter,
     RecordFilter,
+    TenantFilter,
     UserFilter,
 )
 from medicore.domain.repositories.appointment_repository import AppointmentRepository
@@ -24,6 +25,10 @@ from medicore.domain.repositories.medical_document_repository import (
 from medicore.domain.repositories.medical_record_repository import MedicalRecordRepository
 from medicore.domain.repositories.notification_repository import NotificationRepository
 from medicore.domain.repositories.patient_repository import PatientRepository
+from medicore.domain.repositories.platform_repository import (
+    PlatformAdminRepository,
+    PlatformAuditLogRepository,
+)
 from medicore.domain.repositories.prescription_repository import PrescriptionRepository
 from medicore.domain.repositories.tenant_repository import TenantRepository
 from medicore.domain.repositories.user_repository import (
@@ -36,6 +41,7 @@ __all__ = [
     "Paging",
     "PatientFilter",
     "RecordFilter",
+    "TenantFilter",
     "UserFilter",
     "AppointmentRepository",
     "AuditLogRepository",
@@ -46,6 +52,8 @@ __all__ = [
     "MedicalRecordRepository",
     "NotificationRepository",
     "PatientRepository",
+    "PlatformAdminRepository",
+    "PlatformAuditLogRepository",
     "PrescriptionRepository",
     "TenantRepository",
     "DoctorProfileRepository",

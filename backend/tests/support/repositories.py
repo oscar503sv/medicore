@@ -17,6 +17,8 @@ from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
+from medicore.domain.entities.platform_admin import PlatformAdmin
+from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
@@ -26,6 +28,7 @@ from medicore.domain.repositories._support import (
     Paging,
     PatientFilter,
     RecordFilter,
+    TenantFilter,
     UserFilter,
 )
 from medicore.domain.shared.identifiers import (
@@ -34,6 +37,7 @@ from medicore.domain.shared.identifiers import (
     DocumentId,
     NotificationId,
     PatientId,
+    PlatformAdminId,
     RecordId,
     TenantId,
     UserId,
@@ -64,8 +68,49 @@ class InMemoryTenantRepository:
     def get_by_slug(self, slug: Slug) -> Tenant | None:
         return next((t for t in self._store.tenants.values() if t.slug == slug), None)
 
+    def list(
+        self, filter: TenantFilter | None = None, paging: Paging | None = None
+    ) -> Page[Tenant]:
+        tenants = list(self._store.tenants.values())
+        if filter and filter.status:
+            tenants = [t for t in tenants if str(t.status) == filter.status]
+        tenants.sort(key=lambda t: t.legal_name)
+        return _paginate(tenants, paging)
+
     def save(self, tenant: Tenant) -> None:
         self._store.tenants[tenant.id.value] = tenant
+
+
+class InMemoryPlatformAdminRepository:
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def get_by_id(self, admin_id: PlatformAdminId) -> PlatformAdmin | None:
+        return self._store.platform_admins.get(admin_id.value)
+
+    def get_by_email(self, email: str) -> PlatformAdmin | None:
+        target = email.strip().lower()
+        return next(
+            (a for a in self._store.platform_admins.values() if a.email.lower() == target),
+            None,
+        )
+
+    def save(self, admin: PlatformAdmin) -> None:
+        self._store.platform_admins[admin.id.value] = admin
+
+
+class InMemoryPlatformAuditLogRepository:
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def append(self, entry: PlatformAuditLog) -> None:
+        self._store.platform_audit[entry.id.value] = entry
+
+    def list(self, limit: int = 100, offset: int = 0) -> list[PlatformAuditLog]:
+        entries = sorted(
+            self._store.platform_audit.values(), key=lambda e: e.timestamp, reverse=True
+        )
+        return entries[offset : offset + limit]
 
 
 class _Scoped:

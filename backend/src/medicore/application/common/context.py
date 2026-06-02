@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from medicore.domain.enums import Role
-from medicore.domain.shared.identifiers import TenantId, UserId
+from medicore.domain.shared.identifiers import PlatformAdminId, TenantId, UserId
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,3 +15,10 @@ class ActorContext:
     user_id: UserId
     tenant_id: TenantId
     role: Role
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformActorContext:
+    """A platform-level superadmin performing a cross-tenant use case (belongs to no tenant)."""
+
+    admin_id: PlatformAdminId

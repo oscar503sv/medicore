@@ -22,6 +22,12 @@ class TenantModel(Base):
     timezone: Mapped[str] = mapped_column(String(100), nullable=False, default="Europe/Madrid")
     plan: Mapped[str] = mapped_column(String(50), nullable=False, default="pro")
     seat_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="active", default="active"
+    )
+    icd_version: Mapped[str] = mapped_column(
+        String(10), nullable=False, server_default="cie11", default="cie11"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

@@ -79,6 +79,17 @@ def admin_headers(seed, client):
 
 
 @pytest.fixture
+def platform_headers(seed, client):
+    """Login as the platform superadmin and return Authorization header."""
+    resp = client.post(
+        "/api/v1/platform/login",
+        json={"email": seed.platform_admin.email, "password": PASSWORD},
+    )
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['token']}"}
+
+
+@pytest.fixture
 def receptionist_headers(seed, client):
     resp = client.post(
         "/api/v1/auth/login",

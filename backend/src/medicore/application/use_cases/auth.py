@@ -62,6 +62,8 @@ class AuthenticateUser:
         tenant = self._factory.global_tenants().get_by_slug(slug)
         if tenant is None:
             raise AuthenticationFailed("invalid organization")
+        if not tenant.is_active:
+            raise AuthenticationFailed("this organization is not active")
 
         uow = self._factory.for_tenant(tenant.id)
         user = uow.users.get_by_email(cmd.email)

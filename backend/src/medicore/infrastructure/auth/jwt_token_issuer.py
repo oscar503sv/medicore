@@ -22,6 +22,7 @@ class JwtTokenIssuer:
             "sub": claims.user_id,
             "tenant": claims.tenant_id,
             "role": claims.role,
+            "scope": claims.scope,
             "exp": datetime.now(UTC) + timedelta(minutes=self._expire_minutes),
             "iat": datetime.now(UTC),
         }
@@ -31,6 +32,7 @@ class JwtTokenIssuer:
         payload = jwt.decode(token, self._secret, algorithms=[self._algorithm])
         return SessionClaims(
             user_id=payload["sub"],
-            tenant_id=payload["tenant"],
-            role=payload["role"],
+            tenant_id=payload.get("tenant"),
+            role=payload.get("role", ""),
+            scope=payload.get("scope", "tenant"),
         )

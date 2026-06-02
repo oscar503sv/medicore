@@ -12,9 +12,9 @@ from typing import Annotated
 import jwt
 from fastapi import Depends, Header, HTTPException, status
 
-from medicore.application.common.context import ActorContext
+from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.domain.enums import Role
-from medicore.domain.shared.identifiers import TenantId, UserId
+from medicore.domain.shared.identifiers import PlatformAdminId, TenantId, UserId
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
 from medicore.infrastructure.auth.jwt_token_issuer import JwtTokenIssuer
@@ -70,11 +70,49 @@ def get_actor(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         ) from exc
 
+    if claims.scope != "tenant" or not claims.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a tenant session"
+        )
+
     return ActorContext(
         user_id=UserId.parse(claims.user_id),
         tenant_id=TenantId.parse(claims.tenant_id),
         role=Role(claims.role),
     )
+
+
+def get_platform_actor(
+    authorization: Annotated[str | None, Header()] = None,
+    issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
+) -> PlatformActorContext:
+    """Decode the Bearer token and return the authenticated platform superadmin.
+
+    Raises 401 if the header is missing/expired/invalid or the token is not a platform session.
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header",
+        )
+    token = authorization.removeprefix("Bearer ").strip()
+    try:
+        claims = issuer.decode(token)
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+        ) from exc
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
+
+    if claims.scope != "platform":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a platform session"
+        )
+
+    return PlatformActorContext(admin_id=PlatformAdminId.parse(claims.user_id))
 
 
 # ── Convenience per-request UoW ───────────────────────────────────────────────
@@ -95,6 +133,7 @@ def get_codes(uow: SqlAlchemyUnitOfWork = Depends(get_uow)) -> DbSequentialCodeG
 
 # Type aliases for annotated injection
 Actor = Annotated[ActorContext, Depends(get_actor)]
+PlatformActor = Annotated[PlatformActorContext, Depends(get_platform_actor)]
 UoW = Annotated[SqlAlchemyUnitOfWork, Depends(get_uow)]
 Clock = Annotated[SystemClock, Depends(get_clock)]
 Codes = Annotated[DbSequentialCodeGenerator, Depends(get_codes)]

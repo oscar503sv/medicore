@@ -22,6 +22,17 @@ class UserStatus(StrEnum):
     SUSPENDED = "suspended"
 
 
+class TenantStatus(StrEnum):
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+    ARCHIVED = "archived"
+
+
+class IcdVersion(StrEnum):
+    CIE10 = "cie10"
+    CIE11 = "cie11"
+
+
 class Sex(StrEnum):
     MALE = "male"
     FEMALE = "female"

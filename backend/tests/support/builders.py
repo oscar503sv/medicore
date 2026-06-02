@@ -12,6 +12,7 @@ from medicore.domain.entities.availability import (
     WeeklyDay,
 )
 from medicore.domain.entities.patient import Patient
+from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import Role, Sex, UserStatus
@@ -19,6 +20,7 @@ from medicore.domain.shared.identifiers import (
     AvailabilityId,
     LocationId,
     PatientId,
+    PlatformAdminId,
     TenantId,
     UserId,
 )
@@ -120,6 +122,7 @@ class Seed:
     receptionist: User
     patient: Patient
     availability: DoctorAvailability
+    platform_admin: PlatformAdmin
 
     def actor(self, user: User) -> ActorContext:
         return ActorContext(user_id=user.id, tenant_id=self.tenant.id, role=user.role)
@@ -144,6 +147,12 @@ def seed_clinic() -> Seed:
     receptionist = build_user(tenant.id, Role.RECEPTIONIST)
     patient = build_patient(tenant.id, primary_doctor_id=doctor.id)
     availability = build_weekday_availability(tenant.id, doctor.id)
+    platform_admin = PlatformAdmin(
+        id=PlatformAdminId.new(),
+        name="Super Admin",
+        email="super@medicore.health",
+        password_hash=PlainPasswordHasher().hash(PASSWORD),
+    )
 
     store = factory.store
     store.tenants[tenant.id.value] = tenant
@@ -151,6 +160,7 @@ def seed_clinic() -> Seed:
         store.users[user.id.value] = user
     store.patients[patient.id.value] = patient
     store.availability[availability.id.value] = availability
+    store.platform_admins[platform_admin.id.value] = platform_admin
 
     return Seed(
         factory=factory,
@@ -161,4 +171,5 @@ def seed_clinic() -> Seed:
         receptionist=receptionist,
         patient=patient,
         availability=availability,
+        platform_admin=platform_admin,
     )

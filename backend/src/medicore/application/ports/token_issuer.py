@@ -8,11 +8,16 @@ from typing import Protocol
 
 @dataclass(frozen=True, slots=True)
 class SessionClaims:
-    """The claims carried by a session token: ``userId``, ``tenantId``, ``role``."""
+    """The claims carried by a session token.
+
+    Tenant sessions carry ``tenant_id`` + ``role`` with ``scope="tenant"``. Platform (superadmin)
+    sessions carry ``scope="platform"`` and no tenant/role — the ``user_id`` is a platform admin id.
+    """
 
     user_id: str
-    tenant_id: str
-    role: str
+    tenant_id: str | None = None
+    role: str = ""
+    scope: str = "tenant"
 
 
 class TokenIssuer(Protocol):

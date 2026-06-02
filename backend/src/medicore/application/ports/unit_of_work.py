@@ -22,6 +22,8 @@ from medicore.domain.repositories import (
     MedicalRecordRepository,
     NotificationRepository,
     PatientRepository,
+    PlatformAdminRepository,
+    PlatformAuditLogRepository,
     PrescriptionRepository,
     TenantRepository,
     UserRepository,
@@ -46,8 +48,31 @@ class UnitOfWork(Protocol):
     notifications: NotificationRepository
     audit: AuditLogRepository
     tenants: TenantRepository  # global (not tenant-filtered)
+    platform_audit: PlatformAuditLogRepository  # global (not tenant-filtered)
 
     def __enter__(self) -> UnitOfWork: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool | None: ...
+
+    def commit(self) -> None: ...
+
+    def rollback(self) -> None: ...
+
+
+@runtime_checkable
+class PlatformUnitOfWork(Protocol):
+    """Non-tenant-scoped transactional boundary for superadmin operations."""
+
+    tenants: TenantRepository
+    platform_admins: PlatformAdminRepository
+    platform_audit: PlatformAuditLogRepository
+
+    def __enter__(self) -> PlatformUnitOfWork: ...
 
     def __exit__(
         self,
@@ -68,4 +93,8 @@ class UnitOfWorkFactory(Protocol):
 
     def global_tenants(self) -> TenantRepository:
         """The non-scoped tenant repository, used to resolve a tenant by slug before auth."""
+        ...
+
+    def platform_uow(self) -> PlatformUnitOfWork:
+        """Build a non-tenant-scoped UnitOfWork for superadmin operations."""
         ...

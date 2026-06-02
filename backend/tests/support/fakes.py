@@ -49,16 +49,21 @@ class PlainPasswordHasher:
 
 class FakeTokenIssuer:
     def issue(self, claims: SessionClaims) -> str:
-        return f"{claims.user_id}|{claims.tenant_id}|{claims.role}"
+        return f"{claims.user_id}|{claims.tenant_id}|{claims.role}|{claims.scope}"
 
     def decode(self, token: str) -> SessionClaims:
         import jwt
 
         try:
-            user_id, tenant_id, role = token.split("|")
+            user_id, tenant_id, role, scope = token.split("|")
         except ValueError as exc:
             raise jwt.DecodeError("invalid fake token format") from exc
-        return SessionClaims(user_id=user_id, tenant_id=tenant_id, role=role)
+        return SessionClaims(
+            user_id=user_id,
+            tenant_id=None if tenant_id == "None" else tenant_id,
+            role=role,
+            scope=scope,
+        )
 
 
 class SequentialCodeGenerator:
