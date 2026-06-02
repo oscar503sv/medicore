@@ -14,7 +14,7 @@ from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.patient import Patient
 from medicore.domain.enums import AppointmentStatus, PrescriptionStatus, Sex
 from medicore.domain.repositories._support import Page, Paging, PatientFilter
-from medicore.domain.shared.identifiers import PatientId, UserId
+from medicore.domain.shared.identifiers import InsurerId, PatientId, UserId
 from medicore.domain.value_objects.blood_type import BloodType
 from medicore.domain.value_objects.contact_info import ContactInfo
 
@@ -27,7 +27,7 @@ class CreatePatientCommand:
     date_of_birth: date
     contact: ContactInfo = field(default_factory=ContactInfo)
     blood_type: BloodType | None = None
-    insurance: str | None = None
+    insurance_id: InsurerId | None = None
     primary_doctor_id: UserId | None = None
     tags: tuple[str, ...] = ()
     allergies: tuple[str, ...] = ()
@@ -59,7 +59,7 @@ class CreatePatient:
             date_of_birth=cmd.date_of_birth,
             contact=cmd.contact,
             blood_type=cmd.blood_type,
-            insurance=cmd.insurance,
+            insurance_id=cmd.insurance_id,
             primary_doctor_id=cmd.primary_doctor_id,
             tags=list(cmd.tags),
             allergies=list(cmd.allergies),
@@ -89,7 +89,7 @@ class UpdatePatient:
             "last_name",
             "contact",
             "blood_type",
-            "insurance",
+            "insurance_id",
             "primary_doctor_id",
             "tags",
             "allergies",

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from medicore.domain.enums import PatientStatus, Sex
-from medicore.domain.shared.identifiers import PatientId, TenantId, UserId
+from medicore.domain.shared.identifiers import InsurerId, PatientId, TenantId, UserId
 from medicore.domain.value_objects.blood_type import BloodType
 from medicore.domain.value_objects.contact_info import ContactInfo
 
@@ -28,7 +28,7 @@ class Patient:
     date_of_birth: date
     contact: ContactInfo = field(default_factory=ContactInfo)
     blood_type: BloodType | None = None
-    insurance: str | None = None
+    insurance_id: InsurerId | None = None
     primary_doctor_id: UserId | None = None
     status: PatientStatus = PatientStatus.ACTIVE
     tags: list[str] = field(default_factory=list)  # clinical conditions, e.g. "Hipertensión"

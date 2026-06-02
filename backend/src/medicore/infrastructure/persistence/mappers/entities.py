@@ -5,6 +5,7 @@ from __future__ import annotations
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.consultation import Consultation
+from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
@@ -34,6 +35,7 @@ from medicore.domain.shared.identifiers import (
     ConsultationId,
     DoctorProfileId,
     DocumentId,
+    InsurerId,
     LocationId,
     NotificationId,
     PatientId,
@@ -61,6 +63,7 @@ from medicore.infrastructure.persistence.mappers._json import (
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.audit_log import AuditLogModel
 from medicore.infrastructure.persistence.models.consultation import ConsultationModel
+from medicore.infrastructure.persistence.models.insurer import InsurerModel
 from medicore.infrastructure.persistence.models.medical_document import MedicalDocumentModel
 from medicore.infrastructure.persistence.models.medical_record import MedicalRecordModel
 from medicore.infrastructure.persistence.models.notification import NotificationModel
@@ -149,12 +152,28 @@ def to_patient(row: PatientModel) -> Patient:
         sex=Sex(row.sex),
         date_of_birth=row.date_of_birth,
         blood_type=BloodType(row.blood_type) if row.blood_type else None,
-        insurance=row.insurance,
+        insurance_id=InsurerId.parse(row.insurance_id) if row.insurance_id else None,
         primary_doctor_id=UserId.parse(row.primary_doctor_id) if row.primary_doctor_id else None,
         status=PatientStatus(row.status),
         tags=list(row.tags or []),
         allergies=list(row.allergies or []),
         contact=_contact_from_json(row.contact or {}),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def to_insurer(row: InsurerModel) -> Insurer:
+    return Insurer(
+        id=InsurerId.parse(row.id),
+        tenant_id=TenantId.parse(row.tenant_id),
+        name=row.name,
+        phone=row.phone,
+        email=row.email,
+        address=row.address,
+        contact_person=row.contact_person,
+        notes=row.notes,
+        active=row.active,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

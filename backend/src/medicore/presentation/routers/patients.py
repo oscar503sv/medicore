@@ -15,7 +15,7 @@ from medicore.application.use_cases.patients import (
 )
 from medicore.domain.enums import Sex
 from medicore.domain.repositories._support import Paging, PatientFilter
-from medicore.domain.shared.identifiers import PatientId, UserId
+from medicore.domain.shared.identifiers import InsurerId, PatientId, UserId
 from medicore.domain.value_objects.blood_type import BloodType
 from medicore.domain.value_objects.contact_info import ContactInfo
 from medicore.presentation.dependencies import Actor, Clock, Codes, UoW
@@ -71,7 +71,7 @@ def create_patient(body: CreatePatientRequest, actor: Actor, uow: UoW, codes: Co
         date_of_birth=body.date_of_birth,
         contact=contact,
         blood_type=BloodType(body.blood_type) if body.blood_type else None,
-        insurance=body.insurance,
+        insurance_id=InsurerId.parse(body.insurance_id) if body.insurance_id else None,
         primary_doctor_id=UserId.parse(body.primary_doctor_id) if body.primary_doctor_id else None,
         tags=tuple(body.tags),
         allergies=tuple(body.allergies),
@@ -98,8 +98,18 @@ def update_patient(
     patient_id: str, body: UpdatePatientRequest, actor: Actor, uow: UoW, clock: Clock
 ):
     changes = {k: v for k, v in body.model_dump(exclude_none=True).items()}
+    if body.contact is not None:
+        changes["contact"] = ContactInfo(
+            phone=body.contact.phone,
+            email=body.contact.email,
+            address=body.contact.address,
+            emergency_contact_name=body.contact.emergency_contact_name,
+            emergency_contact_phone=body.contact.emergency_contact_phone,
+        )
     if "blood_type" in changes and changes["blood_type"]:
         changes["blood_type"] = BloodType(changes["blood_type"])
+    if "insurance_id" in changes and changes["insurance_id"]:
+        changes["insurance_id"] = InsurerId.parse(changes["insurance_id"])
     if "primary_doctor_id" in changes and changes["primary_doctor_id"]:
         changes["primary_doctor_id"] = UserId.parse(changes["primary_doctor_id"])
     patient = UpdatePatient(uow, clock).execute(actor, PatientId.parse(patient_id), **changes)

@@ -16,12 +16,14 @@ from medicore.domain.entities.availability import (
     DoctorAvailability,
     WeeklyDay,
 )
+from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import PatientStatus, Role, Sex, UserStatus
 from medicore.domain.shared.identifiers import (
     AvailabilityId,
+    InsurerId,
     LocationId,
     PatientId,
     TenantId,
@@ -49,6 +51,13 @@ LAST_NAMES = [
 BLOOD = ["O+", "A+", "B+", "O-", "A-", "AB+"]
 TAGS = [["Hipertensión"], ["Diabetes tipo 2"], ["Asma"], [], ["Hipotiroidismo"], ["Migraña"]]
 ALLERGIES = [["Penicilina"], [], ["Polen"], ["Frutos secos"], [], ["AINE"]]
+# (name, phone, email, address) — demo insurers seeded per tenant.
+INSURERS = [
+    ("Sanitas", "900100100", "atencion@sanitas.test", "Calle Ribera del Loira 52, Madrid"),
+    ("Adeslas", "900200200", "clientes@adeslas.test", "Paseo de la Castellana 259, Madrid"),
+    ("DKV Seguros", "900300300", "info@dkv.test", "Av. María Zambrano 31, Zaragoza"),
+    ("Mapfre Salud", "900400400", "salud@mapfre.test", "Ctra. de Pozuelo 52, Majadahonda"),
+]
 
 
 def weekday_availability(tenant_id: TenantId, doctor_id: UserId) -> DoctorAvailability:
@@ -90,7 +99,7 @@ def make_user(tenant_id, name, email, role, specialty=None) -> User:
     )
 
 
-def make_patient(tenant_id, code, i, doctor_id) -> Patient:
+def make_patient(tenant_id, code, i, doctor_id, insurer_id) -> Patient:
     is_female = i % 2 == 0
     first = (FEMALE_NAMES if is_female else MALE_NAMES)[i % 8]
     last = f"{LAST_NAMES[i % len(LAST_NAMES)]} {LAST_NAMES[(i + 5) % len(LAST_NAMES)]}"
@@ -106,7 +115,7 @@ def make_patient(tenant_id, code, i, doctor_id) -> Patient:
         sex=Sex.FEMALE if is_female else Sex.MALE,
         date_of_birth=date(year, month, day),
         blood_type=BloodType(BLOOD[i % len(BLOOD)]),
-        insurance=["Sanitas", "Adeslas", "DKV", "Mapfre", None][i % 5],
+        insurance_id=insurer_id,
         primary_doctor_id=doctor_id,
         status=PatientStatus.ACTIVE,
         tags=list(TAGS[i % len(TAGS)]),
@@ -131,7 +140,7 @@ def get_or_create_tenant(session, slug: str, legal_name: str, location_name: str
         legal_name=legal_name,
         tax_id="B00000000",
         slug=Slug(slug),
-        timezone="Europe/Madrid",
+        timezone="America/El_Salvador",
         locations=[
             Location(id=LocationId.new(), tenant_id=tid, name=location_name, is_primary=True)
         ],
@@ -172,7 +181,30 @@ def seed_tenant(session, tenant: Tenant, staff: list[tuple], add_admin: bool) ->
 
         uow.commit()
 
-    # Patients (15) — assigned round-robin to the tenant's doctors.
+    # Insurers — seeded once per tenant (idempotent by name).
+    uow = SqlAlchemyUnitOfWork(session, tid)
+    insurer_ids: list[InsurerId | None] = []
+    with uow:
+        existing_insurers = {ins.name: ins.id for ins in uow.insurers.list()}
+        for name, phone, email, address in INSURERS:
+            if name in existing_insurers:
+                insurer_ids.append(existing_insurers[name])
+                continue
+            insurer = Insurer(
+                id=InsurerId.new(),
+                tenant_id=tid,
+                name=name,
+                phone=phone,
+                email=email,
+                address=address,
+            )
+            uow.insurers.save(insurer)
+            insurer_ids.append(insurer.id)
+        uow.commit()
+    insurer_ids.append(None)  # some patients have no insurer
+    print(f"    + {len(INSURERS)} seguros")
+
+    # Patients (15) — assigned round-robin to the tenant's doctors and insurers.
     if not doctors:
         doctors = [None]
     uow = SqlAlchemyUnitOfWork(session, tid)
@@ -183,7 +215,11 @@ def seed_tenant(session, tenant: Tenant, staff: list[tuple], add_admin: bool) ->
     with uow:
         for i in range(15):
             code = codes.next_patient_code()
-            uow.patients.save(make_patient(tid, code, i, doctors[i % len(doctors)]))
+            uow.patients.save(
+                make_patient(
+                    tid, code, i, doctors[i % len(doctors)], insurer_ids[i % len(insurer_ids)]
+                )
+            )
         uow.commit()
     print("    + 15 pacientes")
 
@@ -204,7 +240,7 @@ def main() -> None:
             ("Sara Gil", "sara.gil@clinica-demo.test", Role.RECEPTIONIST, None),
             ("Hugo Castro", "hugo.castro@clinica-demo.test", Role.RECEPTIONIST, None),
         ],
-        add_admin=False,  # already has admins (incl. ozkar@outlook.com)
+        add_admin=True,  # admin@clinica-demo.test (idempotent)
     )
 
     print("Tenant 2: centro-norte")
