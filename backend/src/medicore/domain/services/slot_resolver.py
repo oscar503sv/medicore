@@ -84,6 +84,8 @@ def _overlaps_busy(
 
 def _violates_rules(start: datetime, availability: DoctorAvailability, now: datetime) -> bool:
     rules = availability.rules
+    if start < now:  # the slot has already started; a past time is never bookable
+        return True
     if not rules.allow_same_day and start.date() == now.date():
         return True
     if rules.min_advance_hours and start < now + timedelta(hours=rules.min_advance_hours):

@@ -6,16 +6,19 @@ from datetime import datetime
 
 import pytest
 
+from medicore.application.common.context import ActorContext
 from medicore.application.use_cases.appointments import (
     CancelAppointment,
     CreateAppointment,
     CreateAppointmentCommand,
     GetAvailableSlots,
     GetBookingOptions,
+    ListAppointmentsForDay,
 )
-from medicore.domain.enums import AppointmentStatus, AppointmentType
+from medicore.domain.enums import AppointmentStatus, AppointmentType, Role
 from medicore.domain.services.slot_resolver import SlotStatus
 from medicore.domain.shared.errors import PermissionDenied, SlotUnavailable
+from medicore.domain.shared.identifiers import UserId
 from tests.support.builders import seed_clinic
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
@@ -128,6 +131,29 @@ def test_nurse_cannot_create_appointment():
     create, _ = make_create(seed)
     with pytest.raises(PermissionDenied):
         create.execute(seed.actor(seed.nurse), booking_cmd(seed))
+
+
+def test_doctor_only_sees_their_own_appointments():
+    seed = seed_clinic()
+    create, uow = make_create(seed)
+    create.execute(seed.receptionist_actor, booking_cmd(seed))
+
+    # The owning doctor sees their appointment.
+    own = ListAppointmentsForDay(uow).execute(seed.doctor_actor, MONDAY_9AM.date())
+    assert len(own) == 1
+
+    # A different doctor sees nothing — even when passing the owner's id explicitly.
+    other = ActorContext(user_id=UserId.new(), tenant_id=seed.tenant.id, role=Role.DOCTOR)
+    assert ListAppointmentsForDay(uow).execute(other, MONDAY_9AM.date(), seed.doctor.id) == []
+
+
+def test_receptionist_sees_all_doctors_appointments():
+    seed = seed_clinic()
+    create, uow = make_create(seed)
+    create.execute(seed.receptionist_actor, booking_cmd(seed))
+
+    all_appts = ListAppointmentsForDay(uow).execute(seed.receptionist_actor, MONDAY_9AM.date())
+    assert len(all_appts) == 1
 
 
 class TestBookingOptions:

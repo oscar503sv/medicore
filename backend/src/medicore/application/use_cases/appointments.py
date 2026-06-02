@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
@@ -15,7 +16,7 @@ from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.tenant import Location
 from medicore.domain.entities.user import User
-from medicore.domain.enums import AppointmentStatus, AppointmentType
+from medicore.domain.enums import AppointmentStatus, AppointmentType, Role
 from medicore.domain.repositories._support import UserFilter
 from medicore.domain.services.slot_resolver import (
     BusyInterval,
@@ -44,6 +45,21 @@ def _busy_intervals(appointments: list[Appointment]) -> list[BusyInterval]:
         for a in appointments
         if a.status in _BLOCKING_STATUSES
     ]
+
+
+def _clinic_now(uow: UnitOfWork, tenant_id: object, clock: Clock) -> datetime:
+    """Current instant as the clinic's local wall-clock.
+
+    Slots and appointments are stored/compared as naive wall-clock in the clinic's timezone
+    (see ``slot_resolver._naive``). ``SystemClock`` returns tz-aware UTC, so we convert it to
+    the tenant's timezone and drop tzinfo. A naive clock (tests' ``FixedClock``) is already
+    wall-clock and passes through unchanged."""
+    now = clock.now()
+    if now.tzinfo is None:
+        return now
+    tenant = uow.tenants.get_by_id(tenant_id)
+    tz = ZoneInfo(tenant.timezone) if tenant and tenant.timezone else timezone.utc
+    return now.astimezone(tz).replace(tzinfo=None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +97,13 @@ class GetBookingOptions:
         return BookingOptions(doctors=doctors, locations=locations)
 
 
+def _scope_doctor(actor: ActorContext, doctor_id: UserId | None) -> UserId | None:
+    """Doctors only ever see their own appointments; other roles may filter by any doctor."""
+    if actor.role == Role.DOCTOR:
+        return actor.user_id
+    return doctor_id
+
+
 class ListAppointmentsForDay:
     def __init__(self, uow: UnitOfWork) -> None:
         self._uow = uow
@@ -88,7 +111,7 @@ class ListAppointmentsForDay:
     def execute(
         self, actor: ActorContext, on: date, doctor_id: UserId | None = None
     ) -> list[Appointment]:
-        return self._uow.appointments.list_by_day(on, doctor_id)
+        return self._uow.appointments.list_by_day(on, _scope_doctor(actor, doctor_id))
 
 
 class GetWeeklySchedule:
@@ -98,9 +121,10 @@ class GetWeeklySchedule:
     def execute(
         self, actor: ActorContext, week_start: date, doctor_id: UserId | None = None
     ) -> dict[date, list[Appointment]]:
+        scoped = _scope_doctor(actor, doctor_id)
         return {
             (day := week_start + timedelta(days=offset)): self._uow.appointments.list_by_day(
-                day, doctor_id
+                day, scoped
             )
             for offset in range(7)
         }
@@ -129,7 +153,7 @@ class GetAvailableSlots:
             on,
             desired_duration_minutes=duration_minutes,
             busy=busy,
-            now=self._clock.now(),
+            now=_clinic_now(self._uow, actor.tenant_id, self._clock),
         )
 
 
@@ -158,7 +182,7 @@ class CreateAppointment:
             cmd.scheduled_start,
             cmd.duration_minutes,
             busy=busy,
-            now=self._clock.now(),
+            now=_clinic_now(self._uow, actor.tenant_id, self._clock),
         ):
             raise SlotUnavailable(
                 f"{cmd.scheduled_start.isoformat()} is not bookable for doctor {cmd.doctor_id}"
@@ -224,7 +248,7 @@ class RescheduleAppointment:
             new_start,
             duration,
             busy=_busy_intervals(overlapping),
-            now=self._clock.now(),
+            now=_clinic_now(self._uow, actor.tenant_id, self._clock),
         ):
             raise SlotUnavailable("new slot is not bookable")
 

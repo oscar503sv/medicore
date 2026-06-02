@@ -141,6 +141,15 @@ class TestResolveSlots:
         assert _at(slots, 9, 0).status == SlotStatus.BLOCKED_RULES
         assert not _free(slots)
 
+    def test_past_slots_today_are_blocked_even_with_permissive_rules(self):
+        # Default rules allow same-day with 0h advance; times already past must still not be FREE.
+        now = datetime(2026, 6, 1, 10, 15)
+        slots = resolve_available_slots(make_availability(), THE_DAY, now=now)
+        assert _at(slots, 9, 0).status == SlotStatus.BLOCKED_RULES
+        assert _at(slots, 10, 0).status == SlotStatus.BLOCKED_RULES
+        # The 10:30 slot is still in the future → bookable.
+        assert _at(slots, 10, 30).status == SlotStatus.FREE
+
 
 class TestIsAvailable:
     def test_true_within_block_and_free(self):
@@ -169,3 +178,8 @@ class TestIsAvailable:
         av = make_availability(rules=BookingRules(slot_minutes=30, min_advance_hours=48))
         now = datetime(2026, 6, 1, 8, 0)
         assert not is_available(av, datetime(2026, 6, 1, 9, 0), 30, now=now)
+
+    def test_false_when_slot_is_in_the_past(self):
+        # Permissive defaults, but the 09:00 slot already passed at 10:00 → not bookable.
+        now = datetime(2026, 6, 1, 10, 0)
+        assert not is_available(make_availability(), datetime(2026, 6, 1, 9, 0), 30, now=now)
