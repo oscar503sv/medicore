@@ -86,6 +86,22 @@ class PlatformUnitOfWork(Protocol):
     def rollback(self) -> None: ...
 
 
+class PlatformReadModel(Protocol):
+    """Cross-tenant read model for superadmin stats and the global audit viewer."""
+
+    def counts_by_tenant(self) -> dict[str, dict[str, int]]: ...
+
+    def tenant_counts(self, tenant_id: TenantId) -> dict[str, int]: ...
+
+    def global_audit(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        action: str | None = None,
+        tenant_id: str | None = None,
+    ) -> list: ...
+
+
 class UnitOfWorkFactory(Protocol):
     def for_tenant(self, tenant_id: TenantId) -> UnitOfWork:
         """Build a UnitOfWork scoped to ``tenant_id``."""
@@ -97,4 +113,8 @@ class UnitOfWorkFactory(Protocol):
 
     def platform_uow(self) -> PlatformUnitOfWork:
         """Build a non-tenant-scoped UnitOfWork for superadmin operations."""
+        ...
+
+    def platform_reads(self) -> PlatformReadModel:
+        """Cross-tenant read model for superadmin stats and global audit."""
         ...

@@ -8,28 +8,46 @@ from medicore.application.use_cases.platform import (
     AuthenticatePlatformAdmin,
     CreateTenantCommand,
     CreateTenantWithAdmin,
+    GetGlobalStats,
     GetPlatformAdmin,
     GetTenant,
+    GetTenantStats,
+    ListGlobalAudit,
     ListTenants,
+    ListTenantUsers,
+    ResetUserPassword,
     SetTenantStatus,
+    UnlockUser,
     UpdateTenant,
 )
 from medicore.domain.enums import IcdVersion, TenantStatus
 from medicore.domain.repositories._support import Paging, TenantFilter
-from medicore.domain.shared.identifiers import TenantId
+from medicore.domain.shared.identifiers import TenantId, UserId
 from medicore.presentation.dependencies import Clock, Hasher, JwtIssuer, PlatformActor, UoWFactory
 from medicore.presentation.schemas.platform import (
+    AuditEntryResponse,
     CreateTenantRequest,
     CreateTenantResponse,
+    GlobalStatsResponse,
     PlatformAdminResponse,
     PlatformLoginRequest,
     PlatformSessionResponse,
+    ResetPasswordRequest,
     SetTenantStatusRequest,
     TenantListResponse,
     TenantResponse,
+    TenantStatsResponse,
     UpdateTenantRequest,
 )
-from medicore.presentation.serializers import ser_platform_admin, ser_tenant
+from medicore.presentation.schemas.users import UserListResponse
+from medicore.presentation.serializers import (
+    ser_audit,
+    ser_global_stats,
+    ser_platform_admin,
+    ser_tenant,
+    ser_tenant_stats,
+    ser_user,
+)
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 
@@ -113,3 +131,79 @@ def set_tenant_status(tenant_id: str, body: SetTenantStatusRequest, actor: Platf
         actor, TenantId.parse(tenant_id), TenantStatus(body.status)
     )
     return ser_tenant(tenant)
+
+
+# ── Statistics & audit ─────────────────────────────────────────────────────────
+
+
+@router.get("/stats", response_model=GlobalStatsResponse)
+def global_stats(actor: PlatformActor, factory: UoWFactory):
+    return ser_global_stats(GetGlobalStats(factory).execute(actor))
+
+
+@router.get("/tenants/{tenant_id}/stats", response_model=TenantStatsResponse)
+def tenant_stats(tenant_id: str, actor: PlatformActor, factory: UoWFactory):
+    return ser_tenant_stats(GetTenantStats(factory).execute(actor, TenantId.parse(tenant_id)))
+
+
+@router.get("/audit", response_model=list[AuditEntryResponse])
+def global_audit(
+    actor: PlatformActor,
+    factory: UoWFactory,
+    action: str | None = Query(None),
+    tenant_id: str | None = Query(None),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+):
+    entries = ListGlobalAudit(factory).execute(
+        actor, limit=limit, offset=offset, action=action, tenant_id=tenant_id
+    )
+    return [ser_audit(e) for e in entries]
+
+
+# ── Account support (cross-tenant) ─────────────────────────────────────────────
+
+
+@router.get("/tenants/{tenant_id}/users", response_model=UserListResponse)
+def list_tenant_users(
+    tenant_id: str,
+    actor: PlatformActor,
+    factory: UoWFactory,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+):
+    page = ListTenantUsers(factory).execute(
+        actor, TenantId.parse(tenant_id), Paging(offset=offset, limit=limit)
+    )
+    return UserListResponse(
+        items=[ser_user(u) for u in page.items],
+        total=page.total,
+        offset=page.offset,
+        limit=page.limit,
+    )
+
+
+@router.post("/tenants/{tenant_id}/users/{user_id}/reset-password", response_model=UserListResponse)
+def reset_user_password(tenant_id: str, user_id: str, body: ResetPasswordRequest,
+                        actor: PlatformActor, factory: UoWFactory, hasher: Hasher, clock: Clock):
+    ResetUserPassword(factory, hasher, clock).execute(
+        actor, TenantId.parse(tenant_id), UserId.parse(user_id), body.password
+    )
+    page = ListTenantUsers(factory).execute(actor, TenantId.parse(tenant_id))
+    return UserListResponse(
+        items=[ser_user(u) for u in page.items], total=page.total, offset=page.offset,
+        limit=page.limit,
+    )
+
+
+@router.post("/tenants/{tenant_id}/users/{user_id}/unlock", response_model=UserListResponse)
+def unlock_user(tenant_id: str, user_id: str, actor: PlatformActor, factory: UoWFactory,
+                clock: Clock):
+    UnlockUser(factory, clock).execute(
+        actor, TenantId.parse(tenant_id), UserId.parse(user_id)
+    )
+    page = ListTenantUsers(factory).execute(actor, TenantId.parse(tenant_id))
+    return UserListResponse(
+        items=[ser_user(u) for u in page.items], total=page.total, offset=page.offset,
+        limit=page.limit,
+    )

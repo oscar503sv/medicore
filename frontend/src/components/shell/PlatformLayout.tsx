@@ -1,10 +1,14 @@
-import { LogOut, Building2, ShieldAlert } from 'lucide-react'
+import { LogOut, Building2, BarChart3, ScrollText, ShieldAlert } from 'lucide-react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
 import { usePlatformAuthStore } from '@/stores/platformAuth'
 
-const NAV = [{ to: '/platform/clinics', labelKey: 'platform.nav_clinics', icon: Building2 }]
+const NAV = [
+  { to: '/platform/clinics', labelKey: 'platform.nav_clinics', icon: Building2 },
+  { to: '/platform/stats', labelKey: 'platform.nav_stats', icon: BarChart3 },
+  { to: '/platform/audit', labelKey: 'platform.nav_audit', icon: ScrollText },
+]
 
 export function PlatformLayout() {
   const t = useT()

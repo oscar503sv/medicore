@@ -82,3 +82,69 @@ def test_update_tenant_icd_version(seed, client, platform_headers):
     )
     assert resp.status_code == 200
     assert resp.json()["icd_version"] == "cie10"
+
+
+def test_global_stats_endpoint(seed, client, platform_headers):
+    resp = client.get("/api/v1/platform/stats", headers=platform_headers)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["total_clinics"] == 1
+    assert data["total_users"] == 4
+    assert data["by_clinic"][0]["patients"] == 1
+
+
+def test_tenant_stats_endpoint(seed, client, platform_headers):
+    resp = client.get(f"/api/v1/platform/tenants/{seed.tenant.id}/stats", headers=platform_headers)
+    assert resp.status_code == 200
+    assert resp.json()["users"] == 4
+
+
+def test_list_tenant_users_and_reset_password(seed, client, platform_headers):
+    listing = client.get(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/users", headers=platform_headers
+    )
+    assert listing.status_code == 200
+    assert listing.json()["total"] == 4
+
+    resp = client.post(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/users/{seed.doctor.id}/reset-password",
+        headers=platform_headers,
+        json={"password": "fresh-temp-pass"},
+    )
+    assert resp.status_code == 200, resp.text
+    # the doctor must now change password on next login
+    login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "slug": str(seed.tenant.slug),
+            "email": seed.doctor.email,
+            "password": "fresh-temp-pass",
+        },
+    )
+    assert login.status_code == 200
+    assert login.json()["must_change_password"] is True
+
+
+def test_unlock_user_endpoint(seed, client, platform_headers):
+    from medicore.domain.enums import UserStatus
+
+    seed.doctor.status = UserStatus.SUSPENDED
+    seed.factory.store.users[seed.doctor.id.value] = seed.doctor
+
+    resp = client.post(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/users/{seed.doctor.id}/unlock",
+        headers=platform_headers,
+    )
+    assert resp.status_code == 200
+    assert seed.factory.store.users[seed.doctor.id.value].status == UserStatus.ACTIVE
+
+
+def test_global_audit_endpoint(seed, client, platform_headers):
+    # generate a tenant audit entry by logging in a clinic user
+    client.post(
+        "/api/v1/auth/login",
+        json={"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
+    )
+    resp = client.get("/api/v1/platform/audit", headers=platform_headers)
+    assert resp.status_code == 200, resp.text
+    assert any(e["action"] == "auth.login" for e in resp.json())

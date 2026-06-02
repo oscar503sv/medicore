@@ -19,6 +19,7 @@ from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
 from medicore.application.ports.unit_of_work import UnitOfWorkFactory
+from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
@@ -281,3 +282,173 @@ class SetTenantStatus:
             )
             uow.commit()
         return tenant
+
+
+# ── Statistics ────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class TenantStatsDTO:
+    tenant_id: str
+    legal_name: str
+    status: str
+    patients: int
+    users: int
+    appointments: int
+    consultations: int
+    records: int
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalStatsDTO:
+    total_clinics: int
+    active_clinics: int
+    total_patients: int
+    total_users: int
+    total_appointments: int
+    by_clinic: list[TenantStatsDTO]
+
+
+def _counts_to_stats(tenant: Tenant, counts: dict[str, int]) -> TenantStatsDTO:
+    return TenantStatsDTO(
+        tenant_id=str(tenant.id),
+        legal_name=tenant.legal_name,
+        status=str(tenant.status),
+        patients=counts.get("patients", 0),
+        users=counts.get("users", 0),
+        appointments=counts.get("appointments", 0),
+        consultations=counts.get("consultations", 0),
+        records=counts.get("records", 0),
+    )
+
+
+class GetGlobalStats:
+    """Aggregate counts across every clinic plus per-clinic breakdown."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+        self._factory = uow_factory
+
+    def execute(self, actor: PlatformActorContext) -> GlobalStatsDTO:
+        tenants = self._factory.platform_uow().tenants.list(paging=Paging(limit=1000)).items
+        counts = self._factory.platform_reads().counts_by_tenant()
+        by_clinic = [_counts_to_stats(t, counts.get(str(t.id), {})) for t in tenants]
+        return GlobalStatsDTO(
+            total_clinics=len(tenants),
+            active_clinics=sum(1 for t in tenants if t.is_active),
+            total_patients=sum(c.patients for c in by_clinic),
+            total_users=sum(c.users for c in by_clinic),
+            total_appointments=sum(c.appointments for c in by_clinic),
+            by_clinic=by_clinic,
+        )
+
+
+class GetTenantStats:
+    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+        self._factory = uow_factory
+
+    def execute(self, actor: PlatformActorContext, tenant_id: TenantId) -> TenantStatsDTO:
+        tenant = self._factory.platform_uow().tenants.get_by_id(tenant_id)
+        if tenant is None:
+            raise EntityNotFound("Tenant", tenant_id)
+        counts = self._factory.platform_reads().tenant_counts(tenant_id)
+        return _counts_to_stats(tenant, counts)
+
+
+class ListGlobalAudit:
+    """Read the per-tenant audit trail across all clinics (most recent first)."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+        self._factory = uow_factory
+
+    def execute(
+        self,
+        actor: PlatformActorContext,
+        limit: int = 100,
+        offset: int = 0,
+        action: str | None = None,
+        tenant_id: str | None = None,
+    ) -> list[AuditLog]:
+        return self._factory.platform_reads().global_audit(
+            limit=limit, offset=offset, action=action, tenant_id=tenant_id
+        )
+
+
+# ── Account support (cross-tenant) ─────────────────────────────────────────────
+
+
+class ListTenantUsers:
+    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+        self._factory = uow_factory
+
+    def execute(
+        self, actor: PlatformActorContext, tenant_id: TenantId, paging: Paging | None = None
+    ) -> Page[User]:
+        uow = self._factory.for_tenant(tenant_id)
+        with uow:
+            return uow.users.list(paging=paging)
+
+
+def _require_user(uow, tenant_id: TenantId, user_id: UserId) -> User:
+    user = uow.users.get_by_id(user_id)
+    if user is None or user.tenant_id != tenant_id:
+        raise EntityNotFound("User", user_id)
+    return user
+
+
+class ResetUserPassword:
+    """Superadmin sets a temporary password for a user; they must change it on next login."""
+
+    def __init__(
+        self, uow_factory: UnitOfWorkFactory, hasher: PasswordHasher, clock: Clock
+    ) -> None:
+        self._factory = uow_factory
+        self._hasher = hasher
+        self._clock = clock
+
+    def execute(
+        self,
+        actor: PlatformActorContext,
+        tenant_id: TenantId,
+        user_id: UserId,
+        password: str,
+    ) -> User:
+        if not password or len(password) < 8:
+            raise ValidationError("temporary password must be at least 8 characters")
+        uow = self._factory.for_tenant(tenant_id)
+        user = _require_user(uow, tenant_id, user_id)
+        with uow:
+            user.set_temporary_password(self._hasher.hash(password))
+            uow.users.save(user)
+            uow.platform_audit.append(
+                _audit(
+                    actor, self._clock.now(), "user.password_reset", "User", str(user_id),
+                    tenant_id=str(tenant_id),
+                )
+            )
+            uow.commit()
+        return user
+
+
+class UnlockUser:
+    """Reactivate a suspended user account."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(
+        self, actor: PlatformActorContext, tenant_id: TenantId, user_id: UserId
+    ) -> User:
+        uow = self._factory.for_tenant(tenant_id)
+        user = _require_user(uow, tenant_id, user_id)
+        with uow:
+            user.activate()
+            uow.users.save(user)
+            uow.platform_audit.append(
+                _audit(
+                    actor, self._clock.now(), "user.unlocked", "User", str(user_id),
+                    tenant_id=str(tenant_id),
+                )
+            )
+            uow.commit()
+        return user

@@ -25,6 +25,7 @@ from medicore.infrastructure.persistence.repositories.platform import (
     SqlPlatformAdminRepository,
     SqlPlatformAuditLogRepository,
 )
+from medicore.infrastructure.persistence.repositories.platform_reads import SqlPlatformReadModel
 from medicore.infrastructure.persistence.repositories.tenant import SqlTenantRepository
 from medicore.infrastructure.persistence.repositories.user import (
     SqlDoctorProfileRepository,
@@ -136,3 +137,6 @@ class SqlAlchemyUnitOfWorkFactory:
 
     def platform_admins(self) -> SqlPlatformAdminRepository:
         return SqlPlatformAdminRepository(self._factory())
+
+    def platform_reads(self) -> SqlPlatformReadModel:
+        return SqlPlatformReadModel(self._factory())

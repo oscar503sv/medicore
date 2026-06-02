@@ -59,6 +59,37 @@ export interface Tenant {
   locations: TenantLocation[]
 }
 
+export interface TenantStats {
+  tenant_id: string
+  legal_name: string
+  status: TenantStatus
+  patients: number
+  users: number
+  appointments: number
+  consultations: number
+  records: number
+}
+
+export interface GlobalStats {
+  total_clinics: number
+  active_clinics: number
+  total_patients: number
+  total_users: number
+  total_appointments: number
+  by_clinic: TenantStats[]
+}
+
+export interface AuditEntry {
+  id: string
+  tenant_id: string
+  actor_id: string
+  action: string
+  entity_type: string
+  entity_id: string
+  metadata: Record<string, unknown>
+  timestamp: string
+}
+
 // ── Enums ─────────────────────────────────────────────────────────────────────
 export type Role = 'admin' | 'doctor' | 'nurse' | 'receptionist'
 export type UserStatus = 'active' | 'pending' | 'suspended'

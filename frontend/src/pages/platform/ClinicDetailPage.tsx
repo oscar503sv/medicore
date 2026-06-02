@@ -1,18 +1,26 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, KeyRound, Unlock } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { platformTenantsApi } from '@/api/platform'
 import { PageHeader } from '@/components/PageHeader'
-import { Badge } from '@/components/ui/Badge'
+import { StatCard } from '@/components/StatCard'
+import { Badge, statusTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Input'
 import { PageLoader } from '@/components/ui/Spinner'
+import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
+import { Activity, CalendarCheck, FileText, Users } from 'lucide-react'
 import type { TenantStatus } from '@/types'
+
+function genPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+}
 
 const STATUS_TONE: Record<TenantStatus, 'ok' | 'danger' | 'neutral'> = {
   active: 'ok',
@@ -73,6 +81,34 @@ export function ClinicDetailPage() {
     onSuccess: () => {
       toast(t('platform.status_changed_ok'))
       invalidate()
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  const { data: stats } = useQuery({
+    queryKey: ['platform-tenant-stats', id],
+    queryFn: () => platformTenantsApi.tenantStats(id),
+  })
+
+  const { data: users } = useQuery({
+    queryKey: ['platform-tenant-users', id],
+    queryFn: () => platformTenantsApi.listUsers(id),
+  })
+
+  const resetPassword = useMutation({
+    mutationFn: (userId: string) => platformTenantsApi.resetUserPassword(id, userId, genPassword()),
+    onSuccess: (res, userId) => {
+      const u = res.items.find((x) => x.id === userId)
+      toast(`${t('platform.password_reset_ok')} · ${u?.email}`)
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  const unlock = useMutation({
+    mutationFn: (userId: string) => platformTenantsApi.unlockUser(id, userId),
+    onSuccess: () => {
+      toast(t('platform.unlocked_ok'))
+      qc.invalidateQueries({ queryKey: ['platform-tenant-users', id] })
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -148,6 +184,66 @@ export function ClinicDetailPage() {
             </Button>
           )}
         </div>
+      </Card>
+
+      {stats && (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard icon={Users} label={t('platform.total_patients')} value={String(stats.patients)} />
+          <StatCard icon={Activity} label={t('platform.total_users')} value={String(stats.users)} />
+          <StatCard icon={CalendarCheck} label={t('platform.total_appointments')} value={String(stats.appointments)} />
+          <StatCard icon={FileText} label={t('platform.col_records')} value={String(stats.records)} />
+        </div>
+      )}
+
+      <Card>
+        <CardHeader title={t('platform.users_title')} />
+        <Table>
+          <thead>
+            <Tr>
+              <Th>{t('platform.col_name')}</Th>
+              <Th>{t('login.email')}</Th>
+              <Th>{t('users.col_role')}</Th>
+              <Th>{t('platform.col_status')}</Th>
+              <Th />
+            </Tr>
+          </thead>
+          <tbody>
+            {users?.items.map((u) => (
+              <Tr key={u.id}>
+                <Td className="font-medium text-tx">{u.name}</Td>
+                <Td className="text-[13px]">{u.email}</Td>
+                <Td>{t(`role.${u.role}`)}</Td>
+                <Td>
+                  <Badge tone={statusTone(u.status)}>{t(`status.${u.status}`)}</Badge>
+                </Td>
+                <Td className="text-right">
+                  <div className="flex justify-end gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={resetPassword.isPending && resetPassword.variables === u.id}
+                      onClick={() => resetPassword.mutate(u.id)}
+                    >
+                      <KeyRound className="h-3.5 w-3.5" />
+                      {t('platform.reset_password')}
+                    </Button>
+                    {u.status === 'suspended' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        loading={unlock.isPending && unlock.variables === u.id}
+                        onClick={() => unlock.mutate(u.id)}
+                      >
+                        <Unlock className="h-3.5 w-3.5" />
+                        {t('platform.unlock')}
+                      </Button>
+                    )}
+                  </div>
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
       </Card>
     </div>
   )

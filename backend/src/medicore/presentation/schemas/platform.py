@@ -83,3 +83,38 @@ class UpdateTenantRequest(BaseModel):
 
 class SetTenantStatusRequest(BaseModel):
     status: str  # active | suspended | archived
+
+
+class TenantStatsResponse(BaseModel):
+    tenant_id: str
+    legal_name: str
+    status: str
+    patients: int
+    users: int
+    appointments: int
+    consultations: int
+    records: int
+
+
+class GlobalStatsResponse(BaseModel):
+    total_clinics: int
+    active_clinics: int
+    total_patients: int
+    total_users: int
+    total_appointments: int
+    by_clinic: list[TenantStatsResponse]
+
+
+class AuditEntryResponse(BaseModel):
+    id: str
+    tenant_id: str
+    actor_id: str
+    action: str
+    entity_type: str
+    entity_id: str
+    metadata: dict
+    timestamp: datetime
+
+
+class ResetPasswordRequest(BaseModel):
+    password: str

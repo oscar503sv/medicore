@@ -51,6 +51,43 @@ def ser_platform_admin(a) -> dict:
     }
 
 
+def ser_tenant_stats(s) -> dict:
+    return {
+        "tenant_id": s.tenant_id,
+        "legal_name": s.legal_name,
+        "status": s.status,
+        "patients": s.patients,
+        "users": s.users,
+        "appointments": s.appointments,
+        "consultations": s.consultations,
+        "records": s.records,
+    }
+
+
+def ser_global_stats(s) -> dict:
+    return {
+        "total_clinics": s.total_clinics,
+        "active_clinics": s.active_clinics,
+        "total_patients": s.total_patients,
+        "total_users": s.total_users,
+        "total_appointments": s.total_appointments,
+        "by_clinic": [ser_tenant_stats(c) for c in s.by_clinic],
+    }
+
+
+def ser_audit(e) -> dict:
+    return {
+        "id": str(e.id),
+        "tenant_id": str(e.tenant_id),
+        "actor_id": str(e.actor_id),
+        "action": e.action,
+        "entity_type": e.entity_type,
+        "entity_id": e.entity_id,
+        "metadata": dict(e.metadata),
+        "timestamp": e.timestamp,
+    }
+
+
 def ser_platform_audit(e) -> dict:
     return {
         "id": str(e.id),

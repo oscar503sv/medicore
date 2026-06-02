@@ -11,8 +11,13 @@ from medicore.application.use_cases.platform import (
     AuthenticatePlatformAdmin,
     CreateTenantCommand,
     CreateTenantWithAdmin,
+    GetGlobalStats,
+    GetTenantStats,
+    ListGlobalAudit,
     ListTenants,
+    ResetUserPassword,
     SetTenantStatus,
+    UnlockUser,
     UpdateTenant,
 )
 from medicore.domain.enums import IcdVersion, TenantStatus, UserStatus
@@ -133,3 +138,48 @@ def test_list_tenants_filters_by_status():
     assert page.total == 1
     assert page.items[0].status == TenantStatus.ARCHIVED
     assert seed.platform_admin.status == UserStatus.ACTIVE
+
+
+def test_global_stats_counts():
+    seed = seed_clinic()
+    stats = GetGlobalStats(seed.factory).execute(actor_for(seed))
+    assert stats.total_clinics == 1
+    assert stats.total_users == 4  # admin, doctor, nurse, receptionist
+    assert stats.total_patients == 1
+    assert stats.by_clinic[0].tenant_id == str(seed.tenant.id)
+
+
+def test_tenant_stats_counts():
+    seed = seed_clinic()
+    stats = GetTenantStats(seed.factory).execute(actor_for(seed), seed.tenant.id)
+    assert stats.users == 4
+    assert stats.patients == 1
+
+
+def test_reset_user_password_sets_temporary():
+    seed = seed_clinic()
+    user = ResetUserPassword(seed.factory, PlainPasswordHasher(), FixedClock()).execute(
+        actor_for(seed), seed.tenant.id, seed.doctor.id, "brand-new-pass"
+    )
+    assert user.must_change_password is True
+    assert seed.factory.platform_uow().platform_audit.list()
+
+
+def test_unlock_user_reactivates():
+    seed = seed_clinic()
+    seed.doctor.status = UserStatus.SUSPENDED
+    seed.factory.store.users[seed.doctor.id.value] = seed.doctor
+    user = UnlockUser(seed.factory, FixedClock()).execute(
+        actor_for(seed), seed.tenant.id, seed.doctor.id
+    )
+    assert user.status == UserStatus.ACTIVE
+
+
+def test_global_audit_reads_tenant_trail():
+    seed = seed_clinic()
+    auth = AuthenticateUser(seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), FixedClock())
+    auth.execute(
+        AuthenticateUserCommand(slug="clinica-norte", email=seed.doctor.email, password=PASSWORD)
+    )
+    entries = ListGlobalAudit(seed.factory).execute(actor_for(seed))
+    assert any(e.action == "auth.login" for e in entries)

@@ -1,5 +1,14 @@
 import { platformApi } from './client'
-import type { PaginatedResponse, PlatformAdminProfile, PlatformSession, Tenant } from '@/types'
+import type {
+  AuditEntry,
+  GlobalStats,
+  PaginatedResponse,
+  PlatformAdminProfile,
+  PlatformSession,
+  Tenant,
+  TenantStats,
+  User,
+} from '@/types'
 
 export interface CreateTenantPayload {
   legal_name: string
@@ -53,4 +62,32 @@ export const platformTenantsApi = {
     platformApi
       .post<Tenant>(`/platform/tenants/${id}/status`, { status })
       .then((r) => r.data),
+
+  stats: () => platformApi.get<GlobalStats>('/platform/stats').then((r) => r.data),
+
+  tenantStats: (id: string) =>
+    platformApi.get<TenantStats>(`/platform/tenants/${id}/stats`).then((r) => r.data),
+
+  listUsers: (id: string) =>
+    platformApi
+      .get<PaginatedResponse<User>>(`/platform/tenants/${id}/users`)
+      .then((r) => r.data),
+
+  resetUserPassword: (id: string, userId: string, password: string) =>
+    platformApi
+      .post<PaginatedResponse<User>>(
+        `/platform/tenants/${id}/users/${userId}/reset-password`,
+        { password },
+      )
+      .then((r) => r.data),
+
+  unlockUser: (id: string, userId: string) =>
+    platformApi
+      .post<PaginatedResponse<User>>(`/platform/tenants/${id}/users/${userId}/unlock`)
+      .then((r) => r.data),
+}
+
+export const platformAuditApi = {
+  list: (params: { action?: string; tenant_id?: string; offset?: number; limit?: number } = {}) =>
+    platformApi.get<AuditEntry[]>('/platform/audit', { params }).then((r) => r.data),
 }

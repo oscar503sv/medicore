@@ -18,6 +18,7 @@ from tests.support.repositories import (
     InMemoryPatientRepository,
     InMemoryPlatformAdminRepository,
     InMemoryPlatformAuditLogRepository,
+    InMemoryPlatformReadModel,
     InMemoryPrescriptionRepository,
     InMemoryTenantRepository,
     InMemoryUserRepository,
@@ -125,3 +126,6 @@ class InMemoryUnitOfWorkFactory:
 
     def platform_admins(self) -> InMemoryPlatformAdminRepository:
         return InMemoryPlatformAdminRepository(self.store)
+
+    def platform_reads(self) -> InMemoryPlatformReadModel:
+        return InMemoryPlatformReadModel(self.store)

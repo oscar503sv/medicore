@@ -113,6 +113,47 @@ class InMemoryPlatformAuditLogRepository:
         return entries[offset : offset + limit]
 
 
+class InMemoryPlatformReadModel:
+    _SOURCES = ("patients", "users", "appointments", "consultations", "medical_records")
+    _KEYS = {"medical_records": "records"}
+
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def _items(self, name: str):
+        return getattr(self._store, name).values()
+
+    def tenant_counts(self, tenant_id: TenantId) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for name in self._SOURCES:
+            key = self._KEYS.get(name, name)
+            out[key] = sum(1 for e in self._items(name) if e.tenant_id == tenant_id)
+        return out
+
+    def counts_by_tenant(self) -> dict[str, dict[str, int]]:
+        out: dict[str, dict[str, int]] = {}
+        for name in self._SOURCES:
+            key = self._KEYS.get(name, name)
+            for e in self._items(name):
+                out.setdefault(str(e.tenant_id), {}).setdefault(key, 0)
+                out[str(e.tenant_id)][key] += 1
+        return out
+
+    def global_audit(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        action: str | None = None,
+        tenant_id: str | None = None,
+    ) -> list:
+        entries = sorted(self._store.audit.values(), key=lambda e: e.timestamp, reverse=True)
+        if action:
+            entries = [e for e in entries if e.action == action]
+        if tenant_id:
+            entries = [e for e in entries if str(e.tenant_id) == tenant_id]
+        return entries[offset : offset + limit]
+
+
 class _Scoped:
     def __init__(self, store: InMemoryStore, tenant_id: TenantId) -> None:
         self._store = store
