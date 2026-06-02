@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 from datetime import datetime
+
+import pytest
 
 from medicore.application.use_cases.appointments import (
     CreateAppointment,
@@ -19,7 +19,6 @@ from medicore.application.use_cases.insurers import (
 )
 from medicore.domain.enums import AppointmentType
 from medicore.domain.shared.errors import PermissionDenied
-
 from tests.support.builders import seed_clinic
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 

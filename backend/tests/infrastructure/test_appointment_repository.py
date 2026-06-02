@@ -8,7 +8,7 @@ them on a single wall-clock reference instead of crashing with
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from medicore.domain.shared.identifiers import TenantId, UserId
@@ -24,10 +24,10 @@ class _FakeQuery:
     def __init__(self, rows: list[AppointmentModel]) -> None:
         self._rows = rows
 
-    def filter(self, *args: object, **kwargs: object) -> "_FakeQuery":
+    def filter(self, *args: object, **kwargs: object) -> _FakeQuery:
         return self
 
-    def order_by(self, *args: object) -> "_FakeQuery":
+    def order_by(self, *args: object) -> _FakeQuery:
         return self
 
     def all(self) -> list[AppointmentModel]:
@@ -69,8 +69,8 @@ def test_find_overlapping_compares_naive_store_against_aware_request():
     repo = SqlAppointmentRepository(_FakeSession([_naive_row(doctor, tenant)]), tenant)
 
     # Aware request that overlaps the naive 09:00-09:30 stored appointment.
-    start = datetime(2026, 6, 1, 9, 15, tzinfo=timezone.utc)
-    end = datetime(2026, 6, 1, 9, 45, tzinfo=timezone.utc)
+    start = datetime(2026, 6, 1, 9, 15, tzinfo=UTC)
+    end = datetime(2026, 6, 1, 9, 45, tzinfo=UTC)
 
     overlapping = repo.find_overlapping(doctor, start, end)
 
@@ -83,7 +83,7 @@ def test_find_overlapping_excludes_non_overlapping_aware_request():
     repo = SqlAppointmentRepository(_FakeSession([_naive_row(doctor, tenant)]), tenant)
 
     # Aware request starting exactly when the stored 09:00-09:30 slot ends.
-    start = datetime(2026, 6, 1, 9, 30, tzinfo=timezone.utc)
-    end = datetime(2026, 6, 1, 10, 0, tzinfo=timezone.utc)
+    start = datetime(2026, 6, 1, 9, 30, tzinfo=UTC)
+    end = datetime(2026, 6, 1, 10, 0, tzinfo=UTC)
 
     assert repo.find_overlapping(doctor, start, end) == []

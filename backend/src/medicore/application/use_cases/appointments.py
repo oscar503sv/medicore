@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from medicore.application.common.audit import audit_entry
@@ -59,7 +59,7 @@ def _clinic_now(uow: UnitOfWork, tenant_id: object, clock: Clock) -> datetime:
     if now.tzinfo is None:
         return now
     tenant = uow.tenants.get_by_id(tenant_id)
-    tz = ZoneInfo(tenant.timezone) if tenant and tenant.timezone else timezone.utc
+    tz = ZoneInfo(tenant.timezone) if tenant and tenant.timezone else UTC
     return now.astimezone(tz).replace(tzinfo=None)
 
 
