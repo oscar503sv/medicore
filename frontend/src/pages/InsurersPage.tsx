@@ -1,15 +1,17 @@
 import { useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Pencil, Plus } from 'lucide-react'
+import { Archive, CheckCircle2, Pencil, Plus, Search, ShieldCheck } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { insurersApi, type InsurerPayload } from '@/api/insurers'
 import { PageHeader } from '@/components/PageHeader'
+import { StatCard } from '@/components/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
@@ -21,11 +23,24 @@ export function InsurersPage() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<Insurer | null>(null)
   const [creating, setCreating] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived'>('all')
+  const [q, setQ] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['insurers'],
     queryFn: () => insurersApi.list(),
   })
+
+  const all = data ?? []
+  const activeCount = all.filter((i) => i.active).length
+  const term = q.trim().toLowerCase()
+  const visible = all.filter(
+    (i) =>
+      (statusFilter === 'all' || (statusFilter === 'active' ? i.active : !i.active)) &&
+      (!term ||
+        i.name.toLowerCase().includes(term) ||
+        (i.contact_person ?? '').toLowerCase().includes(term)),
+  )
 
   const archive = useMutation({
     mutationFn: (id: string) => insurersApi.archive(id),
@@ -49,10 +64,37 @@ export function InsurersPage() {
         }
       />
 
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <StatCard icon={ShieldCheck} label={t('insurers.stat_total')} value={String(all.length)} />
+        <StatCard icon={CheckCircle2} label={t('insurers.stat_active')} value={String(activeCount)} />
+        <StatCard icon={Archive} label={t('insurers.stat_archived')} value={String(all.length - activeCount)} />
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative w-80">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('insurers.search_ph')}
+            className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
+          />
+        </div>
+        <Segmented
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: 'all', label: t('app.all') },
+            { value: 'active', label: t('insurers.active') },
+            { value: 'archived', label: t('insurers.inactive') },
+          ]}
+        />
+      </div>
+
       <Card>
         {isLoading ? (
           <PageLoader />
-        ) : data && data.length > 0 ? (
+        ) : visible.length > 0 ? (
           <Table>
             <thead>
               <tr>
@@ -64,7 +106,7 @@ export function InsurersPage() {
               </tr>
             </thead>
             <tbody>
-              {data.map((ins) => (
+              {visible.map((ins) => (
                 <Tr key={ins.id}>
                   <Td>
                     <p className="font-medium text-tx">{ins.name}</p>
@@ -206,7 +248,7 @@ function InsurerModal({
         />
         <Input label={t('insurers.notes')} value={form.notes ?? ''} onChange={set('notes')} />
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={close}>
+          <Button type="button" variant="outline" onClick={close}>
             {t('app.cancel')}
           </Button>
           <Button type="submit" loading={save.isPending} disabled={!form.name}>

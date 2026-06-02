@@ -6,11 +6,13 @@ export function StatCard({
   icon: Icon,
   label,
   value,
+  unit,
   delta,
 }: {
   icon: LucideIcon
   label: string
   value: string
+  unit?: string
   delta?: number
 }) {
   return (
@@ -19,7 +21,10 @@ export function StatCard({
         <span className="eyebrow">{label}</span>
         <Icon className="h-4 w-4 text-tx-3" />
       </div>
-      <p className="mt-2 font-serif text-3xl text-tx">{value}</p>
+      <p className="mt-2 font-serif text-3xl text-tx">
+        {value}
+        {unit && <span className="ml-2 font-sans text-sm text-tx-3">{unit}</span>}
+      </p>
       {delta !== undefined && (
         <div className="mt-1 flex items-center gap-1 text-[13px]">
           {delta >= 0 ? (

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, Check, Plus, Stethoscope, X } from 'lucide-react'
+import { CalendarCheck, CalendarClock, Check, CheckCheck, Clock, Plus, Search, Stethoscope, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { appointmentsApi } from '@/api/appointments'
 import { consultationsApi } from '@/api/consultations'
@@ -9,18 +9,20 @@ import { errorMessage } from '@/api/client'
 import { NewAppointmentModal } from '@/components/appointments/NewAppointmentModal'
 import { RescheduleAppointmentModal } from '@/components/appointments/RescheduleAppointmentModal'
 import { PageHeader } from '@/components/PageHeader'
+import { StatCard } from '@/components/StatCard'
 import { Badge, statusTone, typeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
+import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
-import type { Appointment } from '@/types'
+import type { Appointment, AppointmentStatus } from '@/types'
 
 export function AppointmentsPage() {
   const t = useT()
@@ -33,11 +35,24 @@ export function AppointmentsPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'all' | AppointmentStatus>('all')
+  const [q, setQ] = useState('')
 
   const { data, isLoading } = useQuery({
     queryKey: ['appointments', 'day', date],
     queryFn: () => appointmentsApi.listForDay(date),
   })
+
+  const all = data ?? []
+  const countBy = (s: AppointmentStatus) => all.filter((a) => a.status === s).length
+  const term = q.trim().toLowerCase()
+  const visible = all.filter(
+    (a) =>
+      (statusFilter === 'all' || a.status === statusFilter) &&
+      (!term ||
+        (a.patient_name ?? '').toLowerCase().includes(term) ||
+        a.reason.toLowerCase().includes(term)),
+  )
 
   const startConsult = useMutation({
     mutationFn: (appointmentId: string) => consultationsApi.start(appointmentId),
@@ -82,19 +97,49 @@ export function AppointmentsPage() {
         }
       />
 
-      <div className="flex items-center gap-3">
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="h-10 rounded-lg border border-line bg-bg px-3 text-sm text-tx focus:border-accent focus:outline-none"
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatCard icon={CalendarCheck} label={t('appt.stat_total')} value={String(all.length)} />
+        <StatCard icon={Clock} label={t('appt.stat_scheduled')} value={String(countBy('scheduled'))} />
+        <StatCard icon={Check} label={t('appt.stat_confirmed')} value={String(countBy('confirmed'))} />
+        <StatCard icon={CheckCheck} label={t('appt.stat_completed')} value={String(countBy('completed'))} />
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-10 rounded-lg border border-line bg-bg px-3 text-sm text-tx focus:border-accent focus:outline-none"
+          />
+          <div className="relative w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t('appt.search_ph')}
+              className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
+            />
+          </div>
+        </div>
+        <Segmented
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: 'all', label: t('app.all') },
+            { value: 'scheduled', label: t('status.scheduled') },
+            { value: 'confirmed', label: t('status.confirmed') },
+            { value: 'in_progress', label: t('status.in_progress') },
+            { value: 'completed', label: t('status.completed') },
+            { value: 'cancelled', label: t('status.cancelled') },
+          ]}
         />
       </div>
 
       <Card>
         {isLoading ? (
           <PageLoader />
-        ) : data && data.length > 0 ? (
+        ) : visible.length > 0 ? (
           <Table>
             <thead>
               <tr>
@@ -108,7 +153,7 @@ export function AppointmentsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.map((a) => (
+              {visible.map((a) => (
                 <Tr key={a.id}>
                   <Td>
                     <span className="font-mono text-tx">{fmtTime(a.scheduled_start)}</span>
@@ -213,7 +258,7 @@ export function AppointmentsPage() {
             </div>
           )}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setCancelTarget(null)}>
+            <Button variant="outline" onClick={() => setCancelTarget(null)}>
               {t('app.back')}
             </Button>
             <Button

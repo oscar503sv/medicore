@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Search } from 'lucide-react'
-import { insurersApi } from '@/api/insurers'
+import { Plus, Search, UserCheck, Users, UserX } from 'lucide-react'
 import { patientsApi } from '@/api/patients'
 import { PageHeader } from '@/components/PageHeader'
+import { StatCard } from '@/components/StatCard'
 import { NewPatientModal } from '@/components/patients/NewPatientModal'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
@@ -32,12 +32,16 @@ export function PatientsPage() {
         status: filter === 'all' ? undefined : filter,
       }),
   })
-  const { data: insurers } = useQuery({
-    queryKey: ['insurers'],
-    queryFn: () => insurersApi.list(),
+
+  // Accurate counts for the stat cards (independent of the table's current filter).
+  const { data: activeTotal } = useQuery({
+    queryKey: ['patients-count', 'active'],
+    queryFn: async () => (await patientsApi.list({ status: 'active', limit: 1 })).total,
   })
-  const insurerName = (id: string | null) =>
-    (id && insurers?.find((i) => i.id === id)?.name) || '—'
+  const { data: inactiveTotal } = useQuery({
+    queryKey: ['patients-count', 'inactive'],
+    queryFn: async () => (await patientsApi.list({ status: 'inactive', limit: 1 })).total,
+  })
 
   return (
     <div className="space-y-5 p-8">
@@ -52,13 +56,23 @@ export function PatientsPage() {
         }
       />
 
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <StatCard
+          icon={Users}
+          label={t('patients.stat_total')}
+          value={String((activeTotal ?? 0) + (inactiveTotal ?? 0))}
+        />
+        <StatCard icon={UserCheck} label={t('patients.active')} value={String(activeTotal ?? 0)} />
+        <StatCard icon={UserX} label={t('patients.inactive')} value={String(inactiveTotal ?? 0)} />
+      </div>
+
       <div className="flex items-center justify-between gap-4">
         <div className="relative w-80">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={t('app.search')}
+            placeholder={t('patients.search_ph')}
             className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
           />
         </div>
@@ -82,7 +96,6 @@ export function PatientsPage() {
               <tr>
                 <Th>{t('patients.col_patient')}</Th>
                 <Th>{t('patients.col_age')}</Th>
-                <Th>{t('patients.col_insurance')}</Th>
                 <Th>{t('patients.col_tags')}</Th>
                 <Th>{t('patients.col_last')}</Th>
               </tr>
@@ -104,7 +117,6 @@ export function PatientsPage() {
                   <Td>
                     {p.age} · {p.sex === 'male' ? 'M' : p.sex === 'female' ? 'F' : 'O'}
                   </Td>
-                  <Td>{insurerName(p.insurance_id)}</Td>
                   <Td>
                     <div className="flex flex-wrap gap-1">
                       {p.tags.slice(0, 2).map((tag) => (
