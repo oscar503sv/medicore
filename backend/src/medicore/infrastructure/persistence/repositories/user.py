@@ -65,8 +65,10 @@ class SqlUserRepository:
         row.password_hash = user.password_hash
         row.role = str(user.role)
         row.status = str(user.status)
+        row.sex = str(user.sex) if user.sex else None
         row.specialty = user.specialty
         row.phone = user.phone
+        row.must_change_password = user.must_change_password
         row.preferences = _prefs_to_json(user)
         row.last_seen_at = user.last_seen_at
         row.joined_at = user.joined_at

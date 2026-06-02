@@ -11,7 +11,7 @@ from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
 from medicore.application.ports.unit_of_work import UnitOfWorkFactory
 from medicore.domain.entities.audit_log import AuditLog
-from medicore.domain.enums import LangPref, Role, ThemePref, UserStatus
+from medicore.domain.enums import LangPref, Role, Sex, ThemePref, UserStatus
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import AuditLogId, TenantId, UserId
 from medicore.domain.value_objects.slug import Slug
@@ -32,6 +32,8 @@ class SessionDTO:
     tenant_name: str
     role: Role
     name: str
+    sex: Sex | None
+    must_change_password: bool
 
 
 class AuthenticateUser:
@@ -92,6 +94,8 @@ class AuthenticateUser:
             tenant_name=tenant.legal_name,
             role=user.role,
             name=user.name,
+            sex=user.sex,
+            must_change_password=user.must_change_password,
         )
 
 
@@ -125,5 +129,31 @@ class SwitchLocale:
             raise EntityNotFound("User", actor.user_id)
         with uow:
             user.set_language(language)
+            uow.users.save(user)
+            uow.commit()
+
+
+class ChangePassword:
+    """Change the actor's own password, verifying the current one first.
+
+    Used both for the forced change after a temporary-password invite and for
+    routine password changes. Clears the ``must_change_password`` flag on success.
+    """
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, hasher: PasswordHasher) -> None:
+        self._factory = uow_factory
+        self._hasher = hasher
+
+    def execute(self, actor: ActorContext, current_password: str, new_password: str) -> None:
+        if not new_password or len(new_password) < 8:
+            raise AuthenticationFailed("new password must be at least 8 characters")
+        uow = self._factory.for_tenant(actor.tenant_id)
+        user = uow.users.get_by_id(actor.user_id)
+        if user is None:
+            raise EntityNotFound("User", actor.user_id)
+        if not self._hasher.verify(current_password, user.password_hash):
+            raise AuthenticationFailed("current password is incorrect")
+        with uow:
+            user.change_password(self._hasher.hash(new_password))
             uow.users.save(user)
             uow.commit()

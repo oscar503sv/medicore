@@ -9,14 +9,20 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Badge, statusTone } from '@/components/ui/Badge'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { PageLoader } from '@/components/ui/Spinner'
-import { fmtTime } from '@/lib/format'
+import { fmtNow, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { greetingName } from '@/lib/user'
 import { useAuthStore } from '@/stores/auth'
 
 export function DashboardPage() {
   const t = useT()
-  const name = useAuthStore((s) => s.session?.name ?? '')
+  const session = useAuthStore((s) => s.session)
   const today = format(new Date(), 'yyyy-MM-dd')
+
+  const hour = new Date().getHours()
+  const greetingKey =
+    hour < 12 ? 'dash.greeting_morning' : hour < 19 ? 'dash.greeting_afternoon' : 'dash.greeting_evening'
+  const who = greetingName(session?.name ?? '', session?.role, session?.sex)
 
   const { data: appointments, isLoading } = useQuery({
     queryKey: ['appointments', 'day', today],
@@ -35,7 +41,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6 p-8">
-      <PageHeader eyebrow={format(new Date(), 'EEEE, d MMMM')} title={`${t('dash.greeting')}, ${name.split(' ')[0]}`} />
+      <PageHeader eyebrow={fmtNow('EEEE, d MMMM')} title={`${t(greetingKey)}, ${who}`} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={CalendarCheck} label={t('dash.today_appointments')} value={String(appts.length)} delta={12} />

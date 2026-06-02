@@ -16,16 +16,55 @@ class TestUsers:
     def test_invite_user(self, seed, client, admin_headers):
         resp = client.post(
             "/api/v1/users",
-            json={"name": "Nuevo", "email": "nuevo@test.es", "role": "nurse"},
+            json={
+                "name": "Nuevo",
+                "email": "nuevo@test.es",
+                "role": "nurse",
+                "password": "temporal123",
+                "sex": "female",
+            },
             headers=admin_headers,
         )
         assert resp.status_code == 201
-        assert resp.json()["status"] == "pending"
+        # Created active with a temp password; forced to change it on first login.
+        assert resp.json()["status"] == "active"
+        assert resp.json()["sex"] == "female"
+
+    def test_update_user_profile(self, seed, client, admin_headers):
+        resp = client.patch(
+            f"/api/v1/users/{seed.nurse.id}",
+            json={"name": "Enfermera Edit", "phone": "611000111", "role": "receptionist"},
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["name"] == "Enfermera Edit"
+        assert body["role"] == "receptionist"
+        assert body["phone"] == "611000111"
+
+    def test_reactivate_user(self, seed, client, admin_headers):
+        client.post(f"/api/v1/users/{seed.nurse.id}/suspend", headers=admin_headers)
+        resp = client.post(f"/api/v1/users/{seed.nurse.id}/reactivate", headers=admin_headers)
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "active"
+
+    def test_reset_password(self, seed, client, admin_headers):
+        resp = client.post(
+            f"/api/v1/users/{seed.nurse.id}/reset-password",
+            json={"password": "nuevaTemp1"},
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
 
     def test_duplicate_email_rejected(self, seed, client, admin_headers):
         resp = client.post(
             "/api/v1/users",
-            json={"name": "Dup", "email": seed.doctor.email, "role": "nurse"},
+            json={
+                "name": "Dup",
+                "email": seed.doctor.email,
+                "role": "nurse",
+                "password": "temporal123",
+            },
             headers=admin_headers,
         )
         assert resp.status_code == 400

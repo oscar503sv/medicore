@@ -5,6 +5,7 @@ import { RequireAuth } from '@/components/RequireAuth'
 import { ToastViewport } from '@/components/ui/Toast'
 import { AppointmentsPage } from '@/pages/AppointmentsPage'
 import { AvailabilityPage } from '@/pages/AvailabilityPage'
+import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { ConsultationPage } from '@/pages/ConsultationPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { InsurersPage } from '@/pages/InsurersPage'
@@ -33,6 +34,16 @@ export function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+
+        {/* Forced password change after a temporary-password invite (no shell chrome) */}
+        <Route
+          path="/change-password"
+          element={
+            <RequireAuth>
+              <ChangePasswordPage />
+            </RequireAuth>
+          }
+        />
 
         {/* Full-screen consultation (no shell chrome) */}
         <Route

@@ -11,11 +11,26 @@ class InviteUserRequest(BaseModel):
     name: str
     email: str
     role: str
+    password: str
+    sex: str | None = None
+    phone: str | None = None
     specialty: str | None = None
 
 
 class UpdateRoleRequest(BaseModel):
     role: str
+
+
+class UpdateUserRequest(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    sex: str | None = None
+    phone: str | None = None
+    specialty: str | None = None
+
+
+class ResetPasswordRequest(BaseModel):
+    password: str
 
 
 class UserResponse(BaseModel):
@@ -25,7 +40,9 @@ class UserResponse(BaseModel):
     email: str
     role: str
     status: str
+    sex: str | None = None
     specialty: str | None
+    phone: str | None = None
     avatar_initials: str
     last_seen_at: datetime | None
     joined_at: datetime

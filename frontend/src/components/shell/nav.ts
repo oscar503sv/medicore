@@ -37,7 +37,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/schedule', labelKey: 'nav.schedule', icon: CalendarDays, roles: ['admin', 'doctor', 'nurse', 'receptionist'], group: 'clinical' },
   { to: '/records', labelKey: 'nav.records', icon: FileText, roles: ['admin', 'doctor', 'nurse'], group: 'clinical' },
   // Gestión
-  { to: '/availability', labelKey: 'nav.availability', icon: Stethoscope, roles: ['doctor', 'admin'], group: 'management' },
+  { to: '/availability', labelKey: 'nav.availability', icon: Stethoscope, roles: ['doctor'], group: 'management' },
   { to: '/users', labelKey: 'nav.users', icon: UsersRound, roles: ['admin'], group: 'management' },
   { to: '/insurers', labelKey: 'nav.insurers', icon: ShieldCheck, roles: ['admin'], group: 'management' },
   { to: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['admin', 'doctor', 'nurse', 'receptionist'], group: 'management' },

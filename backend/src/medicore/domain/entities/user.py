@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from medicore.domain.enums import LangPref, Role, ThemePref, UserStatus
+from medicore.domain.enums import LangPref, Role, Sex, ThemePref, UserStatus
 from medicore.domain.shared.identifiers import (
     DoctorProfileId,
     LocationId,
@@ -36,8 +36,10 @@ class User:
     password_hash: str
     role: Role
     status: UserStatus = UserStatus.PENDING
+    sex: Sex | None = None
     specialty: str | None = None
     phone: str | None = None
+    must_change_password: bool = False
     preferences: UserPreferences = field(default_factory=UserPreferences)
     last_seen_at: datetime | None = None
     joined_at: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -58,6 +60,16 @@ class User:
 
     def change_role(self, role: Role) -> None:
         self.role = role
+
+    def change_password(self, new_hash: str) -> None:
+        """Set a new password hash and clear any pending forced-change flag."""
+        self.password_hash = new_hash
+        self.must_change_password = False
+
+    def set_temporary_password(self, new_hash: str) -> None:
+        """Set a temporary password hash and require the user to change it on next login."""
+        self.password_hash = new_hash
+        self.must_change_password = True
 
     def set_theme(self, theme: ThemePref) -> None:
         from dataclasses import replace

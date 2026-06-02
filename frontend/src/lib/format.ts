@@ -11,6 +11,11 @@ export function fmtDate(iso: string | null | undefined, pattern = 'd MMM yyyy'):
   return format(parseISO(iso), pattern, { locale: locale() })
 }
 
+/** Format the current date/time with the active locale (e.g. dashboard header). */
+export function fmtNow(pattern: string): string {
+  return format(new Date(), pattern, { locale: locale() })
+}
+
 export function fmtTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   return format(parseISO(iso), 'HH:mm')

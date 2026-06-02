@@ -14,4 +14,10 @@ export const authApi = {
   switchTheme: (theme: string) => api.post('/auth/theme', { theme }),
 
   switchLocale: (language: string) => api.post('/auth/locale', { language }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post('/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
 }

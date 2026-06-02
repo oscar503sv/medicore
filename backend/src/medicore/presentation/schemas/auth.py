@@ -18,6 +18,8 @@ class SessionResponse(BaseModel):
     tenant_name: str
     role: str
     name: str
+    sex: str | None = None
+    must_change_password: bool = False
 
 
 class SwitchThemeRequest(BaseModel):
@@ -26,3 +28,8 @@ class SwitchThemeRequest(BaseModel):
 
 class SwitchLocaleRequest(BaseModel):
     language: str  # es | en
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str

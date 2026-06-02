@@ -8,16 +8,22 @@ from medicore.application.use_cases.users import (
     InviteUser,
     InviteUserCommand,
     ListUsers,
+    ReactivateUser,
+    ResetUserPassword,
+    ResetUserPasswordCommand,
     SuspendUser,
+    UpdateUser,
     UpdateUserRole,
 )
-from medicore.domain.enums import Role
+from medicore.domain.enums import Role, Sex
 from medicore.domain.repositories._support import Paging, UserFilter
 from medicore.domain.shared.identifiers import UserId
-from medicore.presentation.dependencies import Actor, Clock, UoW
+from medicore.presentation.dependencies import Actor, Clock, Hasher, UoW
 from medicore.presentation.schemas.users import (
     InviteUserRequest,
+    ResetPasswordRequest,
     UpdateRoleRequest,
+    UpdateUserRequest,
     UserListResponse,
     UserResponse,
 )
@@ -47,11 +53,28 @@ def list_users(
 
 
 @router.post("", response_model=UserResponse, status_code=201)
-def invite_user(body: InviteUserRequest, actor: Actor, uow: UoW, clock: Clock):
+def invite_user(body: InviteUserRequest, actor: Actor, uow: UoW, hasher: Hasher, clock: Clock):
     cmd = InviteUserCommand(
-        name=body.name, email=body.email, role=Role(body.role), specialty=body.specialty
+        name=body.name,
+        email=body.email,
+        role=Role(body.role),
+        password=body.password,
+        sex=Sex(body.sex) if body.sex else None,
+        phone=body.phone,
+        specialty=body.specialty,
     )
-    user = InviteUser(uow, clock).execute(actor, cmd)
+    user = InviteUser(uow, hasher, clock).execute(actor, cmd)
+    return ser_user(user)
+
+
+@router.patch("/{user_id}", response_model=UserResponse)
+def update_user(user_id: str, body: UpdateUserRequest, actor: Actor, uow: UoW, clock: Clock):
+    changes = body.model_dump(exclude_none=True)
+    if "role" in changes:
+        changes["role"] = Role(changes["role"])
+    if "sex" in changes:
+        changes["sex"] = Sex(changes["sex"])
+    user = UpdateUser(uow, clock).execute(actor, UserId.parse(user_id), **changes)
     return ser_user(user)
 
 
@@ -64,4 +87,19 @@ def update_role(user_id: str, body: UpdateRoleRequest, actor: Actor, uow: UoW, c
 @router.post("/{user_id}/suspend", response_model=UserResponse)
 def suspend_user(user_id: str, actor: Actor, uow: UoW, clock: Clock):
     user = SuspendUser(uow, clock).execute(actor, UserId.parse(user_id))
+    return ser_user(user)
+
+
+@router.post("/{user_id}/reactivate", response_model=UserResponse)
+def reactivate_user(user_id: str, actor: Actor, uow: UoW, clock: Clock):
+    user = ReactivateUser(uow, clock).execute(actor, UserId.parse(user_id))
+    return ser_user(user)
+
+
+@router.post("/{user_id}/reset-password", response_model=UserResponse)
+def reset_password(
+    user_id: str, body: ResetPasswordRequest, actor: Actor, uow: UoW, hasher: Hasher, clock: Clock
+):
+    cmd = ResetUserPasswordCommand(user_id=UserId.parse(user_id), password=body.password)
+    user = ResetUserPassword(uow, hasher, clock).execute(actor, cmd)
     return ser_user(user)

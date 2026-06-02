@@ -22,7 +22,11 @@ from medicore.application.use_cases.users import (
     InviteUser,
     InviteUserCommand,
     ListUsers,
+    ReactivateUser,
+    ResetUserPassword,
+    ResetUserPasswordCommand,
     SuspendUser,
+    UpdateUser,
     UpdateUserRole,
 )
 from medicore.domain.entities.availability import (
@@ -39,18 +43,25 @@ from medicore.domain.services.slot_resolver import SlotStatus
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.value_objects.time_range import TimeRange
 from tests.support.builders import seed_clinic
-from tests.support.fakes import FixedClock
+from tests.support.fakes import FixedClock, PlainPasswordHasher
 
 
 class TestUsers:
-    def test_admin_invites_user_as_pending(self):
+    def test_admin_invites_user_active_with_temp_password(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
-        user = InviteUser(uow, FixedClock()).execute(
+        user = InviteUser(uow, PlainPasswordHasher(), FixedClock()).execute(
             seed.actor(seed.admin),
-            InviteUserCommand(name="Nuevo", email="nuevo@clinica-norte.test", role=Role.NURSE),
+            InviteUserCommand(
+                name="Nuevo",
+                email="nuevo@clinica-norte.test",
+                role=Role.NURSE,
+                password="temporal123",
+            ),
         )
-        assert user.status == UserStatus.PENDING
+        assert user.status == UserStatus.ACTIVE
+        assert user.must_change_password is True
+        assert user.password_hash  # a temp password was set
         assert uow.audit.query(action="user.invited")
 
     def test_invite_duplicate_email_rejected(self):
@@ -59,9 +70,14 @@ class TestUsers:
         from medicore.application.common.errors import ValidationError
 
         with pytest.raises(ValidationError):
-            InviteUser(uow, FixedClock()).execute(
+            InviteUser(uow, PlainPasswordHasher(), FixedClock()).execute(
                 seed.actor(seed.admin),
-                InviteUserCommand(name="Dup", email=seed.doctor.email, role=Role.DOCTOR),
+                InviteUserCommand(
+                    name="Dup",
+                    email=seed.doctor.email,
+                    role=Role.DOCTOR,
+                    password="temporal123",
+                ),
             )
 
     def test_non_admin_cannot_manage_users(self):
@@ -78,6 +94,56 @@ class TestUsers:
         assert uow.users.get_by_id(seed.nurse.id).role == Role.RECEPTIONIST
         SuspendUser(uow, FixedClock()).execute(admin, seed.nurse.id)
         assert uow.users.get_by_id(seed.nurse.id).status == UserStatus.SUSPENDED
+
+    def test_update_user_edits_profile_fields(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        admin = seed.actor(seed.admin)
+        UpdateUser(uow, FixedClock()).execute(
+            admin,
+            seed.nurse.id,
+            name="Nombre Nuevo",
+            role=Role.RECEPTIONIST,
+            phone="611223344",
+            specialty="Triage",
+        )
+        updated = uow.users.get_by_id(seed.nurse.id)
+        assert updated.name == "Nombre Nuevo"
+        assert updated.role == Role.RECEPTIONIST
+        assert updated.phone == "611223344"
+        assert updated.specialty == "Triage"
+        assert uow.audit.query(action="user.updated")
+
+    def test_suspend_then_reactivate(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        admin = seed.actor(seed.admin)
+        SuspendUser(uow, FixedClock()).execute(admin, seed.nurse.id)
+        ReactivateUser(uow, FixedClock()).execute(admin, seed.nurse.id)
+        assert uow.users.get_by_id(seed.nurse.id).status == UserStatus.ACTIVE
+        assert uow.audit.query(action="user.reactivated")
+
+    def test_reset_password_sets_temp_and_forces_change(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        hasher = PlainPasswordHasher()
+        ResetUserPassword(uow, hasher, FixedClock()).execute(
+            seed.actor(seed.admin),
+            ResetUserPasswordCommand(user_id=seed.nurse.id, password="nuevaTemp1"),
+        )
+        reloaded = uow.users.get_by_id(seed.nurse.id)
+        assert reloaded.must_change_password is True
+        assert hasher.verify("nuevaTemp1", reloaded.password_hash)
+        assert uow.audit.query(action="user.password_reset")
+
+    def test_non_admin_cannot_reset_password(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        with pytest.raises(PermissionDenied):
+            ResetUserPassword(uow, PlainPasswordHasher(), FixedClock()).execute(
+                seed.receptionist_actor,
+                ResetUserPasswordCommand(user_id=seed.nurse.id, password="nuevaTemp1"),
+            )
 
 
 class TestAvailability:
