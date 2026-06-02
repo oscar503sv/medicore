@@ -1,32 +1,38 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Stethoscope } from 'lucide-react'
+import { CalendarClock, Check, Plus, Stethoscope, X } from 'lucide-react'
 import { format } from 'date-fns'
 import { appointmentsApi } from '@/api/appointments'
 import { consultationsApi } from '@/api/consultations'
 import { errorMessage } from '@/api/client'
 import { NewAppointmentModal } from '@/components/appointments/NewAppointmentModal'
+import { RescheduleAppointmentModal } from '@/components/appointments/RescheduleAppointmentModal'
 import { PageHeader } from '@/components/PageHeader'
-import { Badge, statusTone } from '@/components/ui/Badge'
+import { Badge, statusTone, typeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Modal } from '@/components/ui/Modal'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
+import type { Appointment } from '@/types'
 
 export function AppointmentsPage() {
   const t = useT()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const canConsult = useAuthStore((s) => s.hasRole('doctor', 'admin'))
-  const canBook = useAuthStore((s) => s.hasRole('admin', 'doctor', 'receptionist'))
+  // Admin, doctor and receptionist may manage the appointment lifecycle (confirm/reschedule/cancel).
+  const canManage = useAuthStore((s) => s.hasRole('admin', 'doctor', 'receptionist'))
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [modalOpen, setModalOpen] = useState(false)
+  const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
+  const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['appointments', 'day', date],
@@ -42,12 +48,32 @@ export function AppointmentsPage() {
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
+  const confirmAppt = useMutation({
+    mutationFn: (appointmentId: string) => appointmentsApi.confirm(appointmentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] })
+      toast(t('appt.confirmed_ok'))
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  const cancelAppt = useMutation({
+    mutationFn: (appointmentId: string) => appointmentsApi.cancel(appointmentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] })
+      qc.invalidateQueries({ queryKey: ['slots'] })
+      setCancelTarget(null)
+      toast(t('appt.cancelled_ok'))
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
   return (
     <div className="space-y-5 p-8">
       <PageHeader
         title={t('appt.title')}
         action={
-          canBook ? (
+          canManage ? (
             <Button onClick={() => setModalOpen(true)}>
               <Plus className="h-4 w-4" />
               {t('appt.new')}
@@ -73,9 +99,10 @@ export function AppointmentsPage() {
             <thead>
               <tr>
                 <Th>{t('appt.col_time')}</Th>
+                <Th>{t('appt.col_patient')}</Th>
+                <Th>{t('appt.col_doctor')}</Th>
                 <Th>{t('appt.col_reason')}</Th>
                 <Th>{t('appt.col_type')}</Th>
-                <Th>{t('appt.col_room')}</Th>
                 <Th>{t('appt.col_status')}</Th>
                 <Th />
               </tr>
@@ -88,31 +115,70 @@ export function AppointmentsPage() {
                     <span className="text-tx-4"> · {a.duration_minutes}m</span>
                   </Td>
                   <Td>
-                    <p className="font-medium text-tx">{a.reason}</p>
+                    <p className="font-medium text-tx">{a.patient_name ?? '—'}</p>
                     <p className="font-mono text-xs text-tx-3">{a.code}</p>
                   </Td>
-                  <Td>{a.type}</Td>
-                  <Td>{a.room ?? '—'}</Td>
+                  <Td>{a.doctor_name ?? '—'}</Td>
+                  <Td>{a.reason}</Td>
+                  <Td>
+                    <Badge tone={typeTone(a.type)}>{t(`apptype.${a.type}`)}</Badge>
+                  </Td>
                   <Td>
                     <Badge tone={statusTone(a.status)}>{t(`status.${a.status}`)}</Badge>
                   </Td>
                   <Td className="text-right">
-                    {canConsult && (a.status === 'scheduled' || a.status === 'confirmed') && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        loading={startConsult.isPending}
-                        onClick={() => startConsult.mutate(a.id)}
-                      >
-                        <Stethoscope className="h-3.5 w-3.5" />
-                        {t('appt.start_consult')}
-                      </Button>
-                    )}
-                    {a.status === 'in_progress' && canConsult && (
-                      <Button size="sm" variant="subtle" onClick={() => startConsult.mutate(a.id)}>
-                        Continuar
-                      </Button>
-                    )}
+                    <div className="flex items-center justify-end gap-2">
+                      {canManage && a.status === 'scheduled' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={confirmAppt.isPending}
+                          onClick={() => confirmAppt.mutate(a.id)}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          {t('appt.confirm_appt')}
+                        </Button>
+                      )}
+                      {/* Start consultation only once the appointment is confirmed. */}
+                      {canConsult && a.status === 'confirmed' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={startConsult.isPending}
+                          onClick={() => startConsult.mutate(a.id)}
+                        >
+                          <Stethoscope className="h-3.5 w-3.5" />
+                          {t('appt.start_consult')}
+                        </Button>
+                      )}
+                      {a.status === 'in_progress' && canConsult && (
+                        <Button size="sm" variant="subtle" onClick={() => startConsult.mutate(a.id)}>
+                          {t('appt.continue')}
+                        </Button>
+                      )}
+                      {canManage && (a.status === 'scheduled' || a.status === 'confirmed') && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setRescheduleTarget(a)}
+                            title={t('appt.reschedule')}
+                          >
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            {t('appt.reschedule')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setCancelTarget(a)}
+                            title={t('appt.cancel_appt')}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            {t('app.cancel')}
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </Td>
                 </Tr>
               ))}
@@ -124,6 +190,42 @@ export function AppointmentsPage() {
       </Card>
 
       <NewAppointmentModal open={modalOpen} onClose={() => setModalOpen(false)} date={date} />
+
+      <RescheduleAppointmentModal
+        appointment={rescheduleTarget}
+        onClose={() => setRescheduleTarget(null)}
+      />
+
+      <Modal
+        open={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        title={t('appt.cancel_title')}
+        width="max-w-md"
+      >
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-tx-2">{t('appt.cancel_confirm')}</p>
+          {cancelTarget && (
+            <div className="rounded-lg border border-line bg-surface-2/40 p-3 text-sm">
+              <p className="font-medium text-tx">{cancelTarget.patient_name ?? '—'}</p>
+              <p className="text-tx-3">
+                {fmtTime(cancelTarget.scheduled_start)} · {cancelTarget.reason}
+              </p>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setCancelTarget(null)}>
+              {t('app.back')}
+            </Button>
+            <Button
+              variant="danger"
+              loading={cancelAppt.isPending}
+              onClick={() => cancelAppt.mutate(cancelTarget!.id)}
+            >
+              {t('appt.cancel_appt')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
