@@ -80,7 +80,6 @@ class SqlPatientRepository:
         row.sex = str(patient.sex)
         row.date_of_birth = patient.date_of_birth
         row.blood_type = str(patient.blood_type) if patient.blood_type else None
-        row.insurance_id = patient.insurance_id.value if patient.insurance_id else None
         if patient.primary_doctor_id:
             row.primary_doctor_id = patient.primary_doctor_id.value
         else:

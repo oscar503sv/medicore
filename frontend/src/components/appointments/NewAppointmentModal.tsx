@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { CalendarDays, Check, Clock, Stethoscope, User as UserIcon } from 'lucide-react'
+import { CalendarDays, Check, Clock, ShieldCheck, Stethoscope, User as UserIcon } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
 import { errorMessage } from '@/api/client'
+import { insurersApi } from '@/api/insurers'
 import { patientsApi } from '@/api/patients'
 import { Button } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Input'
@@ -41,6 +42,8 @@ export function NewAppointmentModal({
   const [type, setType] = useState('consult')
   const [duration, setDuration] = useState(30)
   const [reason, setReason] = useState('')
+  const [withInsurance, setWithInsurance] = useState(false)
+  const [insuranceId, setInsuranceId] = useState('')
   const [day, setDay] = useState(date)
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
   const [search, setSearch] = useState('')
@@ -59,6 +62,11 @@ export function NewAppointmentModal({
     queryKey: ['booking-options'],
     queryFn: () => appointmentsApi.bookingOptions(),
     enabled: open,
+  })
+  const { data: insurers } = useQuery({
+    queryKey: ['insurers', 'active'],
+    queryFn: () => insurersApi.list(true),
+    enabled: open && withInsurance,
   })
   const { data: slots, isFetching: slotsLoading } = useQuery({
     queryKey: ['slots', doctorId, day, duration],
@@ -82,6 +90,7 @@ export function NewAppointmentModal({
         scheduled_start: selectedSlot!.start,
         duration_minutes: duration,
         reason,
+        insurance_id: withInsurance ? insuranceId || null : null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
@@ -100,12 +109,16 @@ export function NewAppointmentModal({
     setType('consult')
     setDuration(30)
     setReason('')
+    setWithInsurance(false)
+    setInsuranceId('')
     setDay(date)
     setSelectedSlot(null)
     setSearch('')
   }
 
-  const canNext = (step === 0 && patient) || (step === 1 && doctorId && reason)
+  const canNext =
+    (step === 0 && patient) ||
+    (step === 1 && doctorId && reason && (!withInsurance || insuranceId))
 
   return (
     <Modal open={open} onClose={onClose} title={t('appt.new')} width="max-w-2xl">
@@ -203,6 +216,34 @@ export function NewAppointmentModal({
               </Select>
             </div>
             <Input label={t('appt.reason')} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <div className="space-y-3 rounded-lg border border-line bg-surface-2/40 p-3">
+              <label className="flex items-center gap-2 text-sm text-tx">
+                <input
+                  type="checkbox"
+                  className="rounded border-line accent-accent"
+                  checked={withInsurance}
+                  onChange={(e) => {
+                    setWithInsurance(e.target.checked)
+                    if (!e.target.checked) setInsuranceId('')
+                  }}
+                />
+                {t('appt.with_insurance')}
+              </label>
+              {withInsurance && (
+                <Select
+                  label={t('appt.insurer')}
+                  value={insuranceId}
+                  onChange={(e) => setInsuranceId(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {insurers?.map((ins) => (
+                    <option key={ins.id} value={ins.id}>
+                      {ins.name}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </div>
           </div>
         )}
 
@@ -307,6 +348,14 @@ export function NewAppointmentModal({
                 </span>
                 <span className="text-right text-tx">{TYPE_LABELS[type] ?? type}</span>
                 <span className="flex items-center gap-2 text-tx-3">
+                  <ShieldCheck className="h-3.5 w-3.5" /> {t('appt.insurer')}
+                </span>
+                <span className="text-right text-tx">
+                  {withInsurance
+                    ? (insurers?.find((i) => i.id === insuranceId)?.name ?? '—')
+                    : t('appt.private')}
+                </span>
+                <span className="flex items-center gap-2 text-tx-3">
                   <Clock className="h-3.5 w-3.5" /> {t('appt.date')}
                 </span>
                 <span className="text-right font-mono text-tx">
@@ -322,7 +371,7 @@ export function NewAppointmentModal({
 
       {/* Footer */}
       <div className="flex justify-between border-t border-line px-5 py-4">
-        <Button variant="ghost" onClick={() => (step === 0 ? onClose() : setStep(step - 1))}>
+        <Button variant="outline" onClick={() => (step === 0 ? onClose() : setStep(step - 1))}>
           {step === 0 ? t('app.cancel') : t('app.back')}
         </Button>
         {step < 2 ? (

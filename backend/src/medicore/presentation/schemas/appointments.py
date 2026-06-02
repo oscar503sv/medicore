@@ -19,6 +19,7 @@ class CreateAppointmentRequest(BaseModel):
     duration_minutes: int
     reason: str
     room: str | None = None
+    insurance_id: str | None = None
 
 
 class RescheduleRequest(BaseModel):
@@ -40,8 +41,10 @@ class AppointmentResponse(BaseModel):
     duration_minutes: int
     reason: str
     room: str | None
+    insurance_id: str | None = None
     patient_name: str | None = None
     doctor_name: str | None = None
+    insurer_name: str | None = None
     created_by_id: str
     created_at: datetime
     updated_at: datetime

@@ -4,6 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from datetime import datetime
+
+from medicore.application.use_cases.appointments import (
+    CreateAppointment,
+    CreateAppointmentCommand,
+)
 from medicore.application.use_cases.insurers import (
     ArchiveInsurer,
     CreateInsurer,
@@ -11,10 +17,8 @@ from medicore.application.use_cases.insurers import (
     ListInsurers,
     UpdateInsurer,
 )
-from medicore.application.use_cases.patients import CreatePatient, CreatePatientCommand
-from medicore.domain.enums import Sex
+from medicore.domain.enums import AppointmentType
 from medicore.domain.shared.errors import PermissionDenied
-from datetime import date
 
 from tests.support.builders import seed_clinic
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
@@ -72,21 +76,41 @@ class TestInsurerManagement:
         assert len(ListInsurers(uow).execute(seed.actor(seed.admin))) == 1
 
 
-class TestPatientInsurerLink:
-    def test_patient_create_round_trips_insurance_id(self):
+class TestAppointmentInsurerLink:
+    def test_appointment_create_round_trips_insurance_id(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
         insurer = _make_insurer(seed, uow)
-        patient = CreatePatient(uow, SequentialCodeGenerator(), FixedClock()).execute(
-            seed.actor(seed.admin),
-            CreatePatientCommand(
-                first_name="Lucía",
-                last_name="Álvarez",
-                sex=Sex.FEMALE,
-                date_of_birth=date(1990, 5, 1),
+        appt = CreateAppointment(uow, SequentialCodeGenerator(), FixedClock()).execute(
+            seed.receptionist_actor,
+            CreateAppointmentCommand(
+                patient_id=seed.patient.id,
+                doctor_id=seed.doctor.id,
+                location_id=seed.tenant.primary_location.id,
+                type=AppointmentType.CONSULT,
+                scheduled_start=datetime(2026, 6, 1, 9, 0),  # within Mon 09:00–13:00
+                duration_minutes=30,
+                reason="Consulta con seguro",
                 insurance_id=insurer.id,
             ),
         )
-        assert patient.insurance_id == insurer.id
-        reloaded = uow.patients.get_by_id(patient.id)
+        assert appt.insurance_id == insurer.id
+        reloaded = uow.appointments.get_by_id(appt.id)
         assert reloaded.insurance_id == insurer.id
+
+    def test_appointment_without_insurance_is_private(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        appt = CreateAppointment(uow, SequentialCodeGenerator(), FixedClock()).execute(
+            seed.receptionist_actor,
+            CreateAppointmentCommand(
+                patient_id=seed.patient.id,
+                doctor_id=seed.doctor.id,
+                location_id=seed.tenant.primary_location.id,
+                type=AppointmentType.CONSULT,
+                scheduled_start=datetime(2026, 6, 1, 10, 0),
+                duration_minutes=30,
+                reason="Consulta privada",
+            ),
+        )
+        assert appt.insurance_id is None

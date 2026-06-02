@@ -9,6 +9,7 @@ from medicore.domain.enums import AppointmentStatus, AppointmentType
 from medicore.domain.shared.errors import InvalidStateTransition
 from medicore.domain.shared.identifiers import (
     AppointmentId,
+    InsurerId,
     LocationId,
     PatientId,
     TenantId,
@@ -63,6 +64,8 @@ class Appointment:
     created_by_id: UserId
     status: AppointmentStatus = AppointmentStatus.SCHEDULED
     room: str | None = None
+    # Set when the consultation is booked "with insurance"; None means private/out-of-pocket.
+    insurance_id: InsurerId | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 

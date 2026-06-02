@@ -2,7 +2,6 @@ import { useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
-import { insurersApi } from '@/api/insurers'
 import { Input, Select } from '@/components/ui/Input'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
@@ -16,7 +15,6 @@ export interface PatientFormState {
   sex: string
   date_of_birth: string
   blood_type: string
-  insurance_id: string
   primary_doctor_id: string
   phone: string
   email: string
@@ -34,7 +32,6 @@ export function emptyPatientForm(): PatientFormState {
     sex: 'female',
     date_of_birth: '',
     blood_type: '',
-    insurance_id: '',
     primary_doctor_id: '',
     phone: '',
     email: '',
@@ -53,7 +50,6 @@ export function patientToForm(p: Patient): PatientFormState {
     sex: p.sex,
     date_of_birth: p.date_of_birth,
     blood_type: p.blood_type ?? '',
-    insurance_id: p.insurance_id ?? '',
     primary_doctor_id: p.primary_doctor_id ?? '',
     phone: p.contact.phone ?? '',
     email: p.contact.email ?? '',
@@ -73,7 +69,6 @@ export function formToPayload(f: PatientFormState) {
     sex: f.sex,
     date_of_birth: f.date_of_birth,
     blood_type: f.blood_type || null,
-    insurance_id: f.insurance_id || null,
     primary_doctor_id: f.primary_doctor_id || null,
     tags: f.tags,
     allergies: f.allergies,
@@ -97,10 +92,6 @@ export function PatientForm({
   const t = useT()
   const set = (patch: Partial<PatientFormState>) => onChange({ ...value, ...patch })
 
-  const { data: insurers } = useQuery({
-    queryKey: ['insurers', 'active'],
-    queryFn: () => insurersApi.list(true),
-  })
   // Doctors come from the booking-options endpoint (admin/doctor/receptionist). If the caller
   // can't access it, the select simply stays empty — primary doctor is optional.
   const { data: options } = useQuery({
@@ -193,32 +184,18 @@ export function PatientForm({
       </Section>
 
       <Section title={t('patientform.admin')}>
-        <div className="grid grid-cols-2 gap-4">
-          <Select
-            label={t('patientform.insurer')}
-            value={value.insurance_id}
-            onChange={(e) => set({ insurance_id: e.target.value })}
-          >
-            <option value="">{t('insurers.none')}</option>
-            {insurers?.map((ins) => (
-              <option key={ins.id} value={ins.id}>
-                {ins.name}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label={t('patientform.doctor')}
-            value={value.primary_doctor_id}
-            onChange={(e) => set({ primary_doctor_id: e.target.value })}
-          >
-            <option value="">—</option>
-            {options?.doctors.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </Select>
-        </div>
+        <Select
+          label={t('patientform.doctor')}
+          value={value.primary_doctor_id}
+          onChange={(e) => set({ primary_doctor_id: e.target.value })}
+        >
+          <option value="">—</option>
+          {options?.doctors.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </Select>
       </Section>
     </div>
   )

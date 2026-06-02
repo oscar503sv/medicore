@@ -27,6 +27,7 @@ from medicore.domain.services.slot_resolver import (
 from medicore.domain.shared.errors import SlotUnavailable
 from medicore.domain.shared.identifiers import (
     AppointmentId,
+    InsurerId,
     LocationId,
     PatientId,
     UserId,
@@ -72,6 +73,7 @@ class CreateAppointmentCommand:
     duration_minutes: int
     reason: str
     room: str | None = None
+    insurance_id: InsurerId | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +203,7 @@ class CreateAppointment:
             reason=cmd.reason,
             created_by_id=actor.user_id,
             room=cmd.room,
+            insurance_id=cmd.insurance_id,
             created_at=self._clock.now(),
             updated_at=self._clock.now(),
         )

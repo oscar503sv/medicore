@@ -87,6 +87,9 @@ def weekday_availability(tenant_id: TenantId, doctor_id: UserId) -> DoctorAvaila
 
 
 def make_user(tenant_id, name, email, role, specialty=None) -> User:
+    # Demo heuristic: Spanish given names ending in "a" are typically female.
+    first = name.split()[0]
+    sex = Sex.FEMALE if first.lower().endswith("a") else Sex.MALE
     return User(
         id=UserId.new(),
         tenant_id=tenant_id,
@@ -95,11 +98,12 @@ def make_user(tenant_id, name, email, role, specialty=None) -> User:
         password_hash=HASHER.hash(PASSWORD),
         role=role,
         status=UserStatus.ACTIVE,
+        sex=sex,
         specialty=specialty,
     )
 
 
-def make_patient(tenant_id, code, i, doctor_id, insurer_id) -> Patient:
+def make_patient(tenant_id, code, i, doctor_id) -> Patient:
     is_female = i % 2 == 0
     first = (FEMALE_NAMES if is_female else MALE_NAMES)[i % 8]
     last = f"{LAST_NAMES[i % len(LAST_NAMES)]} {LAST_NAMES[(i + 5) % len(LAST_NAMES)]}"
@@ -115,7 +119,6 @@ def make_patient(tenant_id, code, i, doctor_id, insurer_id) -> Patient:
         sex=Sex.FEMALE if is_female else Sex.MALE,
         date_of_birth=date(year, month, day),
         blood_type=BloodType(BLOOD[i % len(BLOOD)]),
-        insurance_id=insurer_id,
         primary_doctor_id=doctor_id,
         status=PatientStatus.ACTIVE,
         tags=list(TAGS[i % len(TAGS)]),
@@ -216,9 +219,7 @@ def seed_tenant(session, tenant: Tenant, staff: list[tuple], add_admin: bool) ->
         for i in range(15):
             code = codes.next_patient_code()
             uow.patients.save(
-                make_patient(
-                    tid, code, i, doctors[i % len(doctors)], insurer_ids[i % len(insurer_ids)]
-                )
+                make_patient(tid, code, i, doctors[i % len(doctors)])
             )
         uow.commit()
     print("    + 15 pacientes")

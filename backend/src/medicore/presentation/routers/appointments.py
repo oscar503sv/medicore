@@ -19,7 +19,13 @@ from medicore.application.use_cases.appointments import (
     RescheduleAppointment,
 )
 from medicore.domain.enums import AppointmentType
-from medicore.domain.shared.identifiers import AppointmentId, LocationId, PatientId, UserId
+from medicore.domain.shared.identifiers import (
+    AppointmentId,
+    InsurerId,
+    LocationId,
+    PatientId,
+    UserId,
+)
 from medicore.presentation.dependencies import Actor, Clock, Codes, UoW
 from medicore.presentation.schemas.appointments import (
     AppointmentResponse,
@@ -35,9 +41,10 @@ router = APIRouter(prefix="/appointments", tags=["appointments"])
 
 
 def _ser_appointments(uow: UoW, appts: list) -> list[dict]:
-    """Serialize appointments, resolving patient/doctor names with per-id caching."""
+    """Serialize appointments, resolving patient/doctor/insurer names with per-id caching."""
     patient_names: dict = {}
     doctor_names: dict = {}
+    insurer_names: dict = {}
     for a in appts:
         if a.patient_id not in patient_names:
             patient = uow.patients.get_by_id(a.patient_id)
@@ -45,11 +52,15 @@ def _ser_appointments(uow: UoW, appts: list) -> list[dict]:
         if a.doctor_id not in doctor_names:
             doctor = uow.users.get_by_id(a.doctor_id)
             doctor_names[a.doctor_id] = doctor.name if doctor else None
+        if a.insurance_id and a.insurance_id not in insurer_names:
+            insurer = uow.insurers.get_by_id(a.insurance_id)
+            insurer_names[a.insurance_id] = insurer.name if insurer else None
     return [
         ser_appointment(
             a,
             patient_name=patient_names[a.patient_id],
             doctor_name=doctor_names[a.doctor_id],
+            insurer_name=insurer_names.get(a.insurance_id) if a.insurance_id else None,
         )
         for a in appts
     ]
@@ -132,6 +143,7 @@ def create_appointment(
         duration_minutes=body.duration_minutes,
         reason=body.reason,
         room=body.room,
+        insurance_id=InsurerId.parse(body.insurance_id) if body.insurance_id else None,
     )
     appt = CreateAppointment(uow, codes, clock).execute(actor, cmd)
     return ser_appointment(appt)

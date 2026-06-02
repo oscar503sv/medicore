@@ -29,9 +29,6 @@ class PatientModel(Base):
     sex: Mapped[str] = mapped_column(String(10), nullable=False)
     date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
     blood_type: Mapped[str | None] = mapped_column(String(5), nullable=True)
-    insurance_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("insurers.id"), nullable=True
-    )
     primary_doctor_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )

@@ -6,6 +6,8 @@ export interface Session {
   tenant_name: string
   role: Role
   name: string
+  sex: Sex | null
+  must_change_password: boolean
 }
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
@@ -42,7 +44,9 @@ export interface User {
   email: string
   role: Role
   status: UserStatus
+  sex: Sex | null
   specialty: string | null
+  phone: string | null
   avatar_initials: string
   last_seen_at: string | null
   joined_at: string
@@ -67,7 +71,6 @@ export interface Patient {
   date_of_birth: string
   age: number
   blood_type: string | null
-  insurance_id: string | null
   primary_doctor_id: string | null
   status: PatientStatus
   tags: string[]
@@ -121,8 +124,10 @@ export interface Appointment {
   duration_minutes: number
   reason: string
   room: string | null
+  insurance_id: string | null
   patient_name: string | null
   doctor_name: string | null
+  insurer_name: string | null
   created_by_id: string
   created_at: string
   updated_at: string

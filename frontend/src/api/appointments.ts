@@ -15,6 +15,7 @@ export interface CreateAppointmentPayload {
   duration_minutes: number
   reason: string
   room?: string | null
+  insurance_id?: string | null
 }
 
 export const appointmentsApi = {

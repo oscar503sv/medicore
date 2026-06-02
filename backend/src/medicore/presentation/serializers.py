@@ -31,7 +31,9 @@ def ser_user(u: User) -> dict:
         "email": u.email,
         "role": str(u.role),
         "status": str(u.status),
+        "sex": str(u.sex) if u.sex else None,
         "specialty": u.specialty,
+        "phone": u.phone,
         "avatar_initials": u.avatar_initials,
         "last_seen_at": u.last_seen_at,
         "joined_at": u.joined_at,
@@ -49,7 +51,6 @@ def ser_patient(p: Patient) -> dict:
         "date_of_birth": p.date_of_birth,
         "age": p.age(),
         "blood_type": str(p.blood_type) if p.blood_type else None,
-        "insurance_id": str(p.insurance_id) if p.insurance_id else None,
         "primary_doctor_id": str(p.primary_doctor_id) if p.primary_doctor_id else None,
         "status": str(p.status),
         "tags": p.tags,
@@ -83,7 +84,11 @@ def ser_insurer(i: Insurer) -> dict:
 
 
 def ser_appointment(
-    a: Appointment, *, patient_name: str | None = None, doctor_name: str | None = None
+    a: Appointment,
+    *,
+    patient_name: str | None = None,
+    doctor_name: str | None = None,
+    insurer_name: str | None = None,
 ) -> dict:
     return {
         "id": str(a.id),
@@ -99,8 +104,10 @@ def ser_appointment(
         "duration_minutes": a.duration_minutes,
         "reason": a.reason,
         "room": a.room,
+        "insurance_id": str(a.insurance_id) if a.insurance_id else None,
         "patient_name": patient_name,
         "doctor_name": doctor_name,
+        "insurer_name": insurer_name,
         "created_by_id": str(a.created_by_id),
         "created_at": a.created_at,
         "updated_at": a.updated_at,

@@ -23,7 +23,6 @@ class CreatePatientRequest(BaseModel):
     date_of_birth: date
     contact: ContactInfoSchema = ContactInfoSchema()
     blood_type: str | None = None
-    insurance_id: str | None = None
     primary_doctor_id: str | None = None
     tags: list[str] = []
     allergies: list[str] = []
@@ -34,7 +33,6 @@ class UpdatePatientRequest(BaseModel):
     last_name: str | None = None
     contact: ContactInfoSchema | None = None
     blood_type: str | None = None
-    insurance_id: str | None = None
     primary_doctor_id: str | None = None
     tags: list[str] | None = None
     allergies: list[str] | None = None
@@ -50,7 +48,6 @@ class PatientResponse(BaseModel):
     date_of_birth: date
     age: int
     blood_type: str | None
-    insurance_id: str | None
     primary_doctor_id: str | None
     status: str
     tags: list[str]

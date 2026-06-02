@@ -97,6 +97,7 @@ class SqlAppointmentRepository:
         row.duration_minutes = appointment.duration_minutes
         row.reason = appointment.reason
         row.room = appointment.room
+        row.insurance_id = appointment.insurance_id.value if appointment.insurance_id else None
         row.created_by_id = appointment.created_by_id.value
         row.created_at = appointment.created_at
         row.updated_at = appointment.updated_at

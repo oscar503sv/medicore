@@ -16,7 +16,6 @@ export interface CreatePatientPayload {
   date_of_birth: string
   contact?: Partial<Patient['contact']>
   blood_type?: string | null
-  insurance_id?: string | null
   primary_doctor_id?: string | null
   tags?: string[]
   allergies?: string[]

@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { insurersApi } from '@/api/insurers'
 import { patientsApi } from '@/api/patients'
 import { recordsApi } from '@/api/records'
 import { EditPatientModal } from '@/components/patients/EditPatientModal'
@@ -30,10 +29,6 @@ export function PatientDetailPage() {
     queryKey: ['patient', id],
     queryFn: () => patientsApi.get(id),
   })
-  const { data: insurers } = useQuery({
-    queryKey: ['insurers'],
-    queryFn: () => insurersApi.list(),
-  })
   const { data: records } = useQuery({
     queryKey: ['records', { patient_id: id }],
     queryFn: () => recordsApi.list({ patient_id: id }),
@@ -42,7 +37,6 @@ export function PatientDetailPage() {
 
   if (isLoading || !data) return <PageLoader />
   const p = data.patient
-  const insurerName = insurers?.find((i) => i.id === p.insurance_id)?.name ?? null
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'summary', label: t('patient.summary') },
@@ -71,7 +65,6 @@ export function PatientDetailPage() {
             <span>{p.age} años</span>
             <span>{p.sex === 'male' ? 'Masculino' : p.sex === 'female' ? 'Femenino' : 'Otro'}</span>
             {p.blood_type && <span>Grupo {p.blood_type}</span>}
-            {insurerName && <span>{insurerName}</span>}
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {p.tags.map((tag) => (
@@ -123,7 +116,6 @@ export function PatientDetailPage() {
                 <Row label="Email" value={p.contact.email} />
                 <Row label="Dirección" value={p.contact.address} />
                 <Row label="Contacto emergencia" value={p.contact.emergency_contact_name} />
-                <Row label={t('patientform.insurer')} value={insurerName} />
               </dl>
             </Card>
           </div>
