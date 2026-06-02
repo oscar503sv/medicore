@@ -5,6 +5,7 @@ from __future__ import annotations
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
+from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.patient import Patient
@@ -48,7 +49,7 @@ def ser_patient(p: Patient) -> dict:
         "date_of_birth": p.date_of_birth,
         "age": p.age(),
         "blood_type": str(p.blood_type) if p.blood_type else None,
-        "insurance": p.insurance,
+        "insurance_id": str(p.insurance_id) if p.insurance_id else None,
         "primary_doctor_id": str(p.primary_doctor_id) if p.primary_doctor_id else None,
         "status": str(p.status),
         "tags": p.tags,
@@ -65,7 +66,25 @@ def ser_patient(p: Patient) -> dict:
     }
 
 
-def ser_appointment(a: Appointment) -> dict:
+def ser_insurer(i: Insurer) -> dict:
+    return {
+        "id": str(i.id),
+        "tenant_id": str(i.tenant_id),
+        "name": i.name,
+        "phone": i.phone,
+        "email": i.email,
+        "address": i.address,
+        "contact_person": i.contact_person,
+        "notes": i.notes,
+        "active": i.active,
+        "created_at": i.created_at,
+        "updated_at": i.updated_at,
+    }
+
+
+def ser_appointment(
+    a: Appointment, *, patient_name: str | None = None, doctor_name: str | None = None
+) -> dict:
     return {
         "id": str(a.id),
         "tenant_id": str(a.tenant_id),
@@ -80,6 +99,8 @@ def ser_appointment(a: Appointment) -> dict:
         "duration_minutes": a.duration_minutes,
         "reason": a.reason,
         "room": a.room,
+        "patient_name": patient_name,
+        "doctor_name": doctor_name,
         "created_by_id": str(a.created_by_id),
         "created_at": a.created_at,
         "updated_at": a.updated_at,
@@ -90,7 +111,12 @@ def ser_slot(s: Slot) -> dict:
     return {"start": s.start, "end": s.end, "status": str(s.status)}
 
 
-def ser_consultation(c: Consultation) -> dict:
+def ser_consultation(c: Consultation, uow=None) -> dict:
+    """Serialize a consultation. When ``uow`` is provided, embed the (immutable for the
+    consultation's life) patient and appointment context the live consultation screen needs
+    for its header — patient summary, allergies, the booked reason and scheduled duration."""
+    patient = uow.patients.get_by_id(c.patient_id) if uow else None
+    appointment = uow.appointments.get_by_id(c.appointment_id) if uow else None
     return {
         "id": str(c.id),
         "tenant_id": str(c.tenant_id),
@@ -111,6 +137,8 @@ def ser_consultation(c: Consultation) -> dict:
         "attachments": [attachment_to_dict(a) for a in c.attachments],
         "completion_percent": c.compute_completion(),
         "last_saved_at": c.last_saved_at,
+        "patient": ser_patient(patient) if patient else None,
+        "appointment": ser_appointment(appointment) if appointment else None,
     }
 
 

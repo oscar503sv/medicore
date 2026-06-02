@@ -45,6 +45,13 @@ def test_start_consultation(seed, client, auth_headers):
     assert resp.json()["status"] == "draft"
 
 
+def test_get_consultation(seed, client, auth_headers):
+    _, cid = _book_and_start(seed, client, auth_headers)
+    resp = client.get(f"/api/v1/consultations/{cid}", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["id"] == cid
+
+
 def test_autosave_vitals_and_soap(seed, client, auth_headers):
     _, cid = _book_and_start(seed, client, auth_headers)
     resp = client.patch(

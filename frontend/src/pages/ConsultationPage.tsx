@@ -1,32 +1,42 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Save, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Clock, Plus, Save, Trash2, X } from 'lucide-react'
 import { api, errorMessage } from '@/api/client'
 import { consultationsApi } from '@/api/consultations'
+import { Badge, typeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
-import type { Consultation, Soap, Vitals } from '@/types'
+import type { Consultation, Patient, Soap, Vitals } from '@/types'
 
-const VITAL_FIELDS: { key: keyof Vitals; label: string; placeholder: string }[] = [
-  { key: 'blood_pressure', label: 'TA', placeholder: '120/80' },
-  { key: 'heart_rate', label: 'FC', placeholder: '72' },
-  { key: 'spo2', label: 'SpO₂', placeholder: '98' },
-  { key: 'temperature', label: 'Temp', placeholder: '36.5' },
-  { key: 'weight', label: 'Peso', placeholder: '70' },
-  { key: 'glucose', label: 'Glucemia', placeholder: '90' },
+const VITAL_FIELDS: {
+  key: keyof Vitals
+  label: string
+  placeholder: string
+  unit: string
+}[] = [
+  { key: 'blood_pressure', label: 'TA', placeholder: '120/80', unit: 'mmHg' },
+  { key: 'heart_rate', label: 'FC', placeholder: '72', unit: 'lpm' },
+  { key: 'spo2', label: 'SpO₂', placeholder: '98', unit: '%' },
+  { key: 'temperature', label: 'Temp', placeholder: '36.5', unit: '°C' },
+  { key: 'weight', label: 'Peso', placeholder: '70', unit: 'kg' },
+  { key: 'glucose', label: 'Glucemia', placeholder: '90', unit: 'mg/dL' },
 ]
 
-const SOAP_FIELDS: { key: keyof Soap; labelKey: string }[] = [
-  { key: 'subjective', labelKey: 'consult.subjective' },
-  { key: 'objective', labelKey: 'consult.objective' },
-  { key: 'assessment', labelKey: 'consult.assessment' },
-  { key: 'plan', labelKey: 'consult.plan' },
+const SOAP_FIELDS: { key: keyof Soap; letter: string; labelKey: string; helpKey: string }[] = [
+  { key: 'subjective', letter: 'S', labelKey: 'consult.subjective', helpKey: 'consult.soap_sub_help' },
+  { key: 'objective', letter: 'O', labelKey: 'consult.objective', helpKey: 'consult.soap_obj_help' },
+  { key: 'assessment', letter: 'A', labelKey: 'consult.assessment', helpKey: 'consult.soap_ass_help' },
+  { key: 'plan', letter: 'P', labelKey: 'consult.plan', helpKey: 'consult.soap_plan_help' },
 ]
+
+function sexLabel(sex: Patient['sex']): string {
+  return sex === 'male' ? 'Masculino' : sex === 'female' ? 'Femenino' : 'Otro'
+}
 
 export function ConsultationPage() {
   const t = useT()
@@ -54,6 +64,8 @@ export function ConsultationPage() {
       setVitals(data.vitals)
       setSoap(data.soap)
       setCompletion(data.completion_percent)
+      // Prefill the sign summary with the reason the appointment was booked for.
+      if (data.appointment?.reason) setChiefComplaint(data.appointment.reason)
     }
   }, [data, vitals])
 
@@ -96,6 +108,8 @@ export function ConsultationPage() {
 
   const mm = String(Math.floor(elapsed / 60)).padStart(2, '0')
   const ss = String(elapsed % 60).padStart(2, '0')
+  const patient = data.patient
+  const appt = data.appointment
 
   return (
     <div className="flex h-full flex-col">
@@ -109,7 +123,15 @@ export function ConsultationPage() {
             <span className="h-2 w-2 animate-pulse-dot rounded-pill bg-warn" />
             <span className="text-[13px] font-medium text-tx-2">{t('consult.in_progress')}</span>
           </div>
-          <span className="font-mono text-sm text-tx-3">{mm}:{ss}</span>
+          <span className="flex items-center gap-1.5 font-mono text-sm text-tx-2">
+            <Clock className="h-3.5 w-3.5 text-tx-4" />
+            {mm}:{ss}
+            {appt && (
+              <span className="text-tx-4">
+                {' '}/ {appt.duration_minutes} min {t('consult.scheduled')}
+              </span>
+            )}
+          </span>
         </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-xs text-tx-3">
@@ -120,7 +142,41 @@ export function ConsultationPage() {
         </div>
       </header>
 
-      {/* Body: 3 columns */}
+      {/* Patient context bar */}
+      {patient && (
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-2 border-b border-line bg-surface-2/30 px-6 py-3">
+          <div>
+            <p className="font-medium text-tx">
+              {patient.first_name} {patient.last_name}
+            </p>
+            <p className="font-mono text-xs text-tx-3">{patient.code}</p>
+          </div>
+          <Meta label={t('consult.age')}>
+            {patient.age} a · {sexLabel(patient.sex)}
+          </Meta>
+          <Meta label={t('consult.blood_type')}>{patient.blood_type ?? '—'}</Meta>
+          <Meta label={t('consult.allergies')}>
+            {patient.allergies.length > 0 ? (
+              <span className="inline-flex items-center gap-1 text-danger">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {patient.allergies.join(', ')}
+              </span>
+            ) : (
+              <span className="text-tx-3">{t('consult.no_allergies')}</span>
+            )}
+          </Meta>
+          {appt && (
+            <Meta label={t('consult.reason')}>
+              <span className="inline-flex items-center gap-2">
+                <Badge tone={typeTone(appt.type)}>{t(`apptype.${appt.type}`)}</Badge>
+                <span className="text-tx">{appt.reason}</span>
+              </span>
+            </Meta>
+          )}
+        </div>
+      )}
+
+      {/* Body: 2 columns */}
       <div className="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6 lg:grid-cols-[1fr_260px]">
         <div className="space-y-6">
           {/* Vitals */}
@@ -130,28 +186,39 @@ export function ConsultationPage() {
               {VITAL_FIELDS.map((f) => (
                 <div key={f.key} className="rounded-lg border border-line bg-surface p-3">
                   <p className="eyebrow mb-1">{f.label}</p>
-                  <input
-                    value={(vitals[f.key] as string | number | null) ?? ''}
-                    onChange={(e) => {
-                      const next = { ...vitals, [f.key]: e.target.value || null }
-                      setVitals(next)
-                      scheduleSave({ vitals: next })
-                    }}
-                    placeholder={f.placeholder}
-                    className="w-full bg-transparent font-serif text-2xl text-tx placeholder:text-tx-4 focus:outline-none"
-                  />
+                  <div className="flex items-baseline gap-1.5">
+                    <input
+                      value={(vitals[f.key] as string | number | null) ?? ''}
+                      onChange={(e) => {
+                        const next = { ...vitals, [f.key]: e.target.value || null }
+                        setVitals(next)
+                        scheduleSave({ vitals: next })
+                      }}
+                      placeholder={f.placeholder}
+                      className="w-full min-w-0 bg-transparent font-serif text-2xl text-tx placeholder:text-tx-4 focus:outline-none"
+                    />
+                    <span className="shrink-0 text-xs text-tx-3">{f.unit}</span>
+                  </div>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* SOAP 2x2 */}
+          {/* SOAP 2x2 — each section labelled with a helper note */}
           <section>
             <h3 className="mb-3 text-sm font-semibold text-tx">{t('consult.soap')}</h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {SOAP_FIELDS.map((f) => (
-                <div key={f.key}>
-                  <label className="eyebrow mb-1 block">{t(f.labelKey)}</label>
+                <div key={f.key} className="rounded-xl border border-line bg-surface p-4">
+                  <div className="mb-2 flex items-start gap-2.5">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-2 font-serif text-sm text-accent">
+                      {f.letter}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-tx">{t(f.labelKey)}</p>
+                      <p className="text-xs leading-snug text-tx-3">{t(f.helpKey)}</p>
+                    </div>
+                  </div>
                   <textarea
                     value={soap[f.key]}
                     onChange={(e) => {
@@ -160,7 +227,8 @@ export function ConsultationPage() {
                       scheduleSave({ soap: next })
                     }}
                     rows={4}
-                    className="w-full resize-none rounded-lg border border-line bg-surface p-3 text-sm text-tx focus:border-accent focus:outline-none"
+                    placeholder={t('app.write_here')}
+                    className="w-full resize-none rounded-lg border border-line bg-bg p-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
                   />
                 </div>
               ))}
@@ -204,6 +272,15 @@ export function ConsultationPage() {
           </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function Meta({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="eyebrow mb-0.5">{label}</p>
+      <div className="text-sm text-tx">{children}</div>
     </div>
   )
 }
@@ -263,7 +340,12 @@ function DiagnosesSection({
 
   return (
     <section>
-      <h3 className="mb-3 text-sm font-semibold text-tx">{t('consult.diagnoses')}</h3>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h3 className="text-sm font-semibold text-tx">{t('consult.diagnoses')}</h3>
+        <span className="text-xs text-tx-3">
+          {consultation.diagnoses.length} {t('consult.dx_unit')}
+        </span>
+      </div>
       <div className="space-y-2">
         {consultation.diagnoses.map((d) => (
           <div key={d.code} className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
@@ -275,19 +357,25 @@ function DiagnosesSection({
           </div>
         ))}
       </div>
-      <div className="mt-2 flex gap-2">
-        <input
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="I10"
-          className="h-9 w-24 rounded-lg border border-line bg-bg px-2 font-mono text-[13px] focus:border-accent focus:outline-none"
-        />
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="Descripción"
-          className="h-9 flex-1 rounded-lg border border-line bg-bg px-2 text-sm focus:border-accent focus:outline-none"
-        />
+      <div className="mt-2 flex items-end gap-2">
+        <div className="w-24">
+          <label className="eyebrow mb-1 block">{t('consult.dx_code')}</label>
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="I10"
+            className="h-9 w-full rounded-lg border border-line bg-bg px-2 font-mono text-[13px] focus:border-accent focus:outline-none"
+          />
+        </div>
+        <div className="flex-1">
+          <label className="eyebrow mb-1 block">{t('consult.dx_desc')}</label>
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Hipertensión esencial"
+            className="h-9 w-full rounded-lg border border-line bg-bg px-2 text-sm focus:border-accent focus:outline-none"
+          />
+        </div>
         <Button size="sm" variant="outline" disabled={!code || !label} onClick={() => add.mutate()}>
           <Plus className="h-4 w-4" />
         </Button>
@@ -305,14 +393,24 @@ function PrescriptionsSection({
 }) {
   const t = useT()
   const qc = useQueryClient()
-  const [form, setForm] = useState({ drug: '', dose: '', schedule: '' })
+  const [form, setForm] = useState<{ drug: string; dose: string; schedule: string; days: string }>({
+    drug: '',
+    dose: '',
+    schedule: '',
+    days: '',
+  })
 
   const add = useMutation({
     mutationFn: () =>
-      consultationsApi.addPrescription(consultationId, { ...form, duration_days: null }),
+      consultationsApi.addPrescription(consultationId, {
+        drug: form.drug,
+        dose: form.dose,
+        schedule: form.schedule,
+        duration_days: form.days ? Number(form.days) : null,
+      }),
     onSuccess: (c) => {
       qc.setQueryData(['consultation', consultationId], c)
-      setForm({ drug: '', dose: '', schedule: '' })
+      setForm({ drug: '', dose: '', schedule: '', days: '' })
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -321,9 +419,17 @@ function PrescriptionsSection({
     onSuccess: (c) => qc.setQueryData(['consultation', consultationId], c),
   })
 
+  const inputCls =
+    'h-9 w-full rounded-lg border border-line bg-bg px-2 text-sm focus:border-accent focus:outline-none'
+
   return (
     <section>
-      <h3 className="mb-3 text-sm font-semibold text-tx">{t('consult.prescriptions')}</h3>
+      <div className="mb-3 flex items-baseline justify-between">
+        <h3 className="text-sm font-semibold text-tx">{t('consult.prescriptions')}</h3>
+        <span className="text-xs text-tx-3">
+          {consultation.draft_prescriptions.length} {t('consult.rx_unit')}
+        </span>
+      </div>
       <div className="space-y-2">
         {consultation.draft_prescriptions.map((rx, i) => (
           <div key={i} className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
@@ -331,6 +437,7 @@ function PrescriptionsSection({
               <p className="text-sm font-medium text-tx">{rx.drug}</p>
               <p className="text-xs text-tx-3">
                 {rx.dose} · {rx.schedule}
+                {rx.duration_days ? ` · ${rx.duration_days} ${t('consult.rx_days').toLowerCase()}` : ''}
               </p>
             </div>
             <button onClick={() => remove.mutate(i)} className="text-tx-4 hover:text-danger">
@@ -339,32 +446,55 @@ function PrescriptionsSection({
           </div>
         ))}
       </div>
-      <div className="mt-2 grid grid-cols-[1fr_80px_1fr_auto] gap-2">
-        <input
-          value={form.drug}
-          onChange={(e) => setForm({ ...form, drug: e.target.value })}
-          placeholder="Fármaco"
-          className="h-9 rounded-lg border border-line bg-bg px-2 text-sm focus:border-accent focus:outline-none"
-        />
-        <input
-          value={form.dose}
-          onChange={(e) => setForm({ ...form, dose: e.target.value })}
-          placeholder="20 mg"
-          className="h-9 rounded-lg border border-line bg-bg px-2 text-sm focus:border-accent focus:outline-none"
-        />
-        <input
-          value={form.schedule}
-          onChange={(e) => setForm({ ...form, schedule: e.target.value })}
-          placeholder="1× día"
-          className="h-9 rounded-lg border border-line bg-bg px-2 text-sm focus:border-accent focus:outline-none"
-        />
+      <div className="mt-3 rounded-xl border border-line bg-surface p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_120px_1fr_88px]">
+          <div>
+            <label className="eyebrow mb-1 block">{t('consult.rx_drug')}</label>
+            <input
+              value={form.drug}
+              onChange={(e) => setForm({ ...form, drug: e.target.value })}
+              placeholder="Ej. Paracetamol"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="eyebrow mb-1 block">{t('consult.rx_dose')}</label>
+            <input
+              value={form.dose}
+              onChange={(e) => setForm({ ...form, dose: e.target.value })}
+              placeholder="500 mg"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="eyebrow mb-1 block">{t('consult.rx_schedule')}</label>
+            <input
+              value={form.schedule}
+              onChange={(e) => setForm({ ...form, schedule: e.target.value })}
+              placeholder="1× día · mañana"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="eyebrow mb-1 block">{t('consult.rx_days')}</label>
+            <input
+              type="number"
+              min={1}
+              value={form.days}
+              onChange={(e) => setForm({ ...form, days: e.target.value })}
+              placeholder="30"
+              className={inputCls}
+            />
+          </div>
+        </div>
         <Button
           size="sm"
-          variant="outline"
+          className="mt-3"
           disabled={!form.drug || !form.dose}
           onClick={() => add.mutate()}
         >
           <Plus className="h-4 w-4" />
+          {t('consult.rx_add')}
         </Button>
       </div>
     </section>

@@ -11,6 +11,7 @@ from medicore.application.use_cases.consultations import (
     AddPrescriptionDraft,
     AutosaveConsultation,
     ConsultationPatch,
+    GetConsultation,
     RemoveDiagnosis,
     RemovePrescriptionDraft,
     SignConsultation,
@@ -39,7 +40,13 @@ router = APIRouter(prefix="/consultations", tags=["consultations"])
 @router.post("/start/{appointment_id}", response_model=ConsultationResponse, status_code=201)
 def start_consultation(appointment_id: str, actor: Actor, uow: UoW, clock: Clock):
     c = StartConsultation(uow, clock).execute(actor, AppointmentId.parse(appointment_id))
-    return ser_consultation(c)
+    return ser_consultation(c, uow)
+
+
+@router.get("/{consultation_id}", response_model=ConsultationResponse)
+def get_consultation(consultation_id: str, actor: Actor, uow: UoW, clock: Clock):
+    c = GetConsultation(uow, clock).execute(actor, ConsultationId.parse(consultation_id))
+    return ser_consultation(c, uow)
 
 
 @router.patch("/{consultation_id}/autosave", response_model=ConsultationResponse)
@@ -69,7 +76,7 @@ def autosave(consultation_id: str, body: AutosaveRequest, actor: Actor, uow: UoW
     c = AutosaveConsultation(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id), ConsultationPatch(vitals=vitals, soap=soap)
     )
-    return ser_consultation(c)
+    return ser_consultation(c, uow)
 
 
 @router.post("/{consultation_id}/diagnoses", response_model=ConsultationResponse)
@@ -79,13 +86,13 @@ def add_diagnosis(
     c = AddDiagnosis(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id), IcdCode(body.code, body.label)
     )
-    return ser_consultation(c)
+    return ser_consultation(c, uow)
 
 
 @router.delete("/{consultation_id}/diagnoses/{code}", response_model=ConsultationResponse)
 def remove_diagnosis(consultation_id: str, code: str, actor: Actor, uow: UoW, clock: Clock):
     c = RemoveDiagnosis(uow, clock).execute(actor, ConsultationId.parse(consultation_id), code)
-    return ser_consultation(c)
+    return ser_consultation(c, uow)
 
 
 @router.post("/{consultation_id}/prescriptions", response_model=ConsultationResponse)
@@ -98,7 +105,7 @@ def add_prescription(
     c = AddPrescriptionDraft(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id), draft
     )
-    return ser_consultation(c)
+    return ser_consultation(c, uow)
 
 
 @router.delete("/{consultation_id}/prescriptions/{index}", response_model=ConsultationResponse)
@@ -108,7 +115,7 @@ def remove_prescription(
     c = RemovePrescriptionDraft(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id), index
     )
-    return ser_consultation(c)
+    return ser_consultation(c, uow)
 
 
 @router.post("/{consultation_id}/sign")

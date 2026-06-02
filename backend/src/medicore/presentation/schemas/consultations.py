@@ -64,3 +64,6 @@ class ConsultationResponse(BaseModel):
     attachments: list[dict[str, Any]]
     completion_percent: int
     last_saved_at: datetime | None
+    # Context for the live consultation header (patient summary + booked appointment).
+    patient: dict[str, Any] | None = None
+    appointment: dict[str, Any] | None = None
