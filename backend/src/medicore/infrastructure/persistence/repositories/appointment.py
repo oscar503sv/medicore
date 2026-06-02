@@ -21,6 +21,11 @@ _ACTIVE = {
 }
 
 
+def _naive(dt: datetime) -> datetime:
+    """Drop tzinfo so naive (SQLite-stored) and aware (request) datetimes are comparable."""
+    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
 class SqlAppointmentRepository:
     def __init__(self, session: Session, tenant_id: TenantId) -> None:
         self._s = session
@@ -66,11 +71,14 @@ class SqlAppointmentRepository:
             )
             .all()
         )
+        # Stored datetimes may be naive (SQLite) while request datetimes are tz-aware;
+        # compare on a single wall-clock reference by dropping tzinfo.
+        start, end = _naive(start), _naive(end)
         return [
             to_appointment(r)
             for r in rows
-            if r.scheduled_start < end
-            and start < r.scheduled_start + timedelta(minutes=r.duration_minutes)
+            if _naive(r.scheduled_start) < end
+            and start < _naive(r.scheduled_start) + timedelta(minutes=r.duration_minutes)
         ]
 
     def save(self, appointment: Appointment) -> None:
