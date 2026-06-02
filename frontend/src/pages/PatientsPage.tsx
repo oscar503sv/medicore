@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Search } from 'lucide-react'
+import { insurersApi } from '@/api/insurers'
 import { patientsApi } from '@/api/patients'
 import { PageHeader } from '@/components/PageHeader'
 import { NewPatientModal } from '@/components/patients/NewPatientModal'
@@ -31,6 +32,12 @@ export function PatientsPage() {
         status: filter === 'all' ? undefined : filter,
       }),
   })
+  const { data: insurers } = useQuery({
+    queryKey: ['insurers'],
+    queryFn: () => insurersApi.list(),
+  })
+  const insurerName = (id: string | null) =>
+    (id && insurers?.find((i) => i.id === id)?.name) || '—'
 
   return (
     <div className="space-y-5 p-8">
@@ -97,7 +104,7 @@ export function PatientsPage() {
                   <Td>
                     {p.age} · {p.sex === 'male' ? 'M' : p.sex === 'female' ? 'F' : 'O'}
                   </Td>
-                  <Td>{p.insurance ?? '—'}</Td>
+                  <Td>{insurerName(p.insurance_id)}</Td>
                   <Td>
                     <div className="flex flex-wrap gap-1">
                       {p.tags.slice(0, 2).map((tag) => (

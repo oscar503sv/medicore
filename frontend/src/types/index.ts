@@ -3,6 +3,7 @@ export interface Session {
   token: string
   user_id: string
   tenant_id: string
+  tenant_name: string
   role: Role
   name: string
 }
@@ -66,12 +67,26 @@ export interface Patient {
   date_of_birth: string
   age: number
   blood_type: string | null
-  insurance: string | null
+  insurance_id: string | null
   primary_doctor_id: string | null
   status: PatientStatus
   tags: string[]
   allergies: string[]
   contact: ContactInfo
+  created_at: string
+  updated_at: string
+}
+
+export interface Insurer {
+  id: string
+  tenant_id: string
+  name: string
+  phone: string | null
+  email: string | null
+  address: string | null
+  contact_person: string | null
+  notes: string | null
+  active: boolean
   created_at: string
   updated_at: string
 }
@@ -106,6 +121,8 @@ export interface Appointment {
   duration_minutes: number
   reason: string
   room: string | null
+  patient_name: string | null
+  doctor_name: string | null
   created_by_id: string
   created_at: string
   updated_at: string
@@ -164,6 +181,9 @@ export interface Consultation {
   attachments: unknown[]
   completion_percent: number
   last_saved_at: string | null
+  // Header context for the live consultation screen (immutable for its lifetime).
+  patient: Patient | null
+  appointment: Appointment | null
 }
 
 // ── Medical Records ───────────────────────────────────────────────────────────

@@ -7,6 +7,7 @@ import { AppointmentsPage } from '@/pages/AppointmentsPage'
 import { AvailabilityPage } from '@/pages/AvailabilityPage'
 import { ConsultationPage } from '@/pages/ConsultationPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { InsurersPage } from '@/pages/InsurersPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { PatientDetailPage } from '@/pages/PatientDetailPage'
 import { PatientsPage } from '@/pages/PatientsPage'
@@ -61,6 +62,7 @@ export function App() {
           <Route path="/records" element={<RecordsPage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/insurers" element={<InsurersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
 
