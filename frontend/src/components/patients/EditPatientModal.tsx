@@ -53,7 +53,7 @@ export function EditPatientModal({
         >
           <PatientForm value={form} onChange={setForm} />
           <div className="flex justify-end gap-2 border-t border-line pt-4">
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               {t('app.cancel')}
             </Button>
             <Button

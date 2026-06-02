@@ -122,7 +122,7 @@ export function RescheduleAppointmentModal({
       </div>
 
       <div className="flex justify-between border-t border-line px-5 py-4">
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="outline" onClick={onClose}>
           {t('app.cancel')}
         </Button>
         <Button

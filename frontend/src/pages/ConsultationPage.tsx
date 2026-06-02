@@ -263,7 +263,7 @@ export function ConsultationPage() {
             placeholder="Resumen del encuentro"
           />
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setSignOpen(false)}>
+            <Button variant="outline" onClick={() => setSignOpen(false)}>
               {t('app.cancel')}
             </Button>
             <Button loading={sign.isPending} onClick={() => sign.mutate()}>

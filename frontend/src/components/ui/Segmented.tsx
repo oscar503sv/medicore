@@ -10,13 +10,13 @@ export function Segmented<T extends string>({
   options: { value: T; label: string }[]
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
+    <div className="inline-flex rounded-xl border border-line bg-surface p-1">
       {options.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
           className={cn(
-            'rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors',
+            'rounded-lg px-3 py-1.5 text-[13px] font-medium leading-none transition-colors',
             value === opt.value ? 'bg-accent text-white shadow-sm' : 'text-tx-2 hover:text-tx',
           )}
         >
