@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from medicore.application.use_cases.auth import MyProfileDTO
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
@@ -37,6 +38,18 @@ def ser_user(u: User) -> dict:
         "avatar_initials": u.avatar_initials,
         "last_seen_at": u.last_seen_at,
         "joined_at": u.joined_at,
+    }
+
+
+def ser_my_profile(p: MyProfileDTO) -> dict:
+    return {
+        "name": p.name,
+        "email": p.email,
+        "role": str(p.role),
+        "sex": str(p.sex) if p.sex else None,
+        "specialty": p.specialty,
+        "phone": p.phone,
+        "bio": p.bio,
     }
 
 

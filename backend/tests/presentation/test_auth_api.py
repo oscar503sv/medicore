@@ -50,3 +50,33 @@ def test_invalid_token_rejected(client):
 def test_switch_theme(client, auth_headers):
     resp = client.post("/api/v1/auth/theme", json={"theme": "dark"}, headers=auth_headers)
     assert resp.status_code == 204
+
+
+def test_get_my_profile(seed, client, auth_headers):
+    resp = client.get("/api/v1/auth/me", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["email"] == seed.doctor.email
+    assert data["role"] == "doctor"
+    assert data["specialty"] == seed.doctor.specialty
+    assert data["bio"] is None
+
+
+def test_get_my_profile_requires_token(client):
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_update_my_profile(seed, client, auth_headers):
+    resp = client.patch(
+        "/api/v1/auth/me",
+        json={"name": "Dra. Elena Vásquez", "phone": "+34 911 23 45 67", "bio": "12 años."},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["name"] == "Dra. Elena Vásquez"
+    assert data["phone"] == "+34 911 23 45 67"
+    assert data["bio"] == "12 años."
+    # email and specialty are not affected
+    assert data["email"] == seed.doctor.email
+    assert data["specialty"] == seed.doctor.specialty

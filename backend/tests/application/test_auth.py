@@ -8,7 +8,9 @@ from medicore.application.common.errors import AuthenticationFailed
 from medicore.application.use_cases.auth import (
     AuthenticateUser,
     AuthenticateUserCommand,
+    GetMyProfile,
     SwitchTheme,
+    UpdateMyProfile,
 )
 from medicore.domain.enums import Role, ThemePref, UserStatus
 from tests.support.builders import PASSWORD, seed_clinic
@@ -76,3 +78,59 @@ def test_switch_theme_persists():
     SwitchTheme(seed.factory).execute(seed.doctor_actor, ThemePref.DARK)
     uow = seed.factory.for_tenant(seed.tenant.id)
     assert uow.users.get_by_id(seed.doctor.id).preferences.theme == ThemePref.DARK
+
+
+def test_get_my_profile_returns_user_fields():
+    seed = seed_clinic()
+    profile = GetMyProfile(seed.factory).execute(seed.doctor_actor)
+    assert profile.name == seed.doctor.name
+    assert profile.email == seed.doctor.email
+    assert profile.role == Role.DOCTOR
+    assert profile.specialty == seed.doctor.specialty
+    assert profile.bio is None  # no DoctorProfile seeded yet
+
+
+def test_update_my_profile_changes_name_and_phone():
+    seed = seed_clinic()
+    profile = UpdateMyProfile(seed.factory, FixedClock()).execute(
+        seed.doctor_actor, name="Dra. Elena Vásquez", phone="+34 911 23 45 67"
+    )
+    assert profile.name == "Dra. Elena Vásquez"
+    assert profile.phone == "+34 911 23 45 67"
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    saved = uow.users.get_by_id(seed.doctor.id)
+    assert saved.name == "Dra. Elena Vásquez"
+    assert saved.phone == "+34 911 23 45 67"
+    assert uow.audit.query(action="user.profile_updated")
+
+
+def test_update_my_profile_leaves_immutable_fields_untouched():
+    seed = seed_clinic()
+    original_email = seed.doctor.email
+    original_specialty = seed.doctor.specialty
+    UpdateMyProfile(seed.factory, FixedClock()).execute(seed.doctor_actor, name="Nuevo Nombre")
+    saved = seed.factory.for_tenant(seed.tenant.id).users.get_by_id(seed.doctor.id)
+    assert saved.email == original_email
+    assert saved.specialty == original_specialty
+    assert saved.role == Role.DOCTOR
+
+
+def test_update_my_profile_creates_doctor_profile_for_bio():
+    seed = seed_clinic()
+    profile = UpdateMyProfile(seed.factory, FixedClock()).execute(
+        seed.doctor_actor, bio="Cardióloga especialista en hipertensión."
+    )
+    assert profile.bio == "Cardióloga especialista en hipertensión."
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    assert uow.doctor_profiles.get_by_user_id(seed.doctor.id).bio == (
+        "Cardióloga especialista en hipertensión."
+    )
+
+
+def test_update_my_profile_ignores_bio_for_non_doctor():
+    seed = seed_clinic()
+    UpdateMyProfile(seed.factory, FixedClock()).execute(
+        seed.receptionist_actor, bio="should be ignored"
+    )
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    assert uow.doctor_profiles.get_by_user_id(seed.receptionist.id) is None

@@ -33,3 +33,19 @@ class SwitchLocaleRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+class MyProfileResponse(BaseModel):
+    name: str
+    email: str
+    role: str
+    sex: str | None = None
+    specialty: str | None = None
+    phone: str | None = None
+    bio: str | None = None
+
+
+class UpdateMyProfileRequest(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    bio: str | None = None

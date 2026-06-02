@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import AuthenticationFailed, EntityNotFound
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
-from medicore.application.ports.unit_of_work import UnitOfWorkFactory
+from medicore.application.ports.unit_of_work import UnitOfWork, UnitOfWorkFactory
 from medicore.domain.entities.audit_log import AuditLog
+from medicore.domain.entities.user import DoctorProfile
 from medicore.domain.enums import LangPref, Role, Sex, ThemePref, UserStatus
 from medicore.domain.shared.errors import InvalidValueObject
-from medicore.domain.shared.identifiers import AuditLogId, TenantId, UserId
+from medicore.domain.shared.identifiers import AuditLogId, DoctorProfileId, TenantId, UserId
 from medicore.domain.value_objects.slug import Slug
 
 
@@ -157,3 +159,95 @@ class ChangePassword:
             user.change_password(self._hasher.hash(new_password))
             uow.users.save(user)
             uow.commit()
+
+
+@dataclass(frozen=True, slots=True)
+class MyProfileDTO:
+    name: str
+    email: str
+    role: Role
+    sex: Sex | None
+    specialty: str | None
+    phone: str | None
+    bio: str | None
+
+
+def _build_profile(uow: UnitOfWork, user_id: UserId) -> MyProfileDTO:
+    """Assemble the actor's profile from the User and (for doctors) their DoctorProfile."""
+    user = uow.users.get_by_id(user_id)
+    if user is None:
+        raise EntityNotFound("User", user_id)
+    bio = None
+    if user.role == Role.DOCTOR:
+        profile = uow.doctor_profiles.get_by_user_id(user_id)
+        bio = profile.bio if profile else None
+    return MyProfileDTO(
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        sex=user.sex,
+        specialty=user.specialty,
+        phone=user.phone,
+        bio=bio,
+    )
+
+
+class GetMyProfile:
+    """Read the authenticated actor's own profile (no admin permission required)."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+        self._factory = uow_factory
+
+    def execute(self, actor: ActorContext) -> MyProfileDTO:
+        uow = self._factory.for_tenant(actor.tenant_id)
+        with uow:
+            return _build_profile(uow, actor.user_id)
+
+
+class UpdateMyProfile:
+    """Update the actor's own editable profile fields.
+
+    Only ``name`` and ``phone`` are writable on the User; ``email``, ``role``, ``sex`` and
+    ``specialty`` are immutable here. ``bio`` is persisted on the doctor's DoctorProfile
+    (created on demand) and ignored for non-doctor users.
+    """
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(
+        self,
+        actor: ActorContext,
+        *,
+        name: str | None = None,
+        phone: str | None = None,
+        bio: str | None = None,
+    ) -> MyProfileDTO:
+        uow = self._factory.for_tenant(actor.tenant_id)
+        user = uow.users.get_by_id(actor.user_id)
+        if user is None:
+            raise EntityNotFound("User", actor.user_id)
+        with uow:
+            if name is not None:
+                user.name = name
+            if phone is not None:
+                user.phone = phone
+            uow.users.save(user)
+            if bio is not None and user.role == Role.DOCTOR:
+                profile = uow.doctor_profiles.get_by_user_id(actor.user_id)
+                if profile is None:
+                    profile = DoctorProfile(
+                        id=DoctorProfileId.new(),
+                        user_id=actor.user_id,
+                        tenant_id=actor.tenant_id,
+                    )
+                profile.bio = bio
+                uow.doctor_profiles.save(profile)
+            uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "user.profile_updated", "User", str(user.id)
+                )
+            )
+            uow.commit()
+            return _build_profile(uow, actor.user_id)

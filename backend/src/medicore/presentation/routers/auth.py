@@ -8,18 +8,23 @@ from medicore.application.use_cases.auth import (
     AuthenticateUser,
     AuthenticateUserCommand,
     ChangePassword,
+    GetMyProfile,
     SwitchLocale,
     SwitchTheme,
+    UpdateMyProfile,
 )
 from medicore.domain.enums import LangPref, ThemePref
 from medicore.presentation.dependencies import Actor, Clock, Hasher, JwtIssuer, UoWFactory
 from medicore.presentation.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
+    MyProfileResponse,
     SessionResponse,
     SwitchLocaleRequest,
     SwitchThemeRequest,
+    UpdateMyProfileRequest,
 )
+from medicore.presentation.serializers import ser_my_profile
 
 router = APIRouter(tags=["auth"])
 
@@ -56,3 +61,18 @@ def change_password(
     body: ChangePasswordRequest, actor: Actor, factory: UoWFactory, hasher: Hasher
 ):
     ChangePassword(factory, hasher).execute(actor, body.current_password, body.new_password)
+
+
+@router.get("/auth/me", response_model=MyProfileResponse)
+def get_my_profile(actor: Actor, factory: UoWFactory):
+    return ser_my_profile(GetMyProfile(factory).execute(actor))
+
+
+@router.patch("/auth/me", response_model=MyProfileResponse)
+def update_my_profile(
+    body: UpdateMyProfileRequest, actor: Actor, factory: UoWFactory, clock: Clock
+):
+    profile = UpdateMyProfile(factory, clock).execute(
+        actor, name=body.name, phone=body.phone, bio=body.bio
+    )
+    return ser_my_profile(profile)
