@@ -31,6 +31,7 @@ def login(body: LoginRequest, factory: UoWFactory, hasher: Hasher, issuer: JwtIs
         token=session.token,
         user_id=str(session.user_id),
         tenant_id=str(session.tenant_id),
+        tenant_name=session.tenant_name,
         role=str(session.role),
         name=session.name,
     )

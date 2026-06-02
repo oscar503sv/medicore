@@ -34,6 +34,27 @@ from medicore.presentation.serializers import ser_appointment, ser_slot, ser_use
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
 
+def _ser_appointments(uow: UoW, appts: list) -> list[dict]:
+    """Serialize appointments, resolving patient/doctor names with per-id caching."""
+    patient_names: dict = {}
+    doctor_names: dict = {}
+    for a in appts:
+        if a.patient_id not in patient_names:
+            patient = uow.patients.get_by_id(a.patient_id)
+            patient_names[a.patient_id] = patient.full_name if patient else None
+        if a.doctor_id not in doctor_names:
+            doctor = uow.users.get_by_id(a.doctor_id)
+            doctor_names[a.doctor_id] = doctor.name if doctor else None
+    return [
+        ser_appointment(
+            a,
+            patient_name=patient_names[a.patient_id],
+            doctor_name=doctor_names[a.doctor_id],
+        )
+        for a in appts
+    ]
+
+
 @router.get("/booking-options", response_model=BookingOptionsResponse)
 def booking_options(actor: Actor, uow: UoW):
     with uow:
@@ -62,7 +83,7 @@ def list_for_day(
     with uow:
         did = UserId.parse(doctor_id) if doctor_id else None
         appts = ListAppointmentsForDay(uow).execute(actor, on, did)
-    return [ser_appointment(a) for a in appts]
+        return _ser_appointments(uow, appts)
 
 
 @router.get("/schedule", response_model=WeeklyScheduleResponse)
@@ -75,11 +96,11 @@ def weekly_schedule(
     with uow:
         did = UserId.parse(doctor_id) if doctor_id else None
         schedule = GetWeeklySchedule(uow).execute(actor, week_start, did)
-    return WeeklyScheduleResponse(
-        schedule={
-            d.isoformat(): [ser_appointment(a) for a in appts] for d, appts in schedule.items()
-        }
-    )
+        return WeeklyScheduleResponse(
+            schedule={
+                d.isoformat(): _ser_appointments(uow, appts) for d, appts in schedule.items()
+            }
+        )
 
 
 @router.get("/slots", response_model=list[SlotResponse])

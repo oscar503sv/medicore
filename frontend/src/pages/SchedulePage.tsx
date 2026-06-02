@@ -102,7 +102,9 @@ export function SchedulePage() {
                         )}
                         style={{ top, height: Math.max(height, 24) }}
                       >
-                        <p className="truncate font-medium">{format(start, 'HH:mm')}</p>
+                        <p className="truncate font-medium">
+                          {format(start, 'HH:mm')} · {a.patient_name ?? a.reason}
+                        </p>
                         <p className="truncate">{a.reason}</p>
                       </div>
                     )

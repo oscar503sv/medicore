@@ -15,6 +15,7 @@ class SessionResponse(BaseModel):
     token: str
     user_id: str
     tenant_id: str
+    tenant_name: str
     role: str
     name: str
 

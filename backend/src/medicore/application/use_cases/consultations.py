@@ -92,6 +92,23 @@ class StartConsultation:
         return consultation
 
 
+class GetConsultation:
+    """Load a single consultation for viewing in the live consultation screen."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(self, actor: ActorContext, consultation_id: ConsultationId) -> Consultation:
+        ensure_can_edit_consultation(actor)
+        consultation = self._uow.consultations.get_by_id(consultation_id)
+        if consultation is None:
+            raise EntityNotFound("Consultation", consultation_id)
+        if not _owns(actor, consultation.doctor_id):
+            raise PermissionDenied("doctors may only view their own consultations")
+        return consultation
+
+
 class _ConsultationEditor:
     """Shared loading/permission/persistence for the draft-editing use cases."""
 

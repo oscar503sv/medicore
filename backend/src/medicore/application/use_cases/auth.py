@@ -29,6 +29,7 @@ class SessionDTO:
     token: str
     user_id: UserId
     tenant_id: TenantId
+    tenant_name: str
     role: Role
     name: str
 
@@ -88,6 +89,7 @@ class AuthenticateUser:
             token=token,
             user_id=user.id,
             tenant_id=tenant.id,
+            tenant_name=tenant.legal_name,
             role=user.role,
             name=user.name,
         )
