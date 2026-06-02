@@ -1,8 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Monitor, Moon, Sun } from 'lucide-react'
 import { authApi } from '@/api/auth'
+import { errorMessage } from '@/api/client'
 import { PageHeader } from '@/components/PageHeader'
+import { Avatar } from '@/components/ui/Avatar'
+import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
+import { Input, Textarea } from '@/components/ui/Input'
+import { PageLoader } from '@/components/ui/Spinner'
+import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -13,7 +20,6 @@ type Section = 'profile' | 'appearance' | 'notifications'
 export function SettingsPage() {
   const t = useT()
   const [section, setSection] = useState<Section>('profile')
-  const session = useAuthStore((s) => s.session)
   const { theme, setTheme, lang, setLang } = useUIStore()
 
   const sections: { id: Section; label: string }[] = [
@@ -49,21 +55,7 @@ export function SettingsPage() {
         </nav>
 
         <div className="space-y-6">
-          {section === 'profile' && (
-            <Card>
-              <CardHeader title={t('settings.profile')} />
-              <dl className="space-y-3 p-5 text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-tx-3">Nombre</dt>
-                  <dd className="text-tx">{session?.name}</dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-tx-3">{t('users.col_role')}</dt>
-                  <dd className="text-tx">{t(`role.${session?.role}`)}</dd>
-                </div>
-              </dl>
-            </Card>
-          )}
+          {section === 'profile' && <ProfileSection />}
 
           {section === 'appearance' && (
             <Card>
@@ -125,5 +117,104 @@ export function SettingsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function ProfileSection() {
+  const t = useT()
+  const session = useAuthStore((s) => s.session)
+  const setSession = useAuthStore((s) => s.setSession)
+  const queryClient = useQueryClient()
+
+  const { data: profile, isLoading } = useQuery({
+    queryKey: ['my-profile'],
+    queryFn: authApi.getMyProfile,
+  })
+
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [bio, setBio] = useState('')
+
+  function reset() {
+    setName(profile?.name ?? '')
+    setPhone(profile?.phone ?? '')
+    setBio(profile?.bio ?? '')
+  }
+
+  // Initialize the form once the profile loads (or after a refetch).
+  useEffect(() => {
+    reset()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile])
+
+  const save = useMutation({
+    mutationFn: () =>
+      authApi.updateMyProfile({
+        name,
+        phone: phone || null,
+        ...(profile?.role === 'doctor' ? { bio: bio || null } : {}),
+      }),
+    onSuccess: (updated) => {
+      toast(t('settings.profile_saved'))
+      queryClient.invalidateQueries({ queryKey: ['my-profile'] })
+      if (session && session.name !== updated.name) {
+        setSession({ ...session, name: updated.name })
+      }
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  if (isLoading || !profile) return <PageLoader />
+
+  const isDoctor = profile.role === 'doctor'
+  const subtitle = [t(`role.${profile.role}`), profile.specialty].filter(Boolean).join(' · ')
+
+  return (
+    <Card>
+      <CardHeader title={t('settings.profile')} />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          save.mutate()
+        }}
+        className="space-y-5 p-5"
+      >
+        <p className="-mt-1 text-[13px] text-tx-3">{t('settings.profile_subtitle')}</p>
+
+        <div className="flex items-center gap-4">
+          <Avatar name={name || profile.name} size="lg" />
+          <div>
+            <p className="text-lg font-semibold text-tx">{name || profile.name}</p>
+            <p className="text-[13px] text-tx-3">{subtitle}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input label={t('users.name')} value={name} onChange={(e) => setName(e.target.value)} required />
+          <Input label={t('login.email')} value={profile.email} disabled />
+          <Input label={t('users.phone')} value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input label={t('users.col_specialty')} value={profile.specialty ?? ''} disabled />
+        </div>
+
+        {isDoctor && (
+          <Textarea
+            label={t('settings.profile_bio')}
+            rows={4}
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            maxLength={2000}
+          />
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" variant="outline" onClick={reset}>
+            {t('app.cancel')}
+          </Button>
+          <Button type="submit" loading={save.isPending} disabled={!name.trim()}>
+            {t('app.save')}
+          </Button>
+        </div>
+      </form>
+    </Card>
   )
 }

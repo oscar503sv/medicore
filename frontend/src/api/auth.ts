@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { Session } from '@/types'
+import type { MyProfile, Session } from '@/types'
 
 export interface LoginPayload {
   slug: string
@@ -20,4 +20,9 @@ export const authApi = {
       current_password: currentPassword,
       new_password: newPassword,
     }),
+
+  getMyProfile: () => api.get<MyProfile>('/auth/me').then((r) => r.data),
+
+  updateMyProfile: (payload: { name?: string; phone?: string | null; bio?: string | null }) =>
+    api.patch<MyProfile>('/auth/me', payload).then((r) => r.data),
 }

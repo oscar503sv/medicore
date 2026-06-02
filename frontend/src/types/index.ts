@@ -10,6 +10,16 @@ export interface Session {
   must_change_password: boolean
 }
 
+export interface MyProfile {
+  name: string
+  email: string
+  role: Role
+  sex: Sex | null
+  specialty: string | null
+  phone: string | null
+  bio: string | null
+}
+
 // ── Enums ─────────────────────────────────────────────────────────────────────
 export type Role = 'admin' | 'doctor' | 'nurse' | 'receptionist'
 export type UserStatus = 'active' | 'pending' | 'suspended'
