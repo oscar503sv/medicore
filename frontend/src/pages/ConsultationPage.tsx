@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Clock, Plus, Save, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Clock, Plus, Save, Search, Trash2, X } from 'lucide-react'
 import { api, errorMessage } from '@/api/client'
 import { consultationsApi } from '@/api/consultations'
+import { diagnosesApi } from '@/api/diagnoses'
 import { Badge, typeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -321,15 +322,36 @@ function DiagnosesSection({
 }) {
   const t = useT()
   const qc = useQueryClient()
-  const [code, setCode] = useState('')
-  const [label, setLabel] = useState('')
+  const [query, setQuery] = useState('')
+  const [debounced, setDebounced] = useState('')
+  const [open, setOpen] = useState(false)
+
+  // Debounce the search input so we don't hit the catalog on every keystroke.
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(query.trim()), 250)
+    return () => clearTimeout(id)
+  }, [query])
+
+  const { data: config } = useQuery({
+    queryKey: ['diagnosis-config'],
+    queryFn: diagnosesApi.config,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: suggestions = [] } = useQuery({
+    queryKey: ['diagnosis-search', config?.version, debounced],
+    queryFn: () => diagnosesApi.search(debounced),
+    enabled: debounced.length > 0,
+  })
 
   const add = useMutation({
-    mutationFn: () => consultationsApi.addDiagnosis(consultationId, code, label),
+    mutationFn: ({ code, label }: { code: string; label: string }) =>
+      consultationsApi.addDiagnosis(consultationId, code, label),
     onSuccess: (c) => {
       qc.setQueryData(['consultation', consultationId], c)
-      setCode('')
-      setLabel('')
+      setQuery('')
+      setDebounced('')
+      setOpen(false)
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -338,15 +360,67 @@ function DiagnosesSection({
     onSuccess: (c) => qc.setQueryData(['consultation', consultationId], c),
   })
 
+  const added = new Set(consultation.diagnoses.map((d) => d.code))
+  const versionLabel = config?.version === 'cie10' ? 'CIE-10' : 'CIE-11'
+
   return (
     <section>
       <div className="mb-3 flex items-baseline justify-between">
-        <h3 className="text-sm font-semibold text-tx">{t('consult.diagnoses')}</h3>
+        <h3 className="text-sm font-semibold text-tx">
+          {t('consult.diagnoses')} <span className="text-tx-3">· {versionLabel}</span>
+        </h3>
         <span className="text-xs text-tx-3">
           {consultation.diagnoses.length} {t('consult.dx_unit')}
         </span>
       </div>
-      <div className="space-y-2">
+
+      {/* Search box + suggestions dropdown */}
+      <div className="relative">
+        <div className="relative flex items-center">
+          <Search className="absolute left-3 h-4 w-4 text-tx-4" />
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setOpen(true)
+            }}
+            onFocus={() => setOpen(true)}
+            onBlur={() => setTimeout(() => setOpen(false), 150)}
+            placeholder={t('consult.dx_search')}
+            className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
+          />
+        </div>
+        {open && debounced.length > 0 && (
+          <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-line bg-surface shadow-lg">
+            {suggestions.length === 0 ? (
+              <p className="px-3 py-3 text-[13px] text-tx-3">{t('consult.dx_no_results')}</p>
+            ) : (
+              suggestions.map((s) => {
+                const already = added.has(s.code)
+                return (
+                  <button
+                    key={`${s.version}:${s.code}`}
+                    type="button"
+                    disabled={already || add.isPending}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => add.mutate({ code: s.code, label: s.label })}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-2 disabled:opacity-40"
+                  >
+                    <span className="rounded bg-[var(--accent-10)] px-1.5 py-0.5 font-mono text-[12px] font-medium text-accent">
+                      {s.code}
+                    </span>
+                    <span className="flex-1 text-sm text-tx">{s.label}</span>
+                    <Plus className="h-4 w-4 text-tx-4" />
+                  </button>
+                )
+              })
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Added diagnoses */}
+      <div className="mt-3 space-y-2">
         {consultation.diagnoses.map((d) => (
           <div key={d.code} className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2">
             <span className="font-mono text-[13px] font-medium text-accent">{d.code}</span>
@@ -356,29 +430,6 @@ function DiagnosesSection({
             </button>
           </div>
         ))}
-      </div>
-      <div className="mt-2 flex items-end gap-2">
-        <div className="w-24">
-          <label className="eyebrow mb-1 block">{t('consult.dx_code')}</label>
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="I10"
-            className="h-9 w-full rounded-lg border border-line bg-bg px-2 font-mono text-[13px] focus:border-accent focus:outline-none"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="eyebrow mb-1 block">{t('consult.dx_desc')}</label>
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Hipertensión esencial"
-            className="h-9 w-full rounded-lg border border-line bg-bg px-2 text-sm focus:border-accent focus:outline-none"
-          />
-        </div>
-        <Button size="sm" variant="outline" disabled={!code || !label} onClick={() => add.mutate()}>
-          <Plus className="h-4 w-4" />
-        </Button>
       </div>
     </section>
   )

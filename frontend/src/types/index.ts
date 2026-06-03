@@ -243,6 +243,14 @@ export interface Diagnosis {
   label: string
 }
 
+export interface DiagnosisSuggestion {
+  version: string
+  code: string
+  label: string
+  billable: boolean
+  chapter: string | null
+}
+
 export interface PrescriptionDraft {
   drug: string
   dose: string

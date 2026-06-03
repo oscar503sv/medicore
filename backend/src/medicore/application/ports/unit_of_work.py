@@ -102,6 +102,16 @@ class PlatformReadModel(Protocol):
     ) -> list: ...
 
 
+class DiagnosisCatalogRepository(Protocol):
+    """Global ICD/CIE catalog used for diagnosis autocomplete (not tenant-scoped)."""
+
+    def search(self, version: str, query: str, limit: int = 20) -> list: ...
+
+    def count(self, version: str) -> int: ...
+
+    def upsert(self, entry) -> None: ...
+
+
 class UnitOfWorkFactory(Protocol):
     def for_tenant(self, tenant_id: TenantId) -> UnitOfWork:
         """Build a UnitOfWork scoped to ``tenant_id``."""
@@ -117,4 +127,8 @@ class UnitOfWorkFactory(Protocol):
 
     def platform_reads(self) -> PlatformReadModel:
         """Cross-tenant read model for superadmin stats and global audit."""
+        ...
+
+    def diagnosis_catalog(self) -> DiagnosisCatalogRepository:
+        """Global ICD/CIE catalog repository for diagnosis autocomplete."""
         ...

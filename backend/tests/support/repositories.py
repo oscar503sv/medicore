@@ -113,6 +113,38 @@ class InMemoryPlatformAuditLogRepository:
         return entries[offset : offset + limit]
 
 
+class InMemoryDiagnosisCatalogRepository:
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def _norm(self, text: str) -> str:
+        import unicodedata
+
+        nfkd = unicodedata.normalize("NFKD", text)
+        return "".join(c for c in nfkd if not unicodedata.combining(c)).lower().strip()
+
+    def search(self, version: str, query: str, limit: int = 20):
+        q = (query or "").strip()
+        if not q:
+            return []
+        norm = self._norm(q)
+        prefix = q.upper()
+        matches = [
+            e
+            for e in self._store.diagnosis_codes.values()
+            if e.version == version
+            and (e.code.upper().startswith(prefix) or norm in self._norm(f"{e.code} {e.label}"))
+        ]
+        matches.sort(key=lambda e: e.code)
+        return matches[:limit]
+
+    def count(self, version: str) -> int:
+        return sum(1 for e in self._store.diagnosis_codes.values() if e.version == version)
+
+    def upsert(self, entry) -> None:
+        self._store.diagnosis_codes[f"{entry.version}:{entry.code}"] = entry
+
+
 class InMemoryPlatformReadModel:
     _SOURCES = ("patients", "users", "appointments", "consultations", "medical_records")
     _KEYS = {"medical_records": "records"}

@@ -9,6 +9,7 @@ from tests.support.repositories import (
     InMemoryAppointmentRepository,
     InMemoryAuditLogRepository,
     InMemoryConsultationRepository,
+    InMemoryDiagnosisCatalogRepository,
     InMemoryDoctorAvailabilityRepository,
     InMemoryDoctorProfileRepository,
     InMemoryInsurerRepository,
@@ -129,3 +130,6 @@ class InMemoryUnitOfWorkFactory:
 
     def platform_reads(self) -> InMemoryPlatformReadModel:
         return InMemoryPlatformReadModel(self.store)
+
+    def diagnosis_catalog(self) -> InMemoryDiagnosisCatalogRepository:
+        return InMemoryDiagnosisCatalogRepository(self.store)

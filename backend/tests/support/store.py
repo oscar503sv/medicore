@@ -10,6 +10,7 @@ from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
+from medicore.domain.entities.diagnosis_catalog import CatalogDiagnosis
 from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
@@ -45,6 +46,8 @@ class InMemoryStore:
     audit: dict[UUID, AuditLog] = field(default_factory=dict)
     platform_admins: dict[UUID, PlatformAdmin] = field(default_factory=dict)
     platform_audit: dict[UUID, PlatformAuditLog] = field(default_factory=dict)
+    # Global catalog keyed by "version:code" (reference data, not tenant-scoped).
+    diagnosis_codes: dict[str, CatalogDiagnosis] = field(default_factory=dict)
 
     def snapshot(self) -> dict[str, dict]:
         return {f.name: copy.deepcopy(getattr(self, f.name)) for f in fields(self)}

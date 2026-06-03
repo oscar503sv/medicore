@@ -207,6 +207,8 @@ const es: Dict = {
   'consult.rx_add': 'Agregar',
   'consult.dx_code': 'Código',
   'consult.dx_desc': 'Descripción',
+  'consult.dx_search': 'Buscar diagnóstico por código o nombre…',
+  'consult.dx_no_results': 'Sin resultados',
   // records
   'records.title': 'Historiales clínicos',
   'records.signed': 'Firmado',
@@ -594,6 +596,8 @@ const en: Dict = {
   'consult.rx_add': 'Add',
   'consult.dx_code': 'Code',
   'consult.dx_desc': 'Description',
+  'consult.dx_search': 'Search diagnosis by code or name…',
+  'consult.dx_no_results': 'No results',
   'records.title': 'Medical records',
   'records.signed': 'Signed',
   'records.amended': 'Amended',

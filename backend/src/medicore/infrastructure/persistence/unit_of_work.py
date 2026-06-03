@@ -14,6 +14,9 @@ from medicore.infrastructure.persistence.repositories.clinical import (
     SqlMedicalRecordRepository,
     SqlPrescriptionRepository,
 )
+from medicore.infrastructure.persistence.repositories.diagnosis_catalog import (
+    SqlDiagnosisCatalogRepository,
+)
 from medicore.infrastructure.persistence.repositories.insurer import SqlInsurerRepository
 from medicore.infrastructure.persistence.repositories.other import (
     SqlAuditLogRepository,
@@ -140,3 +143,6 @@ class SqlAlchemyUnitOfWorkFactory:
 
     def platform_reads(self) -> SqlPlatformReadModel:
         return SqlPlatformReadModel(self._factory())
+
+    def diagnosis_catalog(self) -> SqlDiagnosisCatalogRepository:
+        return SqlDiagnosisCatalogRepository(self._factory())

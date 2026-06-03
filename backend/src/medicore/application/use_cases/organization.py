@@ -9,6 +9,7 @@ from medicore.application.common.permissions import ensure_can_manage_organizati
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.tenant import Location, Tenant
+from medicore.domain.enums import IcdVersion
 from medicore.domain.shared.identifiers import LocationId
 
 
@@ -25,7 +26,7 @@ class GetOrganization:
 
 
 class UpdateOrganization:
-    _EDITABLE = {"legal_name", "tax_id", "timezone", "plan", "seat_limit"}
+    _EDITABLE = {"legal_name", "tax_id", "timezone", "plan", "seat_limit", "icd_version"}
 
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
@@ -37,6 +38,8 @@ class UpdateOrganization:
         with self._uow:
             for key, value in changes.items():
                 if key in self._EDITABLE:
+                    if key == "icd_version":
+                        value = IcdVersion(value)
                     setattr(tenant, key, value)
             self._uow.tenants.save(tenant)
             self._uow.audit.append(

@@ -66,11 +66,13 @@ class TestBloodType:
 
 
 class TestIcdCode:
-    @pytest.mark.parametrize("code", ["I10", "E11.9", "S82.101A", "e11.9"])
+    # Accepts both CIE-10 ("I10", "E11.9") and CIE-11 ("BA00", "8A80.0") shapes; the catalog
+    # is the source of truth for which codes actually exist.
+    @pytest.mark.parametrize("code", ["I10", "E11.9", "S82.101A", "e11.9", "BA00", "8A80.0"])
     def test_accepts_valid(self, code):
         assert IcdCode(code, "label").code == code.upper()
 
-    @pytest.mark.parametrize("code", ["10", "II0", "I1", "U10"])
+    @pytest.mark.parametrize("code", ["", "A", "I 10", "I10!", "ABCDEFGHIJ"])
     def test_rejects_invalid(self, code):
         with pytest.raises(InvalidValueObject):
             IcdCode(code, "label")
