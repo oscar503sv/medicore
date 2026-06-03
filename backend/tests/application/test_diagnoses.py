@@ -9,10 +9,10 @@ from tests.support.builders import seed_clinic
 
 
 def _seed_catalog(seed):
-    cat = seed.factory.diagnosis_catalog()
-    cat.upsert(CatalogDiagnosis(version="cie10", code="I10", label="Hipertensión esencial"))
-    cat.upsert(CatalogDiagnosis(version="cie10", code="F41.1", label="Ansiedad generalizada"))
-    cat.upsert(CatalogDiagnosis(version="cie11", code="BA00", label="Hipertensión esencial"))
+    with seed.factory.diagnosis_catalog() as cat:
+        cat.upsert(CatalogDiagnosis(version="cie10", code="I10", label="Hipertensión esencial"))
+        cat.upsert(CatalogDiagnosis(version="cie10", code="F41.1", label="Ansiedad generalizada"))
+        cat.upsert(CatalogDiagnosis(version="cie11", code="BA00", label="Hipertensión esencial"))
 
 
 def test_config_defaults_to_cie11():

@@ -7,6 +7,7 @@ session is rolled back (noop) and closed cleanly when the block exits.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Annotated
 
 import jwt
@@ -123,9 +124,20 @@ def get_platform_actor(
 def get_uow(
     actor: ActorContext = Depends(get_actor),
     factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
-) -> SqlAlchemyUnitOfWork:
-    """Return a tenant-scoped UoW for the current request."""
-    return factory.for_tenant(actor.tenant_id)
+) -> Iterator[SqlAlchemyUnitOfWork]:
+    """Yield a tenant-scoped UoW for the current request and always close its session.
+
+    Handlers still use ``with uow:`` to delimit transactions (commit/rollback); the
+    ``finally`` here guarantees the underlying connection is returned to the pool even
+    for read-only handlers that don't open a ``with`` block or that read again after a
+    write use case has exited its own ``with``. ``Session.close()`` is idempotent, so the
+    double close (here + in a ``with`` block) is harmless.
+    """
+    uow = factory.for_tenant(actor.tenant_id)
+    try:
+        yield uow
+    finally:
+        uow._session.close()
 
 
 def get_codes(uow: SqlAlchemyUnitOfWork = Depends(get_uow)) -> DbSequentialCodeGenerator:

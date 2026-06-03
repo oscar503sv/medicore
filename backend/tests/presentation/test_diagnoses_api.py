@@ -6,9 +6,9 @@ from medicore.domain.entities.diagnosis_catalog import CatalogDiagnosis
 
 
 def _seed_catalog(seed):
-    cat = seed.factory.diagnosis_catalog()
-    cat.upsert(CatalogDiagnosis(version="cie11", code="BA00", label="Hipertensión esencial"))
-    cat.upsert(CatalogDiagnosis(version="cie10", code="I10", label="Hipertensión esencial"))
+    with seed.factory.diagnosis_catalog() as cat:
+        cat.upsert(CatalogDiagnosis(version="cie11", code="BA00", label="Hipertensión esencial"))
+        cat.upsert(CatalogDiagnosis(version="cie10", code="I10", label="Hipertensión esencial"))
 
 
 def test_config_endpoint(seed, client, auth_headers):

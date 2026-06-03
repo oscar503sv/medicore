@@ -8,6 +8,7 @@ multi-aggregate operations (e.g. signing a consultation) are atomic.
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from types import TracebackType
 from typing import Protocol, runtime_checkable
 
@@ -117,18 +118,19 @@ class UnitOfWorkFactory(Protocol):
         """Build a UnitOfWork scoped to ``tenant_id``."""
         ...
 
-    def global_tenants(self) -> TenantRepository:
-        """The non-scoped tenant repository, used to resolve a tenant by slug before auth."""
+    def global_tenants(self) -> AbstractContextManager[TenantRepository]:
+        """Context-managed non-scoped tenant repository, used to resolve a tenant by slug
+        before auth. The underlying session is closed on exit."""
         ...
 
     def platform_uow(self) -> PlatformUnitOfWork:
         """Build a non-tenant-scoped UnitOfWork for superadmin operations."""
         ...
 
-    def platform_reads(self) -> PlatformReadModel:
-        """Cross-tenant read model for superadmin stats and global audit."""
+    def platform_reads(self) -> AbstractContextManager[PlatformReadModel]:
+        """Context-managed cross-tenant read model for superadmin stats and global audit."""
         ...
 
-    def diagnosis_catalog(self) -> DiagnosisCatalogRepository:
-        """Global ICD/CIE catalog repository for diagnosis autocomplete."""
+    def diagnosis_catalog(self) -> AbstractContextManager[DiagnosisCatalogRepository]:
+        """Context-managed global ICD/CIE catalog repository for diagnosis autocomplete."""
         ...

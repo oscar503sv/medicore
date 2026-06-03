@@ -59,20 +59,19 @@ class AuthenticateUser:
         except InvalidValueObject as exc:
             raise AuthenticationFailed("invalid organization") from exc
 
-        tenant = self._factory.global_tenants().get_by_slug(slug)
+        with self._factory.global_tenants() as tenants:
+            tenant = tenants.get_by_slug(slug)
         if tenant is None:
             raise AuthenticationFailed("invalid organization")
         if not tenant.is_active:
             raise AuthenticationFailed("this organization is not active")
 
-        uow = self._factory.for_tenant(tenant.id)
-        user = uow.users.get_by_email(cmd.email)
-        if user is None or not self._hasher.verify(cmd.password, user.password_hash):
-            raise AuthenticationFailed("invalid credentials")
-        if user.status != UserStatus.ACTIVE:
-            raise AuthenticationFailed("account is not active")
-
-        with uow:
+        with self._factory.for_tenant(tenant.id) as uow:
+            user = uow.users.get_by_email(cmd.email)
+            if user is None or not self._hasher.verify(cmd.password, user.password_hash):
+                raise AuthenticationFailed("invalid credentials")
+            if user.status != UserStatus.ACTIVE:
+                raise AuthenticationFailed("account is not active")
             user.last_seen_at = self._clock.now()
             uow.users.save(user)
             uow.audit.append(
@@ -110,11 +109,10 @@ class SwitchTheme:
         self._factory = uow_factory
 
     def execute(self, actor: ActorContext, theme: ThemePref) -> None:
-        uow = self._factory.for_tenant(actor.tenant_id)
-        user = uow.users.get_by_id(actor.user_id)
-        if user is None:
-            raise EntityNotFound("User", actor.user_id)
-        with uow:
+        with self._factory.for_tenant(actor.tenant_id) as uow:
+            user = uow.users.get_by_id(actor.user_id)
+            if user is None:
+                raise EntityNotFound("User", actor.user_id)
             user.set_theme(theme)
             uow.users.save(user)
             uow.commit()
@@ -127,11 +125,10 @@ class SwitchLocale:
         self._factory = uow_factory
 
     def execute(self, actor: ActorContext, language: LangPref) -> None:
-        uow = self._factory.for_tenant(actor.tenant_id)
-        user = uow.users.get_by_id(actor.user_id)
-        if user is None:
-            raise EntityNotFound("User", actor.user_id)
-        with uow:
+        with self._factory.for_tenant(actor.tenant_id) as uow:
+            user = uow.users.get_by_id(actor.user_id)
+            if user is None:
+                raise EntityNotFound("User", actor.user_id)
             user.set_language(language)
             uow.users.save(user)
             uow.commit()
@@ -151,13 +148,12 @@ class ChangePassword:
     def execute(self, actor: ActorContext, current_password: str, new_password: str) -> None:
         if not new_password or len(new_password) < 8:
             raise AuthenticationFailed("new password must be at least 8 characters")
-        uow = self._factory.for_tenant(actor.tenant_id)
-        user = uow.users.get_by_id(actor.user_id)
-        if user is None:
-            raise EntityNotFound("User", actor.user_id)
-        if not self._hasher.verify(current_password, user.password_hash):
-            raise AuthenticationFailed("current password is incorrect")
-        with uow:
+        with self._factory.for_tenant(actor.tenant_id) as uow:
+            user = uow.users.get_by_id(actor.user_id)
+            if user is None:
+                raise EntityNotFound("User", actor.user_id)
+            if not self._hasher.verify(current_password, user.password_hash):
+                raise AuthenticationFailed("current password is incorrect")
             user.change_password(self._hasher.hash(new_password))
             uow.users.save(user)
             uow.commit()
@@ -226,11 +222,10 @@ class UpdateMyProfile:
         phone: str | None = None,
         bio: str | None = None,
     ) -> MyProfileDTO:
-        uow = self._factory.for_tenant(actor.tenant_id)
-        user = uow.users.get_by_id(actor.user_id)
-        if user is None:
-            raise EntityNotFound("User", actor.user_id)
-        with uow:
+        with self._factory.for_tenant(actor.tenant_id) as uow:
+            user = uow.users.get_by_id(actor.user_id)
+            if user is None:
+                raise EntityNotFound("User", actor.user_id)
             if name is not None:
                 user.name = name
             if phone is not None:

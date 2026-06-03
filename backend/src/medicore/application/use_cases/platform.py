@@ -82,13 +82,12 @@ class AuthenticatePlatformAdmin:
         self._clock = clock
 
     def execute(self, email: str, password: str) -> PlatformSessionDTO:
-        uow = self._factory.platform_uow()
-        admin = uow.platform_admins.get_by_email(email)
-        if admin is None or not self._hasher.verify(password, admin.password_hash):
-            raise AuthenticationFailed("invalid credentials")
-        if not admin.is_active:
-            raise AuthenticationFailed("account is not active")
-        with uow:
+        with self._factory.platform_uow() as uow:
+            admin = uow.platform_admins.get_by_email(email)
+            if admin is None or not self._hasher.verify(password, admin.password_hash):
+                raise AuthenticationFailed("invalid credentials")
+            if not admin.is_active:
+                raise AuthenticationFailed("account is not active")
             admin.last_seen_at = self._clock.now()
             uow.platform_admins.save(admin)
             uow.commit()
@@ -105,8 +104,8 @@ class GetPlatformAdmin:
         self._factory = uow_factory
 
     def execute(self, actor: PlatformActorContext):
-        uow = self._factory.platform_uow()
-        admin = uow.platform_admins.get_by_id(actor.admin_id)
+        with self._factory.platform_uow() as uow:
+            admin = uow.platform_admins.get_by_id(actor.admin_id)
         if admin is None:
             raise EntityNotFound("PlatformAdmin", actor.admin_id)
         return admin
@@ -125,7 +124,8 @@ class ListTenants:
         filter: TenantFilter | None = None,
         paging: Paging | None = None,
     ) -> Page[Tenant]:
-        return self._factory.platform_uow().tenants.list(filter, paging)
+        with self._factory.platform_uow() as uow:
+            return uow.tenants.list(filter, paging)
 
 
 class GetTenant:
@@ -133,7 +133,8 @@ class GetTenant:
         self._factory = uow_factory
 
     def execute(self, actor: PlatformActorContext, tenant_id: TenantId) -> Tenant:
-        tenant = self._factory.platform_uow().tenants.get_by_id(tenant_id)
+        with self._factory.platform_uow() as uow:
+            tenant = uow.tenants.get_by_id(tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", tenant_id)
         return tenant
@@ -180,9 +181,9 @@ class CreateTenantWithAdmin:
         if not cmd.admin_password or len(cmd.admin_password) < 8:
             raise ValidationError("temporary password must be at least 8 characters")
 
-        platform = self._factory.platform_uow()
-        if platform.tenants.get_by_slug(slug) is not None:
-            raise ValidationError(f"slug already in use: {slug}")
+        with self._factory.platform_uow() as platform:
+            if platform.tenants.get_by_slug(slug) is not None:
+                raise ValidationError(f"slug already in use: {slug}")
 
         tenant_id = TenantId.new()
         tenant = Tenant(
@@ -239,11 +240,10 @@ class UpdateTenant:
     def execute(
         self, actor: PlatformActorContext, tenant_id: TenantId, **changes: object
     ) -> Tenant:
-        uow = self._factory.for_tenant(tenant_id)
-        tenant = uow.tenants.get_by_id(tenant_id)
-        if tenant is None:
-            raise EntityNotFound("Tenant", tenant_id)
-        with uow:
+        with self._factory.for_tenant(tenant_id) as uow:
+            tenant = uow.tenants.get_by_id(tenant_id)
+            if tenant is None:
+                raise EntityNotFound("Tenant", tenant_id)
             for key, value in changes.items():
                 if key in _EDITABLE and value is not None:
                     if key == "icd_version":
@@ -267,11 +267,10 @@ class SetTenantStatus:
     def execute(
         self, actor: PlatformActorContext, tenant_id: TenantId, status: TenantStatus
     ) -> Tenant:
-        uow = self._factory.for_tenant(tenant_id)
-        tenant = uow.tenants.get_by_id(tenant_id)
-        if tenant is None:
-            raise EntityNotFound("Tenant", tenant_id)
-        with uow:
+        with self._factory.for_tenant(tenant_id) as uow:
+            tenant = uow.tenants.get_by_id(tenant_id)
+            if tenant is None:
+                raise EntityNotFound("Tenant", tenant_id)
             tenant.status = status
             uow.tenants.save(tenant)
             uow.platform_audit.append(
@@ -329,8 +328,10 @@ class GetGlobalStats:
         self._factory = uow_factory
 
     def execute(self, actor: PlatformActorContext) -> GlobalStatsDTO:
-        tenants = self._factory.platform_uow().tenants.list(paging=Paging(limit=1000)).items
-        counts = self._factory.platform_reads().counts_by_tenant()
+        with self._factory.platform_uow() as uow:
+            tenants = uow.tenants.list(paging=Paging(limit=1000)).items
+        with self._factory.platform_reads() as reads:
+            counts = reads.counts_by_tenant()
         by_clinic = [_counts_to_stats(t, counts.get(str(t.id), {})) for t in tenants]
         return GlobalStatsDTO(
             total_clinics=len(tenants),
@@ -347,10 +348,12 @@ class GetTenantStats:
         self._factory = uow_factory
 
     def execute(self, actor: PlatformActorContext, tenant_id: TenantId) -> TenantStatsDTO:
-        tenant = self._factory.platform_uow().tenants.get_by_id(tenant_id)
+        with self._factory.platform_uow() as uow:
+            tenant = uow.tenants.get_by_id(tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", tenant_id)
-        counts = self._factory.platform_reads().tenant_counts(tenant_id)
+        with self._factory.platform_reads() as reads:
+            counts = reads.tenant_counts(tenant_id)
         return _counts_to_stats(tenant, counts)
 
 
@@ -368,9 +371,10 @@ class ListGlobalAudit:
         action: str | None = None,
         tenant_id: str | None = None,
     ) -> list[AuditLog]:
-        return self._factory.platform_reads().global_audit(
-            limit=limit, offset=offset, action=action, tenant_id=tenant_id
-        )
+        with self._factory.platform_reads() as reads:
+            return reads.global_audit(
+                limit=limit, offset=offset, action=action, tenant_id=tenant_id
+            )
 
 
 # ── Account support (cross-tenant) ─────────────────────────────────────────────
@@ -414,9 +418,8 @@ class ResetUserPassword:
     ) -> User:
         if not password or len(password) < 8:
             raise ValidationError("temporary password must be at least 8 characters")
-        uow = self._factory.for_tenant(tenant_id)
-        user = _require_user(uow, tenant_id, user_id)
-        with uow:
+        with self._factory.for_tenant(tenant_id) as uow:
+            user = _require_user(uow, tenant_id, user_id)
             user.set_temporary_password(self._hasher.hash(password))
             uow.users.save(user)
             uow.platform_audit.append(
@@ -456,13 +459,13 @@ class ImpersonateTenant:
     def execute(
         self, actor: PlatformActorContext, tenant_id: TenantId
     ) -> ImpersonationSessionDTO:
-        tenant = self._factory.platform_uow().tenants.get_by_id(tenant_id)
+        with self._factory.platform_uow() as platform:
+            tenant = platform.tenants.get_by_id(tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", tenant_id)
         if tenant.status == TenantStatus.ARCHIVED:
             raise ValidationError("cannot impersonate an archived clinic")
-        uow = self._factory.for_tenant(tenant_id)
-        with uow:
+        with self._factory.for_tenant(tenant_id) as uow:
             admins = uow.users.list(filter=UserFilter(role="admin", status="active")).items
             if not admins:
                 raise ValidationError("clinic has no active admin to impersonate")
@@ -503,9 +506,8 @@ class UnlockUser:
     def execute(
         self, actor: PlatformActorContext, tenant_id: TenantId, user_id: UserId
     ) -> User:
-        uow = self._factory.for_tenant(tenant_id)
-        user = _require_user(uow, tenant_id, user_id)
-        with uow:
+        with self._factory.for_tenant(tenant_id) as uow:
+            user = _require_user(uow, tenant_id, user_id)
             user.activate()
             uow.users.save(user)
             uow.platform_audit.append(

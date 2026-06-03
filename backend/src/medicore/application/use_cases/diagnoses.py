@@ -15,7 +15,8 @@ class GetDiagnosisConfig:
         self._factory = uow_factory
 
     def execute(self, actor: ActorContext) -> str:
-        tenant = self._factory.global_tenants().get_by_id(actor.tenant_id)
+        with self._factory.global_tenants() as tenants:
+            tenant = tenants.get_by_id(actor.tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", actor.tenant_id)
         return str(tenant.icd_version)
@@ -28,7 +29,9 @@ class SearchDiagnoses:
         self._factory = uow_factory
 
     def execute(self, actor: ActorContext, query: str, limit: int = 20) -> list[CatalogDiagnosis]:
-        tenant = self._factory.global_tenants().get_by_id(actor.tenant_id)
+        with self._factory.global_tenants() as tenants:
+            tenant = tenants.get_by_id(actor.tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", actor.tenant_id)
-        return self._factory.diagnosis_catalog().search(str(tenant.icd_version), query, limit)
+        with self._factory.diagnosis_catalog() as catalog:
+            return catalog.search(str(tenant.icd_version), query, limit)

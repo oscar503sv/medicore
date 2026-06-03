@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import TracebackType
 
 from sqlalchemy.orm import Session
@@ -132,17 +134,37 @@ class SqlAlchemyUnitOfWorkFactory:
     def for_tenant(self, tenant_id: TenantId) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(self._factory(), tenant_id)
 
-    def global_tenants(self) -> SqlTenantRepository:
-        return SqlTenantRepository(self._factory())
+    @contextmanager
+    def global_tenants(self) -> Iterator[SqlTenantRepository]:
+        session = self._factory()
+        try:
+            yield SqlTenantRepository(session)
+        finally:
+            session.close()
 
     def platform_uow(self) -> PlatformUnitOfWork:
         return PlatformUnitOfWork(self._factory())
 
-    def platform_admins(self) -> SqlPlatformAdminRepository:
-        return SqlPlatformAdminRepository(self._factory())
+    @contextmanager
+    def platform_admins(self) -> Iterator[SqlPlatformAdminRepository]:
+        session = self._factory()
+        try:
+            yield SqlPlatformAdminRepository(session)
+        finally:
+            session.close()
 
-    def platform_reads(self) -> SqlPlatformReadModel:
-        return SqlPlatformReadModel(self._factory())
+    @contextmanager
+    def platform_reads(self) -> Iterator[SqlPlatformReadModel]:
+        session = self._factory()
+        try:
+            yield SqlPlatformReadModel(session)
+        finally:
+            session.close()
 
-    def diagnosis_catalog(self) -> SqlDiagnosisCatalogRepository:
-        return SqlDiagnosisCatalogRepository(self._factory())
+    @contextmanager
+    def diagnosis_catalog(self) -> Iterator[SqlDiagnosisCatalogRepository]:
+        session = self._factory()
+        try:
+            yield SqlDiagnosisCatalogRepository(session)
+        finally:
+            session.close()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import TracebackType
 
 from medicore.domain.shared.identifiers import TenantId
@@ -119,17 +121,21 @@ class InMemoryUnitOfWorkFactory:
     def for_tenant(self, tenant_id: TenantId) -> InMemoryUnitOfWork:
         return InMemoryUnitOfWork(self.store, tenant_id)
 
-    def global_tenants(self) -> InMemoryTenantRepository:
-        return InMemoryTenantRepository(self.store)
+    @contextmanager
+    def global_tenants(self) -> Iterator[InMemoryTenantRepository]:
+        yield InMemoryTenantRepository(self.store)
 
     def platform_uow(self) -> InMemoryPlatformUnitOfWork:
         return InMemoryPlatformUnitOfWork(self.store)
 
-    def platform_admins(self) -> InMemoryPlatformAdminRepository:
-        return InMemoryPlatformAdminRepository(self.store)
+    @contextmanager
+    def platform_admins(self) -> Iterator[InMemoryPlatformAdminRepository]:
+        yield InMemoryPlatformAdminRepository(self.store)
 
-    def platform_reads(self) -> InMemoryPlatformReadModel:
-        return InMemoryPlatformReadModel(self.store)
+    @contextmanager
+    def platform_reads(self) -> Iterator[InMemoryPlatformReadModel]:
+        yield InMemoryPlatformReadModel(self.store)
 
-    def diagnosis_catalog(self) -> InMemoryDiagnosisCatalogRepository:
-        return InMemoryDiagnosisCatalogRepository(self.store)
+    @contextmanager
+    def diagnosis_catalog(self) -> Iterator[InMemoryDiagnosisCatalogRepository]:
+        yield InMemoryDiagnosisCatalogRepository(self.store)
