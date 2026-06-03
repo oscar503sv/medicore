@@ -62,12 +62,20 @@ class AppointmentStatus(StrEnum):
 
 
 class RecordType(StrEnum):
+    """Kind of clinical document a signed record represents (document type, not specialty)."""
+
     EVOLUTION = "evolution"
-    CARDIO_REPORT = "cardio_report"
-    OBSTETRIC = "obstetric"
-    VACCINATION = "vaccination"
-    DIAGNOSIS = "diagnosis"
+    EMERGENCY_NOTE = "emergency_note"
+    PROCEDURE_NOTE = "procedure_note"
+    SURGICAL_NOTE = "surgical_note"
     LAB_REPORT = "lab_report"
+    IMAGING_REPORT = "imaging_report"
+    DIAGNOSIS = "diagnosis"
+    PRESCRIPTION_NOTE = "prescription_note"
+    VACCINATION = "vaccination"
+    REFERRAL = "referral"
+    DISCHARGE_SUMMARY = "discharge_summary"
+    NURSING_NOTE = "nursing_note"
     GENERIC = "generic"
 
 

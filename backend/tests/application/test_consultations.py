@@ -108,7 +108,7 @@ def test_sign_consultation_is_atomic_and_complete():
     record = SignConsultation(uow, SequentialCodeGenerator(), FixedClock()).execute(
         seed.doctor_actor,
         SignConsultationCommand(
-            consultation_id=consultation.id, record_type=RecordType.CARDIO_REPORT
+            consultation_id=consultation.id, record_type=RecordType.LAB_REPORT
         ),
     )
 

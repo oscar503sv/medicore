@@ -110,11 +110,17 @@ export type ConsultationStatus = 'draft' | 'signed'
 export type RecordStatus = 'draft' | 'signed' | 'amended'
 export type RecordType =
   | 'evolution'
-  | 'cardio_report'
-  | 'obstetric'
-  | 'vaccination'
-  | 'diagnosis'
+  | 'emergency_note'
+  | 'procedure_note'
+  | 'surgical_note'
   | 'lab_report'
+  | 'imaging_report'
+  | 'diagnosis'
+  | 'prescription_note'
+  | 'vaccination'
+  | 'referral'
+  | 'discharge_summary'
+  | 'nursing_note'
   | 'generic'
 export type DocumentKind = 'lab' | 'imaging' | 'rx' | 'consent' | 'other'
 export type SlotStatus = 'free' | 'taken' | 'out_of_hours' | 'blocked_rules'
@@ -289,6 +295,7 @@ export interface MedicalRecord {
   tenant_id: string
   code: string
   patient_id: string
+  patient_name: string | null
   author_id: string
   type: RecordType
   status: RecordStatus

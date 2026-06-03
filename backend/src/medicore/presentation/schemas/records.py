@@ -28,6 +28,7 @@ class RecordResponse(BaseModel):
     tenant_id: str
     code: str
     patient_id: str
+    patient_name: str | None = None
     author_id: str
     type: str
     status: str

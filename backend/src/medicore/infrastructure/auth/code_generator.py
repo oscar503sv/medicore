@@ -11,12 +11,18 @@ from medicore.domain.enums import RecordType
 from medicore.infrastructure.persistence.models.counters import TenantCounterModel
 
 _RECORD_SUFFIX = {
-    RecordType.CARDIO_REPORT: "CR",
-    RecordType.OBSTETRIC: "OB",
-    RecordType.VACCINATION: "VA",
-    RecordType.DIAGNOSIS: "DX",
-    RecordType.LAB_REPORT: "LR",
     RecordType.EVOLUTION: "EV",
+    RecordType.EMERGENCY_NOTE: "UR",
+    RecordType.PROCEDURE_NOTE: "PR",
+    RecordType.SURGICAL_NOTE: "QX",
+    RecordType.LAB_REPORT: "LR",
+    RecordType.IMAGING_REPORT: "IM",
+    RecordType.DIAGNOSIS: "DX",
+    RecordType.PRESCRIPTION_NOTE: "RX",
+    RecordType.VACCINATION: "VA",
+    RecordType.REFERRAL: "RF",
+    RecordType.DISCHARGE_SUMMARY: "EP",
+    RecordType.NURSING_NOTE: "EF",
     RecordType.GENERIC: "GN",
 }
 

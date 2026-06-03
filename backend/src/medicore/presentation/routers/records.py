@@ -38,7 +38,13 @@ def list_records(
     with uow:
         f = RecordFilter(patient_id=patient_id, type=type) if (patient_id or type) else None
         records = ListMedicalRecords(uow).execute(actor, f)
-    return [ser_record(r) for r in records]
+        # Resolve patient names with per-id caching (mirrors _ser_appointments).
+        names: dict = {}
+        for r in records:
+            if r.patient_id not in names:
+                p = uow.patients.get_by_id(r.patient_id)
+                names[r.patient_id] = p.full_name if p else None
+        return [ser_record(r, patient_name=names[r.patient_id]) for r in records]
 
 
 @router.get("/records/{record_id}", response_model=RecordResponse)

@@ -8,7 +8,7 @@ import { diagnosesApi } from '@/api/diagnoses'
 import { Badge } from '@/components/ui/Badge'
 import { typeTone } from '@/components/ui/badgeTone'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
+import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
@@ -36,6 +36,22 @@ const SOAP_FIELDS: { key: keyof Soap; letter: string; labelKey: string; helpKey:
   { key: 'plan', letter: 'P', labelKey: 'consult.plan', helpKey: 'consult.soap_plan_help' },
 ]
 
+const RECORD_TYPES = [
+  'evolution',
+  'emergency_note',
+  'procedure_note',
+  'surgical_note',
+  'lab_report',
+  'imaging_report',
+  'diagnosis',
+  'prescription_note',
+  'vaccination',
+  'referral',
+  'discharge_summary',
+  'nursing_note',
+  'generic',
+] as const
+
 function sexLabel(sex: Patient['sex']): string {
   return sex === 'male' ? 'Masculino' : sex === 'female' ? 'Femenino' : 'Otro'
 }
@@ -57,6 +73,7 @@ export function ConsultationPage() {
   const [completion, setCompletion] = useState(0)
   const [signOpen, setSignOpen] = useState(false)
   const [chiefComplaint, setChiefComplaint] = useState('')
+  const [recordType, setRecordType] = useState('evolution')
   const [elapsed, setElapsed] = useState(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -94,7 +111,8 @@ export function ConsultationPage() {
   }
 
   const sign = useMutation({
-    mutationFn: () => consultationsApi.sign(id, { chief_complaint: chiefComplaint }),
+    mutationFn: () =>
+      consultationsApi.sign(id, { record_type: recordType, chief_complaint: chiefComplaint }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       toast('Consulta firmada')
@@ -264,6 +282,17 @@ export function ConsultationPage() {
             onChange={(e) => setChiefComplaint(e.target.value)}
             placeholder="Resumen del encuentro"
           />
+          <Select
+            label={t('record.type_label')}
+            value={recordType}
+            onChange={(e) => setRecordType(e.target.value)}
+          >
+            {RECORD_TYPES.map((ty) => (
+              <option key={ty} value={ty}>
+                {t(`record.type_${ty}`)}
+              </option>
+            ))}
+          </Select>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setSignOpen(false)}>
               {t('app.cancel')}
