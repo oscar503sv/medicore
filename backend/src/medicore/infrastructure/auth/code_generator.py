@@ -7,23 +7,17 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from medicore.domain.enums import RecordType
+from medicore.domain.enums import ClinicalRecordType
 from medicore.infrastructure.persistence.models.counters import TenantCounterModel
 
 _RECORD_SUFFIX = {
-    RecordType.EVOLUTION: "EV",
-    RecordType.EMERGENCY_NOTE: "UR",
-    RecordType.PROCEDURE_NOTE: "PR",
-    RecordType.SURGICAL_NOTE: "QX",
-    RecordType.LAB_REPORT: "LR",
-    RecordType.IMAGING_REPORT: "IM",
-    RecordType.DIAGNOSIS: "DX",
-    RecordType.PRESCRIPTION_NOTE: "RX",
-    RecordType.VACCINATION: "VA",
-    RecordType.REFERRAL: "RF",
-    RecordType.DISCHARGE_SUMMARY: "EP",
-    RecordType.NURSING_NOTE: "EF",
-    RecordType.GENERIC: "GN",
+    ClinicalRecordType.CONSULTATION: "CO",
+    ClinicalRecordType.PROCEDURE: "PR",
+    ClinicalRecordType.MEDICATION_APPLICATION: "MA",
+    ClinicalRecordType.VACCINATION: "VA",
+    ClinicalRecordType.LAB_RESULT: "LR",
+    ClinicalRecordType.IMAGING_RESULT: "IM",
+    ClinicalRecordType.DISCHARGE_SUMMARY: "EP",
 }
 
 
@@ -66,7 +60,7 @@ class DbSequentialCodeGenerator:
         n = self._next("appointment")
         return f"A-{n}"
 
-    def next_record_code(self, record_type: RecordType, on: date) -> str:
+    def next_record_code(self, record_type: ClinicalRecordType, on: date) -> str:
         n = self._next("record")
         suffix = _RECORD_SUFFIX.get(record_type, "GN")
         return f"REC-{on.year}-{on.month:02d}{on.day:02d}-{suffix}-{n}"

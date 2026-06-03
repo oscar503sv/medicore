@@ -9,7 +9,12 @@ import pytest
 
 from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.prescription import PrescriptionDraft
-from medicore.domain.enums import ConsultationStatus, PrescriptionStatus, RecordStatus, RecordType
+from medicore.domain.enums import (
+    ClinicalRecordType,
+    ConsultationStatus,
+    PrescriptionStatus,
+    RecordStatus,
+)
 from medicore.domain.shared.errors import ConsultationNotSignable
 from medicore.domain.shared.identifiers import (
     AppointmentId,
@@ -81,7 +86,7 @@ class TestSigning:
             c.sign(
                 record_id=RecordId.new(),
                 record_code="REC-2026-0512-EV",
-                record_type=RecordType.EVOLUTION,
+                record_type=ClinicalRecordType.CONSULTATION,
                 location_name="Madrid",
                 chief_complaint="x",
                 signed_by_id=c.doctor_id,
@@ -97,7 +102,7 @@ class TestSigning:
         result = c.sign(
             record_id=RecordId.new(),
             record_code="REC-2026-0512-EV",
-            record_type=RecordType.EVOLUTION,
+            record_type=ClinicalRecordType.CONSULTATION,
             location_name="Madrid · Atocha",
             chief_complaint="Control HTA",
             signed_by_id=c.doctor_id,
@@ -124,7 +129,7 @@ class TestSigning:
         c.sign(
             record_id=RecordId.new(),
             record_code="REC-2026-0512-EV",
-            record_type=RecordType.EVOLUTION,
+            record_type=ClinicalRecordType.CONSULTATION,
             location_name="Madrid",
             chief_complaint="x",
             signed_by_id=c.doctor_id,

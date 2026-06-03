@@ -1,12 +1,15 @@
 import {
+  Activity,
   Calendar,
   CalendarDays,
   FileText,
   LayoutDashboard,
   type LucideIcon,
+  Pill,
   Settings,
   ShieldCheck,
   Stethoscope,
+  Syringe,
   Users,
   UsersRound,
 } from 'lucide-react'
@@ -20,6 +23,7 @@ export interface NavItem {
   icon: LucideIcon
   roles: Role[] // which roles see this item
   group: NavGroup
+  comingSoon?: boolean // future module: shown with a "Próximamente" badge, placeholder page
 }
 
 export const NAV_GROUPS: { id: NavGroup; labelKey: string }[] = [
@@ -36,6 +40,9 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/appointments', labelKey: 'nav.appointments', icon: Calendar, roles: ['admin', 'doctor', 'nurse', 'receptionist'], group: 'clinical' },
   { to: '/schedule', labelKey: 'nav.schedule', icon: CalendarDays, roles: ['admin', 'doctor', 'nurse', 'receptionist'], group: 'clinical' },
   { to: '/records', labelKey: 'nav.records', icon: FileText, roles: ['admin', 'doctor', 'nurse'], group: 'clinical' },
+  { to: '/applications', labelKey: 'nav.applications', icon: Pill, roles: ['doctor', 'nurse'], group: 'clinical', comingSoon: true },
+  { to: '/procedures', labelKey: 'nav.procedures', icon: Activity, roles: ['doctor', 'nurse'], group: 'clinical', comingSoon: true },
+  { to: '/vaccination', labelKey: 'nav.vaccination', icon: Syringe, roles: ['doctor', 'nurse'], group: 'clinical', comingSoon: true },
   // Gestión
   { to: '/availability', labelKey: 'nav.availability', icon: Stethoscope, roles: ['doctor'], group: 'management' },
   { to: '/users', labelKey: 'nav.users', icon: UsersRound, roles: ['admin'], group: 'management' },

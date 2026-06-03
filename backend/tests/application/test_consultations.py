@@ -27,7 +27,6 @@ from medicore.domain.enums import (
     ConsultationStatus,
     PrescriptionStatus,
     RecordStatus,
-    RecordType,
 )
 from medicore.domain.shared.errors import ConsultationNotSignable, PermissionDenied
 from medicore.domain.value_objects.icd_code import IcdCode
@@ -107,9 +106,7 @@ def test_sign_consultation_is_atomic_and_complete():
 
     record = SignConsultation(uow, SequentialCodeGenerator(), FixedClock()).execute(
         seed.doctor_actor,
-        SignConsultationCommand(
-            consultation_id=consultation.id, record_type=RecordType.LAB_REPORT
-        ),
+        SignConsultationCommand(consultation_id=consultation.id),
     )
 
     # immutable record created

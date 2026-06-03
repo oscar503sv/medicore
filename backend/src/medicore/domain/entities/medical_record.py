@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.prescription import PrescriptionSnapshot
-from medicore.domain.enums import RecordStatus, RecordType
+from medicore.domain.enums import ClinicalRecordType, RecordStatus
 from medicore.domain.shared.errors import RecordAlreadySigned
 from medicore.domain.shared.identifiers import (
     AppointmentId,
@@ -51,7 +51,7 @@ class MedicalRecord:
     code: str  # human-readable, e.g. "REC-2026-0512-CR"
     patient_id: PatientId
     author_id: UserId
-    type: RecordType
+    type: ClinicalRecordType
     encounter_at: datetime
     location_name: str
     chief_complaint: str

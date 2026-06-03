@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import MedicalRecord, VaccineAdministration
 from medicore.domain.entities.prescription import Prescription, PrescriptionDraft
-from medicore.domain.enums import ConsultationStatus, RecordType
+from medicore.domain.enums import ClinicalRecordType, ConsultationStatus
 from medicore.domain.shared.errors import ConsultationNotSignable
 from medicore.domain.shared.identifiers import (
     AppointmentId,
@@ -118,7 +118,7 @@ class Consultation:
         *,
         record_id: RecordId,
         record_code: str,
-        record_type: RecordType,
+        record_type: ClinicalRecordType,
         location_name: str,
         chief_complaint: str,
         signed_by_id: UserId,

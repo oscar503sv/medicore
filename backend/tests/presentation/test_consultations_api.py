@@ -112,7 +112,7 @@ def test_records_list_includes_patient_name_and_chosen_type(seed, client, auth_h
     )
     client.post(
         f"/api/v1/consultations/{cid}/sign",
-        json={"record_type": "lab_report", "chief_complaint": "Análisis"},
+        json={"chief_complaint": "Análisis"},
         headers=auth_headers,
     )
 
@@ -121,7 +121,7 @@ def test_records_list_includes_patient_name_and_chosen_type(seed, client, auth_h
     records = resp.json()
     assert len(records) >= 1
     rec = next(r for r in records if r["chief_complaint"] == "Análisis")
-    assert rec["type"] == "lab_report"  # the chosen record type is honored
+    assert rec["type"] == "consultation"  # signing a consultation always yields CONSULTATION
     assert rec["patient_name"] == seed.patient.full_name
 
 

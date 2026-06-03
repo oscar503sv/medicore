@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Protocol
 
-from medicore.domain.enums import RecordType
+from medicore.domain.enums import ClinicalRecordType
 
 
 class CodeGenerator(Protocol):
@@ -18,4 +18,4 @@ class CodeGenerator(Protocol):
 
     def next_appointment_code(self) -> str: ...
 
-    def next_record_code(self, record_type: RecordType, on: date) -> str: ...
+    def next_record_code(self, record_type: ClinicalRecordType, on: date) -> str: ...

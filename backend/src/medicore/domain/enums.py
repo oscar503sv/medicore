@@ -61,22 +61,21 @@ class AppointmentStatus(StrEnum):
     NO_SHOW = "no_show"
 
 
-class RecordType(StrEnum):
-    """Kind of clinical document a signed record represents (document type, not specialty)."""
+class ClinicalRecordType(StrEnum):
+    """Kind of clinical event a signed record represents.
 
-    EVOLUTION = "evolution"
-    EMERGENCY_NOTE = "emergency_note"
-    PROCEDURE_NOTE = "procedure_note"
-    SURGICAL_NOTE = "surgical_note"
-    LAB_REPORT = "lab_report"
-    IMAGING_REPORT = "imaging_report"
-    DIAGNOSIS = "diagnosis"
-    PRESCRIPTION_NOTE = "prescription_note"
+    Each value is produced automatically by its own flow — never chosen by hand. Today only
+    ``CONSULTATION`` is emitted (when a consultation is signed); the rest are reserved for
+    future modules (applications, procedures, vaccination, lab/imaging results, discharge).
+    """
+
+    CONSULTATION = "consultation"
+    PROCEDURE = "procedure"
+    MEDICATION_APPLICATION = "medication_application"
     VACCINATION = "vaccination"
-    REFERRAL = "referral"
+    LAB_RESULT = "lab_result"
+    IMAGING_RESULT = "imaging_result"
     DISCHARGE_SUMMARY = "discharge_summary"
-    NURSING_NOTE = "nursing_note"
-    GENERIC = "generic"
 
 
 class RecordStatus(StrEnum):

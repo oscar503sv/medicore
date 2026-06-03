@@ -108,20 +108,14 @@ export type AppointmentStatus =
 export type AppointmentType = 'consult' | 'follow_up' | 'check_up' | 'procedure' | 'emergency'
 export type ConsultationStatus = 'draft' | 'signed'
 export type RecordStatus = 'draft' | 'signed' | 'amended'
-export type RecordType =
-  | 'evolution'
-  | 'emergency_note'
-  | 'procedure_note'
-  | 'surgical_note'
-  | 'lab_report'
-  | 'imaging_report'
-  | 'diagnosis'
-  | 'prescription_note'
+export type ClinicalRecordType =
+  | 'consultation'
+  | 'procedure'
+  | 'medication_application'
   | 'vaccination'
-  | 'referral'
+  | 'lab_result'
+  | 'imaging_result'
   | 'discharge_summary'
-  | 'nursing_note'
-  | 'generic'
 export type DocumentKind = 'lab' | 'imaging' | 'rx' | 'consent' | 'other'
 export type SlotStatus = 'free' | 'taken' | 'out_of_hours' | 'blocked_rules'
 
@@ -297,7 +291,7 @@ export interface MedicalRecord {
   patient_id: string
   patient_name: string | null
   author_id: string
-  type: RecordType
+  type: ClinicalRecordType
   status: RecordStatus
   encounter_at: string
   location_name: string

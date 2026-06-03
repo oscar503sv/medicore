@@ -31,6 +31,6 @@ export const consultationsApi = {
       .delete<Consultation>(`/consultations/${id}/prescriptions/${index}`)
       .then((r) => r.data),
 
-  sign: (id: string, payload: { record_type?: string; chief_complaint?: string }) =>
-    api.post<MedicalRecord>(`/consultations/${id}/sign`, payload).then((r) => r.data),
+  sign: (id: string) =>
+    api.post<MedicalRecord>(`/consultations/${id}/sign`, {}).then((r) => r.data),
 }

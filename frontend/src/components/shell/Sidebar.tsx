@@ -92,7 +92,12 @@ export function Sidebar() {
                   title={collapsed ? t(item.labelKey) : undefined}
                 >
                   <item.icon className="h-[18px] w-[18px] shrink-0" />
-                  {!collapsed && <span>{t(item.labelKey)}</span>}
+                  {!collapsed && <span className="flex-1">{t(item.labelKey)}</span>}
+                  {!collapsed && item.comingSoon && (
+                    <span className="rounded-pill bg-surface-2 px-1.5 py-0.5 text-[10px] font-medium text-tx-3">
+                      {t('nav.coming_soon')}
+                    </span>
+                  )}
                 </NavLink>
               ))}
             </div>

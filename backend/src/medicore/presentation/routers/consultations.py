@@ -19,7 +19,6 @@ from medicore.application.use_cases.consultations import (
     StartConsultation,
 )
 from medicore.domain.entities.prescription import PrescriptionDraft
-from medicore.domain.enums import RecordType
 from medicore.domain.shared.identifiers import AppointmentId, ConsultationId
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.soap_note import SoapNote
@@ -124,7 +123,6 @@ def sign_consultation(
 ):
     cmd = SignConsultationCommand(
         consultation_id=ConsultationId.parse(consultation_id),
-        record_type=RecordType(body.record_type),
         chief_complaint=body.chief_complaint,
     )
     record = SignConsultation(uow, codes, clock).execute(actor, cmd)

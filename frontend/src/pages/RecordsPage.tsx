@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search } from 'lucide-react'
+import { Search, X } from 'lucide-react'
 import { recordsApi } from '@/api/records'
 import { RecordDrawer } from '@/components/records/RecordDrawer'
 import { PageHeader } from '@/components/PageHeader'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PageLoader } from '@/components/ui/Spinner'
@@ -72,6 +73,19 @@ export function RecordsPage() {
             className="h-10 rounded-lg border border-line bg-bg px-3 text-sm text-tx focus:border-accent focus:outline-none"
           />
         </div>
+        {(q || from || to) && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setQ('')
+              setFrom('')
+              setTo('')
+            }}
+          >
+            <X className="h-4 w-4" />
+            {t('records.clear')}
+          </Button>
+        )}
       </div>
 
       <Card>

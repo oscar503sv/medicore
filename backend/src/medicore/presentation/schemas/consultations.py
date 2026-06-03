@@ -44,7 +44,6 @@ class PrescriptionDraftRequest(BaseModel):
 
 
 class SignRequest(BaseModel):
-    record_type: str = "evolution"
     chief_complaint: str = ""
 
 

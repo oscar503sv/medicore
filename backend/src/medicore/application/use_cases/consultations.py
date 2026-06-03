@@ -18,7 +18,7 @@ from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import MedicalRecord, VaccineAdministration
 from medicore.domain.entities.prescription import PrescriptionDraft
-from medicore.domain.enums import RecordType, Role
+from medicore.domain.enums import ClinicalRecordType, Role
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import (
     AppointmentId,
@@ -34,7 +34,6 @@ from medicore.domain.value_objects.vitals import Vitals
 @dataclass(frozen=True, slots=True)
 class SignConsultationCommand:
     consultation_id: ConsultationId
-    record_type: RecordType = RecordType.EVOLUTION
     chief_complaint: str = ""
     vaccines: tuple[VaccineAdministration, ...] = ()
 
@@ -212,14 +211,17 @@ class SignConsultation:
             raise EntityNotFound("Appointment", consultation.appointment_id)
 
         now = self._clock.now()
-        record_code = self._codes.next_record_code(cmd.record_type, now.date())
+        # A signed consultation is always a CONSULTATION clinical record — the type is inferred,
+        # never chosen. Other clinical record types come from their own future modules.
+        record_type = ClinicalRecordType.CONSULTATION
+        record_code = self._codes.next_record_code(record_type, now.date())
         location_name = self._location_name(appointment.location_id)
 
         with self._uow:
             result = consultation.sign(
                 record_id=RecordId.new(),
                 record_code=record_code,
-                record_type=cmd.record_type,
+                record_type=record_type,
                 location_name=location_name,
                 chief_complaint=cmd.chief_complaint or appointment.reason,
                 signed_by_id=actor.user_id,

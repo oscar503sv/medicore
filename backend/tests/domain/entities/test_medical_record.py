@@ -8,7 +8,7 @@ from datetime import datetime
 import pytest
 
 from medicore.domain.entities.medical_record import MedicalRecord
-from medicore.domain.enums import RecordStatus, RecordType
+from medicore.domain.enums import ClinicalRecordType, RecordStatus
 from medicore.domain.shared.identifiers import (
     PatientId,
     RecordId,
@@ -27,7 +27,7 @@ def make_record() -> MedicalRecord:
         code="REC-2026-0512-CR",
         patient_id=PatientId.new(),
         author_id=UserId.new(),
-        type=RecordType.EVOLUTION,
+        type=ClinicalRecordType.CONSULTATION,
         encounter_at=datetime(2026, 5, 12, 9, 0),
         location_name="Madrid · Atocha",
         chief_complaint="Cefalea",

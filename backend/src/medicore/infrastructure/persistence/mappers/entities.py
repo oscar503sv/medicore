@@ -16,6 +16,7 @@ from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.enums import (
     AppointmentStatus,
     AppointmentType,
+    ClinicalRecordType,
     ConsultationStatus,
     DocumentKind,
     IcdVersion,
@@ -24,7 +25,6 @@ from medicore.domain.enums import (
     PatientStatus,
     PrescriptionStatus,
     RecordStatus,
-    RecordType,
     Role,
     Sex,
     TenantStatus,
@@ -234,6 +234,11 @@ def to_consultation(row: ConsultationModel) -> Consultation:
     )
 
 
+# Tolerant lookup: rows written before the type catalog changed fall back to CONSULTATION
+# instead of raising on an unknown value.
+_RECORD_TYPES = {t.value: t for t in ClinicalRecordType}
+
+
 def to_medical_record(row: MedicalRecordModel) -> MedicalRecord:
     return MedicalRecord(
         id=RecordId.parse(row.id),
@@ -241,7 +246,7 @@ def to_medical_record(row: MedicalRecordModel) -> MedicalRecord:
         code=row.code,
         patient_id=PatientId.parse(row.patient_id),
         author_id=UserId.parse(row.author_id),
-        type=RecordType(row.type),
+        type=_RECORD_TYPES.get(row.type, ClinicalRecordType.CONSULTATION),
         status=RecordStatus(row.status),
         encounter_at=row.encounter_at,
         location_name=row.location_name,
