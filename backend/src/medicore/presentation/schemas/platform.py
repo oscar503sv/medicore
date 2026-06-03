@@ -118,3 +118,12 @@ class AuditEntryResponse(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     password: str
+
+
+class ImpersonationResponse(BaseModel):
+    token: str
+    user_id: str
+    tenant_id: str
+    tenant_name: str
+    role: str
+    name: str

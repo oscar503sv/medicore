@@ -79,6 +79,9 @@ def get_actor(
         user_id=UserId.parse(claims.user_id),
         tenant_id=TenantId.parse(claims.tenant_id),
         role=Role(claims.role),
+        impersonated_by=(
+            PlatformAdminId.parse(claims.impersonator) if claims.impersonator else None
+        ),
     )
 
 

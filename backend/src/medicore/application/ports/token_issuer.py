@@ -18,6 +18,7 @@ class SessionClaims:
     tenant_id: str | None = None
     role: str = ""
     scope: str = "tenant"
+    impersonator: str | None = None  # platform admin id when this is a support session
 
 
 class TokenIssuer(Protocol):

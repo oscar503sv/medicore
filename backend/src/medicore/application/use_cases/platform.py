@@ -24,7 +24,7 @@ from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import IcdVersion, Role, TenantStatus, UserStatus
-from medicore.domain.repositories._support import Page, Paging, TenantFilter
+from medicore.domain.repositories._support import Page, Paging, TenantFilter, UserFilter
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import (
     AuditLogId,
@@ -427,6 +427,70 @@ class ResetUserPassword:
             )
             uow.commit()
         return user
+
+
+@dataclass(frozen=True, slots=True)
+class ImpersonationSessionDTO:
+    token: str
+    user_id: str
+    tenant_id: str
+    tenant_name: str
+    role: str
+    name: str
+
+
+class ImpersonateTenant:
+    """Issue a tenant session for support access, tagged with the impersonating superadmin.
+
+    The token authenticates as an active admin of the clinic, but carries an ``impersonator``
+    claim so every write made during the session is audited with ``impersonated_by``.
+    """
+
+    def __init__(
+        self, uow_factory: UnitOfWorkFactory, tokens: TokenIssuer, clock: Clock
+    ) -> None:
+        self._factory = uow_factory
+        self._tokens = tokens
+        self._clock = clock
+
+    def execute(
+        self, actor: PlatformActorContext, tenant_id: TenantId
+    ) -> ImpersonationSessionDTO:
+        tenant = self._factory.platform_uow().tenants.get_by_id(tenant_id)
+        if tenant is None:
+            raise EntityNotFound("Tenant", tenant_id)
+        if tenant.status == TenantStatus.ARCHIVED:
+            raise ValidationError("cannot impersonate an archived clinic")
+        uow = self._factory.for_tenant(tenant_id)
+        with uow:
+            admins = uow.users.list(filter=UserFilter(role="admin", status="active")).items
+            if not admins:
+                raise ValidationError("clinic has no active admin to impersonate")
+            target = admins[0]
+            uow.platform_audit.append(
+                _audit(
+                    actor, self._clock.now(), "tenant.impersonated", "Tenant", str(tenant_id),
+                    as_user=str(target.id),
+                )
+            )
+            uow.commit()
+        token = self._tokens.issue(
+            SessionClaims(
+                user_id=str(target.id),
+                tenant_id=str(tenant_id),
+                role=str(target.role),
+                scope="tenant",
+                impersonator=str(actor.admin_id),
+            )
+        )
+        return ImpersonationSessionDTO(
+            token=token,
+            user_id=str(target.id),
+            tenant_id=str(tenant_id),
+            tenant_name=tenant.legal_name,
+            role=str(target.role),
+            name=target.name,
+        )
 
 
 class UnlockUser:

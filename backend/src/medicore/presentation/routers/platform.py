@@ -12,6 +12,7 @@ from medicore.application.use_cases.platform import (
     GetPlatformAdmin,
     GetTenant,
     GetTenantStats,
+    ImpersonateTenant,
     ListGlobalAudit,
     ListTenants,
     ListTenantUsers,
@@ -23,12 +24,19 @@ from medicore.application.use_cases.platform import (
 from medicore.domain.enums import IcdVersion, TenantStatus
 from medicore.domain.repositories._support import Paging, TenantFilter
 from medicore.domain.shared.identifiers import TenantId, UserId
-from medicore.presentation.dependencies import Clock, Hasher, JwtIssuer, PlatformActor, UoWFactory
+from medicore.presentation.dependencies import (
+    Clock,
+    Hasher,
+    JwtIssuer,
+    PlatformActor,
+    UoWFactory,
+)
 from medicore.presentation.schemas.platform import (
     AuditEntryResponse,
     CreateTenantRequest,
     CreateTenantResponse,
     GlobalStatsResponse,
+    ImpersonationResponse,
     PlatformAdminResponse,
     PlatformLoginRequest,
     PlatformSessionResponse,
@@ -206,4 +214,18 @@ def unlock_user(tenant_id: str, user_id: str, actor: PlatformActor, factory: UoW
     return UserListResponse(
         items=[ser_user(u) for u in page.items], total=page.total, offset=page.offset,
         limit=page.limit,
+    )
+
+
+@router.post("/tenants/{tenant_id}/impersonate", response_model=ImpersonationResponse)
+def impersonate(tenant_id: str, actor: PlatformActor, factory: UoWFactory, issuer: JwtIssuer,
+                clock: Clock):
+    s = ImpersonateTenant(factory, issuer, clock).execute(actor, TenantId.parse(tenant_id))
+    return ImpersonationResponse(
+        token=s.token,
+        user_id=s.user_id,
+        tenant_id=s.tenant_id,
+        tenant_name=s.tenant_name,
+        role=s.role,
+        name=s.name,
     )

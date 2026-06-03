@@ -23,6 +23,7 @@ class JwtTokenIssuer:
             "tenant": claims.tenant_id,
             "role": claims.role,
             "scope": claims.scope,
+            "imp": claims.impersonator,
             "exp": datetime.now(UTC) + timedelta(minutes=self._expire_minutes),
             "iat": datetime.now(UTC),
         }
@@ -35,4 +36,5 @@ class JwtTokenIssuer:
             tenant_id=payload.get("tenant"),
             role=payload.get("role", ""),
             scope=payload.get("scope", "tenant"),
+            impersonator=payload.get("imp"),
         )

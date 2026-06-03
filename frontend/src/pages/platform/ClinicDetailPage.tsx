@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, KeyRound, Unlock } from 'lucide-react'
+import { ArrowLeft, KeyRound, LogIn, Unlock } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { platformTenantsApi } from '@/api/platform'
+import { useAuthStore } from '@/stores/auth'
+import type { Role } from '@/types'
 import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
 import { Badge, statusTone } from '@/components/ui/Badge'
@@ -113,6 +115,25 @@ export function ClinicDetailPage() {
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
+  const impersonate = useMutation({
+    mutationFn: () => platformTenantsApi.impersonate(id),
+    onSuccess: (s) => {
+      useAuthStore.getState().setSession({
+        token: s.token,
+        user_id: s.user_id,
+        tenant_id: s.tenant_id,
+        tenant_name: s.tenant_name,
+        role: s.role as Role,
+        name: s.name,
+        sex: null,
+        must_change_password: false,
+        impersonating: true,
+      })
+      navigate('/')
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
   if (isLoading || !clinic) return <PageLoader />
 
   return (
@@ -181,6 +202,12 @@ export function ClinicDetailPage() {
           {clinic.status !== 'archived' && (
             <Button variant="danger" loading={setStatus.isPending} onClick={() => setStatus.mutate('archived')}>
               {t('platform.action_archive')}
+            </Button>
+          )}
+          {clinic.status === 'active' && (
+            <Button variant="subtle" loading={impersonate.isPending} onClick={() => impersonate.mutate()}>
+              <LogIn className="h-4 w-4" />
+              {t('platform.action_impersonate')}
             </Button>
           )}
         </div>

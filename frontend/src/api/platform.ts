@@ -85,6 +85,18 @@ export const platformTenantsApi = {
     platformApi
       .post<PaginatedResponse<User>>(`/platform/tenants/${id}/users/${userId}/unlock`)
       .then((r) => r.data),
+
+  impersonate: (id: string) =>
+    platformApi
+      .post<{
+        token: string
+        user_id: string
+        tenant_id: string
+        tenant_name: string
+        role: string
+        name: string
+      }>(`/platform/tenants/${id}/impersonate`)
+      .then((r) => r.data),
 }
 
 export const platformAuditApi = {

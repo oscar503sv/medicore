@@ -13,6 +13,7 @@ from medicore.application.use_cases.platform import (
     CreateTenantWithAdmin,
     GetGlobalStats,
     GetTenantStats,
+    ImpersonateTenant,
     ListGlobalAudit,
     ListTenants,
     ResetUserPassword,
@@ -183,3 +184,41 @@ def test_global_audit_reads_tenant_trail():
     )
     entries = ListGlobalAudit(seed.factory).execute(actor_for(seed))
     assert any(e.action == "auth.login" for e in entries)
+
+
+def test_impersonation_token_carries_impersonator():
+    seed = seed_clinic()
+    session = ImpersonateTenant(seed.factory, FakeTokenIssuer(), FixedClock()).execute(
+        actor_for(seed), seed.tenant.id
+    )
+    claims = FakeTokenIssuer().decode(session.token)
+    assert claims.scope == "tenant"
+    assert claims.impersonator == str(seed.platform_admin.id)
+    assert claims.user_id == str(seed.admin.id)  # impersonates the clinic's admin
+    assert seed.factory.platform_uow().platform_audit.list()
+
+
+def test_impersonation_rejected_for_archived_clinic():
+    seed = seed_clinic()
+    SetTenantStatus(seed.factory, FixedClock()).execute(
+        actor_for(seed), seed.tenant.id, TenantStatus.ARCHIVED
+    )
+    with pytest.raises(ValidationError):
+        ImpersonateTenant(seed.factory, FakeTokenIssuer(), FixedClock()).execute(
+            actor_for(seed), seed.tenant.id
+        )
+
+
+def test_audit_entry_marks_impersonation():
+    from medicore.application.common.audit import audit_entry
+    from medicore.application.common.context import ActorContext
+
+    seed = seed_clinic()
+    actor = ActorContext(
+        user_id=seed.admin.id,
+        tenant_id=seed.tenant.id,
+        role=seed.admin.role,
+        impersonated_by=seed.platform_admin.id,
+    )
+    entry = audit_entry(actor, FixedClock().now(), "patient.created", "Patient", "x")
+    assert entry.metadata["impersonated_by"] == str(seed.platform_admin.id)

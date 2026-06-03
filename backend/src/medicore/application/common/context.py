@@ -15,6 +15,9 @@ class ActorContext:
     user_id: UserId
     tenant_id: TenantId
     role: Role
+    # Set when a superadmin is impersonating this clinic for support; every write is then
+    # audited with an ``impersonated_by`` marker.
+    impersonated_by: PlatformAdminId | None = None
 
 
 @dataclass(frozen=True, slots=True)

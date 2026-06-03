@@ -17,6 +17,9 @@ def audit_entry(
     entity_id: str,
     **metadata: object,
 ) -> AuditLog:
+    meta = dict(metadata)
+    if actor.impersonated_by is not None:
+        meta["impersonated_by"] = str(actor.impersonated_by)
     return AuditLog(
         id=AuditLogId.new(),
         tenant_id=actor.tenant_id,
@@ -24,6 +27,6 @@ def audit_entry(
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,
-        metadata=dict(metadata),
+        metadata=meta,
         timestamp=when,
     )

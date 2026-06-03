@@ -8,6 +8,8 @@ export interface Session {
   name: string
   sex: Sex | null
   must_change_password: boolean
+  // Set when a superadmin entered this clinic via support impersonation.
+  impersonating?: boolean
 }
 
 export interface MyProfile {
