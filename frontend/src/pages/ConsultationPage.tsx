@@ -229,7 +229,7 @@ export function ConsultationPage() {
                     }}
                     rows={4}
                     placeholder={t('app.write_here')}
-                    className="w-full resize-none rounded-lg border border-line bg-bg p-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
+                    className="min-h-[112px] w-full resize-y rounded-lg border border-line bg-bg p-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
                   />
                 </div>
               ))}
@@ -361,7 +361,7 @@ function DiagnosesSection({
   })
 
   const added = new Set(consultation.diagnoses.map((d) => d.code))
-  const versionLabel = config?.version === 'cie10' ? 'CIE-10' : 'CIE-11'
+  const versionLabel = `${t('consult.icd_prefix')}-${config?.version === 'cie10' ? '10' : '11'}`
 
   return (
     <section>
