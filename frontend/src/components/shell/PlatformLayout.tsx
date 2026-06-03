@@ -1,8 +1,18 @@
-import { LogOut, Building2, BarChart3, ScrollText, ShieldAlert } from 'lucide-react'
+import {
+  LogOut,
+  Building2,
+  BarChart3,
+  ScrollText,
+  ShieldAlert,
+  Monitor,
+  Moon,
+  Sun,
+} from 'lucide-react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
 import { usePlatformAuthStore } from '@/stores/platformAuth'
+import { useUIStore, type Theme } from '@/stores/ui'
 
 const NAV = [
   { to: '/platform/clinics', labelKey: 'platform.nav_clinics', icon: Building2 },
@@ -15,6 +25,14 @@ export function PlatformLayout() {
   const navigate = useNavigate()
   const session = usePlatformAuthStore((s) => s.session)
   const logout = usePlatformAuthStore((s) => s.logout)
+  const { theme, setTheme, lang, setLang } = useUIStore()
+
+  const themeIcons: Record<Theme, typeof Sun> = { light: Sun, dark: Moon, system: Monitor }
+  const ThemeIcon = themeIcons[theme]
+  const cycleTheme = () => {
+    const order: Theme[] = ['light', 'dark', 'system']
+    setTheme(order[(order.indexOf(theme) + 1) % order.length])
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
@@ -48,6 +66,33 @@ export function PlatformLayout() {
             </NavLink>
           ))}
         </nav>
+
+        <div className="flex items-center justify-between border-t border-line px-3 py-2">
+          <div className="flex items-center rounded-pill border border-line p-0.5">
+            {(['es', 'en'] as const).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => setLang(l)}
+                aria-pressed={lang === l}
+                className={cn(
+                  'rounded-pill px-2.5 py-1 text-xs font-medium transition-colors',
+                  lang === l ? 'bg-surface-2 text-tx' : 'text-tx-3 hover:text-tx',
+                )}
+              >
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={cycleTheme}
+            title={theme}
+            aria-label="Cambiar tema"
+            className="rounded-md p-2 text-tx-2 transition-colors hover:bg-surface-2 hover:text-tx"
+          >
+            <ThemeIcon className="h-[18px] w-[18px]" />
+          </button>
+        </div>
 
         <div className="border-t border-line p-3">
           <p className="truncate px-2 text-[13px] font-medium text-tx">{session?.name}</p>
