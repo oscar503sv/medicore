@@ -254,3 +254,4 @@ Los tests verifican, entre otras cosas:
 | `JWT_SECRET` | Clave HMAC para tokens (≥32 bytes aleatorios) | `openssl rand -hex 32` |
 | `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Expiración del token en minutos | `1440` (24 h) |
+| `JWT_SUPPORT_EXPIRE_MINUTES` | Expiración (min) de sesiones de suplantación/soporte — más corta por seguridad | `60` (1 h) |

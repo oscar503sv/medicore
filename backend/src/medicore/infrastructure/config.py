@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
+    jwt_support_expire_minutes: int = 60  # TTL corta para sesiones de suplantación (soporte)
 
 
 @lru_cache

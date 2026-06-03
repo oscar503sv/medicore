@@ -16,16 +16,24 @@ class JwtTokenIssuer:
         self._secret = cfg.jwt_secret
         self._algorithm = cfg.jwt_algorithm
         self._expire_minutes = cfg.jwt_expire_minutes
+        self._support_expire_minutes = cfg.jwt_support_expire_minutes
 
     def issue(self, claims: SessionClaims) -> str:
+        # Support (impersonation) sessions expire sooner than regular ones for security.
+        expire_minutes = (
+            self._support_expire_minutes
+            if claims.impersonator is not None
+            else self._expire_minutes
+        )
+        now = datetime.now(UTC)
         payload = {
             "sub": claims.user_id,
             "tenant": claims.tenant_id,
             "role": claims.role,
             "scope": claims.scope,
             "imp": claims.impersonator,
-            "exp": datetime.now(UTC) + timedelta(minutes=self._expire_minutes),
-            "iat": datetime.now(UTC),
+            "exp": now + timedelta(minutes=expire_minutes),
+            "iat": now,
         }
         return jwt.encode(payload, self._secret, algorithm=self._algorithm)
 
