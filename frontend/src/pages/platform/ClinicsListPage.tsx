@@ -101,7 +101,7 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
     legal_name: '',
     tax_id: '',
     slug: '',
-    timezone: 'Europe/Madrid',
+    timezone: 'America/El_Salvador',
     icd_version: 'cie11',
     location_name: '',
     admin_name: '',

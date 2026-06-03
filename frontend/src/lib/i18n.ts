@@ -352,7 +352,7 @@ const es: Dict = {
   'platform.generate': 'Generar',
   'platform.create': 'Crear clínica',
   'platform.f_legal_name': 'Razón social',
-  'platform.f_tax_id': 'NIF / RFC',
+  'platform.f_tax_id': 'NIT / NIF / RFC',
   'platform.f_slug': 'Identificador (slug)',
   'platform.f_icd': 'Versión CIE',
   'platform.f_location': 'Sede principal',
