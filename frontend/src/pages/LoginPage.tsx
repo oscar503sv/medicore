@@ -114,11 +114,6 @@ export function LoginPage() {
             </div>
           </div>
 
-          <label className="flex items-center gap-2 whitespace-nowrap text-[13px] text-tx-2">
-            <input type="checkbox" defaultChecked className="h-4 w-4 rounded border-line accent-accent" />
-            {t('login.remember')}
-          </label>
-
           <Button type="submit" size="lg" loading={loading} className="w-full">
             {t('login.submit')}
             <ArrowRight className="h-4 w-4" />
