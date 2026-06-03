@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { errorMessage } from '@/api/client'
 import { patientsApi } from '@/api/patients'
+import { PatientForm } from '@/components/patients/PatientForm'
 import {
-  PatientForm,
   emptyPatientForm,
   formToPayload,
   type PatientFormState,
-} from '@/components/patients/PatientForm'
+} from '@/components/patients/patientFormData'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
