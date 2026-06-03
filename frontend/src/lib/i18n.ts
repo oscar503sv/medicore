@@ -61,7 +61,7 @@ const es: Dict = {
   'login.password': 'Contraseña',
   'login.forgot': '¿Olvidó su contraseña?',
   'login.remember': 'Recordarme · 30 días',
-  'login.submit': 'Continuar',
+  'login.submit': 'Iniciar sesión',
   'login.encryption': 'Cifrado de extremo a extremo · HIPAA / GDPR',
   'login.compliance': 'Cifrado extremo a extremo',
   'login.quote':
@@ -461,7 +461,7 @@ const en: Dict = {
   'login.password': 'Password',
   'login.forgot': 'Forgot your password?',
   'login.remember': 'Remember me · 30 days',
-  'login.submit': 'Continue',
+  'login.submit': 'Sign in',
   'login.encryption': 'End-to-end encryption · HIPAA / GDPR',
   'login.compliance': 'End-to-end encryption',
   'login.quote': 'Medicine is a science of uncertainty and an art of probability.',
