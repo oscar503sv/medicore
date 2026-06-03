@@ -32,6 +32,7 @@ class SessionDTO:
     user_id: UserId
     tenant_id: TenantId
     tenant_name: str
+    timezone: str
     role: Role
     name: str
     sex: Sex | None
@@ -95,6 +96,7 @@ class AuthenticateUser:
             user_id=user.id,
             tenant_id=tenant.id,
             tenant_name=tenant.legal_name,
+            timezone=tenant.timezone,
             role=user.role,
             name=user.name,
             sex=user.sex,

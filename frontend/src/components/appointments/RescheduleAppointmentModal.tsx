@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
 import { appointmentsApi } from '@/api/appointments'
 import { errorMessage } from '@/api/client'
 import { Button } from '@/components/ui/Button'
@@ -8,7 +7,7 @@ import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
-import { fmtTime } from '@/lib/format'
+import { clinicToday, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { Appointment, Slot } from '@/types'
 
@@ -21,7 +20,7 @@ export function RescheduleAppointmentModal({
 }) {
   const t = useT()
   const qc = useQueryClient()
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const today = clinicToday()
   const [day, setDay] = useState(today)
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
 

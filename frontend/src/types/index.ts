@@ -4,6 +4,7 @@ export interface Session {
   user_id: string
   tenant_id: string
   tenant_name: string
+  timezone: string
   role: Role
   name: string
   sex: Sex | null

@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
 import { Activity, CalendarCheck, Clock, Users } from 'lucide-react'
-import { format } from 'date-fns'
 import { appointmentsApi } from '@/api/appointments'
 import { patientsApi } from '@/api/patients'
 import { PageHeader } from '@/components/PageHeader'
@@ -10,7 +9,7 @@ import { Badge } from '@/components/ui/Badge'
 import { statusTone } from '@/components/ui/badgeTone'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { PageLoader } from '@/components/ui/Spinner'
-import { fmtNow, fmtTime } from '@/lib/format'
+import { clinicToday, fmtNow, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { greetingName } from '@/lib/user'
 import { useAuthStore } from '@/stores/auth'
@@ -18,7 +17,7 @@ import { useAuthStore } from '@/stores/auth'
 export function DashboardPage() {
   const t = useT()
   const session = useAuthStore((s) => s.session)
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const today = clinicToday()
 
   const hour = new Date().getHours()
   const greetingKey =

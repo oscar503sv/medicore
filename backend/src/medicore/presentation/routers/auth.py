@@ -39,6 +39,7 @@ def login(body: LoginRequest, factory: UoWFactory, hasher: Hasher, issuer: JwtIs
         user_id=str(session.user_id),
         tenant_id=str(session.tenant_id),
         tenant_name=session.tenant_name,
+        timezone=session.timezone,
         role=str(session.role),
         name=session.name,
         sex=str(session.sex) if session.sex else None,

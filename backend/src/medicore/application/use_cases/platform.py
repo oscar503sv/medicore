@@ -438,6 +438,7 @@ class ImpersonationSessionDTO:
     user_id: str
     tenant_id: str
     tenant_name: str
+    timezone: str
     role: str
     name: str
 
@@ -491,6 +492,7 @@ class ImpersonateTenant:
             user_id=str(target.id),
             tenant_id=str(tenant_id),
             tenant_name=tenant.legal_name,
+            timezone=tenant.timezone,
             role=str(target.role),
             name=target.name,
         )

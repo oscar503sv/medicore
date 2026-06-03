@@ -4,7 +4,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Drawer } from '@/components/ui/Drawer'
 import { Spinner } from '@/components/ui/Spinner'
-import { fmtDateTime } from '@/lib/format'
+import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { Soap } from '@/types'
 
@@ -43,7 +43,7 @@ export function RecordDrawer({
               <p className="font-mono text-[13px] text-tx-3">{record.code}</p>
               <h2 className="mt-1 font-serif text-2xl text-tx">{record.chief_complaint}</h2>
               <p className="mt-1 text-[13px] text-tx-3">
-                {record.location_name} · {fmtDateTime(record.encounter_at)}
+                {record.location_name} · {fmtDateTimeTz(record.encounter_at)}
               </p>
             </div>
             <Badge tone={record.status === 'amended' ? 'info' : 'ok'}>
@@ -117,7 +117,7 @@ export function RecordDrawer({
           {/* Author */}
           <div className="mt-8 flex items-center gap-2 border-t border-line pt-5 text-[13px] text-tx-3">
             <Avatar name="Médico" size="sm" />
-            Firmado el {fmtDateTime(record.signed_at)}
+            Firmado el {fmtDateTimeTz(record.signed_at)}
           </div>
         </div>
       )}

@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
-import { fmtDate } from '@/lib/format'
+import { fmtDateTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 
 export function RecordsPage() {
@@ -46,7 +46,7 @@ export function RecordsPage() {
                   </Td>
                   <Td className="font-medium text-tx">{r.chief_complaint}</Td>
                   <Td>{r.type}</Td>
-                  <Td>{fmtDate(r.encounter_at)}</Td>
+                  <Td>{fmtDateTz(r.encounter_at)}</Td>
                   <Td>
                     <Badge tone={r.status === 'amended' ? 'info' : 'ok'}>
                       {t(`records.${r.status === 'amended' ? 'amended' : 'signed'}`)}

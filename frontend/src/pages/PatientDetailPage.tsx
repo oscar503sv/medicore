@@ -13,7 +13,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { PageLoader } from '@/components/ui/Spinner'
 import { useAuthStore } from '@/stores/auth'
 import { cn } from '@/lib/cn'
-import { fmtDate, fmtDateTime } from '@/lib/format'
+import { fmtDateTime, fmtDateTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 
 type Tab = 'summary' | 'history' | 'prescriptions' | 'vitals' | 'documents'
@@ -144,7 +144,7 @@ export function PatientDetailPage() {
                   </Badge>
                 </div>
                 <p className="mt-1 font-mono text-xs text-tx-3">
-                  {r.code} · {fmtDate(r.encounter_at)}
+                  {r.code} · {fmtDateTz(r.encounter_at)}
                 </p>
               </div>
             ))}

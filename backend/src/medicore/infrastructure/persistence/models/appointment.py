@@ -38,7 +38,9 @@ class AppointmentModel(Base):
     insurance_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("insurers.id"), nullable=True
     )
-    scheduled_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Stored as a naive wall-clock in the clinic's timezone (the slot resolver works in local
+    # wall-clock). Kept tz-naive so it round-trips without a spurious UTC offset on read.
+    scheduled_start: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(String(500), nullable=False)
     room: Mapped[str | None] = mapped_column(String(50), nullable=True)

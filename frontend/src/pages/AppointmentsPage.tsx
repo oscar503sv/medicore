@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarCheck, CalendarClock, Check, CheckCheck, Clock, Plus, Search, Stethoscope, X } from 'lucide-react'
-import { format } from 'date-fns'
 import { appointmentsApi } from '@/api/appointments'
 import { consultationsApi } from '@/api/consultations'
 import { errorMessage } from '@/api/client'
@@ -20,7 +19,7 @@ import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
-import { fmtTime } from '@/lib/format'
+import { clinicToday, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
 import type { Appointment, AppointmentStatus } from '@/types'
@@ -32,7 +31,7 @@ export function AppointmentsPage() {
   const canConsult = useAuthStore((s) => s.hasRole('doctor', 'admin'))
   // Admin, doctor and receptionist may manage the appointment lifecycle (confirm/reschedule/cancel).
   const canManage = useAuthStore((s) => s.hasRole('admin', 'doctor', 'receptionist'))
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [date, setDate] = useState(clinicToday())
   const [modalOpen, setModalOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)

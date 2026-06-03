@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { format, startOfWeek } from 'date-fns'
+import { format, parseISO, startOfWeek } from 'date-fns'
 import { CalendarOff, Plus, Trash2 } from 'lucide-react'
 import { availabilityApi } from '@/api/availability'
 import { errorMessage } from '@/api/client'
@@ -15,7 +15,7 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
-import { fmtDate } from '@/lib/format'
+import { clinicToday, fmtDate } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { AvailabilityException, BookingRules, TimeRange, WeeklyDay } from '@/types'
 
@@ -335,7 +335,7 @@ function ExceptionsTab({ exceptions }: { exceptions: AvailabilityException[] }) 
 function ExceptionModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT()
   const qc = useQueryClient()
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const today = clinicToday()
   const [date, setDate] = useState(today)
   const [kind, setKind] = useState<'off' | 'extra'>('off')
   const [reason, setReason] = useState('')
@@ -488,7 +488,7 @@ function RulesEditor({ rules, onSave }: { rules: BookingRules; onSave: (rules: B
 function PreviewTab() {
   const t = useT()
   const weekStart = useMemo(
-    () => format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
+    () => format(startOfWeek(parseISO(clinicToday()), { weekStartsOn: 1 }), 'yyyy-MM-dd'),
     [],
   )
 

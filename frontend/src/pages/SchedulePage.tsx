@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { PageLoader } from '@/components/ui/Spinner'
 import { cn } from '@/lib/cn'
+import { clinicToday } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 
 const HOURS = Array.from({ length: 11 }, (_, i) => i + 8) // 08:00–18:00
@@ -21,7 +22,7 @@ const TYPE_COLORS: Record<string, string> = {
 export function SchedulePage() {
   const t = useT()
   const [weekStart, setWeekStart] = useState(() =>
-    startOfWeek(new Date(), { weekStartsOn: 1 }),
+    startOfWeek(parseISO(clinicToday()), { weekStartsOn: 1 }),
   )
   const weekStartStr = format(weekStart, 'yyyy-MM-dd')
 

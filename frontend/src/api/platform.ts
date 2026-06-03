@@ -93,6 +93,7 @@ export const platformTenantsApi = {
         user_id: string
         tenant_id: string
         tenant_name: string
+        timezone: string
         role: string
         name: string
       }>(`/platform/tenants/${id}/impersonate`)

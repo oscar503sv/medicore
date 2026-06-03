@@ -16,7 +16,7 @@ import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
-import { fmtDateTime } from '@/lib/format'
+import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { Role, User } from '@/types'
 
@@ -158,7 +158,7 @@ export function UsersPage() {
                   <Td>
                     <Badge tone={statusTone(u.status)}>{t(`status.${u.status}`)}</Badge>
                   </Td>
-                  <Td>{fmtDateTime(u.last_seen_at)}</Td>
+                  <Td>{fmtDateTimeTz(u.last_seen_at)}</Td>
                   <Td>
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="sm" onClick={() => setEditTarget(u)}>

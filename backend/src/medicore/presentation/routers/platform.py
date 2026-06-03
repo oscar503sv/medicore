@@ -226,6 +226,7 @@ def impersonate(tenant_id: str, actor: PlatformActor, factory: UoWFactory, issue
         user_id=s.user_id,
         tenant_id=s.tenant_id,
         tenant_name=s.tenant_name,
+        timezone=s.timezone,
         role=s.role,
         name=s.name,
     )

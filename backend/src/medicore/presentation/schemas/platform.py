@@ -125,5 +125,6 @@ class ImpersonationResponse(BaseModel):
     user_id: str
     tenant_id: str
     tenant_name: str
+    timezone: str
     role: str
     name: str

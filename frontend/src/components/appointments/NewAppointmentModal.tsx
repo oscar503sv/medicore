@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
 import { CalendarDays, Check, Clock, ShieldCheck, Stethoscope, User as UserIcon } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
 import { errorMessage } from '@/api/client'
@@ -11,7 +10,7 @@ import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
-import { fmtDate, fmtTime } from '@/lib/format'
+import { clinicToday, fmtDate, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { Patient, Slot } from '@/types'
 
@@ -35,7 +34,7 @@ export function NewAppointmentModal({
 }) {
   const t = useT()
   const qc = useQueryClient()
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const today = clinicToday()
   const [step, setStep] = useState(0)
   const [patient, setPatient] = useState<Patient | null>(null)
   const [doctorId, setDoctorId] = useState('')

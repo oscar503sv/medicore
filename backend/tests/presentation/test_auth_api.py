@@ -18,6 +18,7 @@ def test_login_success(seed, client):
     data = resp.json()
     assert data["role"] == "doctor"
     assert data["name"] == seed.doctor.name
+    assert data["timezone"] == seed.tenant.timezone
     assert "token" in data
 
 

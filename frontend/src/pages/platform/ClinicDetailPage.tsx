@@ -124,6 +124,7 @@ export function ClinicDetailPage() {
         user_id: s.user_id,
         tenant_id: s.tenant_id,
         tenant_name: s.tenant_name,
+        timezone: s.timezone,
         role: s.role as Role,
         name: s.name,
         sex: null,
