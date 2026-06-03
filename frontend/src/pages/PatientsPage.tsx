@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
-import { fmtDate } from '@/lib/format'
+import { fmtDate, fmtDateTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 
 export function PatientsPage() {
@@ -98,6 +98,7 @@ export function PatientsPage() {
                 <Th>{t('patients.col_age')}</Th>
                 <Th>{t('patients.col_tags')}</Th>
                 <Th>{t('patients.col_last')}</Th>
+                <Th>{t('patients.col_next')}</Th>
               </tr>
             </thead>
             <tbody>
@@ -127,6 +128,7 @@ export function PatientsPage() {
                     </div>
                   </Td>
                   <Td>{fmtDate(p.updated_at)}</Td>
+                  <Td>{p.next_visit ? fmtDateTime(p.next_visit) : '—'}</Td>
                 </Tr>
               ))}
             </tbody>

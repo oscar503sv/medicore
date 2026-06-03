@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from medicore.application.use_cases.auth import MyProfileDTO
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.availability import DoctorAvailability
@@ -112,7 +114,7 @@ def ser_my_profile(p: MyProfileDTO) -> dict:
     }
 
 
-def ser_patient(p: Patient) -> dict:
+def ser_patient(p: Patient, *, next_visit: datetime | None = None) -> dict:
     return {
         "id": str(p.id),
         "tenant_id": str(p.tenant_id),
@@ -136,6 +138,7 @@ def ser_patient(p: Patient) -> dict:
         },
         "created_at": p.created_at,
         "updated_at": p.updated_at,
+        "next_visit": next_visit,
     }
 
 

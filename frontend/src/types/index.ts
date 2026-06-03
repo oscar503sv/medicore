@@ -160,6 +160,7 @@ export interface Patient {
   contact: ContactInfo
   created_at: string
   updated_at: string
+  next_visit: string | null
 }
 
 export interface Insurer {

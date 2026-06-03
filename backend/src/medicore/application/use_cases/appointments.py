@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timedelta
 
 from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import ensure_can_manage_appointments
+from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -46,21 +46,6 @@ def _busy_intervals(appointments: list[Appointment]) -> list[BusyInterval]:
         for a in appointments
         if a.status in _BLOCKING_STATUSES
     ]
-
-
-def _clinic_now(uow: UnitOfWork, tenant_id: object, clock: Clock) -> datetime:
-    """Current instant as the clinic's local wall-clock.
-
-    Slots and appointments are stored/compared as naive wall-clock in the clinic's timezone
-    (see ``slot_resolver._naive``). ``SystemClock`` returns tz-aware UTC, so we convert it to
-    the tenant's timezone and drop tzinfo. A naive clock (tests' ``FixedClock``) is already
-    wall-clock and passes through unchanged."""
-    now = clock.now()
-    if now.tzinfo is None:
-        return now
-    tenant = uow.tenants.get_by_id(tenant_id)
-    tz = ZoneInfo(tenant.timezone) if tenant and tenant.timezone else UTC
-    return now.astimezone(tz).replace(tzinfo=None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,7 +140,7 @@ class GetAvailableSlots:
             on,
             desired_duration_minutes=duration_minutes,
             busy=busy,
-            now=_clinic_now(self._uow, actor.tenant_id, self._clock),
+            now=clinic_now(self._uow, actor.tenant_id, self._clock),
         )
 
 
@@ -184,7 +169,7 @@ class CreateAppointment:
             cmd.scheduled_start,
             cmd.duration_minutes,
             busy=busy,
-            now=_clinic_now(self._uow, actor.tenant_id, self._clock),
+            now=clinic_now(self._uow, actor.tenant_id, self._clock),
         ):
             raise SlotUnavailable(
                 f"{cmd.scheduled_start.isoformat()} is not bookable for doctor {cmd.doctor_id}"
@@ -251,7 +236,7 @@ class RescheduleAppointment:
             new_start,
             duration,
             busy=_busy_intervals(overlapping),
-            now=_clinic_now(self._uow, actor.tenant_id, self._clock),
+            now=clinic_now(self._uow, actor.tenant_id, self._clock),
         ):
             raise SlotUnavailable("new slot is not bookable")
 

@@ -9,6 +9,8 @@ def test_list_patients(seed, client, auth_headers):
     data = resp.json()
     assert data["total"] >= 1
     assert any(p["id"] == str(seed.patient.id) for p in data["items"])
+    # Every item exposes the next-visit field (None when the patient has no upcoming appointment).
+    assert all("next_visit" in p for p in data["items"])
 
 
 def test_list_patients_search(seed, client, auth_headers):

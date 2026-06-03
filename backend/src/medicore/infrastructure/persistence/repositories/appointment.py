@@ -57,6 +57,33 @@ class SqlAppointmentRepository:
         )
         return [to_appointment(r) for r in rows]
 
+    def next_visits(
+        self, patient_ids: list[PatientId], now: datetime
+    ) -> dict[PatientId, datetime]:
+        if not patient_ids:
+            return {}
+        ids = [pid.value for pid in patient_ids]
+        rows = (
+            self._q()
+            .filter(
+                AppointmentModel.patient_id.in_(ids),
+                AppointmentModel.status.in_(_ACTIVE),
+            )
+            .all()
+        )
+        # Stored datetimes may be naive (SQLite) while ``now`` is tz-aware; compare on a
+        # single wall-clock reference by dropping tzinfo.
+        cutoff = _naive(now)
+        result: dict[PatientId, datetime] = {}
+        for r in rows:
+            if _naive(r.scheduled_start) <= cutoff:
+                continue
+            pid = PatientId.parse(r.patient_id)
+            current = result.get(pid)
+            if current is None or r.scheduled_start < current:
+                result[pid] = r.scheduled_start
+        return result
+
     def find_overlapping(
         self, doctor_id: UserId, start: datetime, end: datetime
     ) -> list[Appointment]:

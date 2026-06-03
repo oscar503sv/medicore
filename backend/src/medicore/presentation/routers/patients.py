@@ -10,6 +10,7 @@ from medicore.application.use_cases.patients import (
     CreatePatientCommand,
     GetPatientDetail,
     ListPatients,
+    PatientsNextVisits,
     SearchPatients,
     UpdatePatient,
 )
@@ -35,6 +36,7 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 def list_patients(
     actor: Actor,
     uow: UoW,
+    clock: Clock,
     status: str | None = Query(None),
     doctor_id: str | None = Query(None),
     q: str | None = Query(None),
@@ -47,8 +49,9 @@ def list_patients(
         else:
             f = PatientFilter(status=status, doctor_id=doctor_id) if (status or doctor_id) else None
             page = ListPatients(uow).execute(actor, f, Paging(offset=offset, limit=limit))
+        visits = PatientsNextVisits(uow, clock).execute(actor, [p.id for p in page.items])
     return PatientListResponse(
-        items=[ser_patient(p) for p in page.items],
+        items=[ser_patient(p, next_visit=visits.get(p.id)) for p in page.items],
         total=page.total,
         offset=page.offset,
         limit=page.limit,

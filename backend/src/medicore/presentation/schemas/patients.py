@@ -55,6 +55,7 @@ class PatientResponse(BaseModel):
     contact: dict[str, Any]
     created_at: datetime
     updated_at: datetime
+    next_visit: datetime | None = None
 
 
 class PatientListResponse(BaseModel):

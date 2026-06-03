@@ -16,6 +16,12 @@ class AppointmentRepository(Protocol):
 
     def list_by_patient(self, patient_id: PatientId) -> list[Appointment]: ...
 
+    def next_visits(
+        self, patient_ids: list[PatientId], now: datetime
+    ) -> dict[PatientId, datetime]:
+        """Earliest active appointment after ``now`` per patient (omits those without one)."""
+        ...
+
     def find_overlapping(
         self, doctor_id: UserId, start: datetime, end: datetime
     ) -> list[Appointment]:

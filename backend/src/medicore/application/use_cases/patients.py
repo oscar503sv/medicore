@@ -8,6 +8,7 @@ from datetime import date, datetime
 from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
+from medicore.application.common.timezone import clinic_now, to_naive
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -148,6 +149,20 @@ class SearchPatients:
         return self._uow.patients.search(query, paging)
 
 
+class PatientsNextVisits:
+    """Earliest upcoming appointment per patient — enriches the patients list."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(
+        self, actor: ActorContext, patient_ids: list[PatientId]
+    ) -> dict[PatientId, datetime]:
+        now = clinic_now(self._uow, actor.tenant_id, self._clock)
+        return self._uow.appointments.next_visits(patient_ids, now)
+
+
 class GetPatientDetail:
     """Patient profile plus derived facts (last/next visit, counts)."""
 
@@ -160,11 +175,13 @@ class GetPatientDetail:
         if patient is None:
             raise EntityNotFound("Patient", patient_id)
 
-        now = self._clock.now()
+        # Appointments are stored as the clinic's local wall-clock; compare against "now" in
+        # that same reference (see clinic_now), not raw UTC.
+        now = clinic_now(self._uow, actor.tenant_id, self._clock)
         appointments = self._uow.appointments.list_by_patient(patient_id)
         # A completed appointment is a visit that happened; an active future one is the next.
         past = [a for a in appointments if a.status == AppointmentStatus.COMPLETED]
-        upcoming = [a for a in appointments if a.is_active and a.scheduled_start > now]
+        upcoming = [a for a in appointments if a.is_active and to_naive(a.scheduled_start) > now]
         records = self._uow.medical_records.list_by_patient(patient_id)
         prescriptions = self._uow.prescriptions.list_by_patient(patient_id, active_only=True)
 

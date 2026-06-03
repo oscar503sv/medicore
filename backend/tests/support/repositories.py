@@ -293,6 +293,19 @@ class InMemoryAppointmentRepository(_Scoped):
         result.sort(key=lambda a: a.scheduled_start)
         return result
 
+    def next_visits(
+        self, patient_ids: list[PatientId], now: datetime
+    ) -> dict[PatientId, datetime]:
+        wanted = set(patient_ids)
+        result: dict[PatientId, datetime] = {}
+        for a in self._mine(self._store.appointments.values()):
+            if a.patient_id not in wanted or not a.is_active or a.scheduled_start <= now:
+                continue
+            current = result.get(a.patient_id)
+            if current is None or a.scheduled_start < current:
+                result[a.patient_id] = a.scheduled_start
+        return result
+
     def find_overlapping(
         self, doctor_id: UserId, start: datetime, end: datetime
     ) -> list[Appointment]:
