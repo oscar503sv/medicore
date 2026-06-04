@@ -240,6 +240,7 @@ class UpdateTenant:
     def execute(
         self, actor: PlatformActorContext, tenant_id: TenantId, **changes: object
     ) -> Tenant:
+        location_name = changes.pop("location_name", None)
         with self._factory.for_tenant(tenant_id) as uow:
             tenant = uow.tenants.get_by_id(tenant_id)
             if tenant is None:
@@ -249,6 +250,9 @@ class UpdateTenant:
                     if key == "icd_version":
                         value = IcdVersion(value)
                     setattr(tenant, key, value)
+            if location_name:
+                # The clinic's primary site (sede) can be renamed after creation.
+                tenant.primary_location.name = str(location_name)
             uow.tenants.save(tenant)
             uow.platform_audit.append(
                 _audit(actor, self._clock.now(), "tenant.updated", "Tenant", str(tenant_id))

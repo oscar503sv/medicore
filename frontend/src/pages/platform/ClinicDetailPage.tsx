@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, KeyRound, LogIn, Unlock } from 'lucide-react'
@@ -17,7 +17,8 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
-import { Activity, CalendarCheck, FileText, Users } from 'lucide-react'
+import { TIMEZONES } from '@/lib/timezones'
+import { Activity, CalendarCheck, FileText, Search, Users } from 'lucide-react'
 import type { TenantStatus } from '@/types'
 
 function genPassword(): string {
@@ -47,6 +48,8 @@ export function ClinicDetailPage() {
   const [plan, setPlan] = useState('')
   const [seatLimit, setSeatLimit] = useState(10)
   const [icdVersion, setIcdVersion] = useState('cie11')
+  const [timezone, setTimezone] = useState('America/El_Salvador')
+  const [locationName, setLocationName] = useState('')
 
   useEffect(() => {
     if (clinic) {
@@ -55,6 +58,9 @@ export function ClinicDetailPage() {
       setPlan(clinic.plan)
       setSeatLimit(clinic.seat_limit)
       setIcdVersion(clinic.icd_version)
+      setTimezone(clinic.timezone)
+      const primary = clinic.locations.find((l) => l.is_primary) ?? clinic.locations[0]
+      setLocationName(primary?.name ?? '')
     }
   }, [clinic])
 
@@ -71,6 +77,8 @@ export function ClinicDetailPage() {
         plan,
         seat_limit: seatLimit,
         icd_version: icdVersion,
+        timezone,
+        location_name: locationName,
       }),
     onSuccess: () => {
       toast(t('platform.saved_ok'))
@@ -97,6 +105,20 @@ export function ClinicDetailPage() {
     queryKey: ['platform-tenant-users', id],
     queryFn: () => platformTenantsApi.listUsers(id),
   })
+
+  const [userQ, setUserQ] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const filteredUsers = useMemo(() => {
+    const term = userQ.trim().toLowerCase()
+    return (users?.items ?? []).filter((u) => {
+      if (term && !u.name.toLowerCase().includes(term) && !u.email.toLowerCase().includes(term))
+        return false
+      if (roleFilter !== 'all' && u.role !== roleFilter) return false
+      if (statusFilter !== 'all' && u.status !== statusFilter) return false
+      return true
+    })
+  }, [users, userQ, roleFilter, statusFilter])
 
   const resetPassword = useMutation({
     mutationFn: (userId: string) => platformTenantsApi.resetUserPassword(id, userId, genPassword()),
@@ -178,6 +200,19 @@ export function ClinicDetailPage() {
               <option value="cie11">CIE-11</option>
               <option value="cie10">CIE-10</option>
             </Select>
+            <Select label={t('platform.f_timezone')} value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+              {TIMEZONES.map((tz) => (
+                <option key={tz.value} value={tz.value}>
+                  {tz.label}
+                </option>
+              ))}
+            </Select>
+            <Input
+              label={t('platform.f_location')}
+              value={locationName}
+              onChange={(e) => setLocationName(e.target.value)}
+              required
+            />
             <Input label={t('platform.f_slug')} value={clinic.slug} disabled />
           </div>
           <div className="flex justify-end">
@@ -226,6 +261,33 @@ export function ClinicDetailPage() {
 
       <Card>
         <CardHeader title={t('platform.users_title')} />
+        <div className="flex flex-wrap items-center gap-3 px-5 pb-2">
+          <div className="relative w-64">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
+            <input
+              value={userQ}
+              onChange={(e) => setUserQ(e.target.value)}
+              placeholder={t('platform.users_search_ph')}
+              className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
+            />
+          </div>
+          <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+            <option value="all">{t('app.all')}</option>
+            {(['admin', 'doctor', 'nurse', 'receptionist'] as const).map((r) => (
+              <option key={r} value={r}>
+                {t(`role.${r}`)}
+              </option>
+            ))}
+          </Select>
+          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">{t('app.all')}</option>
+            {(['active', 'suspended'] as const).map((s) => (
+              <option key={s} value={s}>
+                {t(`status.${s}`)}
+              </option>
+            ))}
+          </Select>
+        </div>
         <Table>
           <thead>
             <Tr>
@@ -237,7 +299,7 @@ export function ClinicDetailPage() {
             </Tr>
           </thead>
           <tbody>
-            {users?.items.map((u) => (
+            {filteredUsers.map((u) => (
               <Tr key={u.id}>
                 <Td className="font-medium text-tx">{u.name}</Td>
                 <Td className="text-[13px]">{u.email}</Td>

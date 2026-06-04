@@ -79,6 +79,7 @@ class UpdateTenantRequest(BaseModel):
     plan: str | None = None
     seat_limit: int | None = None
     icd_version: str | None = None
+    location_name: str | None = None  # renames the clinic's primary location
 
 
 class SetTenantStatusRequest(BaseModel):

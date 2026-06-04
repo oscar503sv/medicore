@@ -55,6 +55,7 @@ export const platformTenantsApi = {
       plan: string
       seat_limit: number
       icd_version: string
+      location_name: string
     }>,
   ) => platformApi.patch<Tenant>(`/platform/tenants/${id}`, payload).then((r) => r.data),
 

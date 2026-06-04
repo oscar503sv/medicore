@@ -15,6 +15,7 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
+import { TIMEZONES } from '@/lib/timezones'
 import type { TenantStatus } from '@/types'
 
 const STATUS_TONE: Record<TenantStatus, 'ok' | 'danger' | 'neutral'> = {
@@ -168,11 +169,17 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
             placeholder="Madrid · Atocha"
             required
           />
-          <Input
+          <Select
             label={t('platform.f_timezone')}
             value={form.timezone}
             onChange={(e) => set({ timezone: e.target.value })}
-          />
+          >
+            {TIMEZONES.map((tz) => (
+              <option key={tz.value} value={tz.value}>
+                {tz.label}
+              </option>
+            ))}
+          </Select>
         </div>
 
         <div className="rounded-lg border border-line bg-surface-2 p-4">
