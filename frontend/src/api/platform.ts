@@ -1,4 +1,4 @@
-import { platformApi } from './client'
+import { api, platformApi } from './client'
 import type {
   AuditEntry,
   GlobalStats,
@@ -107,7 +107,7 @@ export const platformTenantsApi = {
       .post<PaginatedResponse<User>>(`/platform/tenants/${id}/users/${userId}/suspend`)
       .then((r) => r.data),
 
-  impersonate: (id: string) =>
+  impersonate: (id: string, reason: string) =>
     platformApi
       .post<{
         token: string
@@ -117,11 +117,17 @@ export const platformTenantsApi = {
         timezone: string
         role: string
         name: string
-      }>(`/platform/tenants/${id}/impersonate`)
+      }>(`/platform/tenants/${id}/impersonate`, { reason })
       .then((r) => r.data),
 }
 
 export const platformAuditApi = {
   list: (params: { action?: string; tenant_id?: string; offset?: number; limit?: number } = {}) =>
     platformApi.get<AuditEntry[]>('/platform/audit', { params }).then((r) => r.data),
+}
+
+// Ending a support session runs on the tenant client: it uses the impersonation token
+// (which carries the impersonator claim) so the `support.access.ended` event is recorded.
+export const impersonationApi = {
+  end: () => api.post('/platform/impersonation/end').then((r) => r.data),
 }

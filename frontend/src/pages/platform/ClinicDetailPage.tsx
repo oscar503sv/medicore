@@ -112,6 +112,8 @@ export function ClinicDetailPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [editTarget, setEditTarget] = useState<User | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null)
+  const [supportOpen, setSupportOpen] = useState(false)
+  const [supportReason, setSupportReason] = useState('')
   const filteredUsers = useMemo(() => {
     const term = userQ.trim().toLowerCase()
     return (users?.items ?? []).filter((u) => {
@@ -152,7 +154,7 @@ export function ClinicDetailPage() {
   })
 
   const impersonate = useMutation({
-    mutationFn: () => platformTenantsApi.impersonate(id),
+    mutationFn: (reason: string) => platformTenantsApi.impersonate(id, reason),
     onSuccess: (s) => {
       useAuthStore.getState().setSession({
         token: s.token,
@@ -255,7 +257,14 @@ export function ClinicDetailPage() {
             </Button>
           )}
           {clinic.status === 'active' && (
-            <Button variant="subtle" loading={impersonate.isPending} onClick={() => impersonate.mutate()}>
+            <Button
+              variant="subtle"
+              loading={impersonate.isPending}
+              onClick={() => {
+                setSupportReason('')
+                setSupportOpen(true)
+              }}
+            >
               <LogIn className="h-4 w-4" />
               {t('platform.action_impersonate')}
             </Button>
@@ -370,6 +379,36 @@ export function ClinicDetailPage() {
         onClose={() => setEditTarget(null)}
         onDone={() => qc.invalidateQueries({ queryKey: ['platform-tenant-users', id] })}
       />
+
+      <Modal open={supportOpen} onClose={() => setSupportOpen(false)} title={t('platform.support_reason_title')}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            impersonate.mutate(supportReason.trim())
+          }}
+          className="space-y-4 p-5"
+        >
+          <div>
+            <Input
+              label={t('platform.support_reason_label')}
+              value={supportReason}
+              onChange={(e) => setSupportReason(e.target.value)}
+              placeholder={t('platform.support_reason_ph')}
+              required
+            />
+            <p className="mt-1.5 text-xs text-tx-3">{t('platform.support_reason_hint')}</p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setSupportOpen(false)}>
+              {t('app.cancel')}
+            </Button>
+            <Button type="submit" loading={impersonate.isPending} disabled={!supportReason.trim()}>
+              <LogIn className="h-4 w-4" />
+              {t('platform.action_impersonate')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         open={!!deactivateTarget}

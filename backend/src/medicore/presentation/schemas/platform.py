@@ -131,6 +131,10 @@ class UpdateTenantUserRequest(BaseModel):
     specialty: str | None = None
 
 
+class ImpersonateRequest(BaseModel):
+    reason: str = ""  # why support is entering the clinic; recorded in the audit trail
+
+
 class ImpersonationResponse(BaseModel):
     token: str
     user_id: str

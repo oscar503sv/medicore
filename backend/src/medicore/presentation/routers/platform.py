@@ -8,6 +8,7 @@ from medicore.application.use_cases.platform import (
     AuthenticatePlatformAdmin,
     CreateTenantCommand,
     CreateTenantWithAdmin,
+    EndImpersonation,
     GetGlobalStats,
     GetPlatformAdmin,
     GetTenant,
@@ -27,6 +28,7 @@ from medicore.domain.enums import IcdVersion, Role, Sex, TenantStatus
 from medicore.domain.repositories._support import Paging, TenantFilter
 from medicore.domain.shared.identifiers import TenantId, UserId
 from medicore.presentation.dependencies import (
+    Actor,
     Clock,
     Hasher,
     JwtIssuer,
@@ -38,6 +40,7 @@ from medicore.presentation.schemas.platform import (
     CreateTenantRequest,
     CreateTenantResponse,
     GlobalStatsResponse,
+    ImpersonateRequest,
     ImpersonationResponse,
     PlatformAdminResponse,
     PlatformLoginRequest,
@@ -252,9 +255,11 @@ def suspend_tenant_user(tenant_id: str, user_id: str, actor: PlatformActor, fact
 
 
 @router.post("/tenants/{tenant_id}/impersonate", response_model=ImpersonationResponse)
-def impersonate(tenant_id: str, actor: PlatformActor, factory: UoWFactory, issuer: JwtIssuer,
-                clock: Clock):
-    s = ImpersonateTenant(factory, issuer, clock).execute(actor, TenantId.parse(tenant_id))
+def impersonate(tenant_id: str, body: ImpersonateRequest, actor: PlatformActor,
+                factory: UoWFactory, issuer: JwtIssuer, clock: Clock):
+    s = ImpersonateTenant(factory, issuer, clock).execute(
+        actor, TenantId.parse(tenant_id), body.reason
+    )
     return ImpersonationResponse(
         token=s.token,
         user_id=s.user_id,
@@ -264,3 +269,9 @@ def impersonate(tenant_id: str, actor: PlatformActor, factory: UoWFactory, issue
         role=s.role,
         name=s.name,
     )
+
+
+@router.post("/impersonation/end", status_code=204)
+def end_impersonation(actor: Actor, factory: UoWFactory, clock: Clock):
+    """Close the current support session (tenant-scoped: uses the impersonation token)."""
+    EndImpersonation(factory, clock).execute(actor)

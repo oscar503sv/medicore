@@ -1,5 +1,6 @@
 import { ShieldAlert } from 'lucide-react'
 import { Outlet, useNavigate } from 'react-router-dom'
+import { impersonationApi } from '@/api/platform'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { Sidebar } from './Sidebar'
@@ -11,6 +12,18 @@ export function AppLayout() {
   const session = useAuthStore((s) => s.session)
   const logout = useAuthStore((s) => s.logout)
 
+  // Record support.access.ended before tearing down the session. Best-effort: if the call
+  // fails (expired token, network), we still log the superadmin out.
+  const exitSupport = async () => {
+    try {
+      await impersonationApi.end()
+    } catch {
+      // ignore — leaving the session is more important than the audit ping
+    }
+    logout()
+    navigate('/platform/clinics')
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
       <Sidebar />
@@ -20,10 +33,7 @@ export function AppLayout() {
             <ShieldAlert className="h-4 w-4" />
             {t('platform.impersonation_banner')}
             <button
-              onClick={() => {
-                logout()
-                navigate('/platform/clinics')
-              }}
+              onClick={exitSupport}
               className="rounded-md bg-black/20 px-2 py-0.5 hover:bg-black/30"
             >
               {t('platform.impersonation_exit')}

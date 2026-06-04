@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from medicore.application.common.context import PlatformActorContext
+from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.errors import (
     AuthenticationFailed,
     EntityNotFound,
@@ -15,6 +15,7 @@ from medicore.application.use_cases.platform import (
     AuthenticatePlatformAdmin,
     CreateTenantCommand,
     CreateTenantWithAdmin,
+    EndImpersonation,
     GetGlobalStats,
     GetTenantStats,
     ImpersonateTenant,
@@ -240,13 +241,43 @@ def test_global_audit_reads_tenant_trail():
 def test_impersonation_token_carries_impersonator():
     seed = seed_clinic()
     session = ImpersonateTenant(seed.factory, FakeTokenIssuer(), FixedClock()).execute(
-        actor_for(seed), seed.tenant.id
+        actor_for(seed), seed.tenant.id, "investigating a billing report"
     )
     claims = FakeTokenIssuer().decode(session.token)
     assert claims.scope == "tenant"
     assert claims.impersonator == str(seed.platform_admin.id)
     assert claims.user_id == str(seed.admin.id)  # impersonates the clinic's admin
-    assert seed.factory.platform_uow().platform_audit.list()
+    started = next(
+        e
+        for e in seed.factory.platform_uow().platform_audit.list()
+        if e.action == "support.access.started"
+    )
+    assert started.tenant_id == seed.tenant.id
+    assert started.metadata["reason"] == "investigating a billing report"
+
+
+def test_end_impersonation_records_support_access_ended():
+    seed = seed_clinic()
+    support_actor = ActorContext(
+        user_id=seed.admin.id,
+        tenant_id=seed.tenant.id,
+        role=seed.admin.role,
+        impersonated_by=seed.platform_admin.id,
+    )
+    EndImpersonation(seed.factory, FixedClock()).execute(support_actor)
+    ended = next(
+        e
+        for e in seed.factory.platform_uow().platform_audit.list()
+        if e.action == "support.access.ended"
+    )
+    assert ended.actor_id == seed.platform_admin.id
+    assert ended.tenant_id == seed.tenant.id
+
+
+def test_end_impersonation_rejects_non_support_session():
+    seed = seed_clinic()
+    with pytest.raises(ValidationError):
+        EndImpersonation(seed.factory, FixedClock()).execute(seed.doctor_actor)
 
 
 def test_impersonation_rejected_for_archived_clinic():

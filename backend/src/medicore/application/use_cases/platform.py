@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from medicore.application.common.context import PlatformActorContext
+from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.errors import (
     AuthenticationFailed,
     EntityNotFound,
@@ -470,7 +470,7 @@ class ImpersonateTenant:
         self._clock = clock
 
     def execute(
-        self, actor: PlatformActorContext, tenant_id: TenantId
+        self, actor: PlatformActorContext, tenant_id: TenantId, reason: str = ""
     ) -> ImpersonationSessionDTO:
         with self._factory.platform_uow() as platform:
             tenant = platform.tenants.get_by_id(tenant_id)
@@ -485,8 +485,8 @@ class ImpersonateTenant:
             target = admins[0]
             uow.platform_audit.append(
                 _audit(
-                    actor, self._clock.now(), "tenant.impersonated", "Tenant", str(tenant_id),
-                    tenant_id=tenant_id, as_user=str(target.id),
+                    actor, self._clock.now(), "support.access.started", "Tenant", str(tenant_id),
+                    tenant_id=tenant_id, as_user=str(target.id), reason=reason.strip(),
                 )
             )
             uow.commit()
@@ -508,6 +508,38 @@ class ImpersonateTenant:
             role=str(target.role),
             name=target.name,
         )
+
+
+class EndImpersonation:
+    """Close a support session, recording who left and which clinic they were in.
+
+    Called with the tenant ``ActorContext`` of the impersonation session itself (its token
+    carries ``impersonated_by``), so the ``support.access.ended`` event is attributed to the
+    superadmin rather than the impersonated clinic admin.
+    """
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(self, actor: ActorContext) -> None:
+        if actor.impersonated_by is None:
+            raise ValidationError("not a support session")
+        with self._factory.for_tenant(actor.tenant_id) as uow:
+            uow.platform_audit.append(
+                PlatformAuditLog(
+                    id=AuditLogId.new(),
+                    actor_id=actor.impersonated_by,
+                    action="support.access.ended",
+                    entity_type="Tenant",
+                    entity_id=str(actor.tenant_id),
+                    timestamp=self._clock.now(),
+                    tenant_id=actor.tenant_id,
+                    ip_address=actor.ip_address,
+                    user_agent=actor.user_agent,
+                )
+            )
+            uow.commit()
 
 
 class UnlockUser:
