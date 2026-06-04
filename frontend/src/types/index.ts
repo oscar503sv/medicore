@@ -310,6 +310,7 @@ export interface MedicalRecord {
   status: RecordStatus
   encounter_at: string
   location_name: string
+  insurer_name: string | null
   chief_complaint: string
   soap: Soap
   vitals: Vitals

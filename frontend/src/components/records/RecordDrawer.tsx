@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { ShieldCheck } from 'lucide-react'
 import { recordsApi } from '@/api/records'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
@@ -44,6 +45,12 @@ export function RecordDrawer({
               <h2 className="mt-1 font-serif text-2xl text-tx">{record.chief_complaint}</h2>
               <p className="mt-1 text-[13px] text-tx-3">
                 {record.location_name} · {fmtDateTimeTz(record.encounter_at)}
+              </p>
+              <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] text-tx-3">
+                <ShieldCheck className="h-3.5 w-3.5 text-accent" />
+                {record.insurer_name
+                  ? `${t('record.insurer')} · ${record.insurer_name}`
+                  : t('record.private')}
               </p>
             </div>
             <Badge tone={record.status === 'amended' ? 'info' : 'ok'}>

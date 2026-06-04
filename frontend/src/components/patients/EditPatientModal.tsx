@@ -5,6 +5,7 @@ import { patientsApi } from '@/api/patients'
 import { PatientForm } from '@/components/patients/PatientForm'
 import {
   formToPayload,
+  hasPatientFormErrors,
   patientToForm,
   type PatientFormState,
 } from '@/components/patients/patientFormData'
@@ -59,7 +60,9 @@ export function EditPatientModal({
             <Button
               type="submit"
               loading={mutation.isPending}
-              disabled={!form.first_name || !form.last_name || !form.date_of_birth}
+              disabled={
+                !form.first_name || !form.last_name || !form.date_of_birth || hasPatientFormErrors(form)
+              }
             >
               {t('app.save')}
             </Button>

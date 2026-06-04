@@ -6,6 +6,7 @@ import { PatientForm } from '@/components/patients/PatientForm'
 import {
   emptyPatientForm,
   formToPayload,
+  hasPatientFormErrors,
   type PatientFormState,
 } from '@/components/patients/patientFormData'
 import { Button } from '@/components/ui/Button'
@@ -46,7 +47,9 @@ export function NewPatientModal({ open, onClose }: { open: boolean; onClose: () 
           <Button
             type="submit"
             loading={mutation.isPending}
-            disabled={!form.first_name || !form.last_name || !form.date_of_birth}
+            disabled={
+              !form.first_name || !form.last_name || !form.date_of_birth || hasPatientFormErrors(form)
+            }
           >
             {t('app.create')}
           </Button>

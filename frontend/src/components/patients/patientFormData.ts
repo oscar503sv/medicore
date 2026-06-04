@@ -52,6 +52,39 @@ export function patientToForm(p: Patient): PatientFormState {
   }
 }
 
+// ── Validation ──────────────────────────────────────────────────────────────
+// Local phone format: 8 digits as XXXX-XXXX (e.g. 7777-8956).
+export const PHONE_RE = /^\d{4}-\d{4}$/
+// Unicode-friendly email so accented locals like "lucía.12@example.com" pass.
+// (The native type="email" check is ASCII-only and rejects them, hence we validate here.)
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u
+
+export interface PatientFormErrors {
+  email?: boolean
+  phone?: boolean
+  emergency_contact_phone?: boolean
+}
+
+/** Return per-field errors. All contact fields are optional, so empty is always valid. */
+export function patientFormErrors(f: PatientFormState): PatientFormErrors {
+  const errors: PatientFormErrors = {}
+  if (f.email.trim() && !EMAIL_RE.test(f.email.trim())) errors.email = true
+  if (f.phone.trim() && !PHONE_RE.test(f.phone.trim())) errors.phone = true
+  if (f.emergency_contact_phone.trim() && !PHONE_RE.test(f.emergency_contact_phone.trim()))
+    errors.emergency_contact_phone = true
+  return errors
+}
+
+export function hasPatientFormErrors(f: PatientFormState): boolean {
+  return Object.keys(patientFormErrors(f)).length > 0
+}
+
+/** Format raw input into the XXXX-XXXX phone mask (caps at 8 digits). */
+export function formatPhone(input: string): string {
+  const digits = input.replace(/\D/g, '').slice(0, 8)
+  return digits.length <= 4 ? digits : `${digits.slice(0, 4)}-${digits.slice(4)}`
+}
+
 /** Map the flat form state to the patient create/update payload shape. */
 export function formToPayload(f: PatientFormState) {
   return {

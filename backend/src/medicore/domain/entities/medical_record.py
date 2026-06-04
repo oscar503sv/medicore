@@ -60,6 +60,7 @@ class MedicalRecord:
     signed_at: datetime
     signed_by_id: UserId
     status: RecordStatus = RecordStatus.SIGNED
+    insurer_name: str | None = None  # billed insurer frozen at sign time; None = self-pay
     appointment_id: AppointmentId | None = None
     consultation_id: ConsultationId | None = None
     diagnoses: tuple[IcdCode, ...] = ()

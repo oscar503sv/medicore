@@ -29,6 +29,8 @@ class MedicalRecordModel(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="signed")
     encounter_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     location_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Insurer name frozen at sign time; NULL = self-pay ("Particular").
+    insurer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     chief_complaint: Mapped[str] = mapped_column(String(500), nullable=False)
     soap: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     vitals: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)

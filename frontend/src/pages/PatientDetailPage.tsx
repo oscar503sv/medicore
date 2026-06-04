@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Pencil } from 'lucide-react'
+import { ArrowLeft, Lock, Pencil } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { patientsApi } from '@/api/patients'
 import { recordsApi } from '@/api/records'
 import { EditPatientModal } from '@/components/patients/EditPatientModal'
+import { MedicationTimeline } from '@/components/patients/MedicationTimeline'
+import { VitalsHistory } from '@/components/patients/VitalsHistory'
+import { RecordDrawer } from '@/components/records/RecordDrawer'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -23,7 +26,12 @@ export function PatientDetailPage() {
   const { id = '' } = useParams()
   const [tab, setTab] = useState<Tab>('summary')
   const [editOpen, setEditOpen] = useState(false)
+  const [openRecordId, setOpenRecordId] = useState<string | null>(null)
   const canEdit = useAuthStore((s) => s.hasRole('admin', 'doctor', 'receptionist'))
+  // History is visible to everyone but only a doctor may open it; the clinical tabs
+  // (prescriptions / vitals / documents) are reserved for doctor, nurse and admin.
+  const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
+  const canClinical = useAuthStore((s) => s.hasRole('doctor', 'nurse', 'admin'))
 
   const { data, isLoading } = useQuery({
     queryKey: ['patient', id],
@@ -32,18 +40,22 @@ export function PatientDetailPage() {
   const { data: records } = useQuery({
     queryKey: ['records', { patient_id: id }],
     queryFn: () => recordsApi.list({ patient_id: id }),
-    enabled: tab === 'history',
+    enabled: tab === 'history' || tab === 'prescriptions' || tab === 'vitals',
   })
 
   if (isLoading || !data) return <PageLoader />
   const p = data.patient
 
-  const tabs: { id: Tab; label: string }[] = [
+  const tabs: { id: Tab; label: string; locked?: boolean }[] = [
     { id: 'summary', label: t('patient.summary') },
-    { id: 'history', label: t('patient.history') },
-    { id: 'prescriptions', label: t('patient.prescriptions') },
-    { id: 'vitals', label: t('patient.vitals') },
-    { id: 'documents', label: t('patient.documents') },
+    { id: 'history', label: t('patient.history'), locked: !isDoctor },
+    ...(canClinical
+      ? ([
+          { id: 'prescriptions', label: t('patient.prescriptions') },
+          { id: 'vitals', label: t('patient.vitals') },
+          { id: 'documents', label: t('patient.documents') },
+        ] as const)
+      : []),
   ]
 
   return (
@@ -89,20 +101,31 @@ export function PatientDetailPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-line">
-        {tabs.map((tb) => (
-          <button
-            key={tb.id}
-            onClick={() => setTab(tb.id)}
-            className={cn(
-              '-mb-px border-b-2 px-4 py-2.5 text-[13px] font-medium transition-colors',
-              tab === tb.id
-                ? 'border-accent text-accent'
-                : 'border-transparent text-tx-3 hover:text-tx',
-            )}
-          >
-            {tb.label}
-          </button>
-        ))}
+        {tabs.map((tb) =>
+          tb.locked ? (
+            <span
+              key={tb.id}
+              title={t('patient.history_locked')}
+              className="-mb-px inline-flex cursor-not-allowed items-center gap-1.5 border-b-2 border-transparent px-4 py-2.5 text-[13px] font-medium text-tx-4"
+            >
+              {tb.label}
+              <Lock className="h-3 w-3" />
+            </span>
+          ) : (
+            <button
+              key={tb.id}
+              onClick={() => setTab(tb.id)}
+              className={cn(
+                '-mb-px border-b-2 px-4 py-2.5 text-[13px] font-medium transition-colors',
+                tab === tb.id
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-tx-3 hover:text-tx',
+              )}
+            >
+              {tb.label}
+            </button>
+          ),
+        )}
       </div>
 
       {/* Content */}
@@ -136,7 +159,11 @@ export function PatientDetailPage() {
         <Card>
           <div className="divide-y divide-line-soft">
             {(records ?? []).map((r) => (
-              <div key={r.id} className="px-5 py-4">
+              <button
+                key={r.id}
+                onClick={() => setOpenRecordId(r.id)}
+                className="block w-full px-5 py-4 text-left transition-colors hover:bg-surface-2"
+              >
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-tx">{r.chief_complaint}</p>
                   <Badge tone={r.status === 'amended' ? 'info' : 'ok'}>
@@ -146,22 +173,25 @@ export function PatientDetailPage() {
                 <p className="mt-1 font-mono text-xs text-tx-3">
                   {r.code} · {fmtDateTz(r.encounter_at)}
                 </p>
-              </div>
+              </button>
             ))}
             {(!records || records.length === 0) && (
-              <p className="px-5 py-8 text-center text-sm text-tx-3">Sin historiales</p>
+              <p className="px-5 py-8 text-center text-sm text-tx-3">{t('patient.history_empty')}</p>
             )}
           </div>
         </Card>
       )}
 
-      {(tab === 'prescriptions' || tab === 'vitals' || tab === 'documents') && (
-        <Card className="p-8 text-center text-sm text-tx-3">
-          Sección en desarrollo
-        </Card>
+      {tab === 'prescriptions' && <MedicationTimeline records={records ?? []} />}
+
+      {tab === 'vitals' && <VitalsHistory records={records ?? []} />}
+
+      {tab === 'documents' && (
+        <Card className="p-8 text-center text-sm text-tx-3">{t('patient.section_wip')}</Card>
       )}
 
       <EditPatientModal patient={editOpen ? p : null} onClose={() => setEditOpen(false)} />
+      <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />
     </div>
   )
 }

@@ -23,6 +23,7 @@ from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     ConsultationId,
+    InsurerId,
     LocationId,
     RecordId,
 )
@@ -225,6 +226,7 @@ class SignConsultation:
                 location_name=location_name,
                 chief_complaint=cmd.chief_complaint or appointment.reason,
                 signed_by_id=actor.user_id,
+                insurer_name=self._insurer_name(appointment.insurance_id),
                 vaccines=cmd.vaccines,
                 signed_at=now,
             )
@@ -251,3 +253,10 @@ class SignConsultation:
                 if location.id == location_id:
                     return location.name
         return "—"
+
+    def _insurer_name(self, insurance_id: InsurerId | None) -> str | None:
+        """Resolve the appointment's insurer name (frozen into the record). None = self-pay."""
+        if insurance_id is None:
+            return None
+        insurer = self._uow.insurers.get_by_id(insurance_id)
+        return insurer.name if insurer is not None else None

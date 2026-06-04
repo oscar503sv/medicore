@@ -254,6 +254,7 @@ def ser_record(r: MedicalRecord, *, patient_name: str | None = None) -> dict:
         "status": str(r.status),
         "encounter_at": r.encounter_at,
         "location_name": r.location_name,
+        "insurer_name": r.insurer_name,
         "chief_complaint": r.chief_complaint,
         "soap": soap_to_dict(r.soap),
         "vitals": vitals_to_dict(r.vitals),

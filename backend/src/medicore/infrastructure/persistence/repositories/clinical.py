@@ -120,6 +120,7 @@ class SqlMedicalRecordRepository:
         row.status = str(record.status)
         row.encounter_at = record.encounter_at
         row.location_name = record.location_name
+        row.insurer_name = record.insurer_name
         row.chief_complaint = record.chief_complaint
         row.soap = soap_to_dict(record.soap)
         row.vitals = vitals_to_dict(record.vitals)

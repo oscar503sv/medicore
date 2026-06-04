@@ -34,6 +34,7 @@ class RecordResponse(BaseModel):
     status: str
     encounter_at: datetime
     location_name: str
+    insurer_name: str | None = None
     chief_complaint: str
     soap: dict[str, Any]
     vitals: dict[str, Any]

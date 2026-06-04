@@ -250,6 +250,7 @@ def to_medical_record(row: MedicalRecordModel) -> MedicalRecord:
         status=RecordStatus(row.status),
         encounter_at=row.encounter_at,
         location_name=row.location_name,
+        insurer_name=row.insurer_name,
         chief_complaint=row.chief_complaint,
         soap=dict_to_soap(row.soap or {}),
         vitals=dict_to_vitals(row.vitals or {}),

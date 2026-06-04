@@ -5,7 +5,9 @@ import { appointmentsApi } from '@/api/appointments'
 import { Input, Select } from '@/components/ui/Input'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
-import type { PatientFormState } from './patientFormData'
+import { formatPhone, patientFormErrors, type PatientFormState } from './patientFormData'
+
+type TouchKey = 'email' | 'phone' | 'emergency_contact_phone'
 
 const BLOOD_TYPES = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-']
 
@@ -18,6 +20,17 @@ export function PatientForm({
 }) {
   const t = useT()
   const set = (patch: Partial<PatientFormState>) => onChange({ ...value, ...patch })
+
+  // Show validation errors only after a field is blurred (or if it loaded already-invalid,
+  // so the user can see why Save is disabled on existing data).
+  const errors = patientFormErrors(value)
+  const [touched, setTouched] = useState<Record<TouchKey, boolean>>(() => ({
+    email: !!errors.email,
+    phone: !!errors.phone,
+    emergency_contact_phone: !!errors.emergency_contact_phone,
+  }))
+  const touch = (k: TouchKey) => setTouched((prev) => ({ ...prev, [k]: true }))
+  const errFor = (k: TouchKey) => (touched[k] && errors[k] ? true : false)
 
   // Doctors come from the booking-options endpoint (admin/doctor/receptionist). If the caller
   // can't access it, the select simply stays empty — primary doctor is optional.
@@ -61,8 +74,24 @@ export function PatientForm({
 
       <Section title={t('patientform.contact')}>
         <div className="grid grid-cols-2 gap-4">
-          <Input label={t('patientform.phone')} value={value.phone} onChange={(e) => set({ phone: e.target.value })} />
-          <Input label={t('patientform.email')} type="email" value={value.email} onChange={(e) => set({ email: e.target.value })} />
+          <Input
+            label={t('patientform.phone')}
+            placeholder="7777-8956"
+            inputMode="numeric"
+            value={value.phone}
+            onChange={(e) => set({ phone: formatPhone(e.target.value) })}
+            onBlur={() => touch('phone')}
+            error={errFor('phone') ? t('patientform.phone_invalid') : undefined}
+          />
+          <Input
+            label={t('patientform.email')}
+            inputMode="email"
+            placeholder="correo@ejemplo.com"
+            value={value.email}
+            onChange={(e) => set({ email: e.target.value })}
+            onBlur={() => touch('email')}
+            error={errFor('email') ? t('patientform.email_invalid') : undefined}
+          />
         </div>
         <Input label={t('patientform.address')} value={value.address} onChange={(e) => set({ address: e.target.value })} />
         <div className="grid grid-cols-2 gap-4">
@@ -73,8 +102,12 @@ export function PatientForm({
           />
           <Input
             label={t('patientform.emergency_phone')}
+            placeholder="7777-8956"
+            inputMode="numeric"
             value={value.emergency_contact_phone}
-            onChange={(e) => set({ emergency_contact_phone: e.target.value })}
+            onChange={(e) => set({ emergency_contact_phone: formatPhone(e.target.value) })}
+            onBlur={() => touch('emergency_contact_phone')}
+            error={errFor('emergency_contact_phone') ? t('patientform.phone_invalid') : undefined}
           />
         </div>
       </Section>
