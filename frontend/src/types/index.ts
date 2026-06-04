@@ -91,6 +91,8 @@ export interface AuditEntry {
   entity_id: string
   metadata: Record<string, unknown>
   timestamp: string
+  ip_address?: string | null
+  user_agent?: string | null
 }
 
 // ── Enums ─────────────────────────────────────────────────────────────────────

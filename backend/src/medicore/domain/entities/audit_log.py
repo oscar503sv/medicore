@@ -24,3 +24,5 @@ class AuditLog:
     entity_id: str
     metadata: dict[str, object] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    ip_address: str | None = None
+    user_agent: str | None = None

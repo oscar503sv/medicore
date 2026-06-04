@@ -42,6 +42,8 @@ def _audit(
     action: str,
     entity_type: str,
     entity_id: str,
+    *,
+    tenant_id: TenantId | None = None,
     **metadata: object,
 ) -> PlatformAuditLog:
     return PlatformAuditLog(
@@ -52,6 +54,9 @@ def _audit(
         entity_id=entity_id,
         metadata=dict(metadata),
         timestamp=when,
+        tenant_id=tenant_id,
+        ip_address=actor.ip_address,
+        user_agent=actor.user_agent,
     )
 
 
@@ -220,7 +225,7 @@ class CreateTenantWithAdmin:
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), "tenant.created", "Tenant", str(tenant_id),
-                    slug=str(slug), admin_email=admin.email,
+                    tenant_id=tenant_id, slug=str(slug), admin_email=admin.email,
                 )
             )
             uow.commit()
@@ -255,7 +260,10 @@ class UpdateTenant:
                 tenant.primary_location.name = str(location_name)
             uow.tenants.save(tenant)
             uow.platform_audit.append(
-                _audit(actor, self._clock.now(), "tenant.updated", "Tenant", str(tenant_id))
+                _audit(
+                    actor, self._clock.now(), "tenant.updated", "Tenant", str(tenant_id),
+                    tenant_id=tenant_id,
+                )
             )
             uow.commit()
         return tenant
@@ -280,7 +288,7 @@ class SetTenantStatus:
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), f"tenant.{status}", "Tenant", str(tenant_id),
-                    status=str(status),
+                    tenant_id=tenant_id, status=str(status),
                 )
             )
             uow.commit()
@@ -429,7 +437,7 @@ class ResetUserPassword:
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), "user.password_reset", "User", str(user_id),
-                    tenant_id=str(tenant_id),
+                    tenant_id=tenant_id,
                 )
             )
             uow.commit()
@@ -478,7 +486,7 @@ class ImpersonateTenant:
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), "tenant.impersonated", "Tenant", str(tenant_id),
-                    as_user=str(target.id),
+                    tenant_id=tenant_id, as_user=str(target.id),
                 )
             )
             uow.commit()
@@ -519,7 +527,7 @@ class UnlockUser:
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), "user.unlocked", "User", str(user_id),
-                    tenant_id=str(tenant_id),
+                    tenant_id=tenant_id,
                 )
             )
             uow.commit()
@@ -550,7 +558,7 @@ class UpdateTenantUser:
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), "user.updated", "User", str(user_id),
-                    tenant_id=str(tenant_id),
+                    tenant_id=tenant_id,
                 )
             )
             uow.commit()
@@ -574,7 +582,7 @@ class SuspendTenantUser:
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), "user.suspended", "User", str(user_id),
-                    tenant_id=str(tenant_id),
+                    tenant_id=tenant_id,
                 )
             )
             uow.commit()

@@ -115,6 +115,8 @@ class AuditEntryResponse(BaseModel):
     entity_id: str
     metadata: dict
     timestamp: datetime
+    ip_address: str | None = None
+    user_agent: str | None = None
 
 
 class ResetPasswordRequest(BaseModel):

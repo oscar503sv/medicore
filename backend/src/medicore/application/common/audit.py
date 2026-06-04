@@ -29,4 +29,6 @@ def audit_entry(
         entity_id=entity_id,
         metadata=meta,
         timestamp=when,
+        ip_address=actor.ip_address,
+        user_agent=actor.user_agent,
     )

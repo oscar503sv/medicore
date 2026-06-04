@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from medicore.domain.shared.identifiers import AuditLogId, PlatformAdminId
+from medicore.domain.shared.identifiers import AuditLogId, PlatformAdminId, TenantId
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,3 +22,7 @@ class PlatformAuditLog:
     entity_id: str
     timestamp: datetime
     metadata: dict[str, object] = field(default_factory=dict)
+    # The clinic affected by this platform action, when it targets a specific tenant.
+    tenant_id: TenantId | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None

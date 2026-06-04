@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.domain.enums import Role
@@ -46,7 +46,17 @@ def get_uow_factory() -> SqlAlchemyUnitOfWorkFactory:
 
 # ── Authentication ─────────────────────────────────────────────────────────────
 
+def _client_ip(request: Request) -> str | None:
+    """Best-effort client IP: first ``X-Forwarded-For`` hop, else the socket peer."""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    first = forwarded.split(",")[0].strip() if forwarded else ""
+    if first:
+        return first
+    return request.client.host if request.client else None
+
+
 def get_actor(
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
     issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
 ) -> ActorContext:
@@ -83,10 +93,13 @@ def get_actor(
         impersonated_by=(
             PlatformAdminId.parse(claims.impersonator) if claims.impersonator else None
         ),
+        ip_address=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
     )
 
 
 def get_platform_actor(
+    request: Request,
     authorization: Annotated[str | None, Header()] = None,
     issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
 ) -> PlatformActorContext:
@@ -116,7 +129,11 @@ def get_platform_actor(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a platform session"
         )
 
-    return PlatformActorContext(admin_id=PlatformAdminId.parse(claims.user_id))
+    return PlatformActorContext(
+        admin_id=PlatformAdminId.parse(claims.user_id),
+        ip_address=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
 
 
 # ── Convenience per-request UoW ───────────────────────────────────────────────

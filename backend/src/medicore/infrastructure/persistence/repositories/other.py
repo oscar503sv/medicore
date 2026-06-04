@@ -133,6 +133,8 @@ class SqlAuditLogRepository:
             entity_id=entry.entity_id,
             metadata_=dict(entry.metadata),
             timestamp=entry.timestamp,
+            ip_address=entry.ip_address,
+            user_agent=entry.user_agent,
         )
         self._s.add(row)
 

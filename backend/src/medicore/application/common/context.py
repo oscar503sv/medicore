@@ -18,6 +18,9 @@ class ActorContext:
     # Set when a superadmin is impersonating this clinic for support; every write is then
     # audited with an ``impersonated_by`` marker.
     impersonated_by: PlatformAdminId | None = None
+    # Network context of the request, captured in the presentation layer for audit trails.
+    ip_address: str | None = None
+    user_agent: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,3 +28,5 @@ class PlatformActorContext:
     """A platform-level superadmin performing a cross-tenant use case (belongs to no tenant)."""
 
     admin_id: PlatformAdminId
+    ip_address: str | None = None
+    user_agent: str | None = None

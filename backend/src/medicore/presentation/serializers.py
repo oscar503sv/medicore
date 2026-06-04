@@ -87,6 +87,8 @@ def ser_audit(e) -> dict:
         "entity_id": e.entity_id,
         "metadata": dict(e.metadata),
         "timestamp": e.timestamp,
+        "ip_address": e.ip_address,
+        "user_agent": e.user_agent,
     }
 
 
@@ -99,6 +101,9 @@ def ser_platform_audit(e) -> dict:
         "entity_id": e.entity_id,
         "metadata": dict(e.metadata),
         "timestamp": e.timestamp,
+        "tenant_id": str(e.tenant_id) if e.tenant_id else None,
+        "ip_address": e.ip_address,
+        "user_agent": e.user_agent,
     }
 
 

@@ -214,6 +214,19 @@ def test_suspend_tenant_user_deactivates_and_audits():
     assert any(e.action == "user.suspended" for e in audit)
 
 
+def test_platform_audit_records_affected_tenant_id():
+    seed = seed_clinic()
+    SetTenantStatus(seed.factory, FixedClock()).execute(
+        actor_for(seed), seed.tenant.id, TenantStatus.SUSPENDED
+    )
+    entry = next(
+        e
+        for e in seed.factory.platform_uow().platform_audit.list()
+        if e.action == "tenant.suspended"
+    )
+    assert entry.tenant_id == seed.tenant.id
+
+
 def test_global_audit_reads_tenant_trail():
     seed = seed_clinic()
     auth = AuthenticateUser(seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), FixedClock())

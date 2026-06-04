@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.enums import UserStatus
-from medicore.domain.shared.identifiers import AuditLogId, PlatformAdminId
+from medicore.domain.shared.identifiers import AuditLogId, PlatformAdminId, TenantId
 from medicore.infrastructure.persistence.models.platform import (
     PlatformAdminModel,
     PlatformAuditLogModel,
@@ -35,6 +35,9 @@ def _to_audit(row: PlatformAuditLogModel) -> PlatformAuditLog:
         entity_id=row.entity_id,
         metadata=dict(row.metadata_ or {}),
         timestamp=row.timestamp,
+        tenant_id=TenantId.parse(row.tenant_id) if row.tenant_id else None,
+        ip_address=row.ip_address,
+        user_agent=row.user_agent,
     )
 
 
@@ -81,6 +84,9 @@ class SqlPlatformAuditLogRepository:
                 entity_id=entry.entity_id,
                 metadata_=dict(entry.metadata),
                 timestamp=entry.timestamp,
+                tenant_id=entry.tenant_id.value if entry.tenant_id else None,
+                ip_address=entry.ip_address,
+                user_agent=entry.user_agent,
             )
         )
 

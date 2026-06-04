@@ -322,4 +322,6 @@ def to_audit_log(row: AuditLogModel) -> AuditLog:
         entity_id=row.entity_id,
         metadata=dict(row.metadata_ or {}),
         timestamp=row.timestamp,
+        ip_address=row.ip_address,
+        user_agent=row.user_agent,
     )
