@@ -117,6 +117,7 @@ class AuditEntryResponse(BaseModel):
     timestamp: datetime
     ip_address: str | None = None
     user_agent: str | None = None
+    actor_name: str | None = None
 
 
 class ResetPasswordRequest(BaseModel):

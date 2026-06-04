@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, X } from 'lucide-react'
-import { platformAuditApi, platformTenantsApi } from '@/api/platform'
+import { Search, ShieldCheck, X } from 'lucide-react'
+import { auditApi } from '@/api/audit'
 import { PageHeader } from '@/components/PageHeader'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
@@ -13,44 +14,38 @@ import { actionLabel, auditDetail, AUDIT_CATEGORIES } from '@/lib/audit'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 
-export function GlobalAuditPage() {
+export function AuditPage() {
   const t = useT()
   const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['platform-audit'],
-    queryFn: () => platformAuditApi.list({ limit: 200 }),
+    queryKey: ['audit', category, from, to],
+    queryFn: () =>
+      auditApi.list({
+        category: category || undefined,
+        date_from: from || undefined,
+        date_to: to || undefined,
+        limit: 200,
+      }),
   })
-
-  // Resolve clinic names for the tenant_id column (small, cached list).
-  const { data: tenants } = useQuery({
-    queryKey: ['platform-tenants', 'audit-names'],
-    queryFn: () => platformTenantsApi.list({ limit: 500 }),
-  })
-  const tenantName = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const c of tenants?.items ?? []) map.set(c.id, c.legal_name)
-    return map
-  }, [tenants])
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase()
-    return (data ?? []).filter((e) => {
-      if (category && !e.action.startsWith(`${category}.`)) return false
-      if (
-        term &&
-        !actionLabel(t, e.action).toLowerCase().includes(term) &&
-        !auditDetail(t, e).toLowerCase().includes(term)
-      )
-        return false
-      return true
-    })
-  }, [data, q, category, t])
+    if (!term) return data ?? []
+    return (data ?? []).filter(
+      (e) =>
+        actionLabel(t, e.action).toLowerCase().includes(term) ||
+        (e.actor_name ?? '').toLowerCase().includes(term) ||
+        auditDetail(t, e).toLowerCase().includes(term),
+    )
+  }, [data, q, t])
 
   return (
     <div className="space-y-5 p-8">
-      <PageHeader title={t('platform.audit_title')} />
+      <PageHeader eyebrow={`${filtered.length} ${t('audit.events')}`} title={t('audit.title')} />
 
       <div className="flex flex-wrap items-center gap-4">
         <div className="relative w-80">
@@ -70,8 +65,32 @@ export function GlobalAuditPage() {
             </option>
           ))}
         </Select>
-        {(q || category) && (
-          <Button variant="outline" onClick={() => { setQ(''); setCategory('') }}>
+        <div className="flex items-center gap-2">
+          <label className="text-[13px] text-tx-3">{t('audit.date_from')}</label>
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="h-10 rounded-lg border border-line bg-bg px-3 text-sm text-tx focus:border-accent focus:outline-none"
+          />
+          <label className="text-[13px] text-tx-3">{t('audit.date_to')}</label>
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="h-10 rounded-lg border border-line bg-bg px-3 text-sm text-tx focus:border-accent focus:outline-none"
+          />
+        </div>
+        {(q || category || from || to) && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setQ('')
+              setCategory('')
+              setFrom('')
+              setTo('')
+            }}
+          >
             <X className="h-4 w-4" />
             {t('audit.clear')}
           </Button>
@@ -79,17 +98,17 @@ export function GlobalAuditPage() {
       </div>
 
       <Card>
-        {isLoading || !data ? (
+        {isLoading ? (
           <PageLoader />
         ) : filtered.length > 0 ? (
           <Table>
             <thead>
-              <Tr>
+              <tr>
                 <Th>{t('audit.col_date')}</Th>
-                <Th>{t('audit.col_clinic')}</Th>
+                <Th>{t('audit.col_user')}</Th>
                 <Th>{t('audit.col_action')}</Th>
                 <Th>{t('audit.col_detail')}</Th>
-              </Tr>
+              </tr>
             </thead>
             <tbody>
               {filtered.map((e) => (
@@ -97,8 +116,16 @@ export function GlobalAuditPage() {
                   <Td className="whitespace-nowrap text-[13px] text-tx-3">
                     {fmtDateTimeTz(e.timestamp)}
                   </Td>
-                  <Td className="text-[13px] text-tx">
-                    {(e.tenant_id && tenantName.get(e.tenant_id)) || '—'}
+                  <Td>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-tx">{e.actor_name ?? '—'}</span>
+                      {e.metadata?.impersonated_by != null && (
+                        <Badge tone="info">
+                          <ShieldCheck className="h-3 w-3" />
+                          {t('audit.support_badge')}
+                        </Badge>
+                      )}
+                    </div>
                   </Td>
                   <Td className="text-[13px]">{actionLabel(t, e.action)}</Td>
                   <Td className="text-[13px] text-tx-2">{auditDetail(t, e)}</Td>
@@ -107,7 +134,7 @@ export function GlobalAuditPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title={t('platform.audit_title')} description={t('audit.empty')} />
+          <EmptyState title={t('audit.title')} description={t('audit.empty')} />
         )}
       </Card>
     </div>

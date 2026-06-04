@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.notification import Notification
+from medicore.domain.repositories._support import AuditFilter, Page, Paging
 from medicore.domain.shared.identifiers import (
     NotificationId,
     TenantId,
@@ -144,3 +145,39 @@ class SqlAuditLogRepository:
             if hasattr(AuditLogModel, key):
                 q = q.filter(getattr(AuditLogModel, key) == value)
         return [to_audit_log(r) for r in q.all()]
+
+    def list(
+        self, filter: AuditFilter | None = None, paging: Paging | None = None
+    ) -> Page[AuditLog]:
+        from datetime import UTC, datetime, timedelta
+
+        paging = paging or Paging()
+        q = self._q()
+        if filter:
+            if filter.action:
+                q = q.filter(AuditLogModel.action == filter.action)
+            if filter.category:
+                q = q.filter(AuditLogModel.action.like(f"{filter.category}.%"))
+            if filter.entity_type:
+                q = q.filter(AuditLogModel.entity_type == filter.entity_type)
+            if filter.actor_id:
+                q = q.filter(AuditLogModel.actor_id == UserId.parse(filter.actor_id).value)
+            if filter.date_from:
+                start = datetime.fromisoformat(filter.date_from).replace(tzinfo=UTC)
+                q = q.filter(AuditLogModel.timestamp >= start)
+            if filter.date_to:
+                end = datetime.fromisoformat(filter.date_to).replace(tzinfo=UTC) + timedelta(days=1)
+                q = q.filter(AuditLogModel.timestamp < end)
+        total = q.count()
+        rows = (
+            q.order_by(AuditLogModel.timestamp.desc())
+            .offset(paging.offset)
+            .limit(paging.limit)
+            .all()
+        )
+        return Page(
+            items=[to_audit_log(r) for r in rows],
+            total=total,
+            offset=paging.offset,
+            limit=paging.limit,
+        )

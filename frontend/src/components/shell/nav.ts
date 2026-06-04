@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Pill,
+  ScrollText,
   Settings,
   ShieldCheck,
   Stethoscope,
@@ -47,5 +48,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/availability', labelKey: 'nav.availability', icon: Stethoscope, roles: ['doctor'], group: 'management' },
   { to: '/users', labelKey: 'nav.users', icon: UsersRound, roles: ['admin'], group: 'management' },
   { to: '/insurers', labelKey: 'nav.insurers', icon: ShieldCheck, roles: ['admin'], group: 'management' },
+  { to: '/audit', labelKey: 'nav.audit', icon: ScrollText, roles: ['admin'], group: 'management' },
   { to: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['admin', 'doctor', 'nurse', 'receptionist'], group: 'management' },
 ]

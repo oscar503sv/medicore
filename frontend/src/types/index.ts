@@ -93,6 +93,7 @@ export interface AuditEntry {
   timestamp: string
   ip_address?: string | null
   user_agent?: string | null
+  actor_name?: string | null
 }
 
 // ── Enums ─────────────────────────────────────────────────────────────────────

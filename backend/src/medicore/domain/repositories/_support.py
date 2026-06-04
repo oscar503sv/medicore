@@ -52,3 +52,13 @@ class RecordFilter:
     date_from: str | None = None
     date_to: str | None = None
     extra: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class AuditFilter:
+    action: str | None = None  # exact action, e.g. "record.amended"
+    category: str | None = None  # action namespace, e.g. "patient" matches "patient.*"
+    entity_type: str | None = None
+    actor_id: str | None = None
+    date_from: str | None = None  # inclusive day, "YYYY-MM-DD"
+    date_to: str | None = None  # inclusive day, "YYYY-MM-DD"

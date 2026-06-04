@@ -24,6 +24,7 @@ from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.enums import AppointmentStatus
 from medicore.domain.repositories._support import (
+    AuditFilter,
     Page,
     Paging,
     PatientFilter,
@@ -464,3 +465,26 @@ class InMemoryAuditLogRepository(_Scoped):
             entries = [e for e in entries if getattr(e, key, None) == value]
         entries.sort(key=lambda e: e.timestamp)
         return entries
+
+    def list(
+        self, filter: AuditFilter | None = None, paging: Paging | None = None
+    ) -> Page[AuditLog]:
+        paging = paging or Paging()
+        entries = list(self._mine(self._store.audit.values()))
+        if filter:
+            if filter.action:
+                entries = [e for e in entries if e.action == filter.action]
+            if filter.category:
+                entries = [e for e in entries if e.action.startswith(f"{filter.category}.")]
+            if filter.entity_type:
+                entries = [e for e in entries if e.entity_type == filter.entity_type]
+            if filter.actor_id:
+                entries = [e for e in entries if str(e.actor_id) == filter.actor_id]
+            if filter.date_from:
+                entries = [e for e in entries if e.timestamp.date().isoformat() >= filter.date_from]
+            if filter.date_to:
+                entries = [e for e in entries if e.timestamp.date().isoformat() <= filter.date_to]
+        entries.sort(key=lambda e: e.timestamp, reverse=True)
+        total = len(entries)
+        window = entries[paging.offset : paging.offset + paging.limit]
+        return Page(items=window, total=total, offset=paging.offset, limit=paging.limit)

@@ -6,6 +6,7 @@ import { RequireAuth } from '@/components/RequireAuth'
 import { RequirePlatformAuth } from '@/components/RequirePlatformAuth'
 import { ToastViewport } from '@/components/ui/ToastViewport'
 import { AppointmentsPage } from '@/pages/AppointmentsPage'
+import { AuditPage } from '@/pages/AuditPage'
 import { AvailabilityPage } from '@/pages/AvailabilityPage'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { ComingSoonPage } from '@/pages/ComingSoonPage'
@@ -101,6 +102,7 @@ export function App() {
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/insurers" element={<InsurersPage />} />
+          <Route path="/audit" element={<AuditPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
 
