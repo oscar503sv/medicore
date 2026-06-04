@@ -92,6 +92,19 @@ def ser_audit(e) -> dict:
     }
 
 
+def ser_global_audit_row(r) -> dict:
+    return {
+        "id": r.id,
+        "timestamp": r.timestamp,
+        "source_kind": r.source_kind,
+        "actor_name": r.actor_name,
+        "action": r.action,
+        "clinic_name": r.clinic_name,
+        "metadata": dict(r.metadata),
+        "ip_address": r.ip_address,
+    }
+
+
 def ser_platform_audit(e) -> dict:
     return {
         "id": str(e.id),

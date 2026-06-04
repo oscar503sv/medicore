@@ -103,6 +103,7 @@ export function AuditPage() {
                   <Th>{t('audit.col_user')}</Th>
                   <Th>{t('audit.col_action')}</Th>
                   <Th>{t('audit.col_detail')}</Th>
+                  <Th>{t('audit.col_ip')}</Th>
                 </tr>
               </thead>
               <tbody>
@@ -123,7 +124,10 @@ export function AuditPage() {
                       </div>
                     </Td>
                     <Td className="text-[13px]">{actionLabel(t, e.action)}</Td>
-                    <Td className="text-[13px] text-tx-2">{auditDetail(t, e)}</Td>
+                    <Td className="text-[13px] text-tx-2">{auditDetail(e) || '—'}</Td>
+                    <Td className="whitespace-nowrap font-mono text-[11px] text-tx-4">
+                      {e.ip_address ?? '—'}
+                    </Td>
                   </Tr>
                 ))}
               </tbody>

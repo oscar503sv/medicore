@@ -96,6 +96,18 @@ export interface AuditEntry {
   actor_name?: string | null
 }
 
+/** A consolidated row in the platform global audit (tenant + platform trails merged). */
+export interface GlobalAuditEntry {
+  id: string
+  timestamp: string
+  source_kind: 'tenant' | 'platform'
+  actor_name?: string | null
+  action: string
+  clinic_name?: string | null
+  metadata: Record<string, unknown>
+  ip_address?: string | null
+}
+
 // ── Enums ─────────────────────────────────────────────────────────────────────
 export type Role = 'admin' | 'doctor' | 'nurse' | 'receptionist'
 export type UserStatus = 'active' | 'pending' | 'suspended'

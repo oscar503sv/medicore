@@ -25,6 +25,7 @@ from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.enums import AppointmentStatus
 from medicore.domain.repositories._support import (
     AuditFilter,
+    GlobalAuditRow,
     Page,
     Paging,
     PatientFilter,
@@ -176,21 +177,39 @@ class InMemoryPlatformReadModel:
         self,
         limit: int = 100,
         offset: int = 0,
-        action: str | None = None,
         category: str | None = None,
-        tenant_id: str | None = None,
     ) -> Page:
-        entries = sorted(self._store.audit.values(), key=lambda e: e.timestamp, reverse=True)
-        if action:
-            entries = [e for e in entries if e.action == action]
+        users = {str(u.id): u.name for u in self._store.users.values()}
+        admins = {str(a.id): a.name for a in self._store.platform_admins.values()}
+        clinics = {str(t.id): t.legal_name for t in self._store.tenants.values()}
+
+        rows: list[tuple] = [(e, "tenant") for e in self._store.audit.values()]
+        rows += [(e, "platform") for e in self._store.platform_audit.values()]
+        rows.sort(key=lambda pair: pair[0].timestamp, reverse=True)
         if category:
-            entries = [e for e in entries if e.action.startswith(f"{category}.")]
-        if tenant_id:
-            entries = [e for e in entries if str(e.tenant_id) == tenant_id]
-        total = len(entries)
-        return Page(
-            items=entries[offset : offset + limit], total=total, offset=offset, limit=limit
-        )
+            rows = [r for r in rows if r[0].action.startswith(f"{category}.")]
+        total = len(rows)
+
+        items = []
+        for e, kind in rows[offset : offset + limit]:
+            tid = str(e.tenant_id) if getattr(e, "tenant_id", None) else None
+            items.append(
+                GlobalAuditRow(
+                    id=str(e.id),
+                    timestamp=e.timestamp,
+                    source_kind=kind,
+                    actor_name=(
+                        users.get(str(e.actor_id))
+                        if kind == "tenant"
+                        else admins.get(str(e.actor_id))
+                    ),
+                    action=e.action,
+                    clinic_name=clinics.get(tid) if tid else None,
+                    metadata=dict(e.metadata),
+                    ip_address=getattr(e, "ip_address", None),
+                )
+            )
+        return Page(items=items, total=total, offset=offset, limit=limit)
 
 
 class _Scoped:

@@ -1,6 +1,6 @@
 import { api, platformApi } from './client'
 import type {
-  AuditEntry,
+  GlobalAuditEntry,
   GlobalStats,
   PaginatedResponse,
   PlatformAdminProfile,
@@ -122,17 +122,9 @@ export const platformTenantsApi = {
 }
 
 export const platformAuditApi = {
-  list: (
-    params: {
-      action?: string
-      category?: string
-      tenant_id?: string
-      offset?: number
-      limit?: number
-    } = {},
-  ) =>
+  list: (params: { category?: string; offset?: number; limit?: number } = {}) =>
     platformApi
-      .get<PaginatedResponse<AuditEntry>>('/platform/audit', { params })
+      .get<PaginatedResponse<GlobalAuditEntry>>('/platform/audit', { params })
       .then((r) => r.data),
 }
 

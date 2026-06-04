@@ -234,9 +234,19 @@ def test_global_audit_reads_tenant_trail():
     auth.execute(
         AuthenticateUserCommand(slug="clinica-norte", email=seed.doctor.email, password=PASSWORD)
     )
+    # A platform-level action (suspending a clinic) must appear alongside clinic activity.
+    SetTenantStatus(seed.factory, FixedClock()).execute(
+        actor_for(seed), seed.tenant.id, TenantStatus.SUSPENDED
+    )
     page = ListGlobalAudit(seed.factory).execute(actor_for(seed))
-    assert any(e.action == "auth.login" for e in page.items)
-    assert page.total >= 1
+    by_action = {e.action: e for e in page.items}
+    assert "auth.login" in by_action
+    assert by_action["auth.login"].source_kind == "tenant"
+    assert by_action["auth.login"].clinic_name == seed.tenant.legal_name
+    assert "tenant.suspended" in by_action
+    assert by_action["tenant.suspended"].source_kind == "platform"
+    assert by_action["tenant.suspended"].actor_name == seed.platform_admin.name
+    assert page.total >= 2
 
 
 def test_impersonation_token_carries_impersonator():

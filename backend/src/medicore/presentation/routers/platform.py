@@ -36,9 +36,9 @@ from medicore.presentation.dependencies import (
     UoWFactory,
 )
 from medicore.presentation.schemas.platform import (
-    AuditListResponse,
     CreateTenantRequest,
     CreateTenantResponse,
+    GlobalAuditListResponse,
     GlobalStatsResponse,
     ImpersonateRequest,
     ImpersonationResponse,
@@ -55,7 +55,7 @@ from medicore.presentation.schemas.platform import (
 )
 from medicore.presentation.schemas.users import UserListResponse
 from medicore.presentation.serializers import (
-    ser_audit,
+    ser_global_audit_row,
     ser_global_stats,
     ser_platform_admin,
     ser_tenant,
@@ -160,22 +160,19 @@ def tenant_stats(tenant_id: str, actor: PlatformActor, factory: UoWFactory):
     return ser_tenant_stats(GetTenantStats(factory).execute(actor, TenantId.parse(tenant_id)))
 
 
-@router.get("/audit", response_model=AuditListResponse)
+@router.get("/audit", response_model=GlobalAuditListResponse)
 def global_audit(
     actor: PlatformActor,
     factory: UoWFactory,
-    action: str | None = Query(None),
     category: str | None = Query(None),
-    tenant_id: str | None = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
 ):
     page = ListGlobalAudit(factory).execute(
-        actor, limit=limit, offset=offset, action=action, category=category,
-        tenant_id=tenant_id,
+        actor, limit=limit, offset=offset, category=category
     )
-    return AuditListResponse(
-        items=[ser_audit(e) for e in page.items],
+    return GlobalAuditListResponse(
+        items=[ser_global_audit_row(r) for r in page.items],
         total=page.total,
         offset=page.offset,
         limit=page.limit,

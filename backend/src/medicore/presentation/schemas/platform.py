@@ -127,6 +127,24 @@ class AuditListResponse(BaseModel):
     limit: int
 
 
+class GlobalAuditEntryResponse(BaseModel):
+    id: str
+    timestamp: datetime
+    source_kind: str  # "tenant" | "platform"
+    actor_name: str | None = None
+    action: str
+    clinic_name: str | None = None
+    metadata: dict
+    ip_address: str | None = None
+
+
+class GlobalAuditListResponse(BaseModel):
+    items: list[GlobalAuditEntryResponse]
+    total: int
+    offset: int
+    limit: int
+
+
 class ResetPasswordRequest(BaseModel):
     password: str
 

@@ -149,4 +149,8 @@ def test_global_audit_endpoint(seed, client, platform_headers):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["total"] >= 1
-    assert any(e["action"] == "auth.login" for e in body["items"])
+    login = next(e for e in body["items"] if e["action"] == "auth.login")
+    assert login["source_kind"] == "tenant"
+    assert login["clinic_name"] == seed.tenant.legal_name
+    assert login["actor_name"] == seed.doctor.name
+    assert "ip_address" in login

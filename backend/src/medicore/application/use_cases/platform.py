@@ -19,12 +19,17 @@ from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
 from medicore.application.ports.unit_of_work import UnitOfWorkFactory
-from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import IcdVersion, Role, TenantStatus, UserStatus
-from medicore.domain.repositories._support import Page, Paging, TenantFilter, UserFilter
+from medicore.domain.repositories._support import (
+    GlobalAuditRow,
+    Page,
+    Paging,
+    TenantFilter,
+    UserFilter,
+)
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import (
     AuditLogId,
@@ -380,15 +385,10 @@ class ListGlobalAudit:
         actor: PlatformActorContext,
         limit: int = 100,
         offset: int = 0,
-        action: str | None = None,
         category: str | None = None,
-        tenant_id: str | None = None,
-    ) -> Page[AuditLog]:
+    ) -> Page[GlobalAuditRow]:
         with self._factory.platform_reads() as reads:
-            return reads.global_audit(
-                limit=limit, offset=offset, action=action, category=category,
-                tenant_id=tenant_id,
-            )
+            return reads.global_audit(limit=limit, offset=offset, category=category)
 
 
 # ── Account support (cross-tenant) ─────────────────────────────────────────────

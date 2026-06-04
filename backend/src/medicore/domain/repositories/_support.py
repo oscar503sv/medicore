@@ -9,6 +9,7 @@ parameter on every method — the scope is bound when the repository is construc
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +53,25 @@ class RecordFilter:
     date_from: str | None = None
     date_to: str | None = None
     extra: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class GlobalAuditRow:
+    """A consolidated audit row for the platform console, merging the tenant and platform trails.
+
+    ``source_kind`` is ``"platform"`` for superadmin actions or ``"tenant"`` for in-clinic
+    activity; ``clinic_name`` is the affected clinic (when known). Names are pre-resolved so the
+    presentation layer renders a human-readable timeline without extra lookups.
+    """
+
+    id: str
+    timestamp: datetime
+    source_kind: str  # "tenant" | "platform"
+    actor_name: str | None
+    action: str
+    clinic_name: str | None
+    metadata: dict[str, object]
+    ip_address: str | None
 
 
 @dataclass(frozen=True, slots=True)

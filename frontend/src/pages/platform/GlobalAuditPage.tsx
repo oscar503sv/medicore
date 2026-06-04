@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
-import { platformAuditApi, platformTenantsApi } from '@/api/platform'
+import { platformAuditApi } from '@/api/platform'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -12,6 +12,7 @@ import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { actionLabel, auditDetail, AUDIT_CATEGORIES } from '@/lib/audit'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import type { GlobalAuditEntry } from '@/types'
 import { Pager } from '@/pages/AuditPage'
 
 const PAGE_SIZE = 50
@@ -24,26 +25,17 @@ export function GlobalAuditPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['platform-audit', category, offset],
     queryFn: () =>
-      platformAuditApi.list({
-        category: category || undefined,
-        offset,
-        limit: PAGE_SIZE,
-      }),
+      platformAuditApi.list({ category: category || undefined, offset, limit: PAGE_SIZE }),
   })
-
-  // Resolve clinic names for the tenant_id column (small, cached list; endpoint caps at 200).
-  const { data: tenants } = useQuery({
-    queryKey: ['platform-tenants', 'audit-names'],
-    queryFn: () => platformTenantsApi.list({ limit: 200 }),
-  })
-  const tenantName = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const c of tenants?.items ?? []) map.set(c.id, c.legal_name)
-    return map
-  }, [tenants])
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
+
+  // Detail = metadata summary; for platform actions, prepend the affected clinic.
+  const detailOf = (e: GlobalAuditEntry) => {
+    const clinic = e.source_kind === 'platform' && e.clinic_name ? e.clinic_name : ''
+    return [clinic, auditDetail(e)].filter(Boolean).join(' · ') || '—'
+  }
 
   return (
     <div className="space-y-5 p-8">
@@ -87,9 +79,11 @@ export function GlobalAuditPage() {
               <thead>
                 <Tr>
                   <Th>{t('audit.col_date')}</Th>
-                  <Th>{t('audit.col_clinic')}</Th>
+                  <Th>{t('audit.col_source')}</Th>
+                  <Th>{t('audit.col_user')}</Th>
                   <Th>{t('audit.col_action')}</Th>
                   <Th>{t('audit.col_detail')}</Th>
+                  <Th>{t('audit.col_ip')}</Th>
                 </Tr>
               </thead>
               <tbody>
@@ -99,10 +93,14 @@ export function GlobalAuditPage() {
                       {fmtDateTimeTz(e.timestamp)}
                     </Td>
                     <Td className="text-[13px] text-tx">
-                      {(e.tenant_id && tenantName.get(e.tenant_id)) || '—'}
+                      {e.source_kind === 'platform' ? t('audit.source_platform') : e.clinic_name ?? '—'}
                     </Td>
+                    <Td className="text-[13px] font-medium text-tx">{e.actor_name ?? '—'}</Td>
                     <Td className="text-[13px]">{actionLabel(t, e.action)}</Td>
-                    <Td className="text-[13px] text-tx-2">{auditDetail(t, e)}</Td>
+                    <Td className="text-[13px] text-tx-2">{detailOf(e)}</Td>
+                    <Td className="whitespace-nowrap font-mono text-[11px] text-tx-4">
+                      {e.ip_address ?? '—'}
+                    </Td>
                   </Tr>
                 ))}
               </tbody>
