@@ -18,10 +18,12 @@ from medicore.application.use_cases.platform import (
     ListTenantUsers,
     ResetUserPassword,
     SetTenantStatus,
+    SuspendTenantUser,
     UnlockUser,
     UpdateTenant,
+    UpdateTenantUser,
 )
-from medicore.domain.enums import IcdVersion, TenantStatus
+from medicore.domain.enums import IcdVersion, Role, Sex, TenantStatus
 from medicore.domain.repositories._support import Paging, TenantFilter
 from medicore.domain.shared.identifiers import TenantId, UserId
 from medicore.presentation.dependencies import (
@@ -46,6 +48,7 @@ from medicore.presentation.schemas.platform import (
     TenantResponse,
     TenantStatsResponse,
     UpdateTenantRequest,
+    UpdateTenantUserRequest,
 )
 from medicore.presentation.schemas.users import UserListResponse
 from medicore.presentation.serializers import (
@@ -208,6 +211,37 @@ def reset_user_password(tenant_id: str, user_id: str, body: ResetPasswordRequest
 def unlock_user(tenant_id: str, user_id: str, actor: PlatformActor, factory: UoWFactory,
                 clock: Clock):
     UnlockUser(factory, clock).execute(
+        actor, TenantId.parse(tenant_id), UserId.parse(user_id)
+    )
+    page = ListTenantUsers(factory).execute(actor, TenantId.parse(tenant_id))
+    return UserListResponse(
+        items=[ser_user(u) for u in page.items], total=page.total, offset=page.offset,
+        limit=page.limit,
+    )
+
+
+@router.patch("/tenants/{tenant_id}/users/{user_id}", response_model=UserListResponse)
+def update_tenant_user(tenant_id: str, user_id: str, body: UpdateTenantUserRequest,
+                       actor: PlatformActor, factory: UoWFactory, clock: Clock):
+    changes = body.model_dump(exclude_none=True)
+    if "role" in changes:
+        changes["role"] = Role(changes["role"])
+    if "sex" in changes:
+        changes["sex"] = Sex(changes["sex"])
+    UpdateTenantUser(factory, clock).execute(
+        actor, TenantId.parse(tenant_id), UserId.parse(user_id), **changes
+    )
+    page = ListTenantUsers(factory).execute(actor, TenantId.parse(tenant_id))
+    return UserListResponse(
+        items=[ser_user(u) for u in page.items], total=page.total, offset=page.offset,
+        limit=page.limit,
+    )
+
+
+@router.post("/tenants/{tenant_id}/users/{user_id}/suspend", response_model=UserListResponse)
+def suspend_tenant_user(tenant_id: str, user_id: str, actor: PlatformActor, factory: UoWFactory,
+                        clock: Clock):
+    SuspendTenantUser(factory, clock).execute(
         actor, TenantId.parse(tenant_id), UserId.parse(user_id)
     )
     page = ListTenantUsers(factory).execute(actor, TenantId.parse(tenant_id))

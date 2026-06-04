@@ -87,6 +87,26 @@ export const platformTenantsApi = {
       .post<PaginatedResponse<User>>(`/platform/tenants/${id}/users/${userId}/unlock`)
       .then((r) => r.data),
 
+  updateUser: (
+    id: string,
+    userId: string,
+    payload: Partial<{
+      name: string
+      role: string
+      sex: string | null
+      phone: string | null
+      specialty: string | null
+    }>,
+  ) =>
+    platformApi
+      .patch<PaginatedResponse<User>>(`/platform/tenants/${id}/users/${userId}`, payload)
+      .then((r) => r.data),
+
+  suspendUser: (id: string, userId: string) =>
+    platformApi
+      .post<PaginatedResponse<User>>(`/platform/tenants/${id}/users/${userId}/suspend`)
+      .then((r) => r.data),
+
   impersonate: (id: string) =>
     platformApi
       .post<{

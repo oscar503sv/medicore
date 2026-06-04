@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, KeyRound, LogIn, Unlock } from 'lucide-react'
+import { ArrowLeft, KeyRound, LogIn, Pencil } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { platformTenantsApi } from '@/api/platform'
 import { useAuthStore } from '@/stores/auth'
-import type { Role } from '@/types'
+import type { Role, User } from '@/types'
 import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
 import { Badge } from '@/components/ui/Badge'
@@ -13,6 +13,7 @@ import { statusTone } from '@/components/ui/badgeTone'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Input'
+import { Modal } from '@/components/ui/Modal'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
@@ -109,6 +110,8 @@ export function ClinicDetailPage() {
   const [userQ, setUserQ] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [editTarget, setEditTarget] = useState<User | null>(null)
+  const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null)
   const filteredUsers = useMemo(() => {
     const term = userQ.trim().toLowerCase()
     return (users?.items ?? []).filter((u) => {
@@ -129,11 +132,21 @@ export function ClinicDetailPage() {
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
-  const unlock = useMutation({
+  const reactivate = useMutation({
     mutationFn: (userId: string) => platformTenantsApi.unlockUser(id, userId),
     onSuccess: () => {
-      toast(t('platform.unlocked_ok'))
+      toast(t('users.activated_ok'))
       qc.invalidateQueries({ queryKey: ['platform-tenant-users', id] })
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  const suspend = useMutation({
+    mutationFn: (userId: string) => platformTenantsApi.suspendUser(id, userId),
+    onSuccess: () => {
+      toast(t('users.deactivated_ok'))
+      qc.invalidateQueries({ queryKey: ['platform-tenant-users', id] })
+      setDeactivateTarget(null)
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -261,8 +274,8 @@ export function ClinicDetailPage() {
 
       <Card>
         <CardHeader title={t('platform.users_title')} />
-        <div className="flex flex-wrap items-center gap-3 px-5 pb-2">
-          <div className="relative w-64">
+        <div className="flex items-center justify-between gap-4 px-5 pb-2">
+          <div className="relative w-80">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
             <input
               value={userQ}
@@ -271,22 +284,24 @@ export function ClinicDetailPage() {
               className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
             />
           </div>
-          <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-            <option value="all">{t('app.all')}</option>
-            {(['admin', 'doctor', 'nurse', 'receptionist'] as const).map((r) => (
-              <option key={r} value={r}>
-                {t(`role.${r}`)}
-              </option>
-            ))}
-          </Select>
-          <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="all">{t('app.all')}</option>
-            {(['active', 'suspended'] as const).map((s) => (
-              <option key={s} value={s}>
-                {t(`status.${s}`)}
-              </option>
-            ))}
-          </Select>
+          <div className="flex items-center gap-3">
+            <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+              <option value="all">{t('app.all')}</option>
+              {(['admin', 'doctor', 'nurse', 'receptionist'] as const).map((r) => (
+                <option key={r} value={r}>
+                  {t(`role.${r}`)}
+                </option>
+              ))}
+            </Select>
+            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="all">{t('app.all')}</option>
+              {(['active', 'suspended'] as const).map((s) => (
+                <option key={s} value={s}>
+                  {t(`status.${s}`)}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
         <Table>
           <thead>
@@ -308,25 +323,37 @@ export function ClinicDetailPage() {
                   <Badge tone={statusTone(u.status)}>{t(`status.${u.status}`)}</Badge>
                 </Td>
                 <Td className="text-right">
-                  <div className="flex justify-end gap-1.5">
+                  <div className="flex justify-end gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => setEditTarget(u)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                      {t('app.edit')}
+                    </Button>
                     <Button
                       size="sm"
-                      variant="outline"
+                      variant="ghost"
                       loading={resetPassword.isPending && resetPassword.variables === u.id}
                       onClick={() => resetPassword.mutate(u.id)}
                     >
                       <KeyRound className="h-3.5 w-3.5" />
                       {t('platform.reset_password')}
                     </Button>
-                    {u.status === 'suspended' && (
+                    {u.status === 'active' ? (
                       <Button
                         size="sm"
-                        variant="outline"
-                        loading={unlock.isPending && unlock.variables === u.id}
-                        onClick={() => unlock.mutate(u.id)}
+                        variant="ghost"
+                        className="text-danger hover:bg-[var(--danger-10)]"
+                        onClick={() => setDeactivateTarget(u)}
                       >
-                        <Unlock className="h-3.5 w-3.5" />
-                        {t('platform.unlock')}
+                        {t('users.deactivate')}
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        loading={reactivate.isPending && reactivate.variables === u.id}
+                        onClick={() => reactivate.mutate(u.id)}
+                      >
+                        {t('users.activate')}
                       </Button>
                     )}
                   </div>
@@ -336,6 +363,129 @@ export function ClinicDetailPage() {
           </tbody>
         </Table>
       </Card>
+
+      <EditUserModal
+        tenantId={id}
+        user={editTarget}
+        onClose={() => setEditTarget(null)}
+        onDone={() => qc.invalidateQueries({ queryKey: ['platform-tenant-users', id] })}
+      />
+
+      <Modal
+        open={!!deactivateTarget}
+        onClose={() => setDeactivateTarget(null)}
+        title={t('users.deactivate_title')}
+      >
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-tx-2">{t('users.deactivate_confirm')}</p>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeactivateTarget(null)}>
+              {t('app.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              loading={suspend.isPending}
+              onClick={() => deactivateTarget && suspend.mutate(deactivateTarget.id)}
+            >
+              {t('users.deactivate')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
+  )
+}
+
+function EditUserModal({
+  tenantId,
+  user,
+  onClose,
+  onDone,
+}: {
+  tenantId: string
+  user: User | null
+  onClose: () => void
+  onDone: () => void
+}) {
+  const t = useT()
+  const [form, setForm] = useState({ name: '', role: 'nurse', sex: 'female', phone: '', specialty: '' })
+
+  useEffect(() => {
+    if (user)
+      setForm({
+        name: user.name,
+        role: user.role,
+        sex: user.sex ?? 'female',
+        phone: user.phone ?? '',
+        specialty: user.specialty ?? '',
+      })
+  }, [user])
+
+  const update = useMutation({
+    mutationFn: () =>
+      platformTenantsApi.updateUser(tenantId, user!.id, {
+        name: form.name,
+        role: form.role,
+        sex: form.sex || null,
+        phone: form.phone || null,
+        specialty: form.specialty || null,
+      }),
+    onSuccess: () => {
+      toast(t('users.updated_ok'))
+      onDone()
+      onClose()
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  return (
+    <Modal open={!!user} onClose={onClose} title={t('users.edit')}>
+      {user && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            update.mutate()
+          }}
+          className="space-y-4 p-5"
+        >
+          <Input
+            label={t('users.name')}
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            required
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Select label={t('users.col_role')} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+              <option value="doctor">{t('role.doctor')}</option>
+              <option value="nurse">{t('role.nurse')}</option>
+              <option value="receptionist">{t('role.receptionist')}</option>
+              <option value="admin">{t('role.admin')}</option>
+            </Select>
+            <Select label={t('users.sex')} value={form.sex} onChange={(e) => setForm({ ...form, sex: e.target.value })}>
+              <option value="female">{t('sex.female')}</option>
+              <option value="male">{t('sex.male')}</option>
+              <option value="other">{t('sex.other')}</option>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Input label={t('users.phone')} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <Input
+              label={t('users.col_specialty')}
+              value={form.specialty}
+              onChange={(e) => setForm({ ...form, specialty: e.target.value })}
+            />
+          </div>
+          <Input label={t('login.email')} value={user.email} disabled />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              {t('app.cancel')}
+            </Button>
+            <Button type="submit" loading={update.isPending} disabled={!form.name}>
+              {t('app.save')}
+            </Button>
+          </div>
+        </form>
+      )}
+    </Modal>
   )
 }

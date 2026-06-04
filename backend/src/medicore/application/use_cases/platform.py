@@ -524,3 +524,58 @@ class UnlockUser:
             )
             uow.commit()
         return user
+
+
+class UpdateTenantUser:
+    """Superadmin edits a tenant user's profile fields (and role). Email is immutable."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(
+        self,
+        actor: PlatformActorContext,
+        tenant_id: TenantId,
+        user_id: UserId,
+        **changes: object,
+    ) -> User:
+        allowed = {"name", "role", "sex", "phone", "specialty"}
+        with self._factory.for_tenant(tenant_id) as uow:
+            user = _require_user(uow, tenant_id, user_id)
+            for key, value in changes.items():
+                if key in allowed:
+                    setattr(user, key, value)
+            uow.users.save(user)
+            uow.platform_audit.append(
+                _audit(
+                    actor, self._clock.now(), "user.updated", "User", str(user_id),
+                    tenant_id=str(tenant_id),
+                )
+            )
+            uow.commit()
+        return user
+
+
+class SuspendTenantUser:
+    """Deactivate a tenant user account."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(
+        self, actor: PlatformActorContext, tenant_id: TenantId, user_id: UserId
+    ) -> User:
+        with self._factory.for_tenant(tenant_id) as uow:
+            user = _require_user(uow, tenant_id, user_id)
+            user.suspend()
+            uow.users.save(user)
+            uow.platform_audit.append(
+                _audit(
+                    actor, self._clock.now(), "user.suspended", "User", str(user_id),
+                    tenant_id=str(tenant_id),
+                )
+            )
+            uow.commit()
+        return user

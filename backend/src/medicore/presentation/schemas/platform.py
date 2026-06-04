@@ -121,6 +121,14 @@ class ResetPasswordRequest(BaseModel):
     password: str
 
 
+class UpdateTenantUserRequest(BaseModel):
+    name: str | None = None
+    role: str | None = None  # admin | doctor | nurse | receptionist
+    sex: str | None = None
+    phone: str | None = None
+    specialty: str | None = None
+
+
 class ImpersonationResponse(BaseModel):
     token: str
     user_id: str

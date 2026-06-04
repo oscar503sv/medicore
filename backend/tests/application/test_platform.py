@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from medicore.application.common.context import PlatformActorContext
-from medicore.application.common.errors import AuthenticationFailed, ValidationError
+from medicore.application.common.errors import (
+    AuthenticationFailed,
+    EntityNotFound,
+    ValidationError,
+)
 from medicore.application.use_cases.auth import AuthenticateUser, AuthenticateUserCommand
 from medicore.application.use_cases.platform import (
     AuthenticatePlatformAdmin,
@@ -18,10 +22,13 @@ from medicore.application.use_cases.platform import (
     ListTenants,
     ResetUserPassword,
     SetTenantStatus,
+    SuspendTenantUser,
     UnlockUser,
     UpdateTenant,
+    UpdateTenantUser,
 )
-from medicore.domain.enums import IcdVersion, TenantStatus, UserStatus
+from medicore.domain.enums import IcdVersion, Role, TenantStatus, UserStatus
+from medicore.domain.shared.identifiers import UserId
 from tests.support.builders import PASSWORD, seed_clinic
 from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
 
@@ -174,6 +181,37 @@ def test_unlock_user_reactivates():
         actor_for(seed), seed.tenant.id, seed.doctor.id
     )
     assert user.status == UserStatus.ACTIVE
+
+
+def test_update_tenant_user_edits_profile_and_audits():
+    seed = seed_clinic()
+    user = UpdateTenantUser(seed.factory, FixedClock()).execute(
+        actor_for(seed), seed.tenant.id, seed.doctor.id,
+        name="Dra. Nueva", role=Role.ADMIN, specialty="Cardiología",
+    )
+    assert user.name == "Dra. Nueva"
+    assert user.role == Role.ADMIN
+    assert user.specialty == "Cardiología"
+    audit = seed.factory.platform_uow().platform_audit.list()
+    assert any(e.action == "user.updated" for e in audit)
+
+
+def test_update_tenant_user_rejects_cross_tenant_user():
+    seed = seed_clinic()
+    with pytest.raises(EntityNotFound):
+        UpdateTenantUser(seed.factory, FixedClock()).execute(
+            actor_for(seed), seed.tenant.id, UserId.new(), name="Ghost"
+        )
+
+
+def test_suspend_tenant_user_deactivates_and_audits():
+    seed = seed_clinic()
+    user = SuspendTenantUser(seed.factory, FixedClock()).execute(
+        actor_for(seed), seed.tenant.id, seed.doctor.id
+    )
+    assert user.status == UserStatus.SUSPENDED
+    audit = seed.factory.platform_uow().platform_audit.list()
+    assert any(e.action == "user.suspended" for e in audit)
 
 
 def test_global_audit_reads_tenant_trail():
