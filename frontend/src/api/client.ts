@@ -2,15 +2,20 @@ import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { usePlatformAuthStore } from '@/stores/platformAuth'
 
+// Backend base URL. Defaults to the same-origin relative path "/api/v1" (served behind a
+// reverse proxy, or Vite's dev proxy). Set VITE_API_BASE_URL to an absolute URL when the
+// frontend and backend are deployed on different origins.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+
 export const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 })
 
 // Separate instance for the superadmin console: it carries the platform token and never
 // touches the tenant session, so the two consoles can be used independently.
 export const platformApi = axios.create({
-  baseURL: '/api/v1',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 })
 
