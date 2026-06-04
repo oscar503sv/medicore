@@ -102,6 +102,7 @@ def ser_global_audit_row(r) -> dict:
         "clinic_name": r.clinic_name,
         "metadata": dict(r.metadata),
         "ip_address": r.ip_address,
+        "user_agent": r.user_agent,
     }
 
 

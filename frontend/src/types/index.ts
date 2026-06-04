@@ -106,6 +106,7 @@ export interface GlobalAuditEntry {
   clinic_name?: string | null
   metadata: Record<string, unknown>
   ip_address?: string | null
+  user_agent?: string | null
 }
 
 // ── Enums ─────────────────────────────────────────────────────────────────────

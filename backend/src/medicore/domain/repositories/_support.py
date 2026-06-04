@@ -72,6 +72,7 @@ class GlobalAuditRow:
     clinic_name: str | None
     metadata: dict[str, object]
     ip_address: str | None
+    user_agent: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

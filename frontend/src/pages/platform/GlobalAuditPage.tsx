@@ -116,7 +116,7 @@ export function GlobalAuditPage() {
                       {expanded && (
                         <tr>
                           <td colSpan={6} className="border-b border-line-soft bg-surface-2/40 px-4 py-3">
-                            <AuditMetadata metadata={e.metadata} />
+                            <AuditMetadata metadata={e.metadata} userAgent={e.user_agent} />
                           </td>
                         </tr>
                       )}

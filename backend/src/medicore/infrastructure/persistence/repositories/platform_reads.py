@@ -78,6 +78,7 @@ class SqlPlatformReadModel:
                 model.timestamp.label("timestamp"),
                 model.tenant_id.label("tenant_id"),
                 model.ip_address.label("ip_address"),
+                model.user_agent.label("user_agent"),
                 literal(kind).label("source_kind"),
             )
             if category:
@@ -138,6 +139,7 @@ class SqlPlatformReadModel:
                 clinic_name=clinic_names.get(r.tenant_id) if r.tenant_id else None,
                 metadata=dict(r.metadata or {}),
                 ip_address=r.ip_address,
+                user_agent=r.user_agent,
             )
             for r in rows
         ]

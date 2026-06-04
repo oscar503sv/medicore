@@ -136,6 +136,7 @@ class GlobalAuditEntryResponse(BaseModel):
     clinic_name: str | None = None
     metadata: dict
     ip_address: str | None = None
+    user_agent: str | None = None
 
 
 class GlobalAuditListResponse(BaseModel):

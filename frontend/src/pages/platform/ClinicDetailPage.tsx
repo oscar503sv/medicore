@@ -178,6 +178,17 @@ export function ClinicDetailPage() {
 
   if (isLoading || !clinic) return <PageLoader />
 
+  // Save stays disabled until the clinic info actually changes.
+  const primaryName = (clinic.locations.find((l) => l.is_primary) ?? clinic.locations[0])?.name ?? ''
+  const dirty =
+    legalName !== clinic.legal_name ||
+    taxId !== clinic.tax_id ||
+    plan !== clinic.plan ||
+    seatLimit !== clinic.seat_limit ||
+    icdVersion !== clinic.icd_version ||
+    timezone !== clinic.timezone ||
+    locationName !== primaryName
+
   return (
     <div className="space-y-5 p-8">
       <button
@@ -234,7 +245,7 @@ export function ClinicDetailPage() {
             <Input label={t('platform.f_slug')} value={clinic.slug} disabled />
           </div>
           <div className="flex justify-end">
-            <Button type="submit" loading={save.isPending}>
+            <Button type="submit" loading={save.isPending} disabled={!dirty || save.isPending}>
               {t('app.save')}
             </Button>
           </div>
