@@ -27,7 +27,7 @@ from medicore.presentation.schemas.patients import (
     PatientResponse,
     UpdatePatientRequest,
 )
-from medicore.presentation.serializers import ser_patient
+from medicore.presentation.serializers import ser_appointment, ser_patient
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -86,12 +86,24 @@ def create_patient(body: CreatePatientRequest, actor: Actor, uow: UoW, codes: Co
 def get_patient(patient_id: str, actor: Actor, uow: UoW, clock: Clock):
     with uow:
         detail = GetPatientDetail(uow, clock).execute(actor, PatientId.parse(patient_id))
+        next_appointment = None
+        if detail.next_appointment is not None:
+            appt = detail.next_appointment
+            doctor = uow.users.get_by_id(appt.doctor_id)
+            insurer = uow.insurers.get_by_id(appt.insurance_id) if appt.insurance_id else None
+            next_appointment = ser_appointment(
+                appt,
+                patient_name=detail.patient.full_name,
+                doctor_name=doctor.name if doctor else None,
+                insurer_name=insurer.name if insurer else None,
+            )
     return PatientDetailResponse(
         patient=ser_patient(detail.patient),
         last_visit=detail.last_visit,
         next_visit=detail.next_visit,
         records_count=detail.records_count,
         active_prescriptions=detail.active_prescriptions,
+        next_appointment=next_appointment,
     )
 
 

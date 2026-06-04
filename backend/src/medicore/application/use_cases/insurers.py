@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from medicore.application.common.audit import audit_entry
+from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import ensure_can_manage_insurers
@@ -60,7 +60,10 @@ class CreateInsurer:
         with self._uow:
             self._uow.insurers.save(insurer)
             self._uow.audit.append(
-                audit_entry(actor, self._clock.now(), "insurer.created", "Insurer", str(insurer.id))
+                audit_entry(
+                    actor, self._clock.now(), "insurer.created", "Insurer", str(insurer.id),
+                    subject=subject(insurer.name),
+                )
             )
             self._uow.commit()
         return insurer
@@ -83,7 +86,10 @@ class UpdateInsurer:
             insurer.updated_at = self._clock.now()
             self._uow.insurers.save(insurer)
             self._uow.audit.append(
-                audit_entry(actor, self._clock.now(), "insurer.updated", "Insurer", str(insurer.id))
+                audit_entry(
+                    actor, self._clock.now(), "insurer.updated", "Insurer", str(insurer.id),
+                    subject=subject(insurer.name),
+                )
             )
             self._uow.commit()
         return insurer
@@ -110,7 +116,8 @@ class ArchiveInsurer:
             self._uow.insurers.save(insurer)
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), "insurer.archived", "Insurer", str(insurer.id)
+                    actor, self._clock.now(), "insurer.archived", "Insurer", str(insurer.id),
+                    subject=subject(insurer.name),
                 )
             )
             self._uow.commit()

@@ -12,6 +12,7 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
+import { formatPhone, isValidPhone } from '@/lib/validation'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore, type Lang, type Theme } from '@/stores/ui'
 
@@ -134,11 +135,13 @@ function ProfileSection() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [bio, setBio] = useState('')
+  const [phoneTouched, setPhoneTouched] = useState(false)
 
   function reset() {
     setName(profile?.name ?? '')
     setPhone(profile?.phone ?? '')
     setBio(profile?.bio ?? '')
+    setPhoneTouched(false)
   }
 
   // Initialize the form once the profile loads (or after a refetch).
@@ -169,6 +172,13 @@ function ProfileSection() {
   const isDoctor = profile.role === 'doctor'
   const subtitle = [t(`role.${profile.role}`), profile.specialty].filter(Boolean).join(' · ')
 
+  // Save/Cancel stay disabled until the user actually changes something.
+  const dirty =
+    name !== profile.name ||
+    phone !== (profile.phone ?? '') ||
+    (isDoctor && bio !== (profile.bio ?? ''))
+  const phoneInvalid = !isValidPhone(phone)
+
   return (
     <Card>
       <CardHeader title={t('settings.profile')} />
@@ -192,7 +202,15 @@ function ProfileSection() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input label={t('users.name')} value={name} onChange={(e) => setName(e.target.value)} required />
           <Input label={t('login.email')} value={profile.email} disabled />
-          <Input label={t('users.phone')} value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input
+            label={t('users.phone')}
+            placeholder="7777-8956"
+            inputMode="numeric"
+            value={phone}
+            onChange={(e) => setPhone(formatPhone(e.target.value))}
+            onBlur={() => setPhoneTouched(true)}
+            error={phoneTouched && phoneInvalid ? t('patientform.phone_invalid') : undefined}
+          />
           <Input label={t('users.col_specialty')} value={profile.specialty ?? ''} disabled />
         </div>
 
@@ -207,10 +225,14 @@ function ProfileSection() {
         )}
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button type="button" variant="outline" onClick={reset}>
+          <Button type="button" variant="outline" onClick={reset} disabled={!dirty || save.isPending}>
             {t('app.cancel')}
           </Button>
-          <Button type="submit" loading={save.isPending} disabled={!name.trim()}>
+          <Button
+            type="submit"
+            loading={save.isPending}
+            disabled={!dirty || !name.trim() || phoneInvalid}
+          >
             {t('app.save')}
           </Button>
         </div>

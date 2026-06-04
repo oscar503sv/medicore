@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from medicore.application.common.audit import audit_entry
+from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import (
@@ -58,10 +58,12 @@ class GetMedicalRecord:
         if record is None:
             raise EntityNotFound("MedicalRecord", record_id)
         # Accessing patient clinical data is auditable (HIPAA/GDPR).
+        patient = self._uow.patients.get_by_id(record.patient_id)
         with self._uow:
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), "record.viewed", "MedicalRecord", str(record_id)
+                    actor, self._clock.now(), "record.viewed", "MedicalRecord", str(record_id),
+                    subject=subject(record.code, patient.full_name if patient else None),
                 )
             )
             self._uow.commit()
@@ -82,6 +84,7 @@ class AmendMedicalRecord:
         original = self._uow.medical_records.get_by_id(record_id)
         if original is None:
             raise EntityNotFound("MedicalRecord", record_id)
+        patient = self._uow.patients.get_by_id(original.patient_id)
 
         with self._uow:
             amendment = original.amend(
@@ -95,6 +98,7 @@ class AmendMedicalRecord:
                 audit_entry(
                     actor, self._clock.now(), "record.amended", "MedicalRecord",
                     str(amendment.id), amends=str(original.id),
+                    subject=subject(amendment.code, patient.full_name if patient else None),
                 )
             )
             self._uow.commit()
@@ -126,7 +130,7 @@ class UploadDocument:
             self._uow.audit.append(
                 audit_entry(
                     actor, self._clock.now(), "document.uploaded", "MedicalDocument",
-                    str(document.id),
+                    str(document.id), subject=subject(document.file_name),
                 )
             )
             self._uow.commit()

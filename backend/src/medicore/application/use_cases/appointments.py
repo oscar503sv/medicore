@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-from medicore.application.common.audit import audit_entry
+from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import ensure_can_manage_appointments
@@ -46,6 +46,12 @@ def _busy_intervals(appointments: list[Appointment]) -> list[BusyInterval]:
         for a in appointments
         if a.status in _BLOCKING_STATUSES
     ]
+
+
+def _appt_subject(uow: UnitOfWork, appointment: Appointment) -> str:
+    """Audit subject for an appointment: "A-2401 · Lucía Álvarez"."""
+    patient = uow.patients.get_by_id(appointment.patient_id)
+    return subject(appointment.code, patient.full_name if patient else None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +207,7 @@ class CreateAppointment:
                     "appointment.created",
                     "Appointment",
                     str(appointment.id),
+                    subject=_appt_subject(self._uow, appointment),
                 )
             )
             self._uow.commit()
@@ -246,7 +253,7 @@ class RescheduleAppointment:
             self._uow.audit.append(
                 audit_entry(
                     actor, self._clock.now(), "appointment.rescheduled", "Appointment",
-                    str(appointment.id),
+                    str(appointment.id), subject=_appt_subject(self._uow, appointment),
                 )
             )
             self._uow.commit()
@@ -281,7 +288,8 @@ class _AppointmentTransition:
             self._uow.appointments.save(appointment)
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), self.action, "Appointment", str(appointment.id)
+                    actor, self._clock.now(), self.action, "Appointment", str(appointment.id),
+                    subject=_appt_subject(self._uow, appointment),
                 )
             )
             self._uow.commit()

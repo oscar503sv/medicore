@@ -5,13 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-from medicore.application.common.audit import audit_entry
+from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.timezone import clinic_now, to_naive
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
+from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.patient import Patient
 from medicore.domain.enums import AppointmentStatus, PrescriptionStatus, Sex
 from medicore.domain.repositories._support import Page, Paging, PatientFilter
@@ -40,6 +41,7 @@ class PatientDetailDTO:
     next_visit: datetime | None
     records_count: int
     active_prescriptions: int
+    next_appointment: Appointment | None = None
 
 
 class CreatePatient:
@@ -68,7 +70,10 @@ class CreatePatient:
         with self._uow:
             self._uow.patients.save(patient)
             self._uow.audit.append(
-                audit_entry(actor, self._clock.now(), "patient.created", "Patient", str(patient.id))
+                audit_entry(
+                    actor, self._clock.now(), "patient.created", "Patient", str(patient.id),
+                    subject=subject(patient.code, patient.full_name),
+                )
             )
             self._uow.commit()
         return patient
@@ -99,7 +104,10 @@ class UpdatePatient:
             patient.updated_at = self._clock.now()
             self._uow.patients.save(patient)
             self._uow.audit.append(
-                audit_entry(actor, self._clock.now(), "patient.updated", "Patient", str(patient.id))
+                audit_entry(
+                    actor, self._clock.now(), "patient.updated", "Patient", str(patient.id),
+                    subject=subject(patient.code, patient.full_name),
+                )
             )
             self._uow.commit()
         return patient
@@ -119,7 +127,8 @@ class ArchivePatient:
             self._uow.patients.save(patient)
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), "patient.archived", "Patient", str(patient.id)
+                    actor, self._clock.now(), "patient.archived", "Patient", str(patient.id),
+                    subject=subject(patient.code, patient.full_name),
                 )
             )
             self._uow.commit()
@@ -182,15 +191,17 @@ class GetPatientDetail:
         # A completed appointment is a visit that happened; an active future one is the next.
         past = [a for a in appointments if a.status == AppointmentStatus.COMPLETED]
         upcoming = [a for a in appointments if a.is_active and to_naive(a.scheduled_start) > now]
+        next_appt = min(upcoming, key=lambda a: to_naive(a.scheduled_start), default=None)
         records = self._uow.medical_records.list_by_patient(patient_id)
         prescriptions = self._uow.prescriptions.list_by_patient(patient_id, active_only=True)
 
         return PatientDetailDTO(
             patient=patient,
             last_visit=max((a.scheduled_start for a in past), default=None),
-            next_visit=min((a.scheduled_start for a in upcoming), default=None),
+            next_visit=next_appt.scheduled_start if next_appt else None,
             records_count=len(records),
             active_prescriptions=sum(
                 1 for p in prescriptions if p.status == PrescriptionStatus.ACTIVE
             ),
+            next_appointment=next_appt,
         )

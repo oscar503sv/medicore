@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from medicore.application.common.audit import audit_entry
+from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import AuthenticationFailed, EntityNotFound
 from medicore.application.ports.clock import Clock
@@ -245,7 +245,8 @@ class UpdateMyProfile:
                 uow.doctor_profiles.save(profile)
             uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), "user.profile_updated", "User", str(user.id)
+                    actor, self._clock.now(), "user.profile_updated", "User", str(user.id),
+                    subject=subject(user.name),
                 )
             )
             uow.commit()

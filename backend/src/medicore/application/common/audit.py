@@ -9,6 +9,15 @@ from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.shared.identifiers import AuditLogId
 
 
+def subject(*parts: object) -> str:
+    """Human-readable label for the entity an action targets, e.g. "P-00013 · Lucía Álvarez".
+
+    Joins the truthy parts with " · ". Stored in audit metadata as ``subject`` so the audit
+    UI can show a meaningful Detail column without exposing raw UUIDs.
+    """
+    return " · ".join(str(p) for p in parts if p)
+
+
 def audit_entry(
     actor: ActorContext,
     when: datetime,

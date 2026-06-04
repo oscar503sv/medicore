@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from medicore.application.common.audit import audit_entry
+from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import ensure_can_manage_availability
@@ -50,12 +50,14 @@ class _AvailabilityMutator:
         )
 
     def _persist(self, actor: ActorContext, availability: DoctorAvailability) -> None:
+        doctor = self._uow.users.get_by_id(availability.doctor_id)
         with self._uow:
             self._uow.availability.save(availability)
             self._uow.audit.append(
                 audit_entry(
                     actor, self._clock.now(), "availability.updated", "DoctorAvailability",
                     str(availability.id),
+                    subject=subject(doctor.name) if doctor else None,
                 )
             )
             self._uow.commit()

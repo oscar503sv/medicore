@@ -1,3 +1,21 @@
+import {
+  Activity,
+  Building2,
+  CalendarDays,
+  Clock,
+  FileText,
+  LifeBuoy,
+  LogIn,
+  MapPin,
+  Paperclip,
+  Shield,
+  Stethoscope,
+  UserRound,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
+import type { Tone } from '@/components/ui/badgeTone'
+
 type T = (key: string) => string
 
 /** Action categories offered in the audit filters (the action namespace before the dot). */
@@ -31,6 +49,32 @@ export function entityLabel(t: T, entityType: string): string {
   return label === key ? entityType : label
 }
 
+/** The action namespace before the dot (e.g. "appointment.created" → "appointment"). */
+export function categoryOf(action: string): string {
+  return action.split('.')[0]
+}
+
+/** Icon + colour tone per action category, for quick visual scanning of the log. */
+const CATEGORY_META: Record<string, { icon: LucideIcon; tone: Tone }> = {
+  auth: { icon: LogIn, tone: 'info' },
+  patient: { icon: UserRound, tone: 'accent' },
+  appointment: { icon: CalendarDays, tone: 'info' },
+  consultation: { icon: Stethoscope, tone: 'ok' },
+  record: { icon: FileText, tone: 'accent' },
+  document: { icon: Paperclip, tone: 'neutral' },
+  user: { icon: Users, tone: 'warn' },
+  insurer: { icon: Shield, tone: 'info' },
+  availability: { icon: Clock, tone: 'neutral' },
+  organization: { icon: Building2, tone: 'warn' },
+  location: { icon: MapPin, tone: 'warn' },
+  tenant: { icon: Building2, tone: 'warn' },
+  support: { icon: LifeBuoy, tone: 'danger' },
+}
+
+export function categoryMeta(action: string): { icon: LucideIcon; tone: Tone } {
+  return CATEGORY_META[categoryOf(action)] ?? { icon: Activity, tone: 'neutral' }
+}
+
 /**
  * A short, human-readable summary of an entry's metadata for the "Detail" column.
  * Surfaces only meaningful fields (status transitions, reason, role, names); returns '' when
@@ -39,6 +83,8 @@ export function entityLabel(t: T, entityType: string): string {
 export function auditDetail(e: { metadata?: Record<string, unknown> }): string {
   const m = e.metadata ?? {}
   const parts: string[] = []
+  // Human subject (e.g. "P-00013 · Lucía Álvarez") recorded at write time — shown first.
+  if (typeof m.subject === 'string' && m.subject) parts.push(m.subject)
   if (typeof m.old_status === 'string' && typeof m.new_status === 'string') {
     parts.push(`${m.old_status} → ${m.new_status}`)
   } else if (typeof m.status === 'string') {

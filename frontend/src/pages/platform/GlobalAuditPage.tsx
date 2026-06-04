@@ -1,15 +1,18 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { platformAuditApi } from '@/api/platform'
+import { AuditMetadata } from '@/components/audit/AuditMetadata'
 import { PageHeader } from '@/components/PageHeader'
+import { TONE_TEXT } from '@/components/ui/badgeTone'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Select } from '@/components/ui/Input'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
-import { actionLabel, auditDetail, AUDIT_CATEGORIES } from '@/lib/audit'
+import { actionLabel, auditDetail, categoryMeta, AUDIT_CATEGORIES } from '@/lib/audit'
+import { cn } from '@/lib/cn'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { GlobalAuditEntry } from '@/types'
@@ -21,6 +24,7 @@ export function GlobalAuditPage() {
   const t = useT()
   const [category, setCategory] = useState('')
   const [offset, setOffset] = useState(0)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['platform-audit', category, offset],
@@ -87,22 +91,40 @@ export function GlobalAuditPage() {
                 </Tr>
               </thead>
               <tbody>
-                {items.map((e) => (
-                  <Tr key={e.id}>
-                    <Td className="whitespace-nowrap text-[13px] text-tx-3">
-                      {fmtDateTimeTz(e.timestamp)}
-                    </Td>
-                    <Td className="text-[13px] text-tx">
-                      {e.source_kind === 'platform' ? t('audit.source_platform') : e.clinic_name ?? '—'}
-                    </Td>
-                    <Td className="text-[13px] font-medium text-tx">{e.actor_name ?? '—'}</Td>
-                    <Td className="text-[13px]">{actionLabel(t, e.action)}</Td>
-                    <Td className="text-[13px] text-tx-2">{detailOf(e)}</Td>
-                    <Td className="whitespace-nowrap font-mono text-[11px] text-tx-4">
-                      {e.ip_address ?? '—'}
-                    </Td>
-                  </Tr>
-                ))}
+                {items.map((e) => {
+                  const { icon: Icon, tone } = categoryMeta(e.action)
+                  const expanded = expandedId === e.id
+                  return (
+                    <Fragment key={e.id}>
+                      <Tr onClick={() => setExpandedId(expanded ? null : e.id)}>
+                        <Td className="whitespace-nowrap text-[13px] text-tx-3">
+                          {fmtDateTimeTz(e.timestamp)}
+                        </Td>
+                        <Td className="text-[13px] text-tx">
+                          {e.source_kind === 'platform' ? t('audit.source_platform') : e.clinic_name ?? '—'}
+                        </Td>
+                        <Td className="text-[13px] font-medium text-tx">{e.actor_name ?? '—'}</Td>
+                        <Td className="text-[13px]">
+                          <div className="flex items-center gap-2">
+                            <Icon className={cn('h-3.5 w-3.5 shrink-0', TONE_TEXT[tone])} />
+                            <span>{actionLabel(t, e.action)}</span>
+                          </div>
+                        </Td>
+                        <Td className="text-[13px] text-tx-2">{detailOf(e)}</Td>
+                        <Td className="whitespace-nowrap font-mono text-[11px] text-tx-4">
+                          {e.ip_address ?? '—'}
+                        </Td>
+                      </Tr>
+                      {expanded && (
+                        <tr>
+                          <td colSpan={6} className="border-b border-line-soft bg-surface-2/40 px-4 py-3">
+                            <AuditMetadata metadata={e.metadata} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
               </tbody>
             </Table>
             <Pager offset={offset} limit={PAGE_SIZE} count={items.length} total={total} onChange={setOffset} />

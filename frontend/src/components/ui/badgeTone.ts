@@ -1,5 +1,15 @@
 export type Tone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'accent'
 
+/** Text-colour class per tone (for icons/labels outside the Badge pill). */
+export const TONE_TEXT: Record<Tone, string> = {
+  neutral: 'text-tx-3',
+  ok: 'text-ok',
+  warn: 'text-warn',
+  danger: 'text-danger',
+  info: 'text-info',
+  accent: 'text-accent',
+}
+
 const STATUS_TONE: Record<string, Tone> = {
   scheduled: 'info',
   confirmed: 'accent',

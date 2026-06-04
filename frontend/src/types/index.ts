@@ -199,6 +199,7 @@ export interface PatientDetail {
   next_visit: string | null
   records_count: number
   active_prescriptions: number
+  next_appointment: Appointment | null
 }
 
 export interface PaginatedResponse<T> {

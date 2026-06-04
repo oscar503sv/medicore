@@ -7,16 +7,17 @@ import { patientsApi } from '@/api/patients'
 import { recordsApi } from '@/api/records'
 import { EditPatientModal } from '@/components/patients/EditPatientModal'
 import { MedicationTimeline } from '@/components/patients/MedicationTimeline'
+import { PatientSummary } from '@/components/patients/PatientSummary'
 import { VitalsHistory } from '@/components/patients/VitalsHistory'
 import { RecordDrawer } from '@/components/records/RecordDrawer'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { Card, CardHeader } from '@/components/ui/Card'
+import { Card } from '@/components/ui/Card'
 import { PageLoader } from '@/components/ui/Spinner'
 import { useAuthStore } from '@/stores/auth'
 import { cn } from '@/lib/cn'
-import { fmtDateTime, fmtDateTz } from '@/lib/format'
+import { fmtDateTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 
 type Tab = 'summary' | 'history' | 'prescriptions' | 'vitals' | 'documents'
@@ -40,7 +41,11 @@ export function PatientDetailPage() {
   const { data: records } = useQuery({
     queryKey: ['records', { patient_id: id }],
     queryFn: () => recordsApi.list({ patient_id: id }),
-    enabled: tab === 'history' || tab === 'prescriptions' || tab === 'vitals',
+    enabled:
+      tab === 'history' ||
+      tab === 'prescriptions' ||
+      tab === 'vitals' ||
+      (tab === 'summary' && canClinical),
   })
 
   if (isLoading || !data) return <PageLoader />
@@ -129,31 +134,7 @@ export function PatientDetailPage() {
       </div>
 
       {/* Content */}
-      {tab === 'summary' && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-          <div className="space-y-4">
-            <Card>
-              <CardHeader title={t('patient.contact')} />
-              <dl className="space-y-2 p-5 text-sm">
-                <Row label="Teléfono" value={p.contact.phone} />
-                <Row label="Email" value={p.contact.email} />
-                <Row label="Dirección" value={p.contact.address} />
-                <Row label="Contacto emergencia" value={p.contact.emergency_contact_name} />
-              </dl>
-            </Card>
-          </div>
-          <div className="space-y-4">
-            <Card className="p-5">
-              <div className="grid grid-cols-2 gap-4">
-                <Metric label={t('patients.col_last')} value={fmtDateTime(data.last_visit)} />
-                <Metric label={t('patients.col_next')} value={fmtDateTime(data.next_visit)} />
-                <Metric label="Historiales" value={String(data.records_count)} />
-                <Metric label="Recetas activas" value={String(data.active_prescriptions)} />
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
+      {tab === 'summary' && <PatientSummary detail={data} records={records ?? []} />}
 
       {tab === 'history' && (
         <Card>
@@ -192,24 +173,6 @@ export function PatientDetailPage() {
 
       <EditPatientModal patient={editOpen ? p : null} onClose={() => setEditOpen(false)} />
       <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <dt className="text-tx-3">{label}</dt>
-      <dd className="text-right text-tx">{value || '—'}</dd>
-    </div>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="eyebrow mb-1">{label}</p>
-      <p className="text-sm font-medium text-tx">{value}</p>
     </div>
   )
 }

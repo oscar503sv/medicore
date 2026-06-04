@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from medicore.application.common.audit import audit_entry
+from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import ensure_can_manage_organization
@@ -44,7 +44,8 @@ class UpdateOrganization:
             self._uow.tenants.save(tenant)
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), "organization.updated", "Tenant", str(tenant.id)
+                    actor, self._clock.now(), "organization.updated", "Tenant", str(tenant.id),
+                    subject=subject(tenant.legal_name),
                 )
             )
             self._uow.commit()
@@ -81,7 +82,8 @@ class AddLocation:
             self._uow.tenants.save(tenant)
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), "location.added", "Location", str(location.id)
+                    actor, self._clock.now(), "location.added", "Location", str(location.id),
+                    subject=subject(location.name),
                 )
             )
             self._uow.commit()
@@ -110,7 +112,8 @@ class UpdateLocation:
             self._uow.tenants.save(tenant)
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), "location.updated", "Location", str(location_id)
+                    actor, self._clock.now(), "location.updated", "Location", str(location_id),
+                    subject=subject(location.name),
                 )
             )
             self._uow.commit()

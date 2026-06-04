@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from medicore.application.common.audit import audit_entry
+from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import (
@@ -78,6 +78,7 @@ class StartConsultation:
             doctor_id=appointment.doctor_id,
             started_at=self._clock.now(),
         )
+        patient = self._uow.patients.get_by_id(appointment.patient_id)
         with self._uow:
             appointment.start()
             self._uow.appointments.save(appointment)
@@ -86,6 +87,7 @@ class StartConsultation:
                 audit_entry(
                     actor, self._clock.now(), "consultation.started", "Consultation",
                     str(consultation.id),
+                    subject=subject(patient.code, patient.full_name) if patient else None,
                 )
             )
             self._uow.commit()
@@ -210,6 +212,7 @@ class SignConsultation:
         appointment = self._uow.appointments.get_by_id(consultation.appointment_id)
         if appointment is None:
             raise EntityNotFound("Appointment", consultation.appointment_id)
+        patient = self._uow.patients.get_by_id(consultation.patient_id)
 
         now = self._clock.now()
         # A signed consultation is always a CONSULTATION clinical record — the type is inferred,
@@ -241,6 +244,9 @@ class SignConsultation:
                     actor, now, "consultation.signed", "MedicalRecord", str(result.record.id),
                     appointment_id=str(appointment.id),
                     prescriptions=len(result.prescriptions),
+                    subject=subject(
+                        result.record.code, patient.full_name if patient else None
+                    ),
                 )
             )
             self._uow.commit()

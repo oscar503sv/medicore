@@ -71,3 +71,4 @@ class PatientDetailResponse(BaseModel):
     next_visit: datetime | None
     records_count: int
     active_prescriptions: int
+    next_appointment: dict[str, Any] | None = None

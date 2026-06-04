@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from medicore.application.common.audit import audit_entry
+from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.permissions import ensure_can_manage_users
@@ -74,7 +74,10 @@ class InviteUser:
         with self._uow:
             self._uow.users.save(user)
             self._uow.audit.append(
-                audit_entry(actor, self._clock.now(), "user.invited", "User", str(user.id))
+                audit_entry(
+                    actor, self._clock.now(), "user.invited", "User", str(user.id),
+                    subject=subject(user.name),
+                )
             )
             self._uow.commit()
         return user
@@ -94,7 +97,7 @@ class UpdateUserRole:
             self._uow.audit.append(
                 audit_entry(
                     actor, self._clock.now(), "user.role_changed", "User", str(user.id),
-                    role=str(role),
+                    role=str(role), subject=subject(user.name),
                 )
             )
             self._uow.commit()
@@ -126,7 +129,10 @@ class UpdateUser:
                     setattr(user, key, value)
             self._uow.users.save(user)
             self._uow.audit.append(
-                audit_entry(actor, self._clock.now(), "user.updated", "User", str(user.id))
+                audit_entry(
+                    actor, self._clock.now(), "user.updated", "User", str(user.id),
+                    subject=subject(user.name),
+                )
             )
             self._uow.commit()
         return user
@@ -146,7 +152,10 @@ class SuspendUser:
             user.suspend()
             self._uow.users.save(user)
             self._uow.audit.append(
-                audit_entry(actor, self._clock.now(), "user.suspended", "User", str(user.id))
+                audit_entry(
+                    actor, self._clock.now(), "user.suspended", "User", str(user.id),
+                    subject=subject(user.name),
+                )
             )
             self._uow.commit()
         return user
@@ -166,7 +175,10 @@ class ReactivateUser:
             user.activate()
             self._uow.users.save(user)
             self._uow.audit.append(
-                audit_entry(actor, self._clock.now(), "user.reactivated", "User", str(user.id))
+                audit_entry(
+                    actor, self._clock.now(), "user.reactivated", "User", str(user.id),
+                    subject=subject(user.name),
+                )
             )
             self._uow.commit()
         return user
@@ -197,7 +209,10 @@ class ResetUserPassword:
             user.set_temporary_password(self._hasher.hash(cmd.password))
             self._uow.users.save(user)
             self._uow.audit.append(
-                audit_entry(actor, self._clock.now(), "user.password_reset", "User", str(user.id))
+                audit_entry(
+                    actor, self._clock.now(), "user.password_reset", "User", str(user.id),
+                    subject=subject(user.name),
+                )
             )
             self._uow.commit()
         return user
