@@ -1,5 +1,5 @@
 import { ShieldAlert } from 'lucide-react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet } from 'react-router-dom'
 import { impersonationApi } from '@/api/platform'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -8,12 +8,13 @@ import { Topbar } from './Topbar'
 
 export function AppLayout() {
   const t = useT()
-  const navigate = useNavigate()
   const session = useAuthStore((s) => s.session)
   const logout = useAuthStore((s) => s.logout)
 
   // Record support.access.ended before tearing down the session. Best-effort: if the call
-  // fails (expired token, network), we still log the superadmin out.
+  // fails (expired token, network), we still leave. A hard redirect re-bootstraps from the
+  // persisted platform session and avoids the SPA redirect race that would otherwise bounce
+  // us to the tenant login the moment the tenant session is cleared.
   const exitSupport = async () => {
     try {
       await impersonationApi.end()
@@ -21,7 +22,7 @@ export function AppLayout() {
       // ignore — leaving the session is more important than the audit ping
     }
     logout()
-    navigate('/platform/clinics')
+    window.location.assign('/platform/clinics')
   }
 
   return (

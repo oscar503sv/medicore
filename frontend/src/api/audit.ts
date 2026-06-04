@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { AuditEntry } from '@/types'
+import type { AuditEntry, PaginatedResponse } from '@/types'
 
 export interface AuditListParams {
   action?: string
@@ -14,5 +14,5 @@ export interface AuditListParams {
 
 export const auditApi = {
   list: (params: AuditListParams = {}) =>
-    api.get<AuditEntry[]>('/audit', { params }).then((r) => r.data),
+    api.get<PaginatedResponse<AuditEntry>>('/audit', { params }).then((r) => r.data),
 }

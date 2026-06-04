@@ -147,4 +147,6 @@ def test_global_audit_endpoint(seed, client, platform_headers):
     )
     resp = client.get("/api/v1/platform/audit", headers=platform_headers)
     assert resp.status_code == 200, resp.text
-    assert any(e["action"] == "auth.login" for e in resp.json())
+    body = resp.json()
+    assert body["total"] >= 1
+    assert any(e["action"] == "auth.login" for e in body["items"])

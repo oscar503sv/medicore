@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.audit_log import AuditLog
+from medicore.domain.repositories._support import Page
 from medicore.domain.shared.identifiers import TenantId
 from medicore.infrastructure.persistence.mappers.entities import to_audit_log
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
@@ -62,11 +63,20 @@ class SqlPlatformReadModel:
         limit: int = 100,
         offset: int = 0,
         action: str | None = None,
+        category: str | None = None,
         tenant_id: str | None = None,
-    ) -> list[AuditLog]:
-        q = self._s.query(AuditLogModel).order_by(AuditLogModel.timestamp.desc())
+    ) -> Page[AuditLog]:
+        q = self._s.query(AuditLogModel)
         if action:
             q = q.filter(AuditLogModel.action == action)
+        if category:
+            q = q.filter(AuditLogModel.action.like(f"{category}.%"))
         if tenant_id:
             q = q.filter(AuditLogModel.tenant_id == tenant_id)
-        return [to_audit_log(r) for r in q.offset(offset).limit(limit).all()]
+        total = q.count()
+        rows = (
+            q.order_by(AuditLogModel.timestamp.desc()).offset(offset).limit(limit).all()
+        )
+        return Page(
+            items=[to_audit_log(r) for r in rows], total=total, offset=offset, limit=limit
+        )

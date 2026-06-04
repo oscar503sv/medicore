@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { platformAuditApi, platformTenantsApi } from '@/api/platform'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -12,21 +12,29 @@ import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { actionLabel, auditDetail, AUDIT_CATEGORIES } from '@/lib/audit'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { Pager } from '@/pages/AuditPage'
+
+const PAGE_SIZE = 50
 
 export function GlobalAuditPage() {
   const t = useT()
-  const [q, setQ] = useState('')
   const [category, setCategory] = useState('')
+  const [offset, setOffset] = useState(0)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['platform-audit'],
-    queryFn: () => platformAuditApi.list({ limit: 200 }),
+    queryKey: ['platform-audit', category, offset],
+    queryFn: () =>
+      platformAuditApi.list({
+        category: category || undefined,
+        offset,
+        limit: PAGE_SIZE,
+      }),
   })
 
-  // Resolve clinic names for the tenant_id column (small, cached list).
+  // Resolve clinic names for the tenant_id column (small, cached list; endpoint caps at 200).
   const { data: tenants } = useQuery({
     queryKey: ['platform-tenants', 'audit-names'],
-    queryFn: () => platformTenantsApi.list({ limit: 500 }),
+    queryFn: () => platformTenantsApi.list({ limit: 200 }),
   })
   const tenantName = useMemo(() => {
     const map = new Map<string, string>()
@@ -34,35 +42,21 @@ export function GlobalAuditPage() {
     return map
   }, [tenants])
 
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase()
-    return (data ?? []).filter((e) => {
-      if (category && !e.action.startsWith(`${category}.`)) return false
-      if (
-        term &&
-        !actionLabel(t, e.action).toLowerCase().includes(term) &&
-        !auditDetail(t, e).toLowerCase().includes(term)
-      )
-        return false
-      return true
-    })
-  }, [data, q, category, t])
+  const items = data?.items ?? []
+  const total = data?.total ?? 0
 
   return (
     <div className="space-y-5 p-8">
       <PageHeader title={t('platform.audit_title')} />
 
       <div className="flex flex-wrap items-center gap-4">
-        <div className="relative w-80">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={t('audit.search_ph')}
-            className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
-          />
-        </div>
-        <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+        <Select
+          value={category}
+          onChange={(e) => {
+            setCategory(e.target.value)
+            setOffset(0)
+          }}
+        >
           <option value="">{t('audit.cat_all')}</option>
           {AUDIT_CATEGORIES.map((c) => (
             <option key={c} value={c}>
@@ -70,8 +64,14 @@ export function GlobalAuditPage() {
             </option>
           ))}
         </Select>
-        {(q || category) && (
-          <Button variant="outline" onClick={() => { setQ(''); setCategory('') }}>
+        {category && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              setCategory('')
+              setOffset(0)
+            }}
+          >
             <X className="h-4 w-4" />
             {t('audit.clear')}
           </Button>
@@ -79,33 +79,36 @@ export function GlobalAuditPage() {
       </div>
 
       <Card>
-        {isLoading || !data ? (
+        {isLoading ? (
           <PageLoader />
-        ) : filtered.length > 0 ? (
-          <Table>
-            <thead>
-              <Tr>
-                <Th>{t('audit.col_date')}</Th>
-                <Th>{t('audit.col_clinic')}</Th>
-                <Th>{t('audit.col_action')}</Th>
-                <Th>{t('audit.col_detail')}</Th>
-              </Tr>
-            </thead>
-            <tbody>
-              {filtered.map((e) => (
-                <Tr key={e.id}>
-                  <Td className="whitespace-nowrap text-[13px] text-tx-3">
-                    {fmtDateTimeTz(e.timestamp)}
-                  </Td>
-                  <Td className="text-[13px] text-tx">
-                    {(e.tenant_id && tenantName.get(e.tenant_id)) || '—'}
-                  </Td>
-                  <Td className="text-[13px]">{actionLabel(t, e.action)}</Td>
-                  <Td className="text-[13px] text-tx-2">{auditDetail(t, e)}</Td>
+        ) : items.length > 0 ? (
+          <>
+            <Table>
+              <thead>
+                <Tr>
+                  <Th>{t('audit.col_date')}</Th>
+                  <Th>{t('audit.col_clinic')}</Th>
+                  <Th>{t('audit.col_action')}</Th>
+                  <Th>{t('audit.col_detail')}</Th>
                 </Tr>
-              ))}
-            </tbody>
-          </Table>
+              </thead>
+              <tbody>
+                {items.map((e) => (
+                  <Tr key={e.id}>
+                    <Td className="whitespace-nowrap text-[13px] text-tx-3">
+                      {fmtDateTimeTz(e.timestamp)}
+                    </Td>
+                    <Td className="text-[13px] text-tx">
+                      {(e.tenant_id && tenantName.get(e.tenant_id)) || '—'}
+                    </Td>
+                    <Td className="text-[13px]">{actionLabel(t, e.action)}</Td>
+                    <Td className="text-[13px] text-tx-2">{auditDetail(t, e)}</Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+            <Pager offset={offset} limit={PAGE_SIZE} count={items.length} total={total} onChange={setOffset} />
+          </>
         ) : (
           <EmptyState title={t('platform.audit_title')} description={t('audit.empty')} />
         )}

@@ -36,7 +36,7 @@ from medicore.presentation.dependencies import (
     UoWFactory,
 )
 from medicore.presentation.schemas.platform import (
-    AuditEntryResponse,
+    AuditListResponse,
     CreateTenantRequest,
     CreateTenantResponse,
     GlobalStatsResponse,
@@ -160,19 +160,26 @@ def tenant_stats(tenant_id: str, actor: PlatformActor, factory: UoWFactory):
     return ser_tenant_stats(GetTenantStats(factory).execute(actor, TenantId.parse(tenant_id)))
 
 
-@router.get("/audit", response_model=list[AuditEntryResponse])
+@router.get("/audit", response_model=AuditListResponse)
 def global_audit(
     actor: PlatformActor,
     factory: UoWFactory,
     action: str | None = Query(None),
+    category: str | None = Query(None),
     tenant_id: str | None = Query(None),
     offset: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(50, ge=1, le=500),
 ):
-    entries = ListGlobalAudit(factory).execute(
-        actor, limit=limit, offset=offset, action=action, tenant_id=tenant_id
+    page = ListGlobalAudit(factory).execute(
+        actor, limit=limit, offset=offset, action=action, category=category,
+        tenant_id=tenant_id,
     )
-    return [ser_audit(e) for e in entries]
+    return AuditListResponse(
+        items=[ser_audit(e) for e in page.items],
+        total=page.total,
+        offset=page.offset,
+        limit=page.limit,
+    )
 
 
 # ── Account support (cross-tenant) ─────────────────────────────────────────────

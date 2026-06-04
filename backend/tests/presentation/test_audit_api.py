@@ -20,9 +20,10 @@ class TestAuditApi:
 
         resp = client.get("/api/v1/audit", headers=admin_headers)
         assert resp.status_code == 200, resp.text
-        entries = resp.json()
-        invited = [e for e in entries if e["action"] == "user.invited"]
-        assert invited, entries
+        body = resp.json()
+        assert body["total"] >= 1 and "offset" in body and "limit" in body
+        invited = [e for e in body["items"] if e["action"] == "user.invited"]
+        assert invited, body
         assert invited[0]["actor_name"] == seed.admin.name
         assert "ip_address" in invited[0]
 
@@ -37,4 +38,4 @@ class TestAuditApi:
             "/api/v1/audit", params={"category": "appointment"}, headers=admin_headers
         )
         assert resp.status_code == 200
-        assert all(e["action"].startswith("appointment.") for e in resp.json())
+        assert all(e["action"].startswith("appointment.") for e in resp.json()["items"])

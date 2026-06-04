@@ -120,6 +120,13 @@ class AuditEntryResponse(BaseModel):
     actor_name: str | None = None
 
 
+class AuditListResponse(BaseModel):
+    items: list[AuditEntryResponse]
+    total: int
+    offset: int
+    limit: int
+
+
 class ResetPasswordRequest(BaseModel):
     password: str
 

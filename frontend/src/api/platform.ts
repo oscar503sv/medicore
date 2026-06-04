@@ -122,8 +122,18 @@ export const platformTenantsApi = {
 }
 
 export const platformAuditApi = {
-  list: (params: { action?: string; tenant_id?: string; offset?: number; limit?: number } = {}) =>
-    platformApi.get<AuditEntry[]>('/platform/audit', { params }).then((r) => r.data),
+  list: (
+    params: {
+      action?: string
+      category?: string
+      tenant_id?: string
+      offset?: number
+      limit?: number
+    } = {},
+  ) =>
+    platformApi
+      .get<PaginatedResponse<AuditEntry>>('/platform/audit', { params })
+      .then((r) => r.data),
 }
 
 // Ending a support session runs on the tenant client: it uses the impersonation token

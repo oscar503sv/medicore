@@ -177,14 +177,20 @@ class InMemoryPlatformReadModel:
         limit: int = 100,
         offset: int = 0,
         action: str | None = None,
+        category: str | None = None,
         tenant_id: str | None = None,
-    ) -> list:
+    ) -> Page:
         entries = sorted(self._store.audit.values(), key=lambda e: e.timestamp, reverse=True)
         if action:
             entries = [e for e in entries if e.action == action]
+        if category:
+            entries = [e for e in entries if e.action.startswith(f"{category}.")]
         if tenant_id:
             entries = [e for e in entries if str(e.tenant_id) == tenant_id]
-        return entries[offset : offset + limit]
+        total = len(entries)
+        return Page(
+            items=entries[offset : offset + limit], total=total, offset=offset, limit=limit
+        )
 
 
 class _Scoped:

@@ -7,13 +7,13 @@ from fastapi import APIRouter, Query
 from medicore.application.use_cases.audit import ListTenantAudit
 from medicore.domain.repositories._support import AuditFilter, Paging
 from medicore.presentation.dependencies import Actor, UoW
-from medicore.presentation.schemas.platform import AuditEntryResponse
+from medicore.presentation.schemas.platform import AuditListResponse
 from medicore.presentation.serializers import ser_audit
 
 router = APIRouter(tags=["audit"])
 
 
-@router.get("/audit", response_model=list[AuditEntryResponse])
+@router.get("/audit", response_model=AuditListResponse)
 def list_audit(
     actor: Actor,
     uow: UoW,
@@ -24,7 +24,7 @@ def list_audit(
     date_from: str | None = Query(None),
     date_to: str | None = Query(None),
     offset: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(50, ge=1, le=500),
 ):
     with uow:
         f = AuditFilter(
@@ -42,4 +42,9 @@ def list_audit(
             if e.actor_id not in names:
                 u = uow.users.get_by_id(e.actor_id)
                 names[e.actor_id] = u.name if u else None
-        return [{**ser_audit(e), "actor_name": names[e.actor_id]} for e in page.items]
+        return AuditListResponse(
+            items=[{**ser_audit(e), "actor_name": names[e.actor_id]} for e in page.items],
+            total=page.total,
+            offset=page.offset,
+            limit=page.limit,
+        )

@@ -234,8 +234,9 @@ def test_global_audit_reads_tenant_trail():
     auth.execute(
         AuthenticateUserCommand(slug="clinica-norte", email=seed.doctor.email, password=PASSWORD)
     )
-    entries = ListGlobalAudit(seed.factory).execute(actor_for(seed))
-    assert any(e.action == "auth.login" for e in entries)
+    page = ListGlobalAudit(seed.factory).execute(actor_for(seed))
+    assert any(e.action == "auth.login" for e in page.items)
+    assert page.total >= 1
 
 
 def test_impersonation_token_carries_impersonator():

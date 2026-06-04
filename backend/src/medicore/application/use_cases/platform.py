@@ -381,11 +381,13 @@ class ListGlobalAudit:
         limit: int = 100,
         offset: int = 0,
         action: str | None = None,
+        category: str | None = None,
         tenant_id: str | None = None,
-    ) -> list[AuditLog]:
+    ) -> Page[AuditLog]:
         with self._factory.platform_reads() as reads:
             return reads.global_audit(
-                limit=limit, offset=offset, action=action, tenant_id=tenant_id
+                limit=limit, offset=offset, action=action, category=category,
+                tenant_id=tenant_id,
             )
 
 
