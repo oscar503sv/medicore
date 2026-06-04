@@ -136,10 +136,6 @@ export function ComplianceRow() {
         <Lock className="h-3 w-3 text-accent" />
         {t('login.compliance')}
       </span>
-      <span className="h-3 w-px bg-line" />
-      <span className="font-mono">HIPAA / GDPR</span>
-      <span className="h-3 w-px bg-line" />
-      <span className="font-mono">SOC 2</span>
     </div>
   )
 }
