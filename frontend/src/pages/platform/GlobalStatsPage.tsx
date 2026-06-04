@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Activity, Building2, CalendarCheck, Users } from 'lucide-react'
@@ -6,6 +7,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { Card } from '@/components/ui/Card'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { useT } from '@/lib/i18n'
@@ -20,12 +22,15 @@ const STATUS_TONE: Record<TenantStatus, 'ok' | 'danger' | 'neutral'> = {
 export function GlobalStatsPage() {
   const t = useT()
   const navigate = useNavigate()
+  const [offset, setOffset] = useState(0)
   const { data, isLoading } = useQuery({
     queryKey: ['platform-stats'],
     queryFn: platformTenantsApi.stats,
   })
 
   if (isLoading || !data) return <PageLoader />
+
+  const paged = data.by_clinic.slice(offset, offset + PAGE_SIZE)
 
   return (
     <div className="space-y-5 p-8">
@@ -51,7 +56,7 @@ export function GlobalStatsPage() {
             </Tr>
           </thead>
           <tbody>
-            {data.by_clinic.map((c) => (
+            {paged.map((c) => (
               <Tr key={c.tenant_id} onClick={() => navigate(`/platform/clinics/${c.tenant_id}`)}>
                 <Td className="font-medium text-tx">
                   <Activity className="mr-2 inline h-3.5 w-3.5 text-tx-4" />
@@ -68,6 +73,9 @@ export function GlobalStatsPage() {
             ))}
           </tbody>
         </Table>
+        {data.by_clinic.length > PAGE_SIZE && (
+          <Pager offset={offset} limit={PAGE_SIZE} count={paged.length} total={data.by_clinic.length} onChange={setOffset} />
+        )}
       </Card>
     </div>
   )

@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
@@ -25,6 +26,7 @@ export function InsurersPage() {
   const [creating, setCreating] = useState(false)
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'archived'>('all')
   const [q, setQ] = useState('')
+  const [offset, setOffset] = useState(0)
 
   const { data, isLoading } = useQuery({
     queryKey: ['insurers'],
@@ -41,6 +43,7 @@ export function InsurersPage() {
         i.name.toLowerCase().includes(term) ||
         (i.contact_person ?? '').toLowerCase().includes(term)),
   )
+  const paged = visible.slice(offset, offset + PAGE_SIZE)
 
   const archive = useMutation({
     mutationFn: (id: string) => insurersApi.archive(id),
@@ -75,14 +78,20 @@ export function InsurersPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value)
+              setOffset(0)
+            }}
             placeholder={t('insurers.search_ph')}
             className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
           />
         </div>
         <Segmented
           value={statusFilter}
-          onChange={setStatusFilter}
+          onChange={(v) => {
+            setStatusFilter(v)
+            setOffset(0)
+          }}
           options={[
             { value: 'all', label: t('app.all') },
             { value: 'active', label: t('insurers.active') },
@@ -95,6 +104,7 @@ export function InsurersPage() {
         {isLoading ? (
           <PageLoader />
         ) : visible.length > 0 ? (
+          <>
           <Table>
             <thead>
               <tr>
@@ -106,7 +116,7 @@ export function InsurersPage() {
               </tr>
             </thead>
             <tbody>
-              {visible.map((ins) => (
+              {paged.map((ins) => (
                 <Tr key={ins.id}>
                   <Td>
                     <p className="font-medium text-tx">{ins.name}</p>
@@ -146,6 +156,10 @@ export function InsurersPage() {
               ))}
             </tbody>
           </Table>
+          {visible.length > PAGE_SIZE && (
+            <Pager offset={offset} limit={PAGE_SIZE} count={paged.length} total={visible.length} onChange={setOffset} />
+          )}
+          </>
         ) : (
           <EmptyState title={t('insurers.empty_title')} description={t('insurers.empty_desc')} />
         )}

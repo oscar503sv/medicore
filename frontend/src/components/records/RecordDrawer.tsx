@@ -121,10 +121,15 @@ export function RecordDrawer({
             </section>
           )}
 
-          {/* Author */}
+          {/* Signer */}
           <div className="mt-8 flex items-center gap-2 border-t border-line pt-5 text-[13px] text-tx-3">
-            <Avatar name="Médico" size="sm" />
-            Firmado el {fmtDateTimeTz(record.signed_at)}
+            <Avatar name={record.signed_by_name ?? '—'} size="sm" />
+            <span>
+              {t('record.signed_by')}{' '}
+              <span className="font-medium text-tx">{record.signed_by_name ?? '—'}</span>
+              {' · '}
+              {fmtDateTimeTz(record.signed_at)}
+            </span>
           </div>
         </div>
       )}

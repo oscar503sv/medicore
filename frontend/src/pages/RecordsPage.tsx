@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { fmtDateTz } from '@/lib/format'
@@ -19,6 +20,7 @@ export function RecordsPage() {
   const [q, setQ] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [offset, setOffset] = useState(0)
 
   const { data, isLoading } = useQuery({
     queryKey: ['records', 'all'],
@@ -43,6 +45,8 @@ export function RecordsPage() {
     })
   }, [data, q, from, to])
 
+  const paged = filtered.slice(offset, offset + PAGE_SIZE)
+
   return (
     <div className="space-y-5 p-8">
       <PageHeader eyebrow={`${filtered.length} registros`} title={t('records.title')} />
@@ -52,7 +56,10 @@ export function RecordsPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value)
+              setOffset(0)
+            }}
             placeholder={t('records.search_ph')}
             className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
           />
@@ -62,14 +69,20 @@ export function RecordsPage() {
           <input
             type="date"
             value={from}
-            onChange={(e) => setFrom(e.target.value)}
+            onChange={(e) => {
+              setFrom(e.target.value)
+              setOffset(0)
+            }}
             className="h-10 rounded-lg border border-line bg-bg px-3 text-sm text-tx focus:border-accent focus:outline-none"
           />
           <label className="text-[13px] text-tx-3">{t('records.date_to')}</label>
           <input
             type="date"
             value={to}
-            onChange={(e) => setTo(e.target.value)}
+            onChange={(e) => {
+              setTo(e.target.value)
+              setOffset(0)
+            }}
             className="h-10 rounded-lg border border-line bg-bg px-3 text-sm text-tx focus:border-accent focus:outline-none"
           />
         </div>
@@ -80,6 +93,7 @@ export function RecordsPage() {
               setQ('')
               setFrom('')
               setTo('')
+              setOffset(0)
             }}
           >
             <X className="h-4 w-4" />
@@ -92,38 +106,43 @@ export function RecordsPage() {
         {isLoading ? (
           <PageLoader />
         ) : filtered.length > 0 ? (
-          <Table>
-            <thead>
-              <tr>
-                <Th>{t('records.col_code')}</Th>
-                <Th>{t('records.col_patient')}</Th>
-                <Th>{t('records.col_reason')}</Th>
-                <Th>{t('records.col_type')}</Th>
-                <Th>{t('records.col_encounter')}</Th>
-                <Th>{t('records.col_status')}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => (
-                <Tr key={r.id} onClick={() => setOpenId(r.id)}>
-                  <Td>
-                    <span className="font-mono text-[13px] text-tx">{r.code}</span>
-                  </Td>
-                  <Td className="font-medium text-tx">{r.patient_name ?? '—'}</Td>
-                  <Td>{r.chief_complaint}</Td>
-                  <Td>
-                    <Badge>{t(`record.type_${r.type}`)}</Badge>
-                  </Td>
-                  <Td>{fmtDateTz(r.encounter_at)}</Td>
-                  <Td>
-                    <Badge tone={r.status === 'amended' ? 'info' : 'ok'}>
-                      {t(`records.${r.status === 'amended' ? 'amended' : 'signed'}`)}
-                    </Badge>
-                  </Td>
-                </Tr>
-              ))}
-            </tbody>
-          </Table>
+          <>
+            <Table>
+              <thead>
+                <tr>
+                  <Th>{t('records.col_code')}</Th>
+                  <Th>{t('records.col_patient')}</Th>
+                  <Th>{t('records.col_reason')}</Th>
+                  <Th>{t('records.col_type')}</Th>
+                  <Th>{t('records.col_encounter')}</Th>
+                  <Th>{t('records.col_status')}</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {paged.map((r) => (
+                  <Tr key={r.id} onClick={() => setOpenId(r.id)}>
+                    <Td>
+                      <span className="font-mono text-[13px] text-tx">{r.code}</span>
+                    </Td>
+                    <Td className="font-medium text-tx">{r.patient_name ?? '—'}</Td>
+                    <Td>{r.chief_complaint}</Td>
+                    <Td>
+                      <Badge>{t(`record.type_${r.type}`)}</Badge>
+                    </Td>
+                    <Td>{fmtDateTz(r.encounter_at)}</Td>
+                    <Td>
+                      <Badge tone={r.status === 'amended' ? 'info' : 'ok'}>
+                        {t(`records.${r.status === 'amended' ? 'amended' : 'signed'}`)}
+                      </Badge>
+                    </Td>
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+            {filtered.length > PAGE_SIZE && (
+              <Pager offset={offset} limit={PAGE_SIZE} count={paged.length} total={filtered.length} onChange={setOffset} />
+            )}
+          </>
         ) : data && data.length > 0 ? (
           <EmptyState title={t('records.title')} description={t('records.empty_filtered')} />
         ) : (

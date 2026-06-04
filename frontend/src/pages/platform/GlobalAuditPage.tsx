@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Select } from '@/components/ui/Input'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { actionLabel, auditDetail, categoryMeta, AUDIT_CATEGORIES } from '@/lib/audit'
@@ -16,9 +17,6 @@ import { cn } from '@/lib/cn'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { GlobalAuditEntry } from '@/types'
-import { Pager } from '@/pages/AuditPage'
-
-const PAGE_SIZE = 50
 
 export function GlobalAuditPage() {
   const t = useT()

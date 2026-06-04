@@ -242,13 +242,16 @@ def ser_consultation(c: Consultation, uow=None) -> dict:
     }
 
 
-def ser_record(r: MedicalRecord, *, patient_name: str | None = None) -> dict:
+def ser_record(
+    r: MedicalRecord, *, patient_name: str | None = None, signed_by_name: str | None = None
+) -> dict:
     return {
         "id": str(r.id),
         "tenant_id": str(r.tenant_id),
         "code": r.code,
         "patient_id": str(r.patient_id),
         "patient_name": patient_name,
+        "signed_by_name": signed_by_name,
         "author_id": str(r.author_id),
         "type": str(r.type),
         "status": str(r.status),

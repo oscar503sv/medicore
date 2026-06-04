@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
@@ -22,14 +23,17 @@ export function PatientsPage() {
   const navigate = useNavigate()
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [offset, setOffset] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['patients', { q, filter }],
+    queryKey: ['patients', { q, filter, offset }],
     queryFn: () =>
       patientsApi.list({
         q: q || undefined,
         status: filter === 'all' ? undefined : filter,
+        offset,
+        limit: PAGE_SIZE,
       }),
   })
 
@@ -71,14 +75,20 @@ export function PatientsPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value)
+              setOffset(0)
+            }}
             placeholder={t('patients.search_ph')}
             className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
           />
         </div>
         <Segmented
           value={filter}
-          onChange={setFilter}
+          onChange={(v) => {
+            setFilter(v)
+            setOffset(0)
+          }}
           options={[
             { value: 'all', label: t('app.all') },
             { value: 'active', label: t('patients.active') },
@@ -135,6 +145,9 @@ export function PatientsPage() {
           </Table>
         ) : (
           <EmptyState title="Sin pacientes" description="Registra el primer paciente para empezar." />
+        )}
+        {data && data.total > PAGE_SIZE && (
+          <Pager offset={offset} limit={PAGE_SIZE} count={data.items.length} total={data.total} onChange={setOffset} />
         )}
       </Card>
 

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
@@ -33,6 +34,7 @@ export function ClinicsListPage() {
   const t = useT()
   const navigate = useNavigate()
   const [creating, setCreating] = useState(false)
+  const [offset, setOffset] = useState(0)
 
   const { data, isLoading } = useQuery({
     queryKey: ['platform-tenants'],
@@ -42,6 +44,7 @@ export function ClinicsListPage() {
   if (isLoading || !data) return <PageLoader />
 
   const tenants = data.items
+  const paged = tenants.slice(offset, offset + PAGE_SIZE)
   const active = tenants.filter((c) => c.status === 'active').length
   const suspended = tenants.filter((c) => c.status === 'suspended').length
 
@@ -75,7 +78,7 @@ export function ClinicsListPage() {
             </Tr>
           </thead>
           <tbody>
-            {tenants.map((c) => (
+            {paged.map((c) => (
               <Tr key={c.id} onClick={() => navigate(`/platform/clinics/${c.id}`)}>
                 <Td className="font-medium text-tx">{c.legal_name}</Td>
                 <Td className="font-mono text-[13px]">{c.slug}</Td>
@@ -88,6 +91,9 @@ export function ClinicsListPage() {
             ))}
           </tbody>
         </Table>
+        {tenants.length > PAGE_SIZE && (
+          <Pager offset={offset} limit={PAGE_SIZE} count={paged.length} total={tenants.length} onChange={setOffset} />
+        )}
       </Card>
 
       <CreateClinicModal open={creating} onClose={() => setCreating(false)} />

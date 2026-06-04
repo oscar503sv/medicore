@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
@@ -48,6 +49,7 @@ export function UsersPage() {
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null)
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
   const [q, setQ] = useState('')
+  const [offset, setOffset] = useState(0)
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -64,6 +66,7 @@ export function UsersPage() {
       (roleFilter === 'all' || u.role === roleFilter) &&
       (!term || u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term)),
   )
+  const paged = visible.slice(offset, offset + PAGE_SIZE)
 
   const suspend = useMutation({
     mutationFn: (id: string) => usersApi.suspend(id),
@@ -108,14 +111,20 @@ export function UsersPage() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => {
+              setQ(e.target.value)
+              setOffset(0)
+            }}
             placeholder={t('users.search_ph')}
             className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
           />
         </div>
         <Segmented
           value={roleFilter}
-          onChange={setRoleFilter}
+          onChange={(v) => {
+            setRoleFilter(v)
+            setOffset(0)
+          }}
           options={[
             { value: 'all', label: t('app.all') },
             { value: 'doctor', label: t('role.doctor') },
@@ -130,6 +139,7 @@ export function UsersPage() {
         {isLoading ? (
           <PageLoader />
         ) : (
+          <>
           <Table>
             <thead>
               <tr>
@@ -142,7 +152,7 @@ export function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {visible.map((u) => (
+              {paged.map((u) => (
                 <Tr key={u.id}>
                   <Td>
                     <div className="flex items-center gap-3">
@@ -194,6 +204,10 @@ export function UsersPage() {
               ))}
             </tbody>
           </Table>
+          {visible.length > PAGE_SIZE && (
+            <Pager offset={offset} limit={PAGE_SIZE} count={paged.length} total={visible.length} onChange={setOffset} />
+          )}
+          </>
         )}
       </Card>
 

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
@@ -110,6 +111,7 @@ export function ClinicDetailPage() {
   const [userQ, setUserQ] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [offset, setOffset] = useState(0)
   const [editTarget, setEditTarget] = useState<User | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null)
   const [supportOpen, setSupportOpen] = useState(false)
@@ -124,6 +126,7 @@ export function ClinicDetailPage() {
       return true
     })
   }, [users, userQ, roleFilter, statusFilter])
+  const pagedUsers = filteredUsers.slice(offset, offset + PAGE_SIZE)
 
   const resetPassword = useMutation({
     mutationFn: (userId: string) => platformTenantsApi.resetUserPassword(id, userId, genPassword()),
@@ -288,13 +291,16 @@ export function ClinicDetailPage() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
             <input
               value={userQ}
-              onChange={(e) => setUserQ(e.target.value)}
+              onChange={(e) => {
+                setUserQ(e.target.value)
+                setOffset(0)
+              }}
               placeholder={t('platform.users_search_ph')}
               className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
             />
           </div>
           <div className="flex items-center gap-3">
-            <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+            <Select value={roleFilter} onChange={(e) => { setRoleFilter(e.target.value); setOffset(0) }}>
               <option value="all">{t('app.all')}</option>
               {(['admin', 'doctor', 'nurse', 'receptionist'] as const).map((r) => (
                 <option key={r} value={r}>
@@ -302,7 +308,7 @@ export function ClinicDetailPage() {
                 </option>
               ))}
             </Select>
-            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <Select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setOffset(0) }}>
               <option value="all">{t('app.all')}</option>
               {(['active', 'suspended'] as const).map((s) => (
                 <option key={s} value={s}>
@@ -323,7 +329,7 @@ export function ClinicDetailPage() {
             </Tr>
           </thead>
           <tbody>
-            {filteredUsers.map((u) => (
+            {pagedUsers.map((u) => (
               <Tr key={u.id}>
                 <Td className="font-medium text-tx">{u.name}</Td>
                 <Td className="text-[13px]">{u.email}</Td>
@@ -371,6 +377,9 @@ export function ClinicDetailPage() {
             ))}
           </tbody>
         </Table>
+        {filteredUsers.length > PAGE_SIZE && (
+          <Pager offset={offset} limit={PAGE_SIZE} count={pagedUsers.length} total={filteredUsers.length} onChange={setOffset} />
+        )}
       </Card>
 
       <EditUserModal

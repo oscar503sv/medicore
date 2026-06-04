@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Modal } from '@/components/ui/Modal'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
@@ -37,6 +38,7 @@ export function AppointmentsPage() {
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | AppointmentStatus>('all')
   const [q, setQ] = useState('')
+  const [offset, setOffset] = useState(0)
 
   const { data, isLoading } = useQuery({
     queryKey: ['appointments', 'day', date],
@@ -53,6 +55,7 @@ export function AppointmentsPage() {
         (a.patient_name ?? '').toLowerCase().includes(term) ||
         a.reason.toLowerCase().includes(term)),
   )
+  const paged = visible.slice(offset, offset + PAGE_SIZE)
 
   const startConsult = useMutation({
     mutationFn: (appointmentId: string) => consultationsApi.start(appointmentId),
@@ -109,14 +112,20 @@ export function AppointmentsPage() {
           <input
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => {
+              setDate(e.target.value)
+              setOffset(0)
+            }}
             className="h-10 rounded-lg border border-line bg-bg px-3 text-sm text-tx focus:border-accent focus:outline-none"
           />
           <div className="relative w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-tx-4" />
             <input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value)
+                setOffset(0)
+              }}
               placeholder={t('appt.search_ph')}
               className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
             />
@@ -124,7 +133,10 @@ export function AppointmentsPage() {
         </div>
         <Segmented
           value={statusFilter}
-          onChange={setStatusFilter}
+          onChange={(v) => {
+            setStatusFilter(v)
+            setOffset(0)
+          }}
           options={[
             { value: 'all', label: t('app.all') },
             { value: 'scheduled', label: t('status.scheduled') },
@@ -140,7 +152,8 @@ export function AppointmentsPage() {
         {isLoading ? (
           <PageLoader />
         ) : visible.length > 0 ? (
-          <Table>
+          <>
+            <Table>
             <thead>
               <tr>
                 <Th>{t('appt.col_time')}</Th>
@@ -153,7 +166,7 @@ export function AppointmentsPage() {
               </tr>
             </thead>
             <tbody>
-              {visible.map((a) => (
+              {paged.map((a) => (
                 <Tr key={a.id}>
                   <Td>
                     <span className="font-mono text-tx">{fmtTime(a.scheduled_start)}</span>
@@ -228,7 +241,11 @@ export function AppointmentsPage() {
                 </Tr>
               ))}
             </tbody>
-          </Table>
+            </Table>
+            {visible.length > PAGE_SIZE && (
+              <Pager offset={offset} limit={PAGE_SIZE} count={paged.length} total={visible.length} onChange={setOffset} />
+            )}
+          </>
         ) : (
           <EmptyState title="Sin citas" description="No hay citas para esta fecha." />
         )}

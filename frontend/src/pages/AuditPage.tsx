@@ -10,14 +10,13 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Select } from '@/components/ui/Input'
+import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { actionLabel, auditDetail, categoryMeta, entityLabel, AUDIT_CATEGORIES } from '@/lib/audit'
 import { cn } from '@/lib/cn'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-
-const PAGE_SIZE = 50
 
 export function AuditPage() {
   const t = useT()
@@ -161,38 +160,6 @@ export function AuditPage() {
           <EmptyState title={t('audit.title')} description={t('audit.empty')} />
         )}
       </Card>
-    </div>
-  )
-}
-
-/** Inline server-side pager: "{from}–{to} / {total}" with Prev/Next. */
-export function Pager({
-  offset,
-  limit,
-  count,
-  total,
-  onChange,
-}: {
-  offset: number
-  limit: number
-  count: number
-  total: number
-  onChange: (next: number) => void
-}) {
-  const t = useT()
-  const start = total === 0 ? 0 : offset + 1
-  const end = offset + count
-  return (
-    <div className="flex items-center justify-between border-t border-line px-5 py-3 text-[13px] text-tx-3">
-      <span>{`${start}–${end} / ${total}`}</span>
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" disabled={offset === 0} onClick={() => onChange(Math.max(0, offset - limit))}>
-          {t('audit.prev')}
-        </Button>
-        <Button variant="outline" size="sm" disabled={offset + limit >= total} onClick={() => onChange(offset + limit)}>
-          {t('audit.next')}
-        </Button>
-      </div>
     </div>
   )
 }

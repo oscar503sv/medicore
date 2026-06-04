@@ -29,6 +29,7 @@ class RecordResponse(BaseModel):
     code: str
     patient_id: str
     patient_name: str | None = None
+    signed_by_name: str | None = None
     author_id: str
     type: str
     status: str

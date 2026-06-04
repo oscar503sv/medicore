@@ -50,7 +50,14 @@ def list_records(
 @router.get("/records/{record_id}", response_model=RecordResponse)
 def get_record(record_id: str, actor: Actor, uow: UoW, clock: Clock):
     record = GetMedicalRecord(uow, clock).execute(actor, RecordId.parse(record_id))
-    return ser_record(record)
+    # Record who signed it (the doctor) for the document footer.
+    signer = uow.users.get_by_id(record.signed_by_id)
+    patient = uow.patients.get_by_id(record.patient_id)
+    return ser_record(
+        record,
+        patient_name=patient.full_name if patient else None,
+        signed_by_name=signer.name if signer else None,
+    )
 
 
 @router.post("/records/{record_id}/amend", response_model=RecordResponse)

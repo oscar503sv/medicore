@@ -306,6 +306,7 @@ export interface MedicalRecord {
   code: string
   patient_id: string
   patient_name: string | null
+  signed_by_name: string | null
   author_id: string
   type: ClinicalRecordType
   status: RecordStatus
