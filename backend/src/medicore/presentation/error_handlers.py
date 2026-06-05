@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -20,6 +22,8 @@ from medicore.domain.shared.errors import (
     RecordAlreadySigned,
     SlotUnavailable,
 )
+
+logger = logging.getLogger("medicore")
 
 
 def _json(status: int, detail: str) -> JSONResponse:
@@ -72,3 +76,11 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApplicationError)
     async def handle_application(request: Request, exc: ApplicationError):
         return _json(400, str(exc))
+
+    @app.exception_handler(Exception)
+    async def handle_unexpected(request: Request, exc: Exception):
+        # Last-resort handler: log the full traceback server-side, return a generic message
+        # so internal details never leak to the client. Specific handlers above and FastAPI's
+        # HTTPException/validation handling take precedence over this catch-all.
+        logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        return _json(500, "Internal server error")

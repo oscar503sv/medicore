@@ -62,13 +62,20 @@ La **regla de dependencia** apunta hacia adentro: `domain` no importa de ninguna
 
 Copia `.env.example` a `.env` y ajusta los valores:
 
-| Variable | Descripción | Ejemplo |
+| Variable | Descripción | Default |
 |----------|-------------|---------|
-| `DATABASE_URL` | Cadena de conexión PostgreSQL (psycopg3) | `postgresql+psycopg://user:pass@localhost:5432/medicore` |
-| `JWT_SECRET` | Secreto para firmar tokens (`openssl rand -hex 32`) | — |
+| `ENVIRONMENT` | `development` o `production`. En producción se activan validaciones estrictas. | `development` |
+| `DATABASE_URL` | Cadena de conexión PostgreSQL (psycopg3) | `postgresql+psycopg://localhost/medicore` |
+| `JWT_SECRET` | Secreto para firmar tokens. **Obligatorio y fuerte en producción** (`openssl rand -hex 32`). | `change-me` (solo dev) |
 | `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Expiración del token | `1440` (24 h) |
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Expiración de sesiones de soporte/impersonación | `60` (1 h) |
+| `CORS_ORIGINS` | Orígenes permitidos (coma-separados) o `*` para cualquiera | `*` |
+| `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` |
+
+> En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue
+> siendo el default inseguro o es demasiado corto. En desarrollo no se valida nada y los defaults
+> funcionan tal cual.
 
 ## Puesta en marcha
 
@@ -101,3 +108,31 @@ python -m venv .venv
 .venv/bin/pytest
 .venv/bin/ruff check src
 ```
+
+## Despliegue
+
+Imagen Docker lista para producción (`Dockerfile` en esta carpeta; usuario no-root, arranca con
+uvicorn en el puerto 8000):
+
+```bash
+# Build
+docker build -t medicore-backend .
+
+# Migraciones (paso aparte, antes de levantar la app)
+docker run --rm --env-file .env medicore-backend alembic upgrade head
+
+# Levantar la API
+docker run -d -p 8000:8000 --env-file .env medicore-backend
+```
+
+Checklist de producción (vía variables de entorno, ver tabla de **Configuración**):
+
+- `ENVIRONMENT=production`
+- `JWT_SECRET` fuerte (`openssl rand -hex 32`) — la app no arranca si es inseguro.
+- `DATABASE_URL` apuntando a la base de datos real.
+- `CORS_ORIGINS` con los orígenes del frontend (no `*`).
+- Opcional: `ENABLE_DOCS=false` para ocultar Swagger/OpenAPI.
+
+> Para varios workers: `uvicorn ... --workers N` (sobreescribiendo el `CMD`) o un gestor de procesos.
+> La app se sirve detrás de un reverse-proxy que termina TLS y reenvía `X-Forwarded-For`
+> (la auditoría registra la IP del cliente a partir de esa cabecera).
