@@ -39,7 +39,6 @@ export function NewAppointmentModal({
   const [patient, setPatient] = useState<Patient | null>(null)
   const [doctorId, setDoctorId] = useState('')
   const [type, setType] = useState('consult')
-  const [duration, setDuration] = useState(30)
   const [reason, setReason] = useState('')
   const [withInsurance, setWithInsurance] = useState(false)
   const [insuranceId, setInsuranceId] = useState('')
@@ -68,8 +67,8 @@ export function NewAppointmentModal({
     enabled: open && withInsurance,
   })
   const { data: slots, isFetching: slotsLoading } = useQuery({
-    queryKey: ['slots', doctorId, day, duration],
-    queryFn: () => appointmentsApi.slots(doctorId, day, duration),
+    queryKey: ['slots', doctorId, day],
+    queryFn: () => appointmentsApi.slots(doctorId, day),
     enabled: open && step === 2 && !!doctorId,
   })
 
@@ -77,7 +76,10 @@ export function NewAppointmentModal({
   // every candidate in the fixed grid came back out_of_hours.
   const doctorOffThatDay =
     !!slots && slots.length > 0 && slots.every((s) => s.status === 'out_of_hours')
-  const doctorName = options?.doctors.find((d) => d.id === doctorId)?.name
+  const selectedDoctor = options?.doctors.find((d) => d.id === doctorId)
+  const doctorName = selectedDoctor?.name
+  // Appointment duration is the doctor's rule — shown, never chosen.
+  const slotMinutes = selectedDoctor?.slot_minutes ?? null
 
   const create = useMutation({
     mutationFn: () =>
@@ -87,7 +89,6 @@ export function NewAppointmentModal({
         location_id: options!.locations[0].id,
         type,
         scheduled_start: selectedSlot!.start,
-        duration_minutes: duration,
         reason,
         insurance_id: withInsurance ? insuranceId || null : null,
       }),
@@ -106,7 +107,6 @@ export function NewAppointmentModal({
     setPatient(null)
     setDoctorId('')
     setType('consult')
-    setDuration(30)
     setReason('')
     setWithInsurance(false)
     setInsuranceId('')
@@ -184,7 +184,14 @@ export function NewAppointmentModal({
         {/* Step 2: details */}
         {step === 1 && (
           <div className="space-y-4">
-            <Select label={t('appt.col_doctor')} value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+            <Select
+              label={t('appt.col_doctor')}
+              value={doctorId}
+              onChange={(e) => {
+                setDoctorId(e.target.value)
+                setSelectedSlot(null) // another doctor → previous pick is stale
+              }}
+            >
               <option value="">—</option>
               {options?.doctors.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -200,19 +207,17 @@ export function NewAppointmentModal({
                   </option>
                 ))}
               </Select>
-              <Select
-                label={t('appt.duration')}
-                value={duration}
-                onChange={(e) => {
-                  setDuration(Number(e.target.value))
-                  setSelectedSlot(null) // slot length changed → previous pick is stale
-                }}
-              >
-                <option value={15}>15 min</option>
-                <option value={30}>30 min</option>
-                <option value={45}>45 min</option>
-                <option value={60}>60 min</option>
-              </Select>
+              {/* Duration is the doctor's rule — shown for context, never chosen here. */}
+              <div>
+                <span className="mb-1.5 block text-[13px] font-medium text-tx-2">
+                  {t('appt.duration')}
+                </span>
+                <div className="flex h-10 items-center gap-2 rounded-lg border border-line bg-surface-2/40 px-3 text-sm text-tx">
+                  <Clock className="h-3.5 w-3.5 text-tx-3" />
+                  {slotMinutes !== null ? `${slotMinutes} min` : '—'}
+                </div>
+                <p className="mt-1 text-[11px] text-tx-4">{t('appt.duration_by_doctor')}</p>
+              </div>
             </div>
             <Input label={t('appt.reason')} value={reason} onChange={(e) => setReason(e.target.value)} />
             <div className="space-y-3 rounded-lg border border-line bg-surface-2/40 p-3">
@@ -360,7 +365,7 @@ export function NewAppointmentModal({
                 <span className="text-right font-mono text-tx">
                   {fmtDate(day, 'd MMM')}
                   {selectedSlot ? ` · ${fmtTime(selectedSlot.start)}` : ''}
-                  <span className="text-tx-4"> · {duration}m</span>
+                  {slotMinutes !== null && <span className="text-tx-4"> · {slotMinutes}m</span>}
                 </span>
               </div>
             </div>

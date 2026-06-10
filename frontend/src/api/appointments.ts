@@ -1,18 +1,23 @@
 import { api } from './client'
 import type { Appointment, Location, Slot, User } from '@/types'
 
+export interface BookingDoctor extends User {
+  /** Appointment duration imposed by the doctor's booking rules (null → not configured). */
+  slot_minutes: number | null
+}
+
 export interface BookingOptions {
-  doctors: User[]
+  doctors: BookingDoctor[]
   locations: Location[]
 }
 
+// Duration is never sent — the backend derives it from the doctor's booking rules.
 export interface CreateAppointmentPayload {
   patient_id: string
   doctor_id: string
   location_id: string
   type: string
   scheduled_start: string
-  duration_minutes: number
   reason: string
   room?: string | null
   insurance_id?: string | null
@@ -34,22 +39,19 @@ export const appointmentsApi = {
       })
       .then((r) => r.data.schedule),
 
-  slots: (doctorId: string, on: string, duration = 30) =>
+  slots: (doctorId: string, on: string) =>
     api
       .get<Slot[]>('/appointments/slots', {
-        params: { doctor_id: doctorId, on, duration },
+        params: { doctor_id: doctorId, on },
       })
       .then((r) => r.data),
 
   create: (payload: CreateAppointmentPayload) =>
     api.post<Appointment>('/appointments', payload).then((r) => r.data),
 
-  reschedule: (id: string, newStart: string, newDuration?: number) =>
+  reschedule: (id: string, newStart: string) =>
     api
-      .put<Appointment>(`/appointments/${id}/reschedule`, {
-        new_start: newStart,
-        new_duration: newDuration,
-      })
+      .put<Appointment>(`/appointments/${id}/reschedule`, { new_start: newStart })
       .then((r) => r.data),
 
   confirm: (id: string) =>

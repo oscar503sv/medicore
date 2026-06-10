@@ -34,19 +34,19 @@ export function RescheduleAppointmentModal({
 
   const open = !!appointment
   const doctorId = appointment?.doctor_id ?? ''
-  const duration = appointment?.duration_minutes ?? 30
 
   const { data: slots, isFetching: slotsLoading } = useQuery({
-    queryKey: ['slots', doctorId, day, duration],
-    queryFn: () => appointmentsApi.slots(doctorId, day, duration),
+    queryKey: ['slots', doctorId, day],
+    queryFn: () => appointmentsApi.slots(doctorId, day),
     enabled: open && !!doctorId,
   })
 
   const doctorOffThatDay =
     !!slots && slots.length > 0 && slots.every((s) => s.status === 'out_of_hours')
 
+  // The new duration is decided by the backend from the doctor's current rules.
   const reschedule = useMutation({
-    mutationFn: () => appointmentsApi.reschedule(appointment!.id, selectedSlot!.start, duration),
+    mutationFn: () => appointmentsApi.reschedule(appointment!.id, selectedSlot!.start),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       qc.invalidateQueries({ queryKey: ['slots'] })
@@ -64,7 +64,8 @@ export function RescheduleAppointmentModal({
           <div className="rounded-lg border border-line bg-surface-2/40 p-3 text-sm">
             <p className="font-medium text-tx">{appointment.patient_name ?? '—'}</p>
             <p className="text-tx-3">
-              {t('appt.reschedule_current')}: {fmtTime(appointment.scheduled_start)} · {duration}m
+              {t('appt.reschedule_current')}: {fmtTime(appointment.scheduled_start)} ·{' '}
+              {appointment.duration_minutes}m
             </p>
           </div>
         )}

@@ -402,9 +402,7 @@ export interface AvailabilityException {
 
 export interface BookingRules {
   slot_minutes: number
-  buffer_minutes: number
   min_advance_hours: number
-  max_advance_days: number
   allow_same_day: boolean
 }
 

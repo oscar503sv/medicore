@@ -443,30 +443,12 @@ function RulesEditor({ rules, onSave }: { rules: BookingRules; onSave: (rules: B
             </option>
           ))}
         </Select>
-        <Select
-          label={t('avail.buffer')}
-          value={form.buffer_minutes}
-          onChange={(e) => setForm({ ...form, buffer_minutes: Number(e.target.value) })}
-        >
-          {[0, 5, 10, 15].map((v) => (
-            <option key={v} value={v}>
-              {v} min
-            </option>
-          ))}
-        </Select>
         <Input
           label={t('avail.min_advance')}
           type="number"
           min={0}
           value={form.min_advance_hours}
           onChange={(e) => setForm({ ...form, min_advance_hours: Number(e.target.value) })}
-        />
-        <Input
-          label={t('avail.max_advance')}
-          type="number"
-          min={0}
-          value={form.max_advance_days}
-          onChange={(e) => setForm({ ...form, max_advance_days: Number(e.target.value) })}
         />
       </div>
       <label className="mt-4 flex items-center gap-2 text-sm text-tx-2">
