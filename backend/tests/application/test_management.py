@@ -176,7 +176,7 @@ class TestAvailability:
             ),
         )
         UpdateBookingRules(uow, FixedClock()).execute(
-            seed.doctor_actor, BookingRules(slot_minutes=20, buffer_minutes=5)
+            seed.doctor_actor, BookingRules(slot_minutes=20)
         )
         stored = uow.availability.get_by_doctor(seed.doctor.id)
         assert stored.exception_on(date(2026, 6, 8)) is not None

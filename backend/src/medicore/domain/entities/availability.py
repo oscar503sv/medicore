@@ -54,12 +54,14 @@ class AvailabilityException:
 
 @dataclass(frozen=True, slots=True)
 class BookingRules:
-    """Constraints applied when booking against a doctor's availability."""
+    """Constraints applied when booking against a doctor's availability.
+
+    ``slot_minutes`` is also the duration of every appointment booked with this doctor —
+    callers never choose a duration.
+    """
 
     slot_minutes: int = 30
-    buffer_minutes: int = 0
     min_advance_hours: int = 0
-    max_advance_days: int = 90
     allow_same_day: bool = True
 
     def __post_init__(self) -> None:
@@ -67,9 +69,8 @@ class BookingRules:
             raise InvalidValueObject(
                 f"slot_minutes must be one of {sorted(_SLOT_CHOICES)}, got {self.slot_minutes}"
             )
-        for name in ("buffer_minutes", "min_advance_hours", "max_advance_days"):
-            if getattr(self, name) < 0:
-                raise InvalidValueObject(f"{name} must be non-negative")
+        if self.min_advance_hours < 0:
+            raise InvalidValueObject("min_advance_hours must be non-negative")
 
 
 @dataclass(slots=True)

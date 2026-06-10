@@ -31,13 +31,12 @@ def _weekly_from_json(lst: list[dict]) -> list[WeeklyDay]:
 
 
 def _rules_from_json(d: dict) -> BookingRules:
+    # Legacy keys persisted in JSONB (buffer_minutes, max_advance_days) are ignored.
     if not d:
         return BookingRules()
     return BookingRules(
         slot_minutes=d.get("slot_minutes", 30),
-        buffer_minutes=d.get("buffer_minutes", 0),
         min_advance_hours=d.get("min_advance_hours", 0),
-        max_advance_days=d.get("max_advance_days", 90),
         allow_same_day=d.get("allow_same_day", True),
     )
 
@@ -78,9 +77,7 @@ def from_doctor_availability(av: DoctorAvailability) -> tuple[dict, list[dict]]:
     ]
     rules = {
         "slot_minutes": av.rules.slot_minutes,
-        "buffer_minutes": av.rules.buffer_minutes,
         "min_advance_hours": av.rules.min_advance_hours,
-        "max_advance_days": av.rules.max_advance_days,
         "allow_same_day": av.rules.allow_same_day,
     }
     av_dict = {

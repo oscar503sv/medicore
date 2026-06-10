@@ -159,7 +159,7 @@ def weekday_availability(tid: TenantId, doctor_id: UserId) -> DoctorAvailability
         tenant_id=tid,
         doctor_id=doctor_id,
         weekly=weekly,
-        rules=BookingRules(slot_minutes=30, buffer_minutes=0, max_advance_days=365),
+        rules=BookingRules(slot_minutes=30),
     )
 
 

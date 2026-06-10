@@ -87,9 +87,7 @@ def remove_exception(exception_id: str, actor: Actor, uow: UoW, clock: Clock):
 def update_rules(body: BookingRulesRequest, actor: Actor, uow: UoW, clock: Clock):
     rules = BookingRules(
         slot_minutes=body.slot_minutes,
-        buffer_minutes=body.buffer_minutes,
         min_advance_hours=body.min_advance_hours,
-        max_advance_days=body.max_advance_days,
         allow_same_day=body.allow_same_day,
     )
     av = UpdateBookingRules(uow, clock).execute(actor, rules)

@@ -315,9 +315,7 @@ def ser_availability(av: DoctorAvailability) -> dict:
         ],
         "rules": {
             "slot_minutes": av.rules.slot_minutes,
-            "buffer_minutes": av.rules.buffer_minutes,
             "min_advance_hours": av.rules.min_advance_hours,
-            "max_advance_days": av.rules.max_advance_days,
             "allow_same_day": av.rules.allow_same_day,
         },
     }

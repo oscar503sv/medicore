@@ -111,3 +111,7 @@ class TestAvailability:
     def test_booking_rules_validate_slot_minutes(self):
         with pytest.raises(InvalidValueObject):
             BookingRules(slot_minutes=37)
+
+    def test_booking_rules_reject_negative_min_advance(self):
+        with pytest.raises(InvalidValueObject):
+            BookingRules(min_advance_hours=-1)

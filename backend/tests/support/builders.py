@@ -104,7 +104,6 @@ def build_weekday_availability(
         rules=BookingRules(
             slot_minutes=slot_minutes,
             min_advance_hours=min_advance_hours,
-            max_advance_days=365,
             allow_same_day=True,
         ),
     )

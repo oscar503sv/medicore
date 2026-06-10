@@ -27,9 +27,7 @@ class ExceptionRequest(BaseModel):
 
 class BookingRulesRequest(BaseModel):
     slot_minutes: int = 30
-    buffer_minutes: int = 0
     min_advance_hours: int = 0
-    max_advance_days: int = 90
     allow_same_day: bool = True
 
 

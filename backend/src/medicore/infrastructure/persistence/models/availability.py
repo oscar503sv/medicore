@@ -25,7 +25,8 @@ class DoctorAvailabilityModel(Base):
     doctor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     # weekly: list of {day_of_week, enabled, blocks:[{start,end}]}
     weekly: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-    # rules: {slot_minutes, buffer_minutes, min_advance_hours, max_advance_days, allow_same_day}
+    # rules: {slot_minutes, min_advance_hours, allow_same_day} — legacy keys in stored JSON
+    # (buffer_minutes, max_advance_days) are ignored by the mapper.
     rules: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
 

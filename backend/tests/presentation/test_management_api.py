@@ -128,6 +128,25 @@ class TestAvailability:
         assert resp.status_code == 200
         assert len(resp.json()["preview"]) == 7
 
+    def test_update_rules_ignores_legacy_fields(self, seed, client, auth_headers):
+        resp = client.put(
+            "/api/v1/availability/me/rules",
+            json={
+                "slot_minutes": 20,
+                "min_advance_hours": 2,
+                "allow_same_day": False,
+                "buffer_minutes": 15,  # legacy field — ignored by the schema
+                "max_advance_days": 30,  # legacy field — ignored by the schema
+            },
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["rules"] == {
+            "slot_minutes": 20,
+            "min_advance_hours": 2,
+            "allow_same_day": False,
+        }
+
     def test_receptionist_cannot_manage_availability(self, seed, client, receptionist_headers):
         resp = client.get("/api/v1/availability/me", headers=receptionist_headers)
         assert resp.status_code == 403

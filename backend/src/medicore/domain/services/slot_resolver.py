@@ -7,8 +7,8 @@ needing to know about them.
 This is where the critical booking rules live:
   * a slot must fall inside the doctor's availability (weekly blocks + ``extra`` exceptions);
   * an ``off`` exception blocks the whole day;
-  * a slot must not overlap an existing appointment (respecting the configured buffer);
-  * booking-rule windows (min/max advance, same-day) are honored.
+  * a slot must not overlap an existing appointment;
+  * booking-rule windows (min advance, same-day) are honored.
 """
 
 from __future__ import annotations
@@ -75,11 +75,8 @@ def _blocks_for_date(availability: DoctorAvailability, on: date) -> list[TimeRan
     return sorted(blocks, key=lambda b: b.start)
 
 
-def _overlaps_busy(
-    start: datetime, end: datetime, busy: list[BusyInterval], buffer_minutes: int
-) -> bool:
-    buffer = timedelta(minutes=buffer_minutes)
-    return any(start < b.end + buffer and b.start - buffer < end for b in busy)
+def _overlaps_busy(start: datetime, end: datetime, busy: list[BusyInterval]) -> bool:
+    return any(start < b.end and b.start < end for b in busy)
 
 
 def _violates_rules(start: datetime, availability: DoctorAvailability, now: datetime) -> bool:
@@ -88,10 +85,9 @@ def _violates_rules(start: datetime, availability: DoctorAvailability, now: date
         return True
     if not rules.allow_same_day and start.date() == now.date():
         return True
-    if rules.min_advance_hours and start < now + timedelta(hours=rules.min_advance_hours):
-        return True
-    max_advance = now.date() + timedelta(days=rules.max_advance_days)
-    return bool(rules.max_advance_days and start.date() > max_advance)
+    return bool(
+        rules.min_advance_hours and start < now + timedelta(hours=rules.min_advance_hours)
+    )
 
 
 def _fits_in_block(start: datetime, end: datetime, blocks: list[TimeRange]) -> bool:
@@ -114,14 +110,13 @@ def resolve_available_slots(
     paint the full day. Status precedence (SPEC PARTE B):
 
     * not inside an effective block  → ``OUT_OF_HOURS``
-    * overlaps an existing appointment (with buffer) → ``TAKEN``
-    * breaks a booking rule (advance window / same-day) → ``BLOCKED_RULES``
+    * overlaps an existing appointment → ``TAKEN``
+    * breaks a booking rule (min advance / same-day) → ``BLOCKED_RULES``
     * otherwise → ``FREE``
     """
     busy = _normalize_busy(busy or [])
     now = _naive(now or datetime.now())
     blocks = _blocks_for_date(availability, on)
-    buffer_minutes = availability.rules.buffer_minutes
     duration = timedelta(minutes=desired_duration_minutes)
     step = timedelta(minutes=availability.rules.slot_minutes)
 
@@ -132,7 +127,7 @@ def resolve_available_slots(
         slot_end = cursor + duration
         if not _fits_in_block(cursor, slot_end, blocks):
             status = SlotStatus.OUT_OF_HOURS
-        elif _overlaps_busy(cursor, slot_end, busy, buffer_minutes):
+        elif _overlaps_busy(cursor, slot_end, busy):
             status = SlotStatus.TAKEN
         elif _violates_rules(cursor, availability, now):
             status = SlotStatus.BLOCKED_RULES
@@ -153,7 +148,7 @@ def is_available(
     """True if an appointment ``[start, start+duration)`` can be booked.
 
     Requires the interval to fit entirely within an availability block, not overlap any busy
-    interval (respecting buffer), and satisfy the booking rules.
+    interval, and satisfy the booking rules.
     """
     busy = _normalize_busy(busy or [])
     now = _naive(now or datetime.now())
@@ -162,7 +157,7 @@ def is_available(
 
     if not _fits_in_block(start, end, _blocks_for_date(availability, start.date())):
         return False
-    if _overlaps_busy(start, end, busy, availability.rules.buffer_minutes):
+    if _overlaps_busy(start, end, busy):
         return False
     return not _violates_rules(start, availability, now)
 

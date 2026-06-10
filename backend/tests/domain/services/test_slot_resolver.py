@@ -116,13 +116,12 @@ class TestResolveSlots:
         assert _at(slots, 9, 0).status == SlotStatus.TAKEN
         assert _at(slots, 9, 30).status == SlotStatus.FREE
 
-    def test_buffer_blocks_adjacent_slot(self):
-        av = make_availability(rules=BookingRules(slot_minutes=30, buffer_minutes=15))
+    def test_adjacent_slot_after_busy_is_free(self):
+        # Back-to-back booking: the slot right after an appointment is offered.
         busy = [BusyInterval(datetime(2026, 6, 1, 9, 0), datetime(2026, 6, 1, 9, 30))]
-        slots = resolve_available_slots(av, THE_DAY, busy=busy, now=LONG_AGO)
-        # 09:30 slot now falls inside the 15-min buffer after the 09:00–09:30 appointment.
+        slots = resolve_available_slots(make_availability(), THE_DAY, busy=busy, now=LONG_AGO)
         assert _at(slots, 9, 0).status == SlotStatus.TAKEN
-        assert _at(slots, 9, 30).status == SlotStatus.TAKEN
+        assert _at(slots, 9, 30).status == SlotStatus.FREE
         assert _at(slots, 10, 0).status == SlotStatus.FREE
 
     def test_min_advance_marks_in_hours_slots_blocked_by_rules(self):
