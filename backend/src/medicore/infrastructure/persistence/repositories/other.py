@@ -157,7 +157,8 @@ class SqlAuditLogRepository:
             if filter.action:
                 q = q.filter(AuditLogModel.action == filter.action)
             if filter.category:
-                q = q.filter(AuditLogModel.action.like(f"{filter.category}.%"))
+                # startswith escapes LIKE wildcards in the user-provided category.
+                q = q.filter(AuditLogModel.action.startswith(f"{filter.category}."))
             if filter.entity_type:
                 q = q.filter(AuditLogModel.entity_type == filter.entity_type)
             if filter.actor_id:
