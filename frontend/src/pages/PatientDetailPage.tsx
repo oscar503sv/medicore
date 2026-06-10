@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, ArrowLeft, Lock, Pencil } from 'lucide-react'
+import { Archive, ArrowLeft, Lock, Pencil, RotateCcw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { errorMessage } from '@/api/client'
 import { patientsApi } from '@/api/patients'
@@ -66,6 +66,17 @@ export function PatientDetailPage() {
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
+  // Reactivation is safe and reversible, so no confirmation modal (unlike archiving).
+  const reactivatePatient = useMutation({
+    mutationFn: () => patientsApi.reactivate(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['patient', id] })
+      qc.invalidateQueries({ queryKey: ['patients'] })
+      toast(t('patient.reactivated_ok'))
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
   if (isLoading || !data) return <PageLoader />
   const p = data.patient
 
@@ -126,6 +137,16 @@ export function PatientDetailPage() {
             <Button variant="outline" onClick={() => setArchiveOpen(true)}>
               <Archive className="h-4 w-4" />
               {t('patient.archive')}
+            </Button>
+          )}
+          {canArchive && p.status === 'inactive' && (
+            <Button
+              variant="outline"
+              loading={reactivatePatient.isPending}
+              onClick={() => reactivatePatient.mutate()}
+            >
+              <RotateCcw className="h-4 w-4" />
+              {t('patient.reactivate')}
             </Button>
           )}
         </div>

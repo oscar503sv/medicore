@@ -35,4 +35,7 @@ export const patientsApi = {
 
   archive: (id: string) =>
     api.post<Patient>(`/patients/${id}/archive`).then((r) => r.data),
+
+  reactivate: (id: string) =>
+    api.post<Patient>(`/patients/${id}/reactivate`).then((r) => r.data),
 }

@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, CheckCircle2, Pencil, Plus, Search, ShieldCheck } from 'lucide-react'
+import { Archive, CheckCircle2, Pencil, Plus, RotateCcw, Search, ShieldCheck } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { insurersApi, type InsurerPayload } from '@/api/insurers'
 import { PageHeader } from '@/components/PageHeader'
@@ -50,6 +50,15 @@ export function InsurersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['insurers'] })
       toast(t('insurers.archived_ok'))
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  const reactivate = useMutation({
+    mutationFn: (id: string) => insurersApi.reactivate(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['insurers'] })
+      toast(t('insurers.reactivated_ok'))
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -140,7 +149,7 @@ export function InsurersPage() {
                         <Pencil className="h-3.5 w-3.5" />
                         {t('app.edit')}
                       </Button>
-                      {ins.active && (
+                      {ins.active ? (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -148,6 +157,15 @@ export function InsurersPage() {
                           title={t('insurers.archive')}
                         >
                           <Archive className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => reactivate.mutate(ins.id)}
+                          title={t('insurers.reactivate')}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
                         </Button>
                       )}
                     </div>

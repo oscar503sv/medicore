@@ -24,4 +24,7 @@ export const insurersApi = {
 
   archive: (id: string) =>
     api.post<Insurer>(`/insurers/${id}/archive`).then((r) => r.data),
+
+  reactivate: (id: string) =>
+    api.post<Insurer>(`/insurers/${id}/reactivate`).then((r) => r.data),
 }
