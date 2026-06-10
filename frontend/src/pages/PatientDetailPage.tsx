@@ -8,6 +8,7 @@ import { patientsApi } from '@/api/patients'
 import { recordsApi } from '@/api/records'
 import { EditPatientModal } from '@/components/patients/EditPatientModal'
 import { MedicationTimeline } from '@/components/patients/MedicationTimeline'
+import { PatientDocuments } from '@/components/patients/PatientDocuments'
 import { PatientSummary } from '@/components/patients/PatientSummary'
 import { VitalsHistory } from '@/components/patients/VitalsHistory'
 import { RecordDrawer } from '@/components/records/RecordDrawer'
@@ -193,9 +194,7 @@ export function PatientDetailPage() {
 
       {tab === 'vitals' && <VitalsHistory records={records ?? []} />}
 
-      {tab === 'documents' && (
-        <Card className="p-8 text-center text-sm text-tx-3">{t('patient.section_wip')}</Card>
-      )}
+      {tab === 'documents' && <PatientDocuments patientId={id} />}
 
       <EditPatientModal patient={editOpen ? p : null} onClose={() => setEditOpen(false)} />
       <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />
