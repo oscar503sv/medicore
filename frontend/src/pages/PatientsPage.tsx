@@ -118,8 +118,11 @@ export function PatientsPage() {
                     <div className="flex items-center gap-3">
                       <Avatar name={`${p.first_name} ${p.last_name}`} size="sm" />
                       <div>
-                        <p className="font-medium text-tx">
+                        <p className="flex items-center gap-2 font-medium text-tx">
                           {p.first_name} {p.last_name}
+                          {p.status === 'inactive' && (
+                            <Badge tone="neutral">{t('patients.inactive')}</Badge>
+                          )}
                         </p>
                         <p className="font-mono text-xs text-tx-3">{p.code}</p>
                       </div>

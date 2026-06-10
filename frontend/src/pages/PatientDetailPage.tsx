@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Lock, Pencil } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Archive, ArrowLeft, Lock, Pencil } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { errorMessage } from '@/api/client'
 import { patientsApi } from '@/api/patients'
 import { recordsApi } from '@/api/records'
 import { EditPatientModal } from '@/components/patients/EditPatientModal'
@@ -14,7 +15,9 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
+import { Modal } from '@/components/ui/Modal'
 import { PageLoader } from '@/components/ui/Spinner'
+import { toast } from '@/components/ui/Toast'
 import { useAuthStore } from '@/stores/auth'
 import { cn } from '@/lib/cn'
 import { fmtDateTz } from '@/lib/format'
@@ -25,10 +28,13 @@ type Tab = 'summary' | 'history' | 'prescriptions' | 'vitals' | 'documents'
 export function PatientDetailPage() {
   const t = useT()
   const { id = '' } = useParams()
+  const qc = useQueryClient()
   const [tab, setTab] = useState<Tab>('summary')
   const [editOpen, setEditOpen] = useState(false)
+  const [archiveOpen, setArchiveOpen] = useState(false)
   const [openRecordId, setOpenRecordId] = useState<string | null>(null)
   const canEdit = useAuthStore((s) => s.can('patients.edit'))
+  const canArchive = useAuthStore((s) => s.can('patients.archive'))
   // History is visible to everyone but only a doctor may open it (clinical authorship,
   // not a grantable capability); the clinical tabs follow records.view.
   const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
@@ -46,6 +52,17 @@ export function PatientDetailPage() {
       tab === 'prescriptions' ||
       tab === 'vitals' ||
       (tab === 'summary' && canClinical),
+  })
+
+  const archivePatient = useMutation({
+    mutationFn: () => patientsApi.archive(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['patient', id] })
+      qc.invalidateQueries({ queryKey: ['patients'] })
+      setArchiveOpen(false)
+      toast(t('patient.archived_ok'))
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
   if (isLoading || !data) return <PageLoader />
@@ -82,6 +99,7 @@ export function PatientDetailPage() {
             <span>{p.age} años</span>
             <span>{p.sex === 'male' ? 'Masculino' : p.sex === 'female' ? 'Femenino' : 'Otro'}</span>
             {p.blood_type && <span>Grupo {p.blood_type}</span>}
+            {p.status === 'inactive' && <Badge tone="neutral">{t('patients.inactive')}</Badge>}
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {p.tags.map((tag) => (
@@ -96,12 +114,20 @@ export function PatientDetailPage() {
             ))}
           </div>
         </div>
-        {canEdit && (
-          <Button variant="outline" onClick={() => setEditOpen(true)}>
-            <Pencil className="h-4 w-4" />
-            {t('app.edit')}
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {canEdit && (
+            <Button variant="outline" onClick={() => setEditOpen(true)}>
+              <Pencil className="h-4 w-4" />
+              {t('app.edit')}
+            </Button>
+          )}
+          {canArchive && p.status === 'active' && (
+            <Button variant="outline" onClick={() => setArchiveOpen(true)}>
+              <Archive className="h-4 w-4" />
+              {t('patient.archive')}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -173,6 +199,35 @@ export function PatientDetailPage() {
 
       <EditPatientModal patient={editOpen ? p : null} onClose={() => setEditOpen(false)} />
       <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />
+
+      <Modal
+        open={archiveOpen}
+        onClose={() => setArchiveOpen(false)}
+        title={t('patient.archive_title')}
+        width="max-w-md"
+      >
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-tx-2">{t('patient.archive_confirm')}</p>
+          <div className="rounded-lg border border-line bg-surface-2/40 p-3 text-sm">
+            <p className="font-medium text-tx">
+              {p.first_name} {p.last_name}
+            </p>
+            <p className="font-mono text-xs text-tx-3">{p.code}</p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setArchiveOpen(false)}>
+              {t('app.back')}
+            </Button>
+            <Button
+              variant="danger"
+              loading={archivePatient.isPending}
+              onClick={() => archivePatient.mutate()}
+            >
+              {t('patient.archive')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

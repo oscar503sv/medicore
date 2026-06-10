@@ -122,6 +122,11 @@ const es: Dict = {
   'patients.col_tags': 'Condiciones',
   'patients.col_last': 'Última visita',
   'patients.col_next': 'Próxima visita',
+  'patient.archive': 'Archivar',
+  'patient.archive_title': 'Archivar paciente',
+  'patient.archive_confirm':
+    'El paciente pasará a inactivo y dejará de aparecer en las listas activas. Su historial clínico se conserva.',
+  'patient.archived_ok': 'Paciente archivado',
   'patient.summary': 'Resumen',
   'patient.history': 'Historial médico',
   'patient.prescriptions': 'Recetas',
@@ -701,6 +706,11 @@ const en: Dict = {
   'patients.col_tags': 'Conditions',
   'patients.col_last': 'Last visit',
   'patients.col_next': 'Next visit',
+  'patient.archive': 'Archive',
+  'patient.archive_title': 'Archive patient',
+  'patient.archive_confirm':
+    'The patient will become inactive and disappear from active lists. Their clinical history is preserved.',
+  'patient.archived_ok': 'Patient archived',
   'patient.summary': 'Summary',
   'patient.history': 'Medical history',
   'patient.prescriptions': 'Prescriptions',
