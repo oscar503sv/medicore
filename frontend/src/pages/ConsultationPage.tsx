@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Clock, Plus, Save, Search, Trash2, X } from 'lucide-react'
-import { api, errorMessage } from '@/api/client'
+import { errorMessage } from '@/api/client'
 import { consultationsApi } from '@/api/consultations'
 import { diagnosesApi } from '@/api/diagnoses'
 import { Badge } from '@/components/ui/Badge'
@@ -47,7 +47,7 @@ export function ConsultationPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['consultation', id],
-    queryFn: () => api.get<Consultation>(`/consultations/${id}`).then((r) => r.data).catch(() => null),
+    queryFn: () => consultationsApi.get(id).catch(() => null),
   })
 
   // Local editable state (mirrors the consultation; autosaved with debounce).

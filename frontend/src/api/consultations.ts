@@ -2,6 +2,9 @@ import { api } from './client'
 import type { Consultation, MedicalRecord, Soap, Vitals } from '@/types'
 
 export const consultationsApi = {
+  get: (id: string) =>
+    api.get<Consultation>(`/consultations/${id}`).then((r) => r.data),
+
   start: (appointmentId: string) =>
     api
       .post<Consultation>(`/consultations/start/${appointmentId}`)
