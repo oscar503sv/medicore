@@ -39,7 +39,7 @@ export function PermissionsPage() {
   if (isLoading || !matrix) return <PageLoader />
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5 p-8">
       <PageHeader eyebrow={t('permissions.subtitle')} title={t('permissions.title')} />
       <Card>
         <PermissionsMatrixTable
