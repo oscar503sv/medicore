@@ -32,6 +32,10 @@ src/medicore/
 La **regla de dependencia** apunta hacia adentro: `domain` no importa de ninguna otra capa;
 `application` solo de `domain`; `infrastructure`/`presentation` de las internas.
 
+En cifras: **16 entidades** y **10 value objects** de dominio, **16 repositorios (Protocols)**,
+**5 puertos de aplicación** (Clock, CodeGenerator, PasswordHasher, TokenIssuer, UnitOfWork),
+**13 grupos de casos de uso** y **13 routers / 80 endpoints** bajo `/api/v1/`.
+
 ## Convenciones del dominio
 
 - **Value Objects**: `@dataclass(frozen=True)`, validan invariantes en `__post_init__`.
@@ -49,6 +53,12 @@ La **regla de dependencia** apunta hacia adentro: `domain` no importa de ninguna
 
 - **Autenticación** por JWT con roles (`admin`, `doctor`, `nurse`, `receptionist`) y cambio de
   contraseña forzado en el primer ingreso.
+- **Permisos granulares** (`application/common/permissions.py`): catálogo de **22 permisos**
+  (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
+  tenant** vía `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults
+  vs. override e intersecta con el catálogo vigente; la capa de presentación los coloca en
+  `ActorContext.permissions`, de modo que cada `ensure_permission(...)` honra la personalización
+  de la clínica. Router `role_permissions` (`GET`/`PUT`/`DELETE`) para administrarlos.
 - **Agenda**: disponibilidad por médico, resolución de slots, ciclo de vida de la cita
   (agendada → confirmada → en curso → completada).
 - **Consulta → historial**: al firmar una consulta se emite un `MedicalRecord` inmutable + las
@@ -94,7 +104,10 @@ python -m venv .venv
 .venv/bin/python scripts/seed_demo.py            # idempotente
 .venv/bin/python scripts/seed_demo.py --reset    # borra los tenants demo y los recrea
 
-# 5) Levantar la API
+# 5) (opcional) Alta de un superadmin de plataforma
+.venv/bin/python scripts/create_platform_admin.py
+
+# 6) Levantar la API
 .venv/bin/uvicorn medicore.presentation.main:app --reload
 ```
 
@@ -103,6 +116,10 @@ python -m venv .venv
 - Tras correr el seed, todos los usuarios demo usan la contraseña **`demo1234`**.
 
 ## Pruebas y linting
+
+Suite de **271 tests** (78 dominio · 119 aplicación · 71 presentación · 3 infraestructura), casi
+toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
+contrato multi-tenant que los repos SQLAlchemy.
 
 ```bash
 .venv/bin/pytest

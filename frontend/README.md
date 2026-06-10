@@ -2,6 +2,11 @@
 
 Interfaz web de Medicore: panel clínico multi-tenant y consola de plataforma (superadmin).
 
+La UI se **condiciona por los permisos efectivos del actor**: cada acción y entrada de navegación
+se muestra según los permisos que el backend resuelve para el rol del usuario (con los overrides
+de la clínica ya aplicados), y la pantalla **Roles & Permisos** permite a un admin editar esos
+overrides. La validación de fondo siempre vive en el backend; la UI solo refleja el mismo modelo.
+
 ## Stack
 
 - **React 18** + **TypeScript** + **Vite 6**
@@ -19,10 +24,15 @@ Interfaz web de Medicore: panel clínico multi-tenant y consola de plataforma (s
 
 ```
 src/
-├── api/          # cliente axios (client.ts) + módulos por dominio (patients, appointments…)
-├── components/   # primitivos de UI, componentes de dominio y el shell de la app
-├── pages/        # pantallas del tenant (Patients, Appointments, Records, Audit, Settings…)
-│   └── platform/ # consola de superadmin (Clinics, GlobalStats, GlobalAudit…)
+├── api/          # cliente axios (client.ts) + 14 módulos por dominio (patients,
+│                 # appointments, permissions, audit, platform…)
+├── components/   # primitivos ui/, shell/, componentes de dominio (appointments, audit,
+│                 # patients, permissions, records) y guards (RequireAuth, RequirePlatformAuth)
+├── pages/        # 16 pantallas del tenant (Patients, PatientDetail, Appointments, Schedule,
+│                 # Consultation, Records, Availability, Insurers, Users, Audit,
+│                 # Permissions, Settings…)
+│   └── platform/ # 5 pantallas de superadmin (ClinicsList, ClinicDetail, GlobalStats,
+│                 # GlobalAudit, PlatformLogin)
 ├── stores/       # zustand: auth (tenant), platformAuth (superadmin), ui (tema/idioma)
 ├── lib/          # i18n, format, cn, audit, validation, timezones
 └── types/        # tipos compartidos (entidades, respuestas de API)
