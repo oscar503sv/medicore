@@ -61,6 +61,25 @@ def test_wrong_password_fails():
         )
 
 
+def test_unknown_email_still_runs_password_verification():
+    # Timing-safety: verify() must run even when the email does not exist, so an
+    # attacker cannot enumerate accounts by measuring response times.
+    seed = seed_clinic()
+    hasher = PlainPasswordHasher()
+    calls: list[str] = []
+    original_verify = hasher.verify
+    hasher.verify = lambda plain, hashed: calls.append(plain) or original_verify(plain, hashed)
+    auth = AuthenticateUser(seed.factory, hasher, FakeTokenIssuer(), FixedClock())
+
+    with pytest.raises(AuthenticationFailed):
+        auth.execute(
+            AuthenticateUserCommand(
+                slug="clinica-norte", email="nadie@example.com", password="whatever"
+            )
+        )
+    assert calls == ["whatever"]
+
+
 def test_suspended_user_cannot_authenticate():
     seed = seed_clinic()
     seed.doctor.status = UserStatus.SUSPENDED

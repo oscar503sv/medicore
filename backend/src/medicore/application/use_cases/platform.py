@@ -92,11 +92,22 @@ class AuthenticatePlatformAdmin:
         self._hasher = hasher
         self._tokens = tokens
         self._clock = clock
+        self._dummy_hash: str | None = None
+
+    def _dummy(self) -> str:
+        # Hash to verify against when the email does not exist, so the response time
+        # does not reveal whether an account exists (user enumeration via timing).
+        if self._dummy_hash is None:
+            self._dummy_hash = self._hasher.hash("medicore.invalid-user.dummy")
+        return self._dummy_hash
 
     def execute(self, email: str, password: str) -> PlatformSessionDTO:
         with self._factory.platform_uow() as uow:
             admin = uow.platform_admins.get_by_email(email)
-            if admin is None or not self._hasher.verify(password, admin.password_hash):
+            password_ok = self._hasher.verify(
+                password, admin.password_hash if admin else self._dummy()
+            )
+            if admin is None or not password_ok:
                 raise AuthenticationFailed("invalid credentials")
             if not admin.is_active:
                 raise AuthenticationFailed("account is not active")

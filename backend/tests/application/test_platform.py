@@ -60,6 +60,21 @@ def test_platform_login_wrong_password():
         make_platform_auth(seed).execute(seed.platform_admin.email, "nope")
 
 
+def test_platform_unknown_email_still_runs_password_verification():
+    # Timing-safety: verify() must run even when the email does not exist, so an
+    # attacker cannot enumerate accounts by measuring response times.
+    seed = seed_clinic()
+    hasher = PlainPasswordHasher()
+    calls: list[str] = []
+    original_verify = hasher.verify
+    hasher.verify = lambda plain, hashed: calls.append(plain) or original_verify(plain, hashed)
+    auth = AuthenticatePlatformAdmin(seed.factory, hasher, FakeTokenIssuer(), FixedClock())
+
+    with pytest.raises(AuthenticationFailed):
+        auth.execute("nadie@example.com", "whatever")
+    assert calls == ["whatever"]
+
+
 def test_create_tenant_with_admin():
     seed = seed_clinic()
     cmd = CreateTenantCommand(

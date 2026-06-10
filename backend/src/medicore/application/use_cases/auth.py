@@ -55,6 +55,14 @@ class AuthenticateUser:
         self._hasher = hasher
         self._tokens = tokens
         self._clock = clock
+        self._dummy_hash: str | None = None
+
+    def _dummy(self) -> str:
+        # Hash to verify against when the email does not exist, so the response time
+        # does not reveal whether an account exists (user enumeration via timing).
+        if self._dummy_hash is None:
+            self._dummy_hash = self._hasher.hash("medicore.invalid-user.dummy")
+        return self._dummy_hash
 
     def execute(self, cmd: AuthenticateUserCommand) -> SessionDTO:
         try:
@@ -71,7 +79,10 @@ class AuthenticateUser:
 
         with self._factory.for_tenant(tenant.id) as uow:
             user = uow.users.get_by_email(cmd.email)
-            if user is None or not self._hasher.verify(cmd.password, user.password_hash):
+            password_ok = self._hasher.verify(
+                cmd.password, user.password_hash if user else self._dummy()
+            )
+            if user is None or not password_ok:
                 raise AuthenticationFailed("invalid credentials")
             if user.status != UserStatus.ACTIVE:
                 raise AuthenticationFailed("account is not active")
