@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
-from medicore.application.common.errors import EntityNotFound
+from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -101,6 +102,27 @@ class AmendMedicalRecord:
         return amendment
 
 
+# Document metadata comes straight from the client; constrain it before persisting.
+_ALLOWED_MIME_TYPES = frozenset(
+    {"application/pdf", "image/png", "image/jpeg", "image/webp", "text/plain"}
+)
+_MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
+_STORAGE_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$")
+_FILE_NAME_FORBIDDEN = ("/", "\\", "..", "\x00")
+
+
+def _validate_upload(cmd: UploadDocumentCommand) -> None:
+    if cmd.mime_type not in _ALLOWED_MIME_TYPES:
+        raise ValidationError(f"unsupported mime type: {cmd.mime_type!r}")
+    if cmd.size_bytes <= 0 or cmd.size_bytes > _MAX_DOCUMENT_BYTES:
+        raise ValidationError(f"size_bytes must be between 1 and {_MAX_DOCUMENT_BYTES}")
+    name = cmd.file_name.strip()
+    if not name or len(name) > 255 or any(seq in name for seq in _FILE_NAME_FORBIDDEN):
+        raise ValidationError("invalid file name")
+    if ".." in cmd.storage_key or not _STORAGE_KEY_RE.match(cmd.storage_key):
+        raise ValidationError("invalid storage key")
+
+
 class UploadDocument:
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
@@ -108,6 +130,11 @@ class UploadDocument:
 
     def execute(self, actor: ActorContext, cmd: UploadDocumentCommand) -> MedicalDocument:
         ensure_permission(actor, Permission.RECORDS_UPLOAD)
+        _validate_upload(cmd)
+        if self._uow.patients.get_by_id(cmd.patient_id) is None:
+            raise EntityNotFound("Patient", cmd.patient_id)
+        if cmd.record_id is not None and self._uow.medical_records.get_by_id(cmd.record_id) is None:
+            raise EntityNotFound("MedicalRecord", cmd.record_id)
         document = MedicalDocument(
             id=DocumentId.new(),
             tenant_id=actor.tenant_id,

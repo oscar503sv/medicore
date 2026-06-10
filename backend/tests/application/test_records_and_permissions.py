@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytest
 
 from medicore.application.common.context import ActorContext
+from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.use_cases.appointments import (
     CreateAppointment,
     CreateAppointmentCommand,
@@ -30,9 +31,12 @@ from medicore.application.use_cases.records import (
     AmendMedicalRecord,
     GetMedicalRecord,
     ListMedicalRecords,
+    UploadDocument,
+    UploadDocumentCommand,
 )
-from medicore.domain.enums import AppointmentType, RecordStatus, Sex
+from medicore.domain.enums import AppointmentType, DocumentKind, RecordStatus, Sex
 from medicore.domain.shared.errors import PermissionDenied
+from medicore.domain.shared.identifiers import PatientId
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
@@ -118,6 +122,71 @@ class TestRecordPermissions:
         record = _sign_a_record(seed, uow)
         GetMedicalRecord(uow, FixedClock()).execute(seed.doctor_actor, record.id)
         assert uow.audit.query(action="record.viewed")
+
+
+def _upload_cmd(seed, **overrides) -> UploadDocumentCommand:
+    defaults = dict(
+        patient_id=seed.patient.id,
+        file_name="analitica.pdf",
+        kind=DocumentKind.LAB,
+        mime_type="application/pdf",
+        size_bytes=1024,
+        storage_key=f"{seed.patient.id}/analitica.pdf",
+    )
+    defaults.update(overrides)
+    return UploadDocumentCommand(**defaults)
+
+
+class TestUploadDocument:
+    def test_upload_persists_document_and_audits(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        document = UploadDocument(uow, FixedClock()).execute(seed.doctor_actor, _upload_cmd(seed))
+        assert uow.documents.list_by_patient(seed.patient.id) == [document]
+        assert uow.audit.query(action="document.uploaded")
+
+    def test_unknown_patient_is_rejected(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        with pytest.raises(EntityNotFound):
+            UploadDocument(uow, FixedClock()).execute(
+                seed.doctor_actor, _upload_cmd(seed, patient_id=PatientId.new())
+            )
+
+    def test_disallowed_mime_type_is_rejected(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        with pytest.raises(ValidationError):
+            UploadDocument(uow, FixedClock()).execute(
+                seed.doctor_actor, _upload_cmd(seed, mime_type="application/x-msdownload")
+            )
+
+    def test_size_out_of_bounds_is_rejected(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        for size in (0, -1, 26 * 1024 * 1024):
+            with pytest.raises(ValidationError):
+                UploadDocument(uow, FixedClock()).execute(
+                    seed.doctor_actor, _upload_cmd(seed, size_bytes=size)
+                )
+
+    def test_traversal_file_name_is_rejected(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        for name in ("../../etc/passwd", "a/b.pdf", "", "x" * 256):
+            with pytest.raises(ValidationError):
+                UploadDocument(uow, FixedClock()).execute(
+                    seed.doctor_actor, _upload_cmd(seed, file_name=name)
+                )
+
+    def test_malformed_storage_key_is_rejected(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        for key in ("../secret", "/abs/path", "a/../b", "con espacios", ""):
+            with pytest.raises(ValidationError):
+                UploadDocument(uow, FixedClock()).execute(
+                    seed.doctor_actor, _upload_cmd(seed, storage_key=key)
+                )
 
 
 class TestAmendment:
