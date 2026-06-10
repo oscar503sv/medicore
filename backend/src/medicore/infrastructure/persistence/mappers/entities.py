@@ -11,6 +11,7 @@ from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.prescription import Prescription
+from medicore.domain.entities.role_permission_override import RolePermissionOverride
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.enums import (
@@ -43,6 +44,7 @@ from medicore.domain.shared.identifiers import (
     PatientId,
     PrescriptionId,
     RecordId,
+    RolePermissionOverrideId,
     TenantId,
     UserId,
 )
@@ -71,6 +73,9 @@ from medicore.infrastructure.persistence.models.medical_record import MedicalRec
 from medicore.infrastructure.persistence.models.notification import NotificationModel
 from medicore.infrastructure.persistence.models.patient import PatientModel
 from medicore.infrastructure.persistence.models.prescription import PrescriptionModel
+from medicore.infrastructure.persistence.models.role_permission_override import (
+    RolePermissionOverrideModel,
+)
 from medicore.infrastructure.persistence.models.tenant import LocationModel, TenantModel
 from medicore.infrastructure.persistence.models.user import DoctorProfileModel, UserModel
 
@@ -179,6 +184,17 @@ def to_insurer(row: InsurerModel) -> Insurer:
         contact_person=row.contact_person,
         notes=row.notes,
         active=row.active,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def to_role_permission_override(row: RolePermissionOverrideModel) -> RolePermissionOverride:
+    return RolePermissionOverride(
+        id=RolePermissionOverrideId.parse(row.id),
+        tenant_id=TenantId.parse(row.tenant_id),
+        role=Role(row.role),
+        permissions=tuple(row.permissions or []),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

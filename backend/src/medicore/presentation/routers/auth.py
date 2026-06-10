@@ -44,6 +44,7 @@ def login(body: LoginRequest, factory: UoWFactory, hasher: Hasher, issuer: JwtIs
         name=session.name,
         sex=str(session.sex) if session.sex else None,
         must_change_password=session.must_change_password,
+        permissions=list(session.permissions),
     )
 
 

@@ -10,6 +10,7 @@ from medicore.application.common.errors import (
     EntityNotFound,
     ValidationError,
 )
+from medicore.application.common.permissions import permissions_for
 from medicore.application.use_cases.auth import AuthenticateUser, AuthenticateUserCommand
 from medicore.application.use_cases.platform import (
     AuthenticatePlatformAdmin,
@@ -258,6 +259,8 @@ def test_impersonation_token_carries_impersonator():
     assert claims.scope == "tenant"
     assert claims.impersonator == str(seed.platform_admin.id)
     assert claims.user_id == str(seed.admin.id)  # impersonates the clinic's admin
+    # The session exposes the impersonated admin's permissions so the UI can build its nav.
+    assert session.permissions == tuple(sorted(permissions_for(Role.ADMIN)))
     started = next(
         e
         for e in seed.factory.platform_uow().platform_audit.list()

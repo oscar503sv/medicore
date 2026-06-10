@@ -19,6 +19,9 @@ from medicore.infrastructure.persistence.models.platform import (
     PlatformAuditLogModel,
 )
 from medicore.infrastructure.persistence.models.prescription import PrescriptionModel
+from medicore.infrastructure.persistence.models.role_permission_override import (
+    RolePermissionOverrideModel,
+)
 from medicore.infrastructure.persistence.models.tenant import LocationModel, TenantModel
 from medicore.infrastructure.persistence.models.user import DoctorProfileModel, UserModel
 
@@ -39,6 +42,7 @@ __all__ = [
     "PlatformAdminModel",
     "PlatformAuditLogModel",
     "PrescriptionModel",
+    "RolePermissionOverrideModel",
     "TenantCounterModel",
     "TenantModel",
     "UserModel",

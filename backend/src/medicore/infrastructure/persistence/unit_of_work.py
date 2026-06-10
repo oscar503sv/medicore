@@ -31,6 +31,9 @@ from medicore.infrastructure.persistence.repositories.platform import (
     SqlPlatformAuditLogRepository,
 )
 from medicore.infrastructure.persistence.repositories.platform_reads import SqlPlatformReadModel
+from medicore.infrastructure.persistence.repositories.role_permission_override import (
+    SqlRolePermissionOverrideRepository,
+)
 from medicore.infrastructure.persistence.repositories.tenant import SqlTenantRepository
 from medicore.infrastructure.persistence.repositories.user import (
     SqlDoctorProfileRepository,
@@ -59,6 +62,7 @@ class SqlAlchemyUnitOfWork:
         self.doctor_profiles = SqlDoctorProfileRepository(session, tenant_id)
         self.notifications = SqlNotificationRepository(session, tenant_id)
         self.audit = SqlAuditLogRepository(session, tenant_id)
+        self.role_permissions = SqlRolePermissionOverrideRepository(session, tenant_id)
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
         self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
 

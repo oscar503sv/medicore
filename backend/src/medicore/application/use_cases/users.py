@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
-from medicore.application.common.permissions import ensure_can_manage_users
+from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -35,7 +35,7 @@ class ListUsers:
     def execute(
         self, actor: ActorContext, filter: UserFilter | None = None, paging: Paging | None = None
     ) -> Page[User]:
-        ensure_can_manage_users(actor)
+        ensure_permission(actor, Permission.USERS_VIEW)
         return self._uow.users.list(filter, paging)
 
 
@@ -51,7 +51,7 @@ class InviteUser:
         self._clock = clock
 
     def execute(self, actor: ActorContext, cmd: InviteUserCommand) -> User:
-        ensure_can_manage_users(actor)
+        ensure_permission(actor, Permission.USERS_MANAGE)
         if self._uow.users.get_by_email(cmd.email) is not None:
             raise ValidationError(f"email already in use within this tenant: {cmd.email}")
         if not cmd.password or len(cmd.password) < 8:
@@ -89,7 +89,7 @@ class UpdateUserRole:
         self._clock = clock
 
     def execute(self, actor: ActorContext, user_id: UserId, role: Role) -> User:
-        ensure_can_manage_users(actor)
+        ensure_permission(actor, Permission.USERS_MANAGE)
         user = self._require(user_id)
         with self._uow:
             user.change_role(role)
@@ -118,7 +118,7 @@ class UpdateUser:
         self._clock = clock
 
     def execute(self, actor: ActorContext, user_id: UserId, **changes: object) -> User:
-        ensure_can_manage_users(actor)
+        ensure_permission(actor, Permission.USERS_MANAGE)
         user = self._uow.users.get_by_id(user_id)
         if user is None:
             raise EntityNotFound("User", user_id)
@@ -144,7 +144,7 @@ class SuspendUser:
         self._clock = clock
 
     def execute(self, actor: ActorContext, user_id: UserId) -> User:
-        ensure_can_manage_users(actor)
+        ensure_permission(actor, Permission.USERS_MANAGE)
         user = self._uow.users.get_by_id(user_id)
         if user is None:
             raise EntityNotFound("User", user_id)
@@ -167,7 +167,7 @@ class ReactivateUser:
         self._clock = clock
 
     def execute(self, actor: ActorContext, user_id: UserId) -> User:
-        ensure_can_manage_users(actor)
+        ensure_permission(actor, Permission.USERS_MANAGE)
         user = self._uow.users.get_by_id(user_id)
         if user is None:
             raise EntityNotFound("User", user_id)
@@ -199,7 +199,7 @@ class ResetUserPassword:
         self._clock = clock
 
     def execute(self, actor: ActorContext, cmd: ResetUserPasswordCommand) -> User:
-        ensure_can_manage_users(actor)
+        ensure_permission(actor, Permission.USERS_MANAGE)
         if not cmd.password or len(cmd.password) < 8:
             raise ValidationError("temporary password must be at least 8 characters")
         user = self._uow.users.get_by_id(cmd.user_id)

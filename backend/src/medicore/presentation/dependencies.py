@@ -14,6 +14,7 @@ import jwt
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from medicore.application.common.context import ActorContext, PlatformActorContext
+from medicore.application.common.permissions import effective_permissions
 from medicore.domain.enums import Role
 from medicore.domain.shared.identifiers import PlatformAdminId, TenantId, UserId
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
@@ -59,10 +60,13 @@ def get_actor(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
     issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
+    factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
 ) -> ActorContext:
     """Decode the Bearer token and return the authenticated actor.
 
-    Raises 401 if the header is missing, malformed or expired.
+    Resolves the tenant's role-permission override so every permission check in the
+    request honors the clinic's customization. Raises 401 if the header is missing,
+    malformed or expired.
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
@@ -86,15 +90,22 @@ def get_actor(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a tenant session"
         )
 
+    tenant_id = TenantId.parse(claims.tenant_id)
+    role = Role(claims.role)
+    with factory.for_tenant(tenant_id) as uow:
+        override = uow.role_permissions.get_by_role(role)
+    effective = effective_permissions(role, override.permissions if override else None)
+
     return ActorContext(
         user_id=UserId.parse(claims.user_id),
-        tenant_id=TenantId.parse(claims.tenant_id),
-        role=Role(claims.role),
+        tenant_id=tenant_id,
+        role=role,
         impersonated_by=(
             PlatformAdminId.parse(claims.impersonator) if claims.impersonator else None
         ),
         ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        permissions=frozenset(str(p) for p in effective),
     )
 
 

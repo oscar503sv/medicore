@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from medicore.application.common.context import ActorContext
-from medicore.application.common.permissions import ensure_can_manage_users
+from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.repositories._support import AuditFilter, Page, Paging
@@ -21,5 +21,5 @@ class ListTenantAudit:
         filter: AuditFilter | None = None,
         paging: Paging | None = None,
     ) -> Page[AuditLog]:
-        ensure_can_manage_users(actor)  # admin-only, same gate as user management
+        ensure_permission(actor, Permission.AUDIT_VIEW)
         return self._uow.audit.list(filter, paging)

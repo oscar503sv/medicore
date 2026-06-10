@@ -170,3 +170,4 @@ class ImpersonationResponse(BaseModel):
     timezone: str
     role: str
     name: str
+    permissions: list[str] = []

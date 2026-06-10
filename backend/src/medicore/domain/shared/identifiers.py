@@ -126,3 +126,8 @@ class PlatformAdminId(Identifier):
     """Identity of a platform-level superadmin (belongs to no tenant)."""
 
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class RolePermissionOverrideId(Identifier):
+    pass

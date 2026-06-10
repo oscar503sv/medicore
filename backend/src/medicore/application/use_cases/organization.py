@@ -5,7 +5,7 @@ from __future__ import annotations
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
-from medicore.application.common.permissions import ensure_can_manage_organization
+from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.tenant import Location, Tenant
@@ -18,7 +18,7 @@ class GetOrganization:
         self._uow = uow
 
     def execute(self, actor: ActorContext) -> Tenant:
-        ensure_can_manage_organization(actor)
+        ensure_permission(actor, Permission.ORGANIZATION_VIEW)
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", actor.tenant_id)
@@ -33,7 +33,7 @@ class UpdateOrganization:
         self._clock = clock
 
     def execute(self, actor: ActorContext, **changes: object) -> Tenant:
-        ensure_can_manage_organization(actor)
+        ensure_permission(actor, Permission.ORGANIZATION_MANAGE)
         tenant = self._require()
         with self._uow:
             for key, value in changes.items():
@@ -66,7 +66,7 @@ class AddLocation:
     def execute(
         self, actor: ActorContext, name: str, address: str | None = None, is_primary: bool = False
     ) -> Tenant:
-        ensure_can_manage_organization(actor)
+        ensure_permission(actor, Permission.ORGANIZATION_MANAGE)
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", actor.tenant_id)
@@ -98,7 +98,7 @@ class UpdateLocation:
     def execute(
         self, actor: ActorContext, location_id: LocationId, **changes: object
     ) -> Tenant:
-        ensure_can_manage_organization(actor)
+        ensure_permission(actor, Permission.ORGANIZATION_MANAGE)
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", actor.tenant_id)

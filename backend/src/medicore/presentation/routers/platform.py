@@ -12,16 +12,19 @@ from medicore.application.use_cases.platform import (
     GetGlobalStats,
     GetPlatformAdmin,
     GetTenant,
+    GetTenantPermissionsMatrix,
     GetTenantStats,
     ImpersonateTenant,
     ListGlobalAudit,
     ListTenants,
     ListTenantUsers,
+    ResetTenantRolePermissions,
     ResetUserPassword,
     SetTenantStatus,
     SuspendTenantUser,
     UnlockUser,
     UpdateTenant,
+    UpdateTenantRolePermissions,
     UpdateTenantUser,
 )
 from medicore.domain.enums import IcdVersion, Role, Sex, TenantStatus
@@ -35,6 +38,7 @@ from medicore.presentation.dependencies import (
     PlatformActor,
     UoWFactory,
 )
+from medicore.presentation.routers.role_permissions import parse_role, ser_matrix
 from medicore.presentation.schemas.platform import (
     CreateTenantRequest,
     CreateTenantResponse,
@@ -52,6 +56,10 @@ from medicore.presentation.schemas.platform import (
     TenantStatsResponse,
     UpdateTenantRequest,
     UpdateTenantUserRequest,
+)
+from medicore.presentation.schemas.role_permissions import (
+    PermissionsMatrixResponse,
+    UpdateRolePermissionsRequest,
 )
 from medicore.presentation.schemas.users import UserListResponse
 from medicore.presentation.serializers import (
@@ -272,6 +280,7 @@ def impersonate(tenant_id: str, body: ImpersonateRequest, actor: PlatformActor,
         timezone=s.timezone,
         role=s.role,
         name=s.name,
+        permissions=list(s.permissions),
     )
 
 
@@ -279,3 +288,38 @@ def impersonate(tenant_id: str, body: ImpersonateRequest, actor: PlatformActor,
 def end_impersonation(actor: Actor, factory: UoWFactory, clock: Clock):
     """Close the current support session (tenant-scoped: uses the impersonation token)."""
     EndImpersonation(factory, clock).execute(actor)
+
+
+@router.get("/tenants/{tenant_id}/permissions", response_model=PermissionsMatrixResponse)
+def get_tenant_permissions(tenant_id: str, actor: PlatformActor, factory: UoWFactory):
+    matrix = GetTenantPermissionsMatrix(factory).execute(actor, TenantId.parse(tenant_id))
+    return ser_matrix(matrix)
+
+
+@router.put(
+    "/tenants/{tenant_id}/permissions/roles/{role}", response_model=PermissionsMatrixResponse
+)
+def update_tenant_role_permissions(
+    tenant_id: str,
+    role: str,
+    body: UpdateRolePermissionsRequest,
+    actor: PlatformActor,
+    factory: UoWFactory,
+    clock: Clock,
+):
+    matrix = UpdateTenantRolePermissions(factory, clock).execute(
+        actor, TenantId.parse(tenant_id), parse_role(role), body.permissions
+    )
+    return ser_matrix(matrix)
+
+
+@router.delete(
+    "/tenants/{tenant_id}/permissions/roles/{role}", response_model=PermissionsMatrixResponse
+)
+def reset_tenant_role_permissions(
+    tenant_id: str, role: str, actor: PlatformActor, factory: UoWFactory, clock: Clock
+):
+    matrix = ResetTenantRolePermissions(factory, clock).execute(
+        actor, TenantId.parse(tenant_id), parse_role(role)
+    )
+    return ser_matrix(matrix)

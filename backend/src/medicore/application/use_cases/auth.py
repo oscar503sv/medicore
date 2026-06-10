@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import AuthenticationFailed, EntityNotFound
+from medicore.application.common.permissions import effective_permissions
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
@@ -37,6 +38,7 @@ class SessionDTO:
     name: str
     sex: Sex | None
     must_change_password: bool
+    permissions: tuple[str, ...] = ()
 
 
 class AuthenticateUser:
@@ -73,6 +75,7 @@ class AuthenticateUser:
                 raise AuthenticationFailed("invalid credentials")
             if user.status != UserStatus.ACTIVE:
                 raise AuthenticationFailed("account is not active")
+            override = uow.role_permissions.get_by_role(user.role)
             user.last_seen_at = self._clock.now()
             uow.users.save(user)
             uow.audit.append(
@@ -101,6 +104,9 @@ class AuthenticateUser:
             name=user.name,
             sex=user.sex,
             must_change_password=user.must_change_password,
+            permissions=tuple(
+                sorted(effective_permissions(user.role, override.permissions if override else None))
+            ),
         )
 
 
@@ -170,6 +176,7 @@ class MyProfileDTO:
     specialty: str | None
     phone: str | None
     bio: str | None
+    permissions: tuple[str, ...] = ()
 
 
 def _build_profile(uow: UnitOfWork, user_id: UserId) -> MyProfileDTO:
@@ -181,6 +188,7 @@ def _build_profile(uow: UnitOfWork, user_id: UserId) -> MyProfileDTO:
     if user.role == Role.DOCTOR:
         profile = uow.doctor_profiles.get_by_user_id(user_id)
         bio = profile.bio if profile else None
+    override = uow.role_permissions.get_by_role(user.role)
     return MyProfileDTO(
         name=user.name,
         email=user.email,
@@ -189,6 +197,9 @@ def _build_profile(uow: UnitOfWork, user_id: UserId) -> MyProfileDTO:
         specialty=user.specialty,
         phone=user.phone,
         bio=bio,
+        permissions=tuple(
+            sorted(effective_permissions(user.role, override.permissions if override else None))
+        ),
     )
 
 

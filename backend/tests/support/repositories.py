@@ -366,6 +366,31 @@ class InMemoryInsurerRepository(_Scoped):
         self._store.insurers[insurer.id.value] = insurer
 
 
+class InMemoryRolePermissionOverrideRepository(_Scoped):
+    def get_by_role(self, role) -> object | None:
+        return next(
+            (
+                o
+                for o in self._mine(self._store.role_permission_overrides.values())
+                if o.role == role
+            ),
+            None,
+        )
+
+    def list(self) -> list:
+        result = self._mine(self._store.role_permission_overrides.values())
+        result.sort(key=lambda o: str(o.role))
+        return result
+
+    def save(self, override) -> None:
+        self._store.role_permission_overrides[override.id.value] = override
+
+    def delete_by_role(self, role) -> None:
+        for key, o in list(self._store.role_permission_overrides.items()):
+            if o.tenant_id == self._tenant and o.role == role:
+                del self._store.role_permission_overrides[key]
+
+
 class InMemoryConsultationRepository(_Scoped):
     def get_by_id(self, consultation_id: ConsultationId) -> Consultation | None:
         c = self._store.consultations.get(consultation_id.value)

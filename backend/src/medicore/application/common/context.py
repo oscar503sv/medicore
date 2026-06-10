@@ -21,6 +21,10 @@ class ActorContext:
     # Network context of the request, captured in the presentation layer for audit trails.
     ip_address: str | None = None
     user_agent: str | None = None
+    # Effective permissions resolved per request (tenant overrides applied). Plain strings to
+    # keep this module free of the application permission catalog. None → the permission
+    # checks fall back to the role's code defaults (tests and scripts rely on this).
+    permissions: frozenset[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
-from medicore.application.common.permissions import ensure_can_manage_availability
+from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.availability import (
@@ -27,7 +27,7 @@ class GetMyAvailability:
         self._uow = uow
 
     def execute(self, actor: ActorContext) -> DoctorAvailability:
-        ensure_can_manage_availability(actor)
+        ensure_permission(actor, Permission.AVAILABILITY_MANAGE)
         existing = self._uow.availability.get_by_doctor(actor.user_id)
         if existing is not None:
             return existing
@@ -67,7 +67,7 @@ class UpdateWeeklySchedule(_AvailabilityMutator):
     def execute(
         self, actor: ActorContext, weekly: list[WeeklyDay]
     ) -> DoctorAvailability:
-        ensure_can_manage_availability(actor)
+        ensure_permission(actor, Permission.AVAILABILITY_MANAGE)
         availability = self._load_or_create(actor)
         for day in weekly:
             availability.set_day(day)
@@ -79,7 +79,7 @@ class AddAvailabilityException(_AvailabilityMutator):
     def execute(
         self, actor: ActorContext, exception: AvailabilityException
     ) -> DoctorAvailability:
-        ensure_can_manage_availability(actor)
+        ensure_permission(actor, Permission.AVAILABILITY_MANAGE)
         availability = self._load_or_create(actor)
         availability.add_exception(exception)
         self._persist(actor, availability)
@@ -90,7 +90,7 @@ class RemoveAvailabilityException(_AvailabilityMutator):
     def execute(
         self, actor: ActorContext, exception_id: ExceptionId
     ) -> DoctorAvailability:
-        ensure_can_manage_availability(actor)
+        ensure_permission(actor, Permission.AVAILABILITY_MANAGE)
         availability = self._load_or_create(actor)
         availability.remove_exception(exception_id)
         self._persist(actor, availability)
@@ -99,7 +99,7 @@ class RemoveAvailabilityException(_AvailabilityMutator):
 
 class UpdateBookingRules(_AvailabilityMutator):
     def execute(self, actor: ActorContext, rules: BookingRules) -> DoctorAvailability:
-        ensure_can_manage_availability(actor)
+        ensure_permission(actor, Permission.AVAILABILITY_MANAGE)
         availability = self._load_or_create(actor)
         availability.update_rules(rules)
         self._persist(actor, availability)
@@ -116,7 +116,7 @@ class PreviewAvailability:
     def execute(
         self, actor: ActorContext, week_start: date, doctor_id: UserId | None = None
     ) -> dict[date, list[Slot]]:
-        ensure_can_manage_availability(actor)
+        ensure_permission(actor, Permission.AVAILABILITY_MANAGE)
         target = doctor_id or actor.user_id
         availability = self._uow.availability.get_by_doctor(target)
         if availability is None:

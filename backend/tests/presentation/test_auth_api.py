@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from medicore.application.common.permissions import permissions_for
+from medicore.domain.enums import Role
 from tests.support.builders import PASSWORD
 
 
@@ -20,6 +22,7 @@ def test_login_success(seed, client):
     assert data["name"] == seed.doctor.name
     assert data["timezone"] == seed.tenant.timezone
     assert "token" in data
+    assert data["permissions"] == sorted(str(p) for p in permissions_for(Role.DOCTOR))
 
 
 def test_login_wrong_password(seed, client):
@@ -61,6 +64,7 @@ def test_get_my_profile(seed, client, auth_headers):
     assert data["role"] == "doctor"
     assert data["specialty"] == seed.doctor.specialty
     assert data["bio"] is None
+    assert data["permissions"] == sorted(str(p) for p in permissions_for(Role.DOCTOR))
 
 
 def test_get_my_profile_requires_token(client):

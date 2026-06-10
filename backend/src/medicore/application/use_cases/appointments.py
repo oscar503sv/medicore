@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
-from medicore.application.common.permissions import ensure_can_manage_appointments
+from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
@@ -83,7 +83,7 @@ class GetBookingOptions:
         self._uow = uow
 
     def execute(self, actor: ActorContext) -> BookingOptions:
-        ensure_can_manage_appointments(actor)
+        ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
         doctors = self._uow.users.list(UserFilter(role="doctor", status="active")).items
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         locations = list(tenant.locations) if tenant else []
@@ -104,6 +104,7 @@ class ListAppointmentsForDay:
     def execute(
         self, actor: ActorContext, on: date, doctor_id: UserId | None = None
     ) -> list[Appointment]:
+        ensure_permission(actor, Permission.APPOINTMENTS_VIEW)
         return self._uow.appointments.list_by_day(on, _scope_doctor(actor, doctor_id))
 
 
@@ -114,6 +115,7 @@ class GetWeeklySchedule:
     def execute(
         self, actor: ActorContext, week_start: date, doctor_id: UserId | None = None
     ) -> dict[date, list[Appointment]]:
+        ensure_permission(actor, Permission.APPOINTMENTS_VIEW)
         scoped = _scope_doctor(actor, doctor_id)
         return {
             (day := week_start + timedelta(days=offset)): self._uow.appointments.list_by_day(
@@ -137,6 +139,7 @@ class GetAvailableSlots:
         on: date,
         duration_minutes: int = 30,
     ) -> list[Slot]:
+        ensure_permission(actor, Permission.APPOINTMENTS_VIEW)
         availability = self._uow.availability.get_by_doctor(doctor_id)
         if availability is None:
             return []
@@ -160,7 +163,7 @@ class CreateAppointment:
         self._clock = clock
 
     def execute(self, actor: ActorContext, cmd: CreateAppointmentCommand) -> Appointment:
-        ensure_can_manage_appointments(actor)
+        ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
 
         availability = self._uow.availability.get_by_doctor(cmd.doctor_id)
         if availability is None:
@@ -226,7 +229,7 @@ class RescheduleAppointment:
         new_start: datetime,
         new_duration: int | None = None,
     ) -> Appointment:
-        ensure_can_manage_appointments(actor)
+        ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
         appointment = self._require(appointment_id)
 
         availability = self._uow.availability.get_by_doctor(appointment.doctor_id)
@@ -279,7 +282,7 @@ class _AppointmentTransition:
         raise NotImplementedError
 
     def execute(self, actor: ActorContext, appointment_id: AppointmentId) -> Appointment:
-        ensure_can_manage_appointments(actor)
+        ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
         appointment = self._uow.appointments.get_by_id(appointment_id)
         if appointment is None:
             raise EntityNotFound("Appointment", appointment_id)

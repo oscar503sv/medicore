@@ -130,6 +130,7 @@ def ser_my_profile(p: MyProfileDTO) -> dict:
         "specialty": p.specialty,
         "phone": p.phone,
         "bio": p.bio,
+        "permissions": list(p.permissions),
     }
 
 

@@ -7,11 +7,7 @@ from dataclasses import dataclass
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
-from medicore.application.common.permissions import (
-    ensure_can_sign_records,
-    ensure_can_upload_documents,
-    ensure_can_view_records,
-)
+from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.medical_document import MedicalDocument
@@ -43,7 +39,7 @@ class ListMedicalRecords:
     def execute(
         self, actor: ActorContext, filter: RecordFilter | None = None
     ) -> list[MedicalRecord]:
-        ensure_can_view_records(actor)
+        ensure_permission(actor, Permission.RECORDS_VIEW)
         return self._uow.medical_records.list(filter)
 
 
@@ -53,7 +49,7 @@ class GetMedicalRecord:
         self._clock = clock
 
     def execute(self, actor: ActorContext, record_id: RecordId) -> MedicalRecord:
-        ensure_can_view_records(actor)
+        ensure_permission(actor, Permission.RECORDS_VIEW)
         record = self._uow.medical_records.get_by_id(record_id)
         if record is None:
             raise EntityNotFound("MedicalRecord", record_id)
@@ -80,7 +76,7 @@ class AmendMedicalRecord:
     def execute(
         self, actor: ActorContext, record_id: RecordId, **changes: object
     ) -> MedicalRecord:
-        ensure_can_sign_records(actor)
+        ensure_permission(actor, Permission.RECORDS_AMEND)
         original = self._uow.medical_records.get_by_id(record_id)
         if original is None:
             raise EntityNotFound("MedicalRecord", record_id)
@@ -111,7 +107,7 @@ class UploadDocument:
         self._clock = clock
 
     def execute(self, actor: ActorContext, cmd: UploadDocumentCommand) -> MedicalDocument:
-        ensure_can_upload_documents(actor)
+        ensure_permission(actor, Permission.RECORDS_UPLOAD)
         document = MedicalDocument(
             id=DocumentId.new(),
             tenant_id=actor.tenant_id,
@@ -142,5 +138,5 @@ class ListPatientDocuments:
         self._uow = uow
 
     def execute(self, actor: ActorContext, patient_id: PatientId) -> list[MedicalDocument]:
-        ensure_can_view_records(actor)
+        ensure_permission(actor, Permission.RECORDS_VIEW)
         return self._uow.documents.list_by_patient(patient_id)

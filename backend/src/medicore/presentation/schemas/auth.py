@@ -21,6 +21,7 @@ class SessionResponse(BaseModel):
     name: str
     sex: str | None = None
     must_change_password: bool = False
+    permissions: list[str] = []
 
 
 class SwitchThemeRequest(BaseModel):
@@ -44,6 +45,7 @@ class MyProfileResponse(BaseModel):
     specialty: str | None = None
     phone: str | None = None
     bio: str | None = None
+    permissions: list[str] = []
 
 
 class UpdateMyProfileRequest(BaseModel):

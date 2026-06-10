@@ -15,10 +15,12 @@ from medicore.application.common.errors import (
     EntityNotFound,
     ValidationError,
 )
+from medicore.application.common.permissions import effective_permissions
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
 from medicore.application.ports.unit_of_work import UnitOfWorkFactory
+from medicore.application.use_cases import role_permissions
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
@@ -455,6 +457,7 @@ class ImpersonationSessionDTO:
     timezone: str
     role: str
     name: str
+    permissions: tuple[str, ...] = ()
 
 
 class ImpersonateTenant:
@@ -485,6 +488,7 @@ class ImpersonateTenant:
             if not admins:
                 raise ValidationError("clinic has no active admin to impersonate")
             target = admins[0]
+            override = uow.role_permissions.get_by_role(target.role)
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), "support.access.started", "Tenant", str(tenant_id),
@@ -509,6 +513,13 @@ class ImpersonateTenant:
             timezone=tenant.timezone,
             role=str(target.role),
             name=target.name,
+            permissions=tuple(
+                sorted(
+                    effective_permissions(
+                        target.role, override.permissions if override else None
+                    )
+                )
+            ),
         )
 
 
@@ -621,3 +632,64 @@ class SuspendTenantUser:
             )
             uow.commit()
         return user
+
+
+class GetTenantPermissionsMatrix:
+    """Superadmin reads a clinic's role-permission matrix (support view)."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+        self._factory = uow_factory
+
+    def execute(self, actor: PlatformActorContext, tenant_id: TenantId):
+        with self._factory.for_tenant(tenant_id) as uow:
+            return role_permissions.build_matrix(uow)
+
+
+class UpdateTenantRolePermissions:
+    """Superadmin customizes a role's permissions for a clinic (same guardrails as tenant)."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(
+        self,
+        actor: PlatformActorContext,
+        tenant_id: TenantId,
+        role: Role,
+        permissions: list[str],
+    ):
+        parsed = role_permissions.validate_role_update(role, permissions)
+        with self._factory.for_tenant(tenant_id) as uow:
+            existing = uow.role_permissions.get_by_role(role)
+            before = effective_permissions(role, existing.permissions if existing else None)
+            role_permissions.upsert_override(uow, tenant_id, role, parsed, self._clock.now())
+            uow.platform_audit.append(
+                _audit(
+                    actor, self._clock.now(), "permissions.updated", "RolePermissionOverride",
+                    str(role), tenant_id=tenant_id,
+                    **role_permissions.diff_for_audit(role, before, parsed),
+                )
+            )
+            uow.commit()
+            return role_permissions.build_matrix(uow)
+
+
+class ResetTenantRolePermissions:
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(self, actor: PlatformActorContext, tenant_id: TenantId, role: Role):
+        if role == Role.ADMIN:
+            raise ValidationError("the admin role is not customizable")
+        with self._factory.for_tenant(tenant_id) as uow:
+            uow.role_permissions.delete_by_role(role)
+            uow.platform_audit.append(
+                _audit(
+                    actor, self._clock.now(), "permissions.reset", "RolePermissionOverride",
+                    str(role), tenant_id=tenant_id, role=str(role),
+                )
+            )
+            uow.commit()
+            return role_permissions.build_matrix(uow)

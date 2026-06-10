@@ -26,6 +26,7 @@ from medicore.domain.repositories import (
     PlatformAdminRepository,
     PlatformAuditLogRepository,
     PrescriptionRepository,
+    RolePermissionOverrideRepository,
     TenantRepository,
     UserRepository,
 )
@@ -48,6 +49,7 @@ class UnitOfWork(Protocol):
     doctor_profiles: DoctorProfileRepository
     notifications: NotificationRepository
     audit: AuditLogRepository
+    role_permissions: RolePermissionOverrideRepository
     tenants: TenantRepository  # global (not tenant-filtered)
     platform_audit: PlatformAuditLogRepository  # global (not tenant-filtered)
 

@@ -7,10 +7,7 @@ from dataclasses import dataclass
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
-from medicore.application.common.permissions import (
-    ensure_can_edit_consultation,
-    ensure_can_sign_records,
-)
+from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -59,7 +56,7 @@ class StartConsultation:
         self._clock = clock
 
     def execute(self, actor: ActorContext, appointment_id: AppointmentId) -> Consultation:
-        ensure_can_edit_consultation(actor)
+        ensure_permission(actor, Permission.CONSULTATIONS_START)
         appointment = self._uow.appointments.get_by_id(appointment_id)
         if appointment is None:
             raise EntityNotFound("Appointment", appointment_id)
@@ -102,7 +99,7 @@ class GetConsultation:
         self._clock = clock
 
     def execute(self, actor: ActorContext, consultation_id: ConsultationId) -> Consultation:
-        ensure_can_edit_consultation(actor)
+        ensure_permission(actor, Permission.CONSULTATIONS_EDIT)
         consultation = self._uow.consultations.get_by_id(consultation_id)
         if consultation is None:
             raise EntityNotFound("Consultation", consultation_id)
@@ -119,7 +116,7 @@ class _ConsultationEditor:
         self._clock = clock
 
     def _load(self, actor: ActorContext, consultation_id: ConsultationId) -> Consultation:
-        ensure_can_edit_consultation(actor)
+        ensure_permission(actor, Permission.CONSULTATIONS_EDIT)
         consultation = self._uow.consultations.get_by_id(consultation_id)
         if consultation is None:
             raise EntityNotFound("Consultation", consultation_id)
@@ -203,7 +200,7 @@ class SignConsultation:
         self._clock = clock
 
     def execute(self, actor: ActorContext, cmd: SignConsultationCommand) -> MedicalRecord:
-        ensure_can_sign_records(actor)
+        ensure_permission(actor, Permission.RECORDS_SIGN)
         consultation = self._uow.consultations.get_by_id(cmd.consultation_id)
         if consultation is None:
             raise EntityNotFound("Consultation", cmd.consultation_id)

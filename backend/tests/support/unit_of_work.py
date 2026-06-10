@@ -23,6 +23,7 @@ from tests.support.repositories import (
     InMemoryPlatformAuditLogRepository,
     InMemoryPlatformReadModel,
     InMemoryPrescriptionRepository,
+    InMemoryRolePermissionOverrideRepository,
     InMemoryTenantRepository,
     InMemoryUserRepository,
 )
@@ -48,6 +49,7 @@ class InMemoryUnitOfWork:
         self.doctor_profiles = InMemoryDoctorProfileRepository(store, tenant_id)
         self.notifications = InMemoryNotificationRepository(store, tenant_id)
         self.audit = InMemoryAuditLogRepository(store, tenant_id)
+        self.role_permissions = InMemoryRolePermissionOverrideRepository(store, tenant_id)
         self.tenants = InMemoryTenantRepository(store)
         self.platform_audit = InMemoryPlatformAuditLogRepository(store)
         self._snapshot: dict | None = None

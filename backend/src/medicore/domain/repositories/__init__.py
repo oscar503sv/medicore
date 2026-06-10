@@ -30,6 +30,9 @@ from medicore.domain.repositories.platform_repository import (
     PlatformAuditLogRepository,
 )
 from medicore.domain.repositories.prescription_repository import PrescriptionRepository
+from medicore.domain.repositories.role_permission_override_repository import (
+    RolePermissionOverrideRepository,
+)
 from medicore.domain.repositories.tenant_repository import TenantRepository
 from medicore.domain.repositories.user_repository import (
     DoctorProfileRepository,
@@ -55,6 +58,7 @@ __all__ = [
     "PlatformAdminRepository",
     "PlatformAuditLogRepository",
     "PrescriptionRepository",
+    "RolePermissionOverrideRepository",
     "TenantRepository",
     "DoctorProfileRepository",
     "UserRepository",

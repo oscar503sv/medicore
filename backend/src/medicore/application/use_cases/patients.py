@@ -8,6 +8,7 @@ from datetime import date, datetime
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
+from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.common.timezone import clinic_now, to_naive
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
@@ -51,6 +52,7 @@ class CreatePatient:
         self._clock = clock
 
     def execute(self, actor: ActorContext, cmd: CreatePatientCommand) -> Patient:
+        ensure_permission(actor, Permission.PATIENTS_CREATE)
         patient = Patient(
             id=PatientId.new(),
             tenant_id=actor.tenant_id,
@@ -85,6 +87,7 @@ class UpdatePatient:
         self._clock = clock
 
     def execute(self, actor: ActorContext, patient_id: PatientId, **changes: object) -> Patient:
+        ensure_permission(actor, Permission.PATIENTS_EDIT)
         patient = self._uow.patients.get_by_id(patient_id)
         if patient is None:
             raise EntityNotFound("Patient", patient_id)
@@ -119,6 +122,7 @@ class ArchivePatient:
         self._clock = clock
 
     def execute(self, actor: ActorContext, patient_id: PatientId) -> Patient:
+        ensure_permission(actor, Permission.PATIENTS_ARCHIVE)
         patient = self._uow.patients.get_by_id(patient_id)
         if patient is None:
             raise EntityNotFound("Patient", patient_id)
@@ -145,6 +149,7 @@ class ListPatients:
         filter: PatientFilter | None = None,
         paging: Paging | None = None,
     ) -> Page[Patient]:
+        ensure_permission(actor, Permission.PATIENTS_VIEW)
         return self._uow.patients.list(filter, paging)
 
 
@@ -155,6 +160,7 @@ class SearchPatients:
     def execute(
         self, actor: ActorContext, query: str, paging: Paging | None = None
     ) -> Page[Patient]:
+        ensure_permission(actor, Permission.PATIENTS_VIEW)
         return self._uow.patients.search(query, paging)
 
 
@@ -168,6 +174,7 @@ class PatientsNextVisits:
     def execute(
         self, actor: ActorContext, patient_ids: list[PatientId]
     ) -> dict[PatientId, datetime]:
+        ensure_permission(actor, Permission.PATIENTS_VIEW)
         now = clinic_now(self._uow, actor.tenant_id, self._clock)
         return self._uow.appointments.next_visits(patient_ids, now)
 
@@ -180,6 +187,7 @@ class GetPatientDetail:
         self._clock = clock
 
     def execute(self, actor: ActorContext, patient_id: PatientId) -> PatientDetailDTO:
+        ensure_permission(actor, Permission.PATIENTS_VIEW)
         patient = self._uow.patients.get_by_id(patient_id)
         if patient is None:
             raise EntityNotFound("Patient", patient_id)

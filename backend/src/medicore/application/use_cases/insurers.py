@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
-from medicore.application.common.permissions import ensure_can_manage_insurers
+from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.insurer import Insurer
@@ -29,12 +29,13 @@ class CreateInsurerCommand:
 
 
 class ListInsurers:
-    """All insurers for the tenant. No admin gate — used to populate the patient selector."""
+    """All insurers for the tenant. Open to every role — populates the patient selector."""
 
     def __init__(self, uow: UnitOfWork) -> None:
         self._uow = uow
 
     def execute(self, actor: ActorContext, active_only: bool = False) -> list[Insurer]:
+        ensure_permission(actor, Permission.INSURERS_VIEW)
         return self._uow.insurers.list(active_only=active_only)
 
 
@@ -44,7 +45,7 @@ class CreateInsurer:
         self._clock = clock
 
     def execute(self, actor: ActorContext, cmd: CreateInsurerCommand) -> Insurer:
-        ensure_can_manage_insurers(actor)
+        ensure_permission(actor, Permission.INSURERS_MANAGE)
         insurer = Insurer(
             id=InsurerId.new(),
             tenant_id=actor.tenant_id,
@@ -77,7 +78,7 @@ class UpdateInsurer:
         self._clock = clock
 
     def execute(self, actor: ActorContext, insurer_id: InsurerId, **changes: object) -> Insurer:
-        ensure_can_manage_insurers(actor)
+        ensure_permission(actor, Permission.INSURERS_MANAGE)
         insurer = self._require(insurer_id)
         with self._uow:
             for key, value in changes.items():
@@ -107,7 +108,7 @@ class ArchiveInsurer:
         self._clock = clock
 
     def execute(self, actor: ActorContext, insurer_id: InsurerId) -> Insurer:
-        ensure_can_manage_insurers(actor)
+        ensure_permission(actor, Permission.INSURERS_MANAGE)
         insurer = self._uow.insurers.get_by_id(insurer_id)
         if insurer is None:
             raise EntityNotFound("Insurer", insurer_id)
