@@ -53,6 +53,21 @@ def create_app() -> FastAPI:
 
     register_error_handlers(app)
 
+    hsts = settings.is_production
+
+    @app.middleware("http")
+    async def security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if hsts:
+            # Only meaningful behind TLS, so production-only.
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=63072000; includeSubDomains"
+            )
+        return response
+
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(patients.router, prefix=API_PREFIX)
     app.include_router(insurers.router, prefix=API_PREFIX)
