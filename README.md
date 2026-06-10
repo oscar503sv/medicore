@@ -288,3 +288,9 @@ Los tests verifican, entre otras cosas:
 ## Despliegue
 
 El backend incluye un `Dockerfile` listo para producción (usuario no-root, uvicorn en el puerto 8000). El frontend se sirve como estático (`dist/`) en el mismo origen tras un reverse-proxy, o en un host separado con `VITE_API_BASE_URL` definido al hacer el build. Pasos detallados en [`backend/README.md`](backend/README.md) y [`frontend/README.md`](frontend/README.md).
+
+---
+
+## Backlog
+
+El trabajo diferido (funcionalidad a medio implementar y hallazgos de seguridad pendientes) está inventariado en [`docs/BACKLOG.md`](docs/BACKLOG.md).
