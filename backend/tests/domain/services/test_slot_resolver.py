@@ -140,6 +140,14 @@ class TestResolveSlots:
         assert _at(slots, 9, 0).status == SlotStatus.BLOCKED_RULES
         assert not _free(slots)
 
+    def test_slot_duration_follows_slot_minutes(self):
+        # Every slot lasts exactly rules.slot_minutes — duration is never a caller choice.
+        for minutes, expected_free in ((60, 4), (20, 12)):
+            av = make_availability(rules=BookingRules(slot_minutes=minutes))
+            free = _free(resolve_available_slots(av, THE_DAY, now=LONG_AGO))
+            assert len(free) == expected_free  # 240-min block / slot_minutes
+            assert all((s.end - s.start).total_seconds() == minutes * 60 for s in free)
+
     def test_past_slots_today_are_blocked_even_with_permissive_rules(self):
         # Default rules allow same-day with 0h advance; times already past must still not be FREE.
         now = datetime(2026, 6, 1, 10, 15)
@@ -153,32 +161,32 @@ class TestResolveSlots:
 class TestIsAvailable:
     def test_true_within_block_and_free(self):
         assert is_available(
-            make_availability(), datetime(2026, 6, 1, 9, 0), 30, now=LONG_AGO
+            make_availability(), datetime(2026, 6, 1, 9, 0), now=LONG_AGO
         )
 
     def test_false_outside_block(self):
         assert not is_available(
-            make_availability(), datetime(2026, 6, 1, 14, 0), 30, now=LONG_AGO
+            make_availability(), datetime(2026, 6, 1, 14, 0), now=LONG_AGO
         )
 
     def test_false_when_not_fully_inside_block(self):
         # 12:45 + 30min = 13:15, spills past 13:00 block end.
         assert not is_available(
-            make_availability(), datetime(2026, 6, 1, 12, 45), 30, now=LONG_AGO
+            make_availability(), datetime(2026, 6, 1, 12, 45), now=LONG_AGO
         )
 
     def test_false_when_overlapping_existing(self):
         busy = [BusyInterval(datetime(2026, 6, 1, 9, 0), datetime(2026, 6, 1, 9, 30))]
         assert not is_available(
-            make_availability(), datetime(2026, 6, 1, 9, 15), 30, busy=busy, now=LONG_AGO
+            make_availability(), datetime(2026, 6, 1, 9, 15), busy=busy, now=LONG_AGO
         )
 
     def test_false_when_breaks_advance_rule(self):
         av = make_availability(rules=BookingRules(slot_minutes=30, min_advance_hours=48))
         now = datetime(2026, 6, 1, 8, 0)
-        assert not is_available(av, datetime(2026, 6, 1, 9, 0), 30, now=now)
+        assert not is_available(av, datetime(2026, 6, 1, 9, 0), now=now)
 
     def test_false_when_slot_is_in_the_past(self):
         # Permissive defaults, but the 09:00 slot already passed at 10:00 → not bookable.
         now = datetime(2026, 6, 1, 10, 0)
-        assert not is_available(make_availability(), datetime(2026, 6, 1, 9, 0), 30, now=now)
+        assert not is_available(make_availability(), datetime(2026, 6, 1, 9, 0), now=now)

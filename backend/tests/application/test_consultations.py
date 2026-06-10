@@ -49,7 +49,6 @@ def booked(seed, uow):
             location_id=seed.tenant.primary_location.id,
             type=AppointmentType.CONSULT,
             scheduled_start=MONDAY_9AM,
-            duration_minutes=30,
             reason="Control de tensión",
         ),
     )

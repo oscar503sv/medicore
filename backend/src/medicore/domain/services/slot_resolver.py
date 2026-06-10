@@ -99,11 +99,11 @@ def _fits_in_block(start: datetime, end: datetime, blocks: list[TimeRange]) -> b
 def resolve_available_slots(
     availability: DoctorAvailability,
     on: date,
-    desired_duration_minutes: int = 30,
     busy: list[BusyInterval] | None = None,
     now: datetime | None = None,
 ) -> list[Slot]:
-    """Generate the day's candidate slots for an appointment of ``desired_duration_minutes``.
+    """Generate the day's candidate slots. Every slot lasts ``rules.slot_minutes`` —
+    appointment duration is the doctor's rule, never a caller choice.
 
     Candidates are stepped by ``rules.slot_minutes`` across a fixed horizon
     (``HORIZON_START``–``HORIZON_END``), not just inside the doctor's blocks, so the UI can
@@ -117,8 +117,7 @@ def resolve_available_slots(
     busy = _normalize_busy(busy or [])
     now = _naive(now or datetime.now())
     blocks = _blocks_for_date(availability, on)
-    duration = timedelta(minutes=desired_duration_minutes)
-    step = timedelta(minutes=availability.rules.slot_minutes)
+    duration = step = timedelta(minutes=availability.rules.slot_minutes)
 
     slots: list[Slot] = []
     cursor = datetime.combine(on, HORIZON_START)
@@ -141,11 +140,11 @@ def resolve_available_slots(
 def is_available(
     availability: DoctorAvailability,
     start: datetime,
-    duration_minutes: int,
     busy: list[BusyInterval] | None = None,
     now: datetime | None = None,
 ) -> bool:
-    """True if an appointment ``[start, start+duration)`` can be booked.
+    """True if an appointment starting at ``start`` can be booked. Its duration is always
+    ``rules.slot_minutes``.
 
     Requires the interval to fit entirely within an availability block, not overlap any busy
     interval, and satisfy the booking rules.
@@ -153,7 +152,7 @@ def is_available(
     busy = _normalize_busy(busy or [])
     now = _naive(now or datetime.now())
     start = _naive(start)
-    end = start + timedelta(minutes=duration_minutes)
+    end = start + timedelta(minutes=availability.rules.slot_minutes)
 
     if not _fits_in_block(start, end, _blocks_for_date(availability, start.date())):
         return False

@@ -14,7 +14,10 @@ from medicore.application.use_cases.appointments import (
     GetAvailableSlots,
     GetBookingOptions,
     ListAppointmentsForDay,
+    RescheduleAppointment,
 )
+from medicore.application.use_cases.availability import UpdateBookingRules
+from medicore.domain.entities.availability import BookingRules
 from medicore.domain.enums import AppointmentStatus, AppointmentType, Role
 from medicore.domain.services.slot_resolver import SlotStatus
 from medicore.domain.shared.errors import PermissionDenied, SlotUnavailable
@@ -30,14 +33,13 @@ def make_create(seed):
     return CreateAppointment(uow, SequentialCodeGenerator(), FixedClock()), uow
 
 
-def booking_cmd(seed, start=MONDAY_9AM, duration=30):
+def booking_cmd(seed, start=MONDAY_9AM):
     return CreateAppointmentCommand(
         patient_id=seed.patient.id,
         doctor_id=seed.doctor.id,
         location_id=seed.tenant.primary_location.id,
         type=AppointmentType.CONSULT,
         scheduled_start=start,
-        duration_minutes=duration,
         reason="Control de tensión",
     )
 
@@ -99,7 +101,6 @@ def test_doctor_without_availability_cannot_be_booked():
         location_id=seed.tenant.primary_location.id,
         type=AppointmentType.CONSULT,
         scheduled_start=MONDAY_9AM,
-        duration_minutes=30,
         reason="x",
     )
     with pytest.raises(SlotUnavailable):
@@ -161,7 +162,7 @@ class TestBookingOptions:
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
         opts = GetBookingOptions(uow).execute(seed.receptionist_actor)
-        assert any(d.id == seed.doctor.id for d in opts.doctors)
+        assert any(d.user.id == seed.doctor.id for d in opts.doctors)
         assert len(opts.locations) == 1
 
     def test_doctor_can_get_booking_options(self):
@@ -175,3 +176,63 @@ class TestBookingOptions:
         uow = seed.factory.for_tenant(seed.tenant.id)
         with pytest.raises(PermissionDenied):
             GetBookingOptions(uow).execute(seed.actor(seed.nurse))
+
+    def test_options_expose_doctor_slot_minutes(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        opts = GetBookingOptions(uow).execute(seed.receptionist_actor)
+        configured = next(d for d in opts.doctors if d.user.id == seed.doctor.id)
+        assert configured.slot_minutes == 30
+
+
+class TestDoctorDrivenDuration:
+    def test_created_appointment_duration_is_doctors_slot_minutes(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        UpdateBookingRules(uow, FixedClock()).execute(
+            seed.doctor_actor, BookingRules(slot_minutes=20)
+        )
+        appt = CreateAppointment(uow, SequentialCodeGenerator(), FixedClock()).execute(
+            seed.receptionist_actor, booking_cmd(seed)
+        )
+        assert appt.duration_minutes == 20
+
+    def test_slot_duration_follows_doctor_rules(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        UpdateBookingRules(uow, FixedClock()).execute(
+            seed.doctor_actor, BookingRules(slot_minutes=60)
+        )
+        slots = GetAvailableSlots(uow, FixedClock()).execute(
+            seed.receptionist_actor, seed.doctor.id, MONDAY_9AM.date()
+        )
+        free = [s for s in slots if s.status == SlotStatus.FREE]
+        assert len(free) == 4  # 09:00-13:00 block / 60 min
+        assert all((s.end - s.start).total_seconds() == 3600 for s in free)
+
+    def test_reschedule_recomputes_duration_with_current_rules(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        appt = CreateAppointment(uow, SequentialCodeGenerator(), FixedClock()).execute(
+            seed.receptionist_actor, booking_cmd(seed)
+        )
+        assert appt.duration_minutes == 30
+        UpdateBookingRules(uow, FixedClock()).execute(
+            seed.doctor_actor, BookingRules(slot_minutes=20)
+        )
+        moved = RescheduleAppointment(uow, FixedClock()).execute(
+            seed.receptionist_actor, appt.id, datetime(2026, 6, 1, 10, 0)
+        )
+        assert moved.scheduled_start == datetime(2026, 6, 1, 10, 0)
+        assert moved.duration_minutes == 20
+
+    def test_reschedule_to_unavailable_slot_rejected(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        appt = CreateAppointment(uow, SequentialCodeGenerator(), FixedClock()).execute(
+            seed.receptionist_actor, booking_cmd(seed)
+        )
+        with pytest.raises(SlotUnavailable):
+            RescheduleAppointment(uow, FixedClock()).execute(
+                seed.receptionist_actor, appt.id, datetime(2026, 6, 1, 14, 0)
+            )

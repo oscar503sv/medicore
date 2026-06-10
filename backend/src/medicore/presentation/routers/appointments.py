@@ -71,7 +71,7 @@ def booking_options(actor: Actor, uow: UoW):
     with uow:
         opts = GetBookingOptions(uow).execute(actor)
     return BookingOptionsResponse(
-        doctors=[ser_user(d) for d in opts.doctors],
+        doctors=[{**ser_user(d.user), "slot_minutes": d.slot_minutes} for d in opts.doctors],
         locations=[
             {
                 "id": str(loc.id),
@@ -121,12 +121,9 @@ def available_slots(
     clock: Clock,
     doctor_id: str = Query(...),
     on: date = Query(...),
-    duration: int = Query(30, ge=5, le=240),
 ):
     with uow:
-        slots = GetAvailableSlots(uow, clock).execute(
-            actor, UserId.parse(doctor_id), on, duration
-        )
+        slots = GetAvailableSlots(uow, clock).execute(actor, UserId.parse(doctor_id), on)
     return [ser_slot(s) for s in slots]
 
 
@@ -140,7 +137,6 @@ def create_appointment(
         location_id=LocationId.parse(body.location_id),
         type=AppointmentType(body.type),
         scheduled_start=body.scheduled_start,
-        duration_minutes=body.duration_minutes,
         reason=body.reason,
         room=body.room,
         insurance_id=InsurerId.parse(body.insurance_id) if body.insurance_id else None,
@@ -152,7 +148,7 @@ def create_appointment(
 @router.put("/{appointment_id}/reschedule", response_model=AppointmentResponse)
 def reschedule(appointment_id: str, body: RescheduleRequest, actor: Actor, uow: UoW, clock: Clock):
     appt = RescheduleAppointment(uow, clock).execute(
-        actor, AppointmentId.parse(appointment_id), body.new_start, body.new_duration
+        actor, AppointmentId.parse(appointment_id), body.new_start
     )
     return ser_appointment(appt)
 

@@ -12,7 +12,6 @@ def _booking_payload(seed, start="2026-06-01T09:00:00"):
         "location_id": str(seed.tenant.primary_location.id),
         "type": "consult",
         "scheduled_start": start,
-        "duration_minutes": 30,
         "reason": "Control tensión",
     }
 
@@ -27,6 +26,8 @@ def test_get_slots_within_availability(seed, client, auth_headers):
     free = [s for s in slots if s["status"] == "free"]
     assert len(free) == 8  # 240 min / 30 within the 09:00–13:00 block
     assert free[0]["start"].endswith("09:00:00")
+    # Slot duration comes from the doctor's rules (30 min).
+    assert free[0]["end"].endswith("09:30:00")
 
 
 def test_invalid_uuid_returns_422(seed, client, auth_headers):
@@ -45,6 +46,39 @@ def test_create_appointment(seed, client, auth_headers):
     data = resp.json()
     assert data["status"] == "scheduled"
     assert data["code"].startswith("A-")
+    # Duration comes from the doctor's rules, not from the request.
+    assert data["duration_minutes"] == 30
+
+
+def test_create_ignores_client_duration(seed, client, auth_headers):
+    payload = {**_booking_payload(seed), "duration_minutes": 60}  # legacy field — ignored
+    resp = client.post("/api/v1/appointments", json=payload, headers=auth_headers)
+    assert resp.status_code == 201
+    assert resp.json()["duration_minutes"] == 30
+
+
+def test_reschedule_uses_doctor_duration(seed, client, auth_headers):
+    appt = client.post(
+        "/api/v1/appointments", json=_booking_payload(seed), headers=auth_headers
+    ).json()
+    resp = client.put(
+        f"/api/v1/appointments/{appt['id']}/reschedule",
+        json={"new_start": "2026-06-01T10:00:00", "new_duration": 90},  # legacy — ignored
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    moved = resp.json()
+    assert moved["scheduled_start"].endswith("10:00:00")
+    assert moved["duration_minutes"] == 30
+
+
+def test_booking_options_include_slot_minutes(seed, client, auth_headers):
+    resp = client.get("/api/v1/appointments/booking-options", headers=auth_headers)
+    assert resp.status_code == 200
+    doctor = next(
+        d for d in resp.json()["doctors"] if d["id"] == str(seed.doctor.id)
+    )
+    assert doctor["slot_minutes"] == 30
 
 
 def test_slot_shows_taken_after_booking(seed, client, auth_headers):

@@ -61,17 +61,24 @@ class CreateAppointmentCommand:
     location_id: LocationId
     type: AppointmentType
     scheduled_start: datetime
-    duration_minutes: int
     reason: str
     room: str | None = None
     insurance_id: InsurerId | None = None
 
 
 @dataclass(frozen=True, slots=True)
+class DoctorOption:
+    """A bookable doctor plus the appointment duration their rules impose."""
+
+    user: User
+    slot_minutes: int | None  # None → the doctor has no availability configured yet
+
+
+@dataclass(frozen=True, slots=True)
 class BookingOptions:
     """Everything the create-appointment UI needs to populate its selectors."""
 
-    doctors: list[User]
+    doctors: list[DoctorOption]
     locations: list[Location]
 
 
@@ -87,7 +94,16 @@ class GetBookingOptions:
         doctors = self._uow.users.list(UserFilter(role="doctor", status="active")).items
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         locations = list(tenant.locations) if tenant else []
-        return BookingOptions(doctors=doctors, locations=locations)
+        options = []
+        for doctor in doctors:
+            availability = self._uow.availability.get_by_doctor(doctor.id)
+            options.append(
+                DoctorOption(
+                    user=doctor,
+                    slot_minutes=availability.rules.slot_minutes if availability else None,
+                )
+            )
+        return BookingOptions(doctors=options, locations=locations)
 
 
 def _scope_doctor(actor: ActorContext, doctor_id: UserId | None) -> UserId | None:
@@ -132,13 +148,7 @@ class GetAvailableSlots:
         self._uow = uow
         self._clock = clock
 
-    def execute(
-        self,
-        actor: ActorContext,
-        doctor_id: UserId,
-        on: date,
-        duration_minutes: int = 30,
-    ) -> list[Slot]:
+    def execute(self, actor: ActorContext, doctor_id: UserId, on: date) -> list[Slot]:
         ensure_permission(actor, Permission.APPOINTMENTS_VIEW)
         availability = self._uow.availability.get_by_doctor(doctor_id)
         if availability is None:
@@ -147,7 +157,6 @@ class GetAvailableSlots:
         return resolve_available_slots(
             availability,
             on,
-            desired_duration_minutes=duration_minutes,
             busy=busy,
             now=clinic_now(self._uow, actor.tenant_id, self._clock),
         )
@@ -169,14 +178,15 @@ class CreateAppointment:
         if availability is None:
             raise SlotUnavailable("doctor has no availability configured")
 
-        end = cmd.scheduled_start + timedelta(minutes=cmd.duration_minutes)
+        # Appointment duration is the doctor's rule, never a caller choice.
+        duration = availability.rules.slot_minutes
+        end = cmd.scheduled_start + timedelta(minutes=duration)
         busy = _busy_intervals(
             self._uow.appointments.find_overlapping(cmd.doctor_id, cmd.scheduled_start, end)
         )
         if not is_available(
             availability,
             cmd.scheduled_start,
-            cmd.duration_minutes,
             busy=busy,
             now=clinic_now(self._uow, actor.tenant_id, self._clock),
         ):
@@ -193,7 +203,7 @@ class CreateAppointment:
             location_id=cmd.location_id,
             type=cmd.type,
             scheduled_start=cmd.scheduled_start,
-            duration_minutes=cmd.duration_minutes,
+            duration_minutes=duration,
             reason=cmd.reason,
             created_by_id=actor.user_id,
             room=cmd.room,
@@ -227,13 +237,15 @@ class RescheduleAppointment:
         actor: ActorContext,
         appointment_id: AppointmentId,
         new_start: datetime,
-        new_duration: int | None = None,
     ) -> Appointment:
         ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
         appointment = self._require(appointment_id)
 
         availability = self._uow.availability.get_by_doctor(appointment.doctor_id)
-        duration = new_duration or appointment.duration_minutes
+        if availability is None:
+            raise SlotUnavailable("doctor has no availability configured")
+        # Duration is recomputed from the doctor's current rules, not carried over.
+        duration = availability.rules.slot_minutes
         end = new_start + timedelta(minutes=duration)
         # Existing appointments excluding the one being moved.
         overlapping = [
@@ -241,17 +253,16 @@ class RescheduleAppointment:
             for a in self._uow.appointments.find_overlapping(appointment.doctor_id, new_start, end)
             if a.id != appointment.id
         ]
-        if availability is None or not is_available(
+        if not is_available(
             availability,
             new_start,
-            duration,
             busy=_busy_intervals(overlapping),
             now=clinic_now(self._uow, actor.tenant_id, self._clock),
         ):
             raise SlotUnavailable("new slot is not bookable")
 
         with self._uow:
-            appointment.reschedule(new_start, new_duration)
+            appointment.reschedule(new_start, duration)
             self._uow.appointments.save(appointment)
             self._uow.audit.append(
                 audit_entry(

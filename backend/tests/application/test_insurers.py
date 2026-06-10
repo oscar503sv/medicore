@@ -88,7 +88,6 @@ class TestAppointmentInsurerLink:
                 location_id=seed.tenant.primary_location.id,
                 type=AppointmentType.CONSULT,
                 scheduled_start=datetime(2026, 6, 1, 9, 0),  # within Mon 09:00–13:00
-                duration_minutes=30,
                 reason="Consulta con seguro",
                 insurance_id=insurer.id,
             ),
@@ -108,7 +107,6 @@ class TestAppointmentInsurerLink:
                 location_id=seed.tenant.primary_location.id,
                 type=AppointmentType.CONSULT,
                 scheduled_start=datetime(2026, 6, 1, 10, 0),
-                duration_minutes=30,
                 reason="Consulta privada",
             ),
         )

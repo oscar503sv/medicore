@@ -10,13 +10,13 @@ from medicore.presentation.schemas.organization import LocationResponse
 from medicore.presentation.schemas.users import UserResponse
 
 
+# Duration is never sent by the client — it always comes from the doctor's booking rules.
 class CreateAppointmentRequest(BaseModel):
     patient_id: str
     doctor_id: str
     location_id: str
     type: str
     scheduled_start: datetime
-    duration_minutes: int
     reason: str
     room: str | None = None
     insurance_id: str | None = None
@@ -24,7 +24,6 @@ class CreateAppointmentRequest(BaseModel):
 
 class RescheduleRequest(BaseModel):
     new_start: datetime
-    new_duration: int | None = None
 
 
 class AppointmentResponse(BaseModel):
@@ -60,6 +59,10 @@ class WeeklyScheduleResponse(BaseModel):
     schedule: dict[str, list[AppointmentResponse]]  # date ISO → appointments
 
 
+class BookingDoctorResponse(UserResponse):
+    slot_minutes: int | None = None  # appointment duration imposed by the doctor's rules
+
+
 class BookingOptionsResponse(BaseModel):
-    doctors: list[UserResponse]
+    doctors: list[BookingDoctorResponse]
     locations: list[LocationResponse]
