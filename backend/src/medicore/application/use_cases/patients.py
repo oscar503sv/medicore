@@ -139,6 +139,29 @@ class ArchivePatient:
         return patient
 
 
+class ReactivatePatient:
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(self, actor: ActorContext, patient_id: PatientId) -> Patient:
+        ensure_permission(actor, Permission.PATIENTS_ARCHIVE)
+        patient = self._uow.patients.get_by_id(patient_id)
+        if patient is None:
+            raise EntityNotFound("Patient", patient_id)
+        with self._uow:
+            patient.reactivate()
+            self._uow.patients.save(patient)
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "patient.reactivated", "Patient", str(patient.id),
+                    subject=subject(patient.code, patient.full_name),
+                )
+            )
+            self._uow.commit()
+        return patient
+
+
 class ListPatients:
     def __init__(self, uow: UnitOfWork) -> None:
         self._uow = uow

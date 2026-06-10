@@ -15,6 +15,7 @@ from medicore.application.use_cases.insurers import (
     CreateInsurer,
     CreateInsurerCommand,
     ListInsurers,
+    ReactivateInsurer,
     UpdateInsurer,
 )
 from medicore.domain.enums import AppointmentType
@@ -73,6 +74,26 @@ class TestInsurerManagement:
         ArchiveInsurer(uow, FixedClock()).execute(seed.actor(seed.admin), insurer.id)
         assert ListInsurers(uow).execute(seed.actor(seed.admin), active_only=True) == []
         assert len(ListInsurers(uow).execute(seed.actor(seed.admin))) == 1
+
+    def test_reactivate_restores_to_active_only(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        insurer = _make_insurer(seed, uow)
+        ArchiveInsurer(uow, FixedClock()).execute(seed.actor(seed.admin), insurer.id)
+        restored = ReactivateInsurer(uow, FixedClock()).execute(
+            seed.actor(seed.admin), insurer.id
+        )
+        assert restored.active is True
+        active = ListInsurers(uow).execute(seed.actor(seed.admin), active_only=True)
+        assert [i.name for i in active] == ["Sanitas"]
+        assert uow.audit.query(action="insurer.reactivated")
+
+    def test_non_admin_cannot_reactivate(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        insurer = _make_insurer(seed, uow)
+        with pytest.raises(PermissionDenied):
+            ReactivateInsurer(uow, FixedClock()).execute(seed.receptionist_actor, insurer.id)
 
 
 class TestAppointmentInsurerLink:

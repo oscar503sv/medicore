@@ -17,7 +17,11 @@ from medicore.application.common.permissions import (
     permissions_for,
 )
 from medicore.application.use_cases.consultations import StartConsultation
-from medicore.application.use_cases.patients import ArchivePatient, UpdatePatient
+from medicore.application.use_cases.patients import (
+    ArchivePatient,
+    ReactivatePatient,
+    UpdatePatient,
+)
 from medicore.domain.enums import Role
 from medicore.domain.shared.errors import PermissionDenied
 from tests.support.builders import seed_clinic
@@ -113,6 +117,12 @@ class TestTightenedGrants:
         uow = seed.factory.for_tenant(seed.tenant.id)
         with pytest.raises(PermissionDenied):
             ArchivePatient(uow, FixedClock()).execute(seed.actor(seed.nurse), seed.patient.id)
+
+    def test_nurse_cannot_reactivate_patient(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        with pytest.raises(PermissionDenied):
+            ReactivatePatient(uow, FixedClock()).execute(seed.actor(seed.nurse), seed.patient.id)
 
     def test_nurse_cannot_start_consultation(self):
         seed = seed_clinic()

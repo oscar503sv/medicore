@@ -11,6 +11,7 @@ from medicore.application.use_cases.patients import (
     GetPatientDetail,
     ListPatients,
     PatientsNextVisits,
+    ReactivatePatient,
     SearchPatients,
     UpdatePatient,
 )
@@ -131,4 +132,10 @@ def update_patient(
 @router.post("/{patient_id}/archive", response_model=PatientResponse)
 def archive_patient(patient_id: str, actor: Actor, uow: UoW, clock: Clock):
     patient = ArchivePatient(uow, clock).execute(actor, PatientId.parse(patient_id))
+    return ser_patient(patient)
+
+
+@router.post("/{patient_id}/reactivate", response_model=PatientResponse)
+def reactivate_patient(patient_id: str, actor: Actor, uow: UoW, clock: Clock):
+    patient = ReactivatePatient(uow, clock).execute(actor, PatientId.parse(patient_id))
     return ser_patient(patient)

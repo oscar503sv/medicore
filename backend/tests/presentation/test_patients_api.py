@@ -54,3 +54,23 @@ def test_get_nonexistent_patient_returns_404(client, auth_headers):
 def test_receptionist_cannot_list_records(seed, client, receptionist_headers):
     resp = client.get("/api/v1/records", headers=receptionist_headers)
     assert resp.status_code == 403
+
+
+def test_archive_then_reactivate_patient(seed, client, auth_headers):
+    archived = client.post(
+        f"/api/v1/patients/{seed.patient.id}/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+    assert archived.json()["status"] == "inactive"
+
+    restored = client.post(
+        f"/api/v1/patients/{seed.patient.id}/reactivate", headers=auth_headers
+    )
+    assert restored.status_code == 200
+    assert restored.json()["status"] == "active"
+
+
+def test_reactivate_nonexistent_patient_returns_404(client, auth_headers):
+    import uuid
+    resp = client.post(f"/api/v1/patients/{uuid.uuid4()}/reactivate", headers=auth_headers)
+    assert resp.status_code == 404

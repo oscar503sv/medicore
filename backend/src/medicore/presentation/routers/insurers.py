@@ -10,6 +10,7 @@ from medicore.application.use_cases.insurers import (
     CreateInsurer,
     CreateInsurerCommand,
     ListInsurers,
+    ReactivateInsurer,
     UpdateInsurer,
 )
 from medicore.domain.shared.identifiers import InsurerId
@@ -57,3 +58,8 @@ def update_insurer(
 @router.post("/{insurer_id}/archive", response_model=InsurerResponse)
 def archive_insurer(insurer_id: str, actor: Actor, uow: UoW, clock: Clock):
     return ser_insurer(ArchiveInsurer(uow, clock).execute(actor, InsurerId.parse(insurer_id)))
+
+
+@router.post("/{insurer_id}/reactivate", response_model=InsurerResponse)
+def reactivate_insurer(insurer_id: str, actor: Actor, uow: UoW, clock: Clock):
+    return ser_insurer(ReactivateInsurer(uow, clock).execute(actor, InsurerId.parse(insurer_id)))

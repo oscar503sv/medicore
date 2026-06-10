@@ -123,3 +123,26 @@ class ArchiveInsurer:
             )
             self._uow.commit()
         return insurer
+
+
+class ReactivateInsurer:
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(self, actor: ActorContext, insurer_id: InsurerId) -> Insurer:
+        ensure_permission(actor, Permission.INSURERS_MANAGE)
+        insurer = self._uow.insurers.get_by_id(insurer_id)
+        if insurer is None:
+            raise EntityNotFound("Insurer", insurer_id)
+        with self._uow:
+            insurer.reactivate()
+            self._uow.insurers.save(insurer)
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "insurer.reactivated", "Insurer", str(insurer.id),
+                    subject=subject(insurer.name),
+                )
+            )
+            self._uow.commit()
+        return insurer
