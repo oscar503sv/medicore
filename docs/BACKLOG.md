@@ -19,11 +19,6 @@ La pieza más grande. Existe la base pero nada la usa:
 las recetas nacen `active` y nunca cambian de estado. La UI muestra "recetas activas"
 calculadas, pero nadie puede completar/cancelar una.
 
-### Reactivaciones
-- `Patient.reactivate()` (`domain/entities/patient.py`) — se puede archivar desde la UI,
-  pero no reactivar; un paciente archivado es hoy un estado terminal en la práctica.
-- `Insurer.reactivate()` (`domain/entities/insurer.py`) — mismo caso para aseguradoras.
-
 ### Otros cabos sueltos
 - Caso de uso `AttachDocument` (`application/use_cases/consultations.py`) sin endpoint:
   adjuntar documentos a una consulta en curso no es alcanzable vía API.
