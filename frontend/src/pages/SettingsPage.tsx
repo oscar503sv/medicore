@@ -4,6 +4,7 @@ import { Monitor, Moon, Sun } from 'lucide-react'
 import { authApi } from '@/api/auth'
 import { errorMessage } from '@/api/client'
 import { PageHeader } from '@/components/PageHeader'
+import { OrganizationSection } from '@/components/settings/OrganizationSection'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -16,16 +17,20 @@ import { formatPhone, isValidPhone } from '@/lib/validation'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore, type Lang, type Theme } from '@/stores/ui'
 
-type Section = 'profile' | 'appearance' | 'notifications'
+type Section = 'profile' | 'appearance' | 'organization' | 'notifications'
 
 export function SettingsPage() {
   const t = useT()
   const [section, setSection] = useState<Section>('profile')
   const { theme, setTheme, lang, setLang } = useUIStore()
+  const canViewOrg = useAuthStore((s) => s.can('organization.view'))
 
   const sections: { id: Section; label: string }[] = [
     { id: 'profile', label: t('settings.profile') },
     { id: 'appearance', label: t('settings.appearance') },
+    ...(canViewOrg
+      ? [{ id: 'organization' as const, label: t('settings.organization') }]
+      : []),
     { id: 'notifications', label: t('settings.notifications') },
   ]
 
@@ -111,6 +116,8 @@ export function SettingsPage() {
               </div>
             </Card>
           )}
+
+          {section === 'organization' && <OrganizationSection />}
 
           {section === 'notifications' && (
             <Card className="p-8 text-center text-sm text-tx-3">Sección en desarrollo</Card>
