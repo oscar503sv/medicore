@@ -101,6 +101,15 @@ class TestPatients:
         assert detail.active_prescriptions == 0
         assert detail.last_visit == MONDAY_9AM
 
+    def test_patient_detail_audits_chart_view_once_per_access(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        detail = GetPatientDetail(uow, FixedClock())
+        detail.execute(seed.doctor_actor, seed.patient.id)
+        assert len(uow.audit.query(action="patient.chart_viewed")) == 1
+        detail.execute(seed.doctor_actor, seed.patient.id)
+        assert len(uow.audit.query(action="patient.chart_viewed")) == 2
+
 
 class TestRecordPermissions:
     def test_receptionist_cannot_view_records(self):

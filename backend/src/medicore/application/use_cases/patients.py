@@ -203,6 +203,17 @@ class GetPatientDetail:
         records = self._uow.medical_records.list_by_patient(patient_id)
         prescriptions = self._uow.prescriptions.list_by_patient(patient_id, active_only=True)
 
+        # Opening a patient chart exposes their clinical history — auditable (HIPAA/GDPR).
+        # One entry per access, not per record (GetMedicalRecord audits individual reads).
+        with self._uow:
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "patient.chart_viewed", "Patient",
+                    str(patient.id), subject=subject(patient.code, patient.full_name),
+                )
+            )
+            self._uow.commit()
+
         return PatientDetailDTO(
             patient=patient,
             last_visit=max((a.scheduled_start for a in past), default=None),
