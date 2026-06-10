@@ -1,12 +1,16 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ShieldCheck } from 'lucide-react'
+import { FilePen, ShieldCheck } from 'lucide-react'
 import { recordsApi } from '@/api/records'
+import { AmendRecordModal } from '@/components/records/AmendRecordModal'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
+import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/ui/Drawer'
 import { Spinner } from '@/components/ui/Spinner'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { useAuthStore } from '@/stores/auth'
 import type { Soap } from '@/types'
 
 const SOAP_ORDER: { key: keyof Soap; labelKey: string }[] = [
@@ -24,6 +28,8 @@ export function RecordDrawer({
   onClose: () => void
 }) {
   const t = useT()
+  const canAmend = useAuthStore((s) => s.can('records.amend'))
+  const [amendOpen, setAmendOpen] = useState(false)
   const { data: record, isLoading } = useQuery({
     queryKey: ['record', recordId],
     queryFn: () => recordsApi.get(recordId!),
@@ -53,9 +59,17 @@ export function RecordDrawer({
                   : t('record.private')}
               </p>
             </div>
-            <Badge tone={record.status === 'amended' ? 'info' : 'ok'}>
-              {t(`records.${record.status === 'amended' ? 'amended' : 'signed'}`)}
-            </Badge>
+            <div className="flex items-center gap-3">
+              {canAmend && record.status !== 'draft' && (
+                <Button size="sm" variant="outline" onClick={() => setAmendOpen(true)}>
+                  <FilePen className="h-3.5 w-3.5" />
+                  {t('record.amend')}
+                </Button>
+              )}
+              <Badge tone={record.status === 'amended' ? 'info' : 'ok'}>
+                {t(`records.${record.status === 'amended' ? 'amended' : 'signed'}`)}
+              </Badge>
+            </div>
           </div>
 
           {/* Vitals */}
@@ -133,6 +147,10 @@ export function RecordDrawer({
           </div>
         </div>
       )}
+      <AmendRecordModal
+        record={amendOpen && record ? record : null}
+        onClose={() => setAmendOpen(false)}
+      />
     </Drawer>
   )
 }
