@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import { Outlet } from 'react-router-dom'
+import { authApi } from '@/api/auth'
 import { impersonationApi } from '@/api/platform'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -10,6 +12,22 @@ export function AppLayout() {
   const t = useT()
   const session = useAuthStore((s) => s.session)
   const logout = useAuthStore((s) => s.logout)
+  const setSession = useAuthStore((s) => s.setSession)
+
+  // Refresh effective permissions on mount so an admin's permission changes reach
+  // already-logged-in users without forcing a re-login. Best-effort: failures are ignored
+  // (an expired token already triggers logout via the 401 interceptor).
+  useEffect(() => {
+    if (!session) return
+    authApi
+      .getMyProfile()
+      .then((profile) => {
+        const current = useAuthStore.getState().session
+        if (current) setSession({ ...current, permissions: profile.permissions })
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Record support.access.ended before tearing down the session. Best-effort: if the call
   // fails (expired token, network), we still leave. A hard redirect re-bootstraps from the

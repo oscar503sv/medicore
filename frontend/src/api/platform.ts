@@ -3,8 +3,11 @@ import type {
   GlobalAuditEntry,
   GlobalStats,
   PaginatedResponse,
+  Permission,
+  PermissionsMatrix,
   PlatformAdminProfile,
   PlatformSession,
+  Role,
   Tenant,
   TenantStats,
   User,
@@ -107,6 +110,21 @@ export const platformTenantsApi = {
       .post<PaginatedResponse<User>>(`/platform/tenants/${id}/users/${userId}/suspend`)
       .then((r) => r.data),
 
+  getPermissions: (id: string) =>
+    platformApi
+      .get<PermissionsMatrix>(`/platform/tenants/${id}/permissions`)
+      .then((r) => r.data),
+
+  updateRolePermissions: (id: string, role: Role, permissions: Permission[]) =>
+    platformApi
+      .put<PermissionsMatrix>(`/platform/tenants/${id}/permissions/roles/${role}`, { permissions })
+      .then((r) => r.data),
+
+  resetRolePermissions: (id: string, role: Role) =>
+    platformApi
+      .delete<PermissionsMatrix>(`/platform/tenants/${id}/permissions/roles/${role}`)
+      .then((r) => r.data),
+
   impersonate: (id: string, reason: string) =>
     platformApi
       .post<{
@@ -117,6 +135,7 @@ export const platformTenantsApi = {
         timezone: string
         role: string
         name: string
+        permissions: Permission[]
       }>(`/platform/tenants/${id}/impersonate`, { reason })
       .then((r) => r.data),
 }

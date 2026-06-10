@@ -1,4 +1,40 @@
 // ── Auth ──────────────────────────────────────────────────────────────────────
+// Mirror of the backend Permission catalog (application/common/permissions.py).
+export type Permission =
+  | 'patients.view'
+  | 'patients.create'
+  | 'patients.edit'
+  | 'patients.archive'
+  | 'appointments.view'
+  | 'appointments.manage'
+  | 'availability.manage'
+  | 'consultations.start'
+  | 'consultations.edit'
+  | 'records.view'
+  | 'records.upload'
+  | 'records.sign'
+  | 'records.amend'
+  | 'diagnoses.view'
+  | 'insurers.view'
+  | 'insurers.manage'
+  | 'users.view'
+  | 'users.manage'
+  | 'organization.view'
+  | 'organization.manage'
+  | 'audit.view'
+  | 'permissions.manage'
+
+export interface RolePermissionsEntry {
+  defaults: Permission[]
+  effective: Permission[]
+  customized: boolean
+}
+
+export interface PermissionsMatrix {
+  catalog: Permission[]
+  roles: Record<Role, RolePermissionsEntry>
+}
+
 export interface Session {
   token: string
   user_id: string
@@ -9,6 +45,7 @@ export interface Session {
   name: string
   sex: Sex | null
   must_change_password: boolean
+  permissions: Permission[]
   // Set when a superadmin entered this clinic via support impersonation.
   impersonating?: boolean
 }
@@ -21,6 +58,7 @@ export interface MyProfile {
   specialty: string | null
   phone: string | null
   bio: string | null
+  permissions: Permission[]
 }
 
 // ── Platform (superadmin) ──────────────────────────────────────────────────────

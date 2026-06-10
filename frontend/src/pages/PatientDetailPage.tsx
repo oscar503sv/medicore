@@ -28,11 +28,11 @@ export function PatientDetailPage() {
   const [tab, setTab] = useState<Tab>('summary')
   const [editOpen, setEditOpen] = useState(false)
   const [openRecordId, setOpenRecordId] = useState<string | null>(null)
-  const canEdit = useAuthStore((s) => s.hasRole('admin', 'doctor', 'receptionist'))
-  // History is visible to everyone but only a doctor may open it; the clinical tabs
-  // (prescriptions / vitals / documents) are reserved for doctor, nurse and admin.
+  const canEdit = useAuthStore((s) => s.can('patients.edit'))
+  // History is visible to everyone but only a doctor may open it (clinical authorship,
+  // not a grantable capability); the clinical tabs follow records.view.
   const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
-  const canClinical = useAuthStore((s) => s.hasRole('doctor', 'nurse', 'admin'))
+  const canClinical = useAuthStore((s) => s.can('records.view'))
 
   const { data, isLoading } = useQuery({
     queryKey: ['patient', id],

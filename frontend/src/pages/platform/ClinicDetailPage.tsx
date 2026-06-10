@@ -5,8 +5,9 @@ import { ArrowLeft, KeyRound, LogIn, Pencil } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { platformTenantsApi } from '@/api/platform'
 import { useAuthStore } from '@/stores/auth'
-import type { Role, User } from '@/types'
+import type { Permission, PermissionsMatrix, Role, User } from '@/types'
 import { PageHeader } from '@/components/PageHeader'
+import { PermissionsMatrixTable } from '@/components/permissions/PermissionsMatrixTable'
 import { StatCard } from '@/components/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { statusTone } from '@/components/ui/badgeTone'
@@ -169,10 +170,31 @@ export function ClinicDetailPage() {
         name: s.name,
         sex: null,
         must_change_password: false,
+        permissions: s.permissions,
         impersonating: true,
       })
       navigate('/')
     },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  const { data: permMatrix } = useQuery({
+    queryKey: ['platform-tenant-permissions', id],
+    queryFn: () => platformTenantsApi.getPermissions(id),
+  })
+  const refreshPerms = (next: PermissionsMatrix) => {
+    qc.setQueryData(['platform-tenant-permissions', id], next)
+    toast(t('permissions.saved'))
+  }
+  const savePerms = useMutation({
+    mutationFn: ({ role, permissions }: { role: Role; permissions: Permission[] }) =>
+      platformTenantsApi.updateRolePermissions(id, role, permissions),
+    onSuccess: refreshPerms,
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+  const resetPerms = useMutation({
+    mutationFn: (role: Role) => platformTenantsApi.resetRolePermissions(id, role),
+    onSuccess: refreshPerms,
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
@@ -390,6 +412,19 @@ export function ClinicDetailPage() {
         </Table>
         {filteredUsers.length > PAGE_SIZE && (
           <Pager offset={offset} limit={PAGE_SIZE} count={pagedUsers.length} total={filteredUsers.length} onChange={setOffset} />
+        )}
+      </Card>
+
+      {/* Roles & permissions */}
+      <Card>
+        <CardHeader title={t('permissions.title')} />
+        {permMatrix && (
+          <PermissionsMatrixTable
+            matrix={permMatrix}
+            busy={savePerms.isPending || resetPerms.isPending}
+            onSaveRole={(role, permissions) => savePerms.mutate({ role, permissions })}
+            onResetRole={(role) => resetPerms.mutate(role)}
+          />
         )}
       </Card>
 

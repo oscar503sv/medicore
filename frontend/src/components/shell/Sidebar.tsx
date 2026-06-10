@@ -11,9 +11,14 @@ export function Sidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed)
   const toggle = useUIStore((s) => s.toggleSidebar)
   const role = useAuthStore((s) => s.session?.role)
+  const can = useAuthStore((s) => s.can)
   const tenantName = useAuthStore((s) => s.session?.tenant_name)
 
-  const visible = NAV_ITEMS.filter((item) => role && item.roles.includes(role))
+  const visible = NAV_ITEMS.filter(
+    (item) =>
+      (item.permission ? can(item.permission) : true) &&
+      (item.roles ? !!role && item.roles.includes(role) : true),
+  )
 
   return (
     <aside

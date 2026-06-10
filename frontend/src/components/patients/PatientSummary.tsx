@@ -26,9 +26,9 @@ export function PatientSummary({
 }) {
   const t = useT()
   const qc = useQueryClient()
-  const canClinical = useAuthStore((s) => s.hasRole('admin', 'doctor', 'nurse'))
+  const canClinical = useAuthStore((s) => s.can('records.view'))
   const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
-  const canManage = useAuthStore((s) => s.hasRole('admin', 'doctor', 'receptionist'))
+  const canManage = useAuthStore((s) => s.can('appointments.manage'))
 
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)

@@ -24,6 +24,7 @@ import { PlatformLoginPage } from '@/pages/platform/PlatformLoginPage'
 import { RecordsPage } from '@/pages/RecordsPage'
 import { SchedulePage } from '@/pages/SchedulePage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { PermissionsPage } from '@/pages/PermissionsPage'
 import { UsersPage } from '@/pages/UsersPage'
 import { applyTheme, useUIStore } from '@/stores/ui'
 
@@ -101,6 +102,7 @@ export function App() {
           <Route path="/vaccination" element={<ComingSoonPage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/users" element={<UsersPage />} />
+          <Route path="/permissions" element={<PermissionsPage />} />
           <Route path="/insurers" element={<InsurersPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/settings" element={<SettingsPage />} />

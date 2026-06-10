@@ -29,9 +29,8 @@ export function AppointmentsPage() {
   const t = useT()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const canConsult = useAuthStore((s) => s.hasRole('doctor', 'admin'))
-  // Admin, doctor and receptionist may manage the appointment lifecycle (confirm/reschedule/cancel).
-  const canManage = useAuthStore((s) => s.hasRole('admin', 'doctor', 'receptionist'))
+  const canConsult = useAuthStore((s) => s.can('consultations.start'))
+  const canManage = useAuthStore((s) => s.can('appointments.manage'))
   const [date, setDate] = useState(clinicToday())
   const [modalOpen, setModalOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
