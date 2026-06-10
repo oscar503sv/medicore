@@ -53,6 +53,23 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _enforce_production_cors(self) -> Settings:
+        # Fail fast rather than serve a production API open to any origin.
+        if self.is_production and self.cors_origins.strip() == "*":
+            raise ValueError(
+                "CORS_ORIGINS cannot be '*' in production — list the frontend "
+                "origins explicitly (e.g. https://app.example.com)."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _default_docs_off_in_production(self) -> Settings:
+        # Docs stay available in production only as an explicit opt-in.
+        if self.is_production and "enable_docs" not in self.model_fields_set:
+            self.enable_docs = False
+        return self
+
 
 @lru_cache
 def get_settings() -> Settings:

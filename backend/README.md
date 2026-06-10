@@ -80,12 +80,13 @@ Copia `.env.example` a `.env` y ajusta los valores:
 | `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Expiración del token | `1440` (24 h) |
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Expiración de sesiones de soporte/impersonación | `60` (1 h) |
-| `CORS_ORIGINS` | Orígenes permitidos (coma-separados) o `*` para cualquiera | `*` |
-| `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` |
+| `CORS_ORIGINS` | Orígenes permitidos (coma-separados); `*` solo en desarrollo | `*` |
+| `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` (dev) / `false` (prod, salvo opt-in explícito) |
 
 > En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue
-> siendo el default inseguro o es demasiado corto. En desarrollo no se valida nada y los defaults
-> funcionan tal cual.
+> siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*`. Además los docs
+> quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida nada y los
+> defaults funcionan tal cual.
 
 ## Puesta en marcha
 
