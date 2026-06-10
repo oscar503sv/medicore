@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarCheck, CalendarClock, Check, CheckCheck, Clock, Plus, Search, Stethoscope, X } from 'lucide-react'
+import { CalendarCheck, CalendarClock, Check, CheckCheck, Clock, Plus, Search, Stethoscope, UserX, X } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
 import { consultationsApi } from '@/api/consultations'
 import { errorMessage } from '@/api/client'
@@ -34,6 +34,7 @@ export function AppointmentsPage() {
   const [date, setDate] = useState(clinicToday())
   const [modalOpen, setModalOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
+  const [noShowTarget, setNoShowTarget] = useState<Appointment | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | AppointmentStatus>('all')
   const [q, setQ] = useState('')
@@ -85,6 +86,16 @@ export function AppointmentsPage() {
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
+  const noShowAppt = useMutation({
+    mutationFn: (appointmentId: string) => appointmentsApi.noShow(appointmentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] })
+      setNoShowTarget(null)
+      toast(t('appt.no_show_ok'))
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
   return (
     <div className="space-y-5 p-8">
       <PageHeader
@@ -99,11 +110,12 @@ export function AppointmentsPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         <StatCard icon={CalendarCheck} label={t('appt.stat_total')} value={String(all.length)} />
         <StatCard icon={Clock} label={t('appt.stat_scheduled')} value={String(countBy('scheduled'))} />
         <StatCard icon={Check} label={t('appt.stat_confirmed')} value={String(countBy('confirmed'))} />
         <StatCard icon={CheckCheck} label={t('appt.stat_completed')} value={String(countBy('completed'))} />
+        <StatCard icon={UserX} label={t('appt.stat_no_show')} value={String(countBy('no_show'))} />
       </div>
 
       <div className="flex items-center justify-between gap-4">
@@ -143,6 +155,7 @@ export function AppointmentsPage() {
             { value: 'in_progress', label: t('status.in_progress') },
             { value: 'completed', label: t('status.completed') },
             { value: 'cancelled', label: t('status.cancelled') },
+            { value: 'no_show', label: t('status.no_show') },
           ]}
         />
       </div>
@@ -227,6 +240,15 @@ export function AppointmentsPage() {
                           <Button
                             size="sm"
                             variant="ghost"
+                            onClick={() => setNoShowTarget(a)}
+                            title={t('appt.no_show')}
+                          >
+                            <UserX className="h-3.5 w-3.5" />
+                            {t('appt.no_show')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
                             onClick={() => setCancelTarget(a)}
                             title={t('appt.cancel_appt')}
                           >
@@ -256,6 +278,37 @@ export function AppointmentsPage() {
         appointment={rescheduleTarget}
         onClose={() => setRescheduleTarget(null)}
       />
+
+      <Modal
+        open={!!noShowTarget}
+        onClose={() => setNoShowTarget(null)}
+        title={t('appt.no_show_title')}
+        width="max-w-md"
+      >
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-tx-2">{t('appt.no_show_confirm')}</p>
+          {noShowTarget && (
+            <div className="rounded-lg border border-line bg-surface-2/40 p-3 text-sm">
+              <p className="font-medium text-tx">{noShowTarget.patient_name ?? '—'}</p>
+              <p className="text-tx-3">
+                {fmtTime(noShowTarget.scheduled_start)} · {noShowTarget.reason}
+              </p>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setNoShowTarget(null)}>
+              {t('app.back')}
+            </Button>
+            <Button
+              variant="danger"
+              loading={noShowAppt.isPending}
+              onClick={() => noShowAppt.mutate(noShowTarget!.id)}
+            >
+              {t('appt.no_show')}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={!!cancelTarget}
