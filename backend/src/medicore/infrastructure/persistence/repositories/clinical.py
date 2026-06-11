@@ -15,6 +15,7 @@ from medicore.domain.shared.identifiers import (
     ConsultationId,
     DocumentId,
     PatientId,
+    PrescriptionId,
     RecordId,
     TenantId,
 )
@@ -142,6 +143,10 @@ class SqlPrescriptionRepository:
 
     def _q(self):
         return self._s.query(PrescriptionModel).filter(PrescriptionModel.tenant_id == self._tid)
+
+    def get_by_id(self, prescription_id: PrescriptionId) -> Prescription | None:
+        row = self._q().filter(PrescriptionModel.id == prescription_id.value).first()
+        return to_prescription(row) if row else None
 
     def list_by_patient(
         self, patient_id: PatientId, active_only: bool = False

@@ -12,6 +12,7 @@ from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.patient import Patient
+from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.services.slot_resolver import Slot
@@ -159,6 +160,24 @@ def ser_patient(p: Patient, *, next_visit: datetime | None = None) -> dict:
         "created_at": p.created_at,
         "updated_at": p.updated_at,
         "next_visit": next_visit,
+    }
+
+
+def ser_prescription(p: Prescription, prescriber_name: str | None = None) -> dict:
+    return {
+        "id": str(p.id),
+        "patient_id": str(p.patient_id),
+        "prescriber_id": str(p.prescriber_id),
+        "prescriber_name": prescriber_name,
+        "drug": p.drug,
+        "dose": p.dose,
+        "schedule": p.schedule,
+        "start_date": p.start_date,
+        "end_date": p.end_date,
+        "duration_days": p.duration_days,
+        "status": str(p.status),
+        "record_id": str(p.record_id) if p.record_id else None,
+        "created_at": p.created_at,
     }
 
 

@@ -242,8 +242,11 @@ class GetPatientDetail:
             last_visit=max((a.scheduled_start for a in past), default=None),
             next_visit=next_appt.scheduled_start if next_appt else None,
             records_count=len(records),
+            # Expired-but-still-active prescriptions don't count as current medication.
             active_prescriptions=sum(
-                1 for p in prescriptions if p.status == PrescriptionStatus.ACTIVE
+                1
+                for p in prescriptions
+                if p.status == PrescriptionStatus.ACTIVE and not p.is_expired_on(now.date())
             ),
             next_appointment=next_appt,
         )

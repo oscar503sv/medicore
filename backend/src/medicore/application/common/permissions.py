@@ -41,6 +41,7 @@ class Permission(StrEnum):
     RECORDS_UPLOAD = "records.upload"
     RECORDS_SIGN = "records.sign"
     RECORDS_AMEND = "records.amend"
+    PRESCRIPTIONS_MANAGE = "prescriptions.manage"
     DIAGNOSES_VIEW = "diagnoses.view"
     INSURERS_VIEW = "insurers.view"
     INSURERS_MANAGE = "insurers.manage"
@@ -89,6 +90,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.RECORDS_UPLOAD,
         Permission.RECORDS_SIGN,
         Permission.RECORDS_AMEND,
+        Permission.PRESCRIPTIONS_MANAGE,
         Permission.DIAGNOSES_VIEW,
         Permission.INSURERS_VIEW,
     }),

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from medicore.domain.enums import PrescriptionStatus
+from medicore.domain.shared.errors import InvalidStateTransition
 from medicore.domain.shared.identifiers import (
     PatientId,
     PrescriptionId,
@@ -61,10 +62,23 @@ class Prescription:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def complete(self) -> None:
-        self.status = PrescriptionStatus.COMPLETED
+        self._transition_to(PrescriptionStatus.COMPLETED)
 
     def cancel(self) -> None:
-        self.status = PrescriptionStatus.CANCELLED
+        self._transition_to(PrescriptionStatus.CANCELLED)
+
+    def is_expired_on(self, ref: date) -> bool:
+        """Active past its end date — shown as expired, but still ACTIVE until a doctor acts."""
+        return (
+            self.status == PrescriptionStatus.ACTIVE
+            and self.end_date is not None
+            and self.end_date < ref
+        )
+
+    def _transition_to(self, target: PrescriptionStatus) -> None:
+        if self.status != PrescriptionStatus.ACTIVE:
+            raise InvalidStateTransition("Prescription", self.status, target)
+        self.status = target
 
     def snapshot(self) -> PrescriptionSnapshot:
         return PrescriptionSnapshot(

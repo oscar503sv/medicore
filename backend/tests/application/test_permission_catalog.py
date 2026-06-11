@@ -47,6 +47,7 @@ EXPECTED_MATRIX: dict[Role, set[str]] = {
         "availability.manage",
         "consultations.start", "consultations.edit",
         "records.view", "records.upload", "records.sign", "records.amend",
+        "prescriptions.manage",
         "diagnoses.view",
         "insurers.view",
     },

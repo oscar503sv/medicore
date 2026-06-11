@@ -40,6 +40,7 @@ from medicore.domain.shared.identifiers import (
     NotificationId,
     PatientId,
     PlatformAdminId,
+    PrescriptionId,
     RecordId,
     TenantId,
     UserId,
@@ -438,6 +439,10 @@ class InMemoryMedicalRecordRepository(_Scoped):
 
 
 class InMemoryPrescriptionRepository(_Scoped):
+    def get_by_id(self, prescription_id: PrescriptionId) -> Prescription | None:
+        p = self._store.prescriptions.get(prescription_id.value)
+        return p if p and p.tenant_id == self._tenant else None
+
     def list_by_patient(
         self, patient_id: PatientId, active_only: bool = False
     ) -> list[Prescription]:
