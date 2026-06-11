@@ -27,7 +27,10 @@ La pieza más grande. Existe la base pero nada la usa:
 
 Quick wins ya aplicados (jun 2026): login en tiempo constante, validación de CORS/docs en
 producción, security headers, validación de metadata de uploads, auditoría de lectura de
-expediente (`patient.chart_viewed`) y `startswith` en el filtro de auditoría.
+expediente (`patient.chart_viewed`) y `startswith` en el filtro de auditoría. Además, el
+token de sesión ya no se guarda en localStorage: vive en una cookie httpOnly
+(SameSite=Lax, Secure en producción) con CSRF double-submit (`mc_csrf` +
+`X-CSRF-Token`); el header `Authorization: Bearer` sigue aceptándose para clientes API.
 
 Pendiente, en orden de valor aproximado:
 
@@ -36,22 +39,22 @@ Pendiente, en orden de valor aproximado:
    encarece cada intento. Opciones: contador de fallos en BD (lockout temporal) o
    middleware tipo `slowapi` con Redis.
 2. **Revocación de sesiones / refresh tokens** — el access token dura 24 h
-   (`JWT_EXPIRE_MINUTES=1440`) y el logout es solo client-side; un token robado vale hasta
-   expirar. Opciones: TTL corto + refresh token rotatorio, o blacklist server-side
-   (invalidación al cambiar contraseña / logout forzado).
+   (`JWT_EXPIRE_MINUTES=1440`); aunque el logout ya borra la cookie de sesión, un token
+   robado vale hasta expirar. Opciones: TTL corto + refresh token rotatorio, o blacklist
+   server-side (invalidación al cambiar contraseña / logout forzado).
 3. **`X-Forwarded-For` confiable** — `_client_ip()` en `presentation/dependencies.py` toma
    la cabecera sin validar que venga de un proxy de confianza; la IP registrada en
    auditoría es spoofeable si la app se expone sin reverse-proxy. Solución: lista de
    proxies de confianza configurable.
-4. **Token en localStorage** — el frontend persiste la sesión en localStorage (riesgo si
-   hubiera XSS). Alternativa: cookies httpOnly (requiere CSRF protection) o aceptar el
-   trade-off con CSP estricta.
-5. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
+4. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
    (`use_cases/auth.py`). NIST sugiere ≥12 o chequeo de entropía (zxcvbn).
-6. **Enumeración de organizaciones en login** — el formulario de login revela si un slug
+5. **Enumeración de organizaciones en login** — el formulario de login revela si un slug
    de organización existe (mensaje distinto). Riesgo bajo: los slugs son semi-públicos.
-7. **Cobertura de tests de infraestructura** — los filtros SQL del repositorio de
+6. **Cobertura de tests de infraestructura** — los filtros SQL del repositorio de
    auditoría (categoría, actor, fechas) solo están cubiertos por los repos en memoria;
    añadir tests contra el repositorio SQLAlchemy real.
-8. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
+7. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
    explícitamente de desarrollo, pero podría generar una contraseña aleatoria e imprimirla.
+8. **CSP estricta en el host del frontend** — con el token fuera de localStorage el impacto
+   de un XSS baja, pero una Content-Security-Policy en el servidor que sirve la SPA sigue
+   siendo la defensa principal contra inyección de scripts.

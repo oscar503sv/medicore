@@ -52,8 +52,11 @@ En cifras: **16 entidades** y **10 value objects** de dominio, **16 repositorios
 ## Funcionalidades
 
 - **Autenticación** por JWT con roles (`admin`, `doctor`, `nurse`, `receptionist`) y cambio de
-  contraseña forzado en el primer ingreso.
-- **Permisos granulares** (`application/common/permissions.py`): catálogo de **22 permisos**
+  contraseña forzado en el primer ingreso. La sesión viaja en una **cookie httpOnly**
+  (`mc_session` / `mc_platform`, SameSite=Lax, Secure en producción) con **CSRF
+  double-submit** (cookie `mc_csrf` + cabecera `X-CSRF-Token` en mutaciones); el header
+  `Authorization: Bearer` se acepta como alternativa para clientes API.
+- **Permisos granulares** (`application/common/permissions.py`): catálogo de **23 permisos**
   (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
   tenant** vía `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults
   vs. override e intersecta con el catálogo vigente; la capa de presentación los coloca en
