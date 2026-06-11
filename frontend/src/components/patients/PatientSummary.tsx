@@ -216,7 +216,7 @@ function RecentActivity({
 
   return (
     <div className="relative py-5 pl-12 pr-5">
-      <div className="absolute bottom-6 left-[26px] top-6 w-px bg-line" />
+      <div className="absolute bottom-6 left-[22px] top-6 w-px bg-line" />
       <div className="space-y-5">
         {items.map((r) => {
           const body = (
