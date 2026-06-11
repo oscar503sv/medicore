@@ -13,7 +13,6 @@ class PlatformLoginRequest(BaseModel):
 
 
 class PlatformSessionResponse(BaseModel):
-    token: str
     admin_id: str
     name: str
     email: str
@@ -163,7 +162,6 @@ class ImpersonateRequest(BaseModel):
 
 
 class ImpersonationResponse(BaseModel):
-    token: str
     user_id: str
     tenant_id: str
     tenant_name: str

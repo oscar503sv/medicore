@@ -1,8 +1,8 @@
-"""Auth router: login, theme/locale switch."""
+"""Auth router: login/logout, theme/locale switch."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from medicore.application.use_cases.auth import (
     AuthenticateUser,
@@ -14,6 +14,12 @@ from medicore.application.use_cases.auth import (
     UpdateMyProfile,
 )
 from medicore.domain.enums import LangPref, ThemePref
+from medicore.infrastructure.config import get_settings
+from medicore.presentation.cookies import (
+    SESSION_COOKIE,
+    clear_session_cookies,
+    set_session_cookies,
+)
 from medicore.presentation.dependencies import Actor, Clock, Hasher, JwtIssuer, UoWFactory
 from medicore.presentation.schemas.auth import (
     ChangePasswordRequest,
@@ -30,12 +36,25 @@ router = APIRouter(tags=["auth"])
 
 
 @router.post("/auth/login", response_model=SessionResponse)
-def login(body: LoginRequest, factory: UoWFactory, hasher: Hasher, issuer: JwtIssuer, clock: Clock):
+def login(
+    body: LoginRequest,
+    response: Response,
+    factory: UoWFactory,
+    hasher: Hasher,
+    issuer: JwtIssuer,
+    clock: Clock,
+):
     session = AuthenticateUser(factory, hasher, issuer, clock).execute(
         AuthenticateUserCommand(slug=body.slug, email=body.email, password=body.password)
     )
-    return SessionResponse(
+    # The JWT travels only in an httpOnly cookie — never in the body, never in storage.
+    set_session_cookies(
+        response,
+        cookie_name=SESSION_COOKIE,
         token=session.token,
+        max_age=get_settings().jwt_expire_minutes * 60,
+    )
+    return SessionResponse(
         user_id=str(session.user_id),
         tenant_id=str(session.tenant_id),
         tenant_name=session.tenant_name,
@@ -46,6 +65,12 @@ def login(body: LoginRequest, factory: UoWFactory, hasher: Hasher, issuer: JwtIs
         must_change_password=session.must_change_password,
         permissions=list(session.permissions),
     )
+
+
+@router.post("/auth/logout", status_code=204)
+def logout(response: Response):
+    """Clear the session cookies. No auth required — clearing cookies is harmless."""
+    clear_session_cookies(response, SESSION_COOKIE)
 
 
 @router.post("/auth/theme", status_code=204)

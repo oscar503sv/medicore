@@ -21,7 +21,10 @@ def test_login_success(seed, client):
     assert data["role"] == "doctor"
     assert data["name"] == seed.doctor.name
     assert data["timezone"] == seed.tenant.timezone
-    assert "token" in data
+    # The token never travels in the body — it lives in the httpOnly session cookie.
+    assert "token" not in data
+    assert client.cookies.get("mc_session")
+    assert client.cookies.get("mc_csrf")
     assert data["permissions"] == sorted(str(p) for p in permissions_for(Role.DOCTOR))
 
 

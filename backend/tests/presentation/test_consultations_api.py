@@ -137,20 +137,21 @@ def test_sign_incomplete_returns_422(seed, client, auth_headers):
 
 def test_nurse_cannot_sign(seed, client):
     """Nurse can start (clinical) but cannot sign."""
+    from tests.presentation.conftest import bearer_login
     from tests.support.builders import PASSWORD
 
-    nurse_resp = client.post(
+    nurse_headers = bearer_login(
+        client,
         "/api/v1/auth/login",
-        json={"slug": str(seed.tenant.slug), "email": seed.nurse.email, "password": PASSWORD},
+        {"slug": str(seed.tenant.slug), "email": seed.nurse.email, "password": PASSWORD},
     )
-    nurse_headers = {"Authorization": f"Bearer {nurse_resp.json()['token']}"}
 
     # book via doctor
-    doctor_resp = client.post(
+    doc_headers = bearer_login(
+        client,
         "/api/v1/auth/login",
-        json={"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
+        {"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
     )
-    doc_headers = {"Authorization": f"Bearer {doctor_resp.json()['token']}"}
 
     _, cid = _book_and_start(seed, client, doc_headers)
 

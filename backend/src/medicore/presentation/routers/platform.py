@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 
 from medicore.application.use_cases.platform import (
     AuthenticatePlatformAdmin,
@@ -30,6 +30,13 @@ from medicore.application.use_cases.platform import (
 from medicore.domain.enums import IcdVersion, Role, Sex, TenantStatus
 from medicore.domain.repositories._support import Paging, TenantFilter
 from medicore.domain.shared.identifiers import TenantId, UserId
+from medicore.infrastructure.config import get_settings
+from medicore.presentation.cookies import (
+    PLATFORM_COOKIE,
+    SESSION_COOKIE,
+    clear_session_cookies,
+    set_session_cookies,
+)
 from medicore.presentation.dependencies import (
     Actor,
     Clock,
@@ -75,17 +82,28 @@ router = APIRouter(prefix="/platform", tags=["platform"])
 
 
 @router.post("/login", response_model=PlatformSessionResponse)
-def login(body: PlatformLoginRequest, factory: UoWFactory, hasher: Hasher, issuer: JwtIssuer,
-          clock: Clock):
+def login(body: PlatformLoginRequest, response: Response, factory: UoWFactory, hasher: Hasher,
+          issuer: JwtIssuer, clock: Clock):
     session = AuthenticatePlatformAdmin(factory, hasher, issuer, clock).execute(
         body.email, body.password
     )
-    return PlatformSessionResponse(
+    set_session_cookies(
+        response,
+        cookie_name=PLATFORM_COOKIE,
         token=session.token,
+        max_age=get_settings().jwt_expire_minutes * 60,
+    )
+    return PlatformSessionResponse(
         admin_id=str(session.admin_id),
         name=session.name,
         email=session.email,
     )
+
+
+@router.post("/logout", status_code=204)
+def logout(response: Response):
+    """Clear the platform session cookies."""
+    clear_session_cookies(response, PLATFORM_COOKIE)
 
 
 @router.get("/me", response_model=PlatformAdminResponse)
@@ -267,13 +285,20 @@ def suspend_tenant_user(tenant_id: str, user_id: str, actor: PlatformActor, fact
 
 
 @router.post("/tenants/{tenant_id}/impersonate", response_model=ImpersonationResponse)
-def impersonate(tenant_id: str, body: ImpersonateRequest, actor: PlatformActor,
-                factory: UoWFactory, issuer: JwtIssuer, clock: Clock):
+def impersonate(tenant_id: str, body: ImpersonateRequest, response: Response,
+                actor: PlatformActor, factory: UoWFactory, issuer: JwtIssuer, clock: Clock):
     s = ImpersonateTenant(factory, issuer, clock).execute(
         actor, TenantId.parse(tenant_id), body.reason
     )
-    return ImpersonationResponse(
+    # The support session is a TENANT session: set the tenant cookie so the superadmin
+    # can use the clinic app, with the shorter support TTL.
+    set_session_cookies(
+        response,
+        cookie_name=SESSION_COOKIE,
         token=s.token,
+        max_age=get_settings().jwt_support_expire_minutes * 60,
+    )
+    return ImpersonationResponse(
         user_id=s.user_id,
         tenant_id=s.tenant_id,
         tenant_name=s.tenant_name,
@@ -285,9 +310,10 @@ def impersonate(tenant_id: str, body: ImpersonateRequest, actor: PlatformActor,
 
 
 @router.post("/impersonation/end", status_code=204)
-def end_impersonation(actor: Actor, factory: UoWFactory, clock: Clock):
+def end_impersonation(response: Response, actor: Actor, factory: UoWFactory, clock: Clock):
     """Close the current support session (tenant-scoped: uses the impersonation token)."""
     EndImpersonation(factory, clock).execute(actor)
+    clear_session_cookies(response, SESSION_COOKIE)
 
 
 @router.get("/tenants/{tenant_id}/permissions", response_model=PermissionsMatrixResponse)

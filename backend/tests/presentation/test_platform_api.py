@@ -23,10 +23,12 @@ def test_platform_endpoints_require_platform_token(seed, client, auth_headers):
     # a normal tenant token must not access platform endpoints
     assert client.get("/api/v1/platform/tenants", headers=auth_headers).status_code == 401
     # and a platform token must not access tenant endpoints
-    plat = client.post(
+    client.post(
         "/api/v1/platform/login",
         json={"email": seed.platform_admin.email, "password": PASSWORD},
-    ).json()["token"]
+    )
+    plat = client.cookies.get("mc_platform")
+    client.cookies.clear()
     headers = {"Authorization": f"Bearer {plat}"}
     assert client.get("/api/v1/patients", headers=headers).status_code == 401
 

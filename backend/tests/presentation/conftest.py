@@ -55,49 +55,60 @@ def client(seed):
     return TestClient(app, raise_server_exceptions=True)
 
 
+def bearer_login(client, url: str, payload: dict, cookie: str = "mc_session") -> dict:
+    """Login and return a Bearer header built from the session cookie.
+
+    The token now travels only in an httpOnly cookie; for header-based tests we read it
+    from the cookie jar and then CLEAR the jar, so requests are authenticated exactly the
+    way they were before cookies existed (and 401 tests aren't polluted by a stale cookie).
+    """
+    resp = client.post(url, json=payload)
+    assert resp.status_code == 200, resp.text
+    token = client.cookies.get(cookie)
+    assert token, f"login did not set the {cookie} cookie"
+    client.cookies.clear()
+    return {"Authorization": f"Bearer {token}"}
+
+
 @pytest.fixture
 def auth_headers(seed, client):
     """Login as the doctor and return Authorization header."""
-    resp = client.post(
+    return bearer_login(
+        client,
         "/api/v1/auth/login",
-        json={"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
+        {"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
     )
-    assert resp.status_code == 200, resp.text
-    token = resp.json()["token"]
-    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def admin_headers(seed, client):
     """Login as admin."""
-    resp = client.post(
+    return bearer_login(
+        client,
         "/api/v1/auth/login",
-        json={"slug": str(seed.tenant.slug), "email": seed.admin.email, "password": PASSWORD},
+        {"slug": str(seed.tenant.slug), "email": seed.admin.email, "password": PASSWORD},
     )
-    assert resp.status_code == 200, resp.text
-    return {"Authorization": f"Bearer {resp.json()['token']}"}
 
 
 @pytest.fixture
 def platform_headers(seed, client):
     """Login as the platform superadmin and return Authorization header."""
-    resp = client.post(
+    return bearer_login(
+        client,
         "/api/v1/platform/login",
-        json={"email": seed.platform_admin.email, "password": PASSWORD},
+        {"email": seed.platform_admin.email, "password": PASSWORD},
+        cookie="mc_platform",
     )
-    assert resp.status_code == 200, resp.text
-    return {"Authorization": f"Bearer {resp.json()['token']}"}
 
 
 @pytest.fixture
 def receptionist_headers(seed, client):
-    resp = client.post(
+    return bearer_login(
+        client,
         "/api/v1/auth/login",
-        json={
+        {
             "slug": str(seed.tenant.slug),
             "email": seed.receptionist.email,
             "password": PASSWORD,
         },
     )
-    assert resp.status_code == 200, resp.text
-    return {"Authorization": f"Bearer {resp.json()['token']}"}

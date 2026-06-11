@@ -7,6 +7,7 @@ session is rolled back (noop) and closed cleanly when the block exits.
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Iterator
 from typing import Annotated
 
@@ -25,6 +26,13 @@ from medicore.infrastructure.database.engine import get_session_factory
 from medicore.infrastructure.persistence.unit_of_work import (
     SqlAlchemyUnitOfWork,
     SqlAlchemyUnitOfWorkFactory,
+)
+from medicore.presentation.cookies import (
+    CSRF_COOKIE,
+    CSRF_HEADER,
+    PLATFORM_COOKIE,
+    SESSION_COOKIE,
+    is_mutating,
 )
 
 # ── Singletons (cheap to construct, no shared mutable state) ──────────────────
@@ -56,26 +64,36 @@ def _client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
-def get_actor(
-    request: Request,
-    authorization: Annotated[str | None, Header()] = None,
-    issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
-    factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
-) -> ActorContext:
-    """Decode the Bearer token and return the authenticated actor.
+def _session_token(request: Request, authorization: str | None, cookie_name: str) -> str:
+    """Resolve the session token: Bearer header first, session cookie as fallback.
 
-    Resolves the tenant's role-permission override so every permission check in the
-    request honors the clinic's customization. Raises 401 if the header is missing,
-    malformed or expired.
+    Cookie-authenticated mutations must pass the double-submit CSRF check — the browser
+    attaches cookies automatically, so we require a header a cross-site page cannot set.
+    Bearer requests skip it: the header itself is never sent automatically.
     """
-    if not authorization or not authorization.startswith("Bearer "):
+    if authorization and authorization.startswith("Bearer "):
+        return authorization.removeprefix("Bearer ").strip()
+
+    token = request.cookies.get(cookie_name)
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid Authorization header",
         )
-    token = authorization.removeprefix("Bearer ").strip()
+    if is_mutating(request.method):
+        csrf_cookie = request.cookies.get(CSRF_COOKIE, "")
+        csrf_header = request.headers.get(CSRF_HEADER, "")
+        if not csrf_cookie or not secrets.compare_digest(csrf_cookie, csrf_header):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF token missing or invalid",
+            )
+    return token
+
+
+def _decode_or_401(issuer: JwtTokenIssuer, token: str):
     try:
-        claims = issuer.decode(token)
+        return issuer.decode(token)
     except jwt.ExpiredSignatureError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
@@ -84,6 +102,22 @@ def get_actor(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         ) from exc
+
+
+def get_actor(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+    issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
+    factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
+) -> ActorContext:
+    """Authenticate the request (Bearer header or mc_session cookie) and return the actor.
+
+    Resolves the tenant's role-permission override so every permission check in the
+    request honors the clinic's customization. Raises 401 if no valid credential is
+    present, 403 if a cookie-authenticated mutation fails the CSRF check.
+    """
+    token = _session_token(request, authorization, SESSION_COOKIE)
+    claims = _decode_or_401(issuer, token)
 
     if claims.scope != "tenant" or not claims.tenant_id:
         raise HTTPException(
@@ -114,26 +148,13 @@ def get_platform_actor(
     authorization: Annotated[str | None, Header()] = None,
     issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
 ) -> PlatformActorContext:
-    """Decode the Bearer token and return the authenticated platform superadmin.
+    """Authenticate the platform superadmin (Bearer header or mc_platform cookie).
 
-    Raises 401 if the header is missing/expired/invalid or the token is not a platform session.
+    Raises 401 if no valid credential is present or the token is not a platform session,
+    403 if a cookie-authenticated mutation fails the CSRF check.
     """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    token = authorization.removeprefix("Bearer ").strip()
-    try:
-        claims = issuer.decode(token)
-    except jwt.ExpiredSignatureError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
-        ) from exc
-    except jwt.InvalidTokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        ) from exc
+    token = _session_token(request, authorization, PLATFORM_COOKIE)
+    claims = _decode_or_401(issuer, token)
 
     if claims.scope != "platform":
         raise HTTPException(
