@@ -68,6 +68,7 @@ const es: Dict = {
   'login.password': 'Contraseña',
   'login.forgot': '¿Olvidó su contraseña?',
   'login.submit': 'Iniciar sesión',
+  'login.locked': 'Demasiados intentos fallidos. Espera unos minutos e intenta de nuevo.',
   'login.encryption': 'Accesos auditados · Conexión cifrada',
   'login.compliance': 'Accesos auditados · Conexión cifrada',
   'login.quote':
@@ -721,6 +722,7 @@ const en: Dict = {
   'login.password': 'Password',
   'login.forgot': 'Forgot your password?',
   'login.submit': 'Sign in',
+  'login.locked': 'Too many failed attempts. Wait a few minutes and try again.',
   'login.encryption': 'Audited access · Encrypted connection',
   'login.compliance': 'Audited access · Encrypted connection',
   'login.quote': 'Medicine is a science of uncertainty and an art of probability.',

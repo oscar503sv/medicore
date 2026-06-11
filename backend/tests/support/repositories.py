@@ -7,8 +7,9 @@ fakes exercise the same multi-tenant contract the real ORM repos will honor in f
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
+from medicore.application.common.login_throttle import WINDOW_MINUTES, lockout_until
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.availability import DoctorAvailability
@@ -114,6 +115,33 @@ class InMemoryPlatformAuditLogRepository:
             self._store.platform_audit.values(), key=lambda e: e.timestamp, reverse=True
         )
         return entries[offset : offset + limit]
+
+
+class InMemoryLoginThrottleRepository:
+    """Same windowing/backoff contract as the SQL repo, sharing the pure policy."""
+
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def locked_until(self, identifier: str, now: datetime) -> datetime | None:
+        entry = self._store.login_attempts.get(identifier)
+        if entry is None:
+            return None
+        _, _, locked = entry
+        if locked is None or locked <= now:
+            return None
+        return locked
+
+    def record_failure(self, identifier: str, now: datetime) -> datetime | None:
+        entry = self._store.login_attempts.get(identifier)
+        window_start = now - timedelta(minutes=WINDOW_MINUTES)
+        count = 1 if entry is None or entry[1] < window_start else entry[0] + 1
+        locked = lockout_until(count, now)
+        self._store.login_attempts[identifier] = (count, now, locked)
+        return locked
+
+    def reset(self, identifier: str) -> None:
+        self._store.login_attempts.pop(identifier, None)
 
 
 class InMemoryDiagnosisCatalogRepository:

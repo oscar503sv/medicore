@@ -11,6 +11,7 @@ from medicore.application.common.errors import (
     ApplicationError,
     AuthenticationFailed,
     EntityNotFound,
+    TooManyLoginAttempts,
     ValidationError,
 )
 from medicore.domain.shared.errors import (
@@ -34,6 +35,12 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(AuthenticationFailed)
     async def handle_auth_failed(request: Request, exc: AuthenticationFailed):
         return _json(401, str(exc))
+
+    @app.exception_handler(TooManyLoginAttempts)
+    async def handle_login_throttled(request: Request, exc: TooManyLoginAttempts):
+        response = _json(429, str(exc))
+        response.headers["Retry-After"] = str(exc.retry_after_seconds)
+        return response
 
     @app.exception_handler(PermissionDenied)
     async def handle_permission_denied(request: Request, exc: PermissionDenied):

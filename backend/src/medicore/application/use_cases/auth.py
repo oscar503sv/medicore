@@ -6,7 +6,12 @@ from dataclasses import dataclass
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
-from medicore.application.common.errors import AuthenticationFailed, EntityNotFound
+from medicore.application.common.errors import (
+    AuthenticationFailed,
+    EntityNotFound,
+    TooManyLoginAttempts,
+)
+from medicore.application.common.login_throttle import tenant_login_identifier
 from medicore.application.common.permissions import effective_permissions
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
@@ -65,6 +70,51 @@ class AuthenticateUser:
         return self._dummy_hash
 
     def execute(self, cmd: AuthenticateUserCommand) -> SessionDTO:
+        identifier = tenant_login_identifier(cmd.slug, cmd.email)
+        now = self._clock.now()
+        with self._factory.login_throttle() as throttle:
+            locked = throttle.locked_until(identifier, now)
+            if locked is not None:
+                raise TooManyLoginAttempts(locked, now)
+            try:
+                session = self._authenticate(cmd)
+            except AuthenticationFailed:
+                # Counted for non-existent accounts too, so the lockout does not reveal
+                # which accounts exist (complements the dummy-hash timing defense).
+                if throttle.record_failure(identifier, now) is not None:
+                    self._audit_lockout(cmd, now)
+                raise
+            throttle.reset(identifier)
+            return session
+
+    def _audit_lockout(self, cmd: AuthenticateUserCommand, now) -> None:
+        """Record ``auth.login_locked`` when the lockout engages on an existing account."""
+        try:
+            slug = Slug(cmd.slug.strip().lower())
+        except InvalidValueObject:
+            return
+        with self._factory.global_tenants() as tenants:
+            tenant = tenants.get_by_slug(slug)
+        if tenant is None:
+            return
+        with self._factory.for_tenant(tenant.id) as uow:
+            user = uow.users.get_by_email(cmd.email)
+            if user is None:
+                return
+            uow.audit.append(
+                AuditLog(
+                    id=AuditLogId.new(),
+                    tenant_id=tenant.id,
+                    actor_id=user.id,
+                    action="auth.login_locked",
+                    entity_type="User",
+                    entity_id=str(user.id),
+                    timestamp=now,
+                )
+            )
+            uow.commit()
+
+    def _authenticate(self, cmd: AuthenticateUserCommand) -> SessionDTO:
         try:
             slug = Slug(cmd.slug.strip().lower())
         except InvalidValueObject as exc:

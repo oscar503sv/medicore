@@ -44,6 +44,19 @@ def test_login_unknown_org(seed, client):
     assert resp.status_code == 401
 
 
+def test_login_lockout_returns_429_with_retry_after(seed, client):
+    bad = {"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": "wrong"}
+    for _ in range(5):
+        assert client.post("/api/v1/auth/login", json=bad).status_code == 401
+
+    resp = client.post(
+        "/api/v1/auth/login",
+        json={"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
+    )
+    assert resp.status_code == 429
+    assert int(resp.headers["Retry-After"]) > 0
+
+
 def test_protected_endpoint_requires_token(client):
     resp = client.get("/api/v1/patients")
     assert resp.status_code == 401

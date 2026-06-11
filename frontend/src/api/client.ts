@@ -64,6 +64,11 @@ platformApi.interceptors.response.use(
   },
 )
 
+/** HTTP status code of an Axios error, or undefined for non-HTTP failures. */
+export function errorStatus(error: unknown): number | undefined {
+  return axios.isAxiosError(error) ? error.response?.status : undefined
+}
+
 /** Extract a human-readable message from an Axios error. */
 export function errorMessage(error: unknown, fallback = 'Algo salió mal'): string {
   if (axios.isAxiosError(error)) {

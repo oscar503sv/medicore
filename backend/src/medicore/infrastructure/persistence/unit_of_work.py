@@ -20,6 +20,9 @@ from medicore.infrastructure.persistence.repositories.diagnosis_catalog import (
     SqlDiagnosisCatalogRepository,
 )
 from medicore.infrastructure.persistence.repositories.insurer import SqlInsurerRepository
+from medicore.infrastructure.persistence.repositories.login_throttle import (
+    SqlLoginThrottleRepository,
+)
 from medicore.infrastructure.persistence.repositories.other import (
     SqlAuditLogRepository,
     SqlDoctorAvailabilityRepository,
@@ -170,5 +173,13 @@ class SqlAlchemyUnitOfWorkFactory:
         session = self._factory()
         try:
             yield SqlDiagnosisCatalogRepository(session)
+        finally:
+            session.close()
+
+    @contextmanager
+    def login_throttle(self) -> Iterator[SqlLoginThrottleRepository]:
+        session = self._factory()
+        try:
+            yield SqlLoginThrottleRepository(session)
         finally:
             session.close()

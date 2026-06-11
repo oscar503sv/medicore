@@ -15,6 +15,7 @@ from tests.support.repositories import (
     InMemoryDoctorAvailabilityRepository,
     InMemoryDoctorProfileRepository,
     InMemoryInsurerRepository,
+    InMemoryLoginThrottleRepository,
     InMemoryMedicalDocumentRepository,
     InMemoryMedicalRecordRepository,
     InMemoryNotificationRepository,
@@ -141,3 +142,7 @@ class InMemoryUnitOfWorkFactory:
     @contextmanager
     def diagnosis_catalog(self) -> Iterator[InMemoryDiagnosisCatalogRepository]:
         yield InMemoryDiagnosisCatalogRepository(self.store)
+
+    @contextmanager
+    def login_throttle(self) -> Iterator[InMemoryLoginThrottleRepository]:
+        yield InMemoryLoginThrottleRepository(self.store)

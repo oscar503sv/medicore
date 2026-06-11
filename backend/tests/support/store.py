@@ -50,6 +50,8 @@ class InMemoryStore:
     platform_audit: dict[UUID, PlatformAuditLog] = field(default_factory=dict)
     # Global catalog keyed by "version:code" (reference data, not tenant-scoped).
     diagnosis_codes: dict[str, CatalogDiagnosis] = field(default_factory=dict)
+    # Global login throttle keyed by identifier: (failed_count, last_failed_at, locked_until).
+    login_attempts: dict[str, tuple] = field(default_factory=dict)
 
     def snapshot(self) -> dict[str, dict]:
         return {f.name: copy.deepcopy(getattr(self, f.name)) for f in fields(self)}

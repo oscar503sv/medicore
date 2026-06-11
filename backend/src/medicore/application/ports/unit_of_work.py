@@ -9,6 +9,7 @@ multi-aggregate operations (e.g. signing a consultation) are atomic.
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
+from datetime import datetime
 from types import TracebackType
 from typing import Protocol, runtime_checkable
 
@@ -115,6 +116,26 @@ class DiagnosisCatalogRepository(Protocol):
     def upsert(self, entry) -> None: ...
 
 
+class LoginThrottleRepository(Protocol):
+    """Global failed-login counter with temporary lockout (not tenant-scoped).
+
+    Implementations persist each mutation immediately (own commit): the recorded failure
+    must survive the ``AuthenticationFailed`` raised right after it.
+    """
+
+    def locked_until(self, identifier: str, now: datetime) -> datetime | None:
+        """Active lockout deadline for ``identifier``, or None when login may proceed."""
+        ...
+
+    def record_failure(self, identifier: str, now: datetime) -> datetime | None:
+        """Count one failure; returns the lockout deadline when the threshold is crossed."""
+        ...
+
+    def reset(self, identifier: str) -> None:
+        """Forget the failure history (called on successful login)."""
+        ...
+
+
 class UnitOfWorkFactory(Protocol):
     def for_tenant(self, tenant_id: TenantId) -> UnitOfWork:
         """Build a UnitOfWork scoped to ``tenant_id``."""
@@ -135,4 +156,8 @@ class UnitOfWorkFactory(Protocol):
 
     def diagnosis_catalog(self) -> AbstractContextManager[DiagnosisCatalogRepository]:
         """Context-managed global ICD/CIE catalog repository for diagnosis autocomplete."""
+        ...
+
+    def login_throttle(self) -> AbstractContextManager[LoginThrottleRepository]:
+        """Context-managed global login-attempt throttle used by the login use cases."""
         ...

@@ -8,6 +8,7 @@ from medicore.application.common.context import ActorContext, PlatformActorConte
 from medicore.application.common.errors import (
     AuthenticationFailed,
     EntityNotFound,
+    TooManyLoginAttempts,
     ValidationError,
 )
 from medicore.application.common.permissions import permissions_for
@@ -73,6 +74,17 @@ def test_platform_unknown_email_still_runs_password_verification():
     with pytest.raises(AuthenticationFailed):
         auth.execute("nadie@example.com", "whatever")
     assert calls == ["whatever"]
+
+
+def test_platform_login_lockout_after_five_failures():
+    seed = seed_clinic()
+    auth = make_platform_auth(seed)
+    for _ in range(5):
+        with pytest.raises(AuthenticationFailed):
+            auth.execute(seed.platform_admin.email, "nope")
+
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(seed.platform_admin.email, PASSWORD)
 
 
 def test_create_tenant_with_admin():

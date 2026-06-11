@@ -13,8 +13,10 @@ from medicore.application.common.context import ActorContext, PlatformActorConte
 from medicore.application.common.errors import (
     AuthenticationFailed,
     EntityNotFound,
+    TooManyLoginAttempts,
     ValidationError,
 )
+from medicore.application.common.login_throttle import platform_login_identifier
 from medicore.application.common.permissions import effective_permissions
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
@@ -102,6 +104,23 @@ class AuthenticatePlatformAdmin:
         return self._dummy_hash
 
     def execute(self, email: str, password: str) -> PlatformSessionDTO:
+        identifier = platform_login_identifier(email)
+        now = self._clock.now()
+        with self._factory.login_throttle() as throttle:
+            locked = throttle.locked_until(identifier, now)
+            if locked is not None:
+                raise TooManyLoginAttempts(locked, now)
+            try:
+                session = self._authenticate(email, password)
+            except AuthenticationFailed:
+                # Counted for non-existent accounts too, so the lockout does not reveal
+                # which accounts exist (complements the dummy-hash timing defense).
+                throttle.record_failure(identifier, now)
+                raise
+            throttle.reset(identifier)
+            return session
+
+    def _authenticate(self, email: str, password: str) -> PlatformSessionDTO:
         with self._factory.platform_uow() as uow:
             admin = uow.platform_admins.get_by_email(email)
             password_ok = self._hasher.verify(

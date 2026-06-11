@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
-from medicore.application.common.errors import AuthenticationFailed
+from medicore.application.common.errors import AuthenticationFailed, TooManyLoginAttempts
 from medicore.application.use_cases.auth import (
     AuthenticateUser,
     AuthenticateUserCommand,
@@ -90,6 +92,91 @@ def test_suspended_user_cannot_authenticate():
                 slug="clinica-norte", email=seed.doctor.email, password=PASSWORD
             )
         )
+
+
+def _login_cmd(email: str, password: str) -> AuthenticateUserCommand:
+    return AuthenticateUserCommand(slug="clinica-norte", email=email, password=password)
+
+
+def _fail_login(auth, email: str) -> None:
+    with pytest.raises(AuthenticationFailed):
+        auth.execute(_login_cmd(email, "wrong-password"))
+
+
+def test_lockout_after_five_failures_blocks_even_correct_password():
+    seed = seed_clinic()
+    auth = make_auth(seed)
+    for _ in range(5):
+        _fail_login(auth, seed.doctor.email)
+
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(_login_cmd(seed.doctor.email, PASSWORD))
+    # engaging the lockout on an existing account is audited
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    assert uow.audit.query(action="auth.login_locked")
+
+
+def test_lockout_also_applies_to_unknown_accounts():
+    # Anti-enumeration: a non-existent account locks exactly like a real one.
+    seed = seed_clinic()
+    auth = make_auth(seed)
+    for _ in range(5):
+        _fail_login(auth, "nadie@example.com")
+
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(_login_cmd("nadie@example.com", "whatever"))
+
+
+def test_successful_login_resets_failure_count():
+    seed = seed_clinic()
+    auth = make_auth(seed)
+    for _ in range(4):
+        _fail_login(auth, seed.doctor.email)
+    auth.execute(_login_cmd(seed.doctor.email, PASSWORD))
+
+    for _ in range(4):
+        _fail_login(auth, seed.doctor.email)
+    # still not locked: the success cleared the earlier failures
+    session = auth.execute(_login_cmd(seed.doctor.email, PASSWORD))
+    assert session.user_id == seed.doctor.id
+
+
+def test_lockout_expires_and_backoff_doubles():
+    seed = seed_clinic()
+    clock = FixedClock()
+    auth = AuthenticateUser(seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), clock)
+    start = clock.now()
+
+    for _ in range(5):
+        _fail_login(auth, seed.doctor.email)  # 5th failure → locked for 1 min
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(_login_cmd(seed.doctor.email, PASSWORD))
+
+    clock.set(start + timedelta(seconds=61))  # first lockout expired
+    _fail_login(auth, seed.doctor.email)  # 6th failure → locked for 2 min
+
+    clock.set(start + timedelta(seconds=61 + 90))  # 1.5 min later: still locked
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(_login_cmd(seed.doctor.email, PASSWORD))
+
+    clock.set(start + timedelta(seconds=61 + 121))  # past the 2 min: attempts run again
+    _fail_login(auth, seed.doctor.email)
+
+
+def test_failures_outside_window_restart_the_count():
+    seed = seed_clinic()
+    clock = FixedClock()
+    auth = AuthenticateUser(seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), clock)
+    start = clock.now()
+
+    for _ in range(4):
+        _fail_login(auth, seed.doctor.email)
+    clock.set(start + timedelta(minutes=16))  # the four failures fall out of the window
+    for _ in range(4):
+        _fail_login(auth, seed.doctor.email)
+
+    session = auth.execute(_login_cmd(seed.doctor.email, PASSWORD))
+    assert session.user_id == seed.doctor.id
 
 
 def test_switch_theme_persists():
