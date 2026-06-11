@@ -36,8 +36,8 @@ export interface PermissionsMatrix {
   roles: Record<Role, RolePermissionsEntry>
 }
 
+// The JWT itself lives in an httpOnly cookie — sessions hold only UI metadata.
 export interface Session {
-  token: string
   user_id: string
   tenant_id: string
   tenant_name: string
@@ -67,7 +67,6 @@ export type TenantStatus = 'active' | 'suspended' | 'archived'
 export type IcdVersion = 'cie10' | 'cie11'
 
 export interface PlatformSession {
-  token: string
   admin_id: string
   name: string
   email: string

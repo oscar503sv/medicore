@@ -125,10 +125,10 @@ export const platformTenantsApi = {
       .delete<PermissionsMatrix>(`/platform/tenants/${id}/permissions/roles/${role}`)
       .then((r) => r.data),
 
+  // The backend sets the tenant session cookie on this response — no token in the body.
   impersonate: (id: string, reason: string) =>
     platformApi
       .post<{
-        token: string
         user_id: string
         tenant_id: string
         tenant_name: string

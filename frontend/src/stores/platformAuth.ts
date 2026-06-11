@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { serverLogout } from '@/stores/auth'
 import type { PlatformSession } from '@/types'
 
 interface PlatformAuthState {
@@ -13,8 +14,16 @@ export const usePlatformAuthStore = create<PlatformAuthState>()(
     (set) => ({
       session: null,
       setSession: (session) => set({ session }),
-      logout: () => set({ session: null }),
+      logout: () => {
+        serverLogout('/platform/logout')
+        set({ session: null })
+      },
     }),
-    { name: 'medicore-platform' },
+    {
+      name: 'medicore-platform',
+      // v1: the token moved to an httpOnly cookie; purge older persisted sessions.
+      version: 1,
+      migrate: () => ({ session: null }),
+    },
   ),
 )

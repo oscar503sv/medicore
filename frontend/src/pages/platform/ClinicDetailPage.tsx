@@ -161,7 +161,6 @@ export function ClinicDetailPage() {
     mutationFn: (reason: string) => platformTenantsApi.impersonate(id, reason),
     onSuccess: (s) => {
       useAuthStore.getState().setSession({
-        token: s.token,
         user_id: s.user_id,
         tenant_id: s.tenant_id,
         tenant_name: s.tenant_name,

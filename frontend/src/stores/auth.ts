@@ -2,6 +2,13 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Permission, Role, Session } from '@/types'
 
+// Plain fetch (not the axios instance — client.ts imports this store) to clear the
+// httpOnly session cookie server-side; JS cannot delete it. Fire-and-forget.
+export function serverLogout(path: string) {
+  const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+  void fetch(`${base}${path}`, { method: 'POST', credentials: 'include' }).catch(() => {})
+}
+
 interface AuthState {
   session: Session | null
   setSession: (session: Session) => void
@@ -21,7 +28,10 @@ export const useAuthStore = create<AuthState>()(
         const s = get().session
         if (s) set({ session: { ...s, must_change_password: false } })
       },
-      logout: () => set({ session: null }),
+      logout: () => {
+        serverLogout('/auth/logout')
+        set({ session: null })
+      },
       hasRole: (...roles) => {
         const role = get().session?.role
         return role ? roles.includes(role) : false
@@ -33,9 +43,9 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'medicore-auth',
-      // v1: sessions now carry `permissions`; drop older persisted sessions so the
-      // user re-logs once and gets a complete session from the backend.
-      version: 1,
+      // v2: the token moved to an httpOnly cookie; purge older persisted sessions
+      // (which still contain it) so the user re-logs once.
+      version: 2,
       migrate: () => ({ session: null }),
     },
   ),
