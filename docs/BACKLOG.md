@@ -37,23 +37,26 @@ de comodines LIKE faltante en los filtros de categoría) y CSP estricta inyectad
 build de la SPA (meta en `dist/index.html` vía plugin de Vite; el header completo con
 `frame-ancestors` queda documentado para el reverse-proxy en el README del frontend).
 
+Resueltos en jun 2026 (sin Redis — el contador y las sesiones viven en PostgreSQL, que
+ya se consulta en cada request autenticado):
+
+- **Lockout en login**: contador de fallos en BD por `(slug, email)` con lockout temporal
+  y backoff exponencial (5 fallos → 1 min, duplicando hasta 15); responde 429 con
+  `Retry-After`, cuenta también cuentas inexistentes (anti-enumeración) y audita
+  `auth.login_locked`.
+- **Revocación de sesiones**: tabla `sessions` + claim `sid` en el JWT validada en cada
+  request; logout real, cambio de contraseña revoca las demás sesiones, suspensión/reset
+  revoca todas, y las sesiones de soporte (impersonación) también son revocables.
+
 Pendiente, en orden de valor aproximado:
 
-1. **Lockout / rate limiting en login** — no hay límite de intentos fallidos ni rate
-   limiting por IP en `/auth/login` y `/platform/login`. Mitigación parcial: bcrypt
-   encarece cada intento. Opciones: contador de fallos en BD (lockout temporal) o
-   middleware tipo `slowapi` con Redis.
-2. **Revocación de sesiones / refresh tokens** — el access token dura 24 h
-   (`JWT_EXPIRE_MINUTES=1440`); aunque el logout ya borra la cookie de sesión, un token
-   robado vale hasta expirar. Opciones: TTL corto + refresh token rotatorio, o blacklist
-   server-side (invalidación al cambiar contraseña / logout forzado).
-3. **`X-Forwarded-For` confiable** — `_client_ip()` en `presentation/dependencies.py` toma
+1. **`X-Forwarded-For` confiable** — `_client_ip()` en `presentation/dependencies.py` toma
    la cabecera sin validar que venga de un proxy de confianza; la IP registrada en
    auditoría es spoofeable si la app se expone sin reverse-proxy. Solución: lista de
    proxies de confianza configurable.
-4. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
+2. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
    (`use_cases/auth.py`). NIST sugiere ≥12 o chequeo de entropía (zxcvbn).
-5. **Enumeración de organizaciones en login** — el formulario de login revela si un slug
+3. **Enumeración de organizaciones en login** — el formulario de login revela si un slug
    de organización existe (mensaje distinto). Riesgo bajo: los slugs son semi-públicos.
-6. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
+4. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
    explícitamente de desarrollo, pero podría generar una contraseña aleatoria e imprimirla.

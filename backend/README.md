@@ -56,6 +56,13 @@ En cifras: **16 entidades** y **10 value objects** de dominio, **16 repositorios
   (`mc_session` / `mc_platform`, SameSite=Lax, Secure en producción) con **CSRF
   double-submit** (cookie `mc_csrf` + cabecera `X-CSRF-Token` en mutaciones); el header
   `Authorization: Bearer` se acepta como alternativa para clientes API.
+- **Sesiones revocables server-side**: cada login crea una fila en `sessions` referenciada
+  por el claim `sid` del JWT y validada en cada request. El logout revoca de verdad, el
+  cambio de contraseña revoca las demás sesiones del usuario, y suspender o resetear la
+  contraseña de una cuenta cierra todas sus sesiones al instante.
+- **Lockout de login**: contador de intentos fallidos por `(organización, email)` con
+  bloqueo temporal y backoff exponencial (HTTP 429 + `Retry-After`); cuenta también
+  cuentas inexistentes para no revelar cuáles existen.
 - **Permisos granulares** (`application/common/permissions.py`): catálogo de **23 permisos**
   (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
   tenant** vía `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults
@@ -121,13 +128,14 @@ python -m venv .venv
 
 ## Pruebas y linting
 
-Suite de **364 tests** (89 dominio · 145 aplicación · 98 presentación · 32 infraestructura), casi
+Suite de **388 tests** (89 dominio · 158 aplicación · 103 presentación · 38 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
-Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_audit_repository_sql.py`
-y `test_diagnosis_catalog_sql.py` — este último cubre el ranking y la búsqueda por trigram del
-autocomplete de diagnósticos) usan `TEST_DATABASE_URL` (o `DATABASE_URL` de la configuración),
+Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_audit_repository_sql.py`,
+`test_diagnosis_catalog_sql.py` — ranking y búsqueda por trigram del autocomplete de diagnósticos —
+y `test_login_throttle_sql.py` — UPSERT atómico del lockout de login) usan `TEST_DATABASE_URL`
+(o `DATABASE_URL` de la configuración),
 corren dentro de una transacción que siempre se revierte —no dejan rastro en la BD de desarrollo—
 y se **saltan automáticamente** si no hay PostgreSQL accesible.
 
