@@ -76,3 +76,17 @@ Dos modelos según cómo se sirva la app:
   relativa `/api/v1` por defecto.
 - **Orígenes distintos** (frontend y backend en hosts separados): define
   `VITE_API_BASE_URL=https://<tu-backend>/api/v1` **al hacer el build**. El backend ya habilita CORS.
+
+### Content-Security-Policy
+
+El build inyecta automáticamente un meta CSP estricto en `dist/index.html`
+(`script-src 'self'`, Google Fonts permitido, `connect-src` incluye el origen de
+`VITE_API_BASE_URL` si es absoluta). Solo aplica al build de producción: en `npm run dev`
+no se inyecta porque el HMR de Vite usa scripts inline.
+
+`frame-ancestors` no puede declararse vía meta — el reverse-proxy debería añadirlo como
+header real (y con ello toda la política tiene prioridad sobre el meta):
+
+```nginx
+add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; frame-ancestors 'none'" always;
+```
