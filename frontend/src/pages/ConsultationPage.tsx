@@ -331,11 +331,16 @@ function DiagnosesSection({
     staleTime: 5 * 60 * 1000,
   })
 
-  const { data: suggestions = [] } = useQuery({
+  // Backend requires >= 2 chars; below that the dropdown stays closed.
+  const { data: suggestions = [], isFetching } = useQuery({
     queryKey: ['diagnosis-search', config?.version, debounced],
     queryFn: () => diagnosesApi.search(debounced),
-    enabled: debounced.length > 0,
+    enabled: debounced.length >= 2,
   })
+
+  // Keyboard navigation: arrows move the highlight, Enter adds, Escape closes.
+  const [active, setActive] = useState(-1)
+  useEffect(() => setActive(-1), [debounced])
 
   const add = useMutation({
     mutationFn: ({ code, label }: { code: string; label: string }) =>
@@ -379,31 +384,69 @@ function DiagnosesSection({
             }}
             onFocus={() => setOpen(true)}
             onBlur={() => setTimeout(() => setOpen(false), 150)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setOpen(false)
+                return
+              }
+              if (!open || suggestions.length === 0) return
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setActive((a) => (a + 1) % suggestions.length)
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setActive((a) => (a <= 0 ? suggestions.length - 1 : a - 1))
+              } else if (e.key === 'Enter') {
+                e.preventDefault()
+                const s = suggestions[active >= 0 ? active : 0]
+                if (s && !added.has(s.code) && !add.isPending) {
+                  add.mutate({ code: s.code, label: s.label })
+                }
+              }
+            }}
             placeholder={t('consult.dx_search')}
             className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
           />
         </div>
-        {open && debounced.length > 0 && (
+        {open && debounced.length >= 2 && (
           <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-line bg-surface shadow-lg">
             {suggestions.length === 0 ? (
-              <p className="px-3 py-3 text-[13px] text-tx-3">{t('consult.dx_no_results')}</p>
+              <p className="px-3 py-3 text-[13px] text-tx-3">
+                {isFetching ? t('consult.dx_searching') : t('consult.dx_no_results')}
+              </p>
             ) : (
-              suggestions.map((s) => {
+              suggestions.map((s, idx) => {
                 const already = added.has(s.code)
                 return (
                   <button
                     key={`${s.version}:${s.code}`}
                     type="button"
                     disabled={already || add.isPending}
+                    ref={(el) => {
+                      if (idx === active) el?.scrollIntoView({ block: 'nearest' })
+                    }}
                     onMouseDown={(e) => e.preventDefault()}
+                    onMouseEnter={() => setActive(idx)}
                     onClick={() => add.mutate({ code: s.code, label: s.label })}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface-2 disabled:opacity-40"
+                    className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors disabled:opacity-40 ${
+                      idx === active ? 'bg-surface-2' : ''
+                    }`}
                   >
                     <span className="rounded bg-[var(--accent-10)] px-1.5 py-0.5 font-mono text-[12px] font-medium text-accent">
                       {s.code}
                     </span>
-                    <span className="flex-1 text-sm text-tx">{s.label}</span>
-                    <Plus className="h-4 w-4 text-tx-4" />
+                    <span className="flex-1">
+                      <span className="block text-sm text-tx">{s.label}</span>
+                      {s.chapter && (
+                        <span className="block truncate text-[11px] text-tx-4">{s.chapter}</span>
+                      )}
+                    </span>
+                    {!s.billable && (
+                      <span className="shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-tx-3">
+                        {t('consult.dx_category')}
+                      </span>
+                    )}
+                    <Plus className="h-4 w-4 shrink-0 text-tx-4" />
                   </button>
                 )
               })
