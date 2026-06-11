@@ -31,6 +31,11 @@ expediente (`patient.chart_viewed`) y `startswith` en el filtro de auditoría. A
 token de sesión ya no se guarda en localStorage: vive en una cookie httpOnly
 (SameSite=Lax, Secure en producción) con CSRF double-submit (`mc_csrf` +
 `X-CSRF-Token`); el header `Authorization: Bearer` sigue aceptándose para clientes API.
+También: tests de integración del repo SQL de auditoría contra PostgreSQL real
+(`tests/infrastructure/test_audit_repository_sql.py` — destaparon y corrigieron un escape
+de comodines LIKE faltante en los filtros de categoría) y CSP estricta inyectada en el
+build de la SPA (meta en `dist/index.html` vía plugin de Vite; el header completo con
+`frame-ancestors` queda documentado para el reverse-proxy en el README del frontend).
 
 Pendiente, en orden de valor aproximado:
 
@@ -50,11 +55,5 @@ Pendiente, en orden de valor aproximado:
    (`use_cases/auth.py`). NIST sugiere ≥12 o chequeo de entropía (zxcvbn).
 5. **Enumeración de organizaciones en login** — el formulario de login revela si un slug
    de organización existe (mensaje distinto). Riesgo bajo: los slugs son semi-públicos.
-6. **Cobertura de tests de infraestructura** — los filtros SQL del repositorio de
-   auditoría (categoría, actor, fechas) solo están cubiertos por los repos en memoria;
-   añadir tests contra el repositorio SQLAlchemy real.
-7. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
+6. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
    explícitamente de desarrollo, pero podría generar una contraseña aleatoria e imprimirla.
-8. **CSP estricta en el host del frontend** — con el token fuera de localStorage el impacto
-   de un XSS baja, pero una Content-Security-Policy en el servidor que sirve la SPA sigue
-   siendo la defensa principal contra inyección de scripts.
