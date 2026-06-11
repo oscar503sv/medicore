@@ -14,6 +14,7 @@ export type Permission =
   | 'records.upload'
   | 'records.sign'
   | 'records.amend'
+  | 'prescriptions.manage'
   | 'diagnoses.view'
   | 'insurers.view'
   | 'insurers.manage'
@@ -239,6 +240,24 @@ export interface PatientDetail {
   records_count: number
   active_prescriptions: number
   next_appointment: Appointment | null
+}
+
+export type PrescriptionStatus = 'active' | 'completed' | 'cancelled'
+
+export interface Prescription {
+  id: string
+  patient_id: string
+  prescriber_id: string
+  prescriber_name: string | null
+  drug: string
+  dose: string
+  schedule: string
+  start_date: string
+  end_date: string | null
+  duration_days: number | null
+  status: PrescriptionStatus
+  record_id: string | null
+  created_at: string
 }
 
 export interface PaginatedResponse<T> {

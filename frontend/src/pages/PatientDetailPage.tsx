@@ -8,6 +8,7 @@ import { patientsApi } from '@/api/patients'
 import { recordsApi } from '@/api/records'
 import { EditPatientModal } from '@/components/patients/EditPatientModal'
 import { MedicationTimeline } from '@/components/patients/MedicationTimeline'
+import { PrescriptionList } from '@/components/patients/PrescriptionList'
 import { PatientDocuments } from '@/components/patients/PatientDocuments'
 import { PatientSummary } from '@/components/patients/PatientSummary'
 import { VitalsHistory } from '@/components/patients/VitalsHistory'
@@ -211,7 +212,17 @@ export function PatientDetailPage() {
         </Card>
       )}
 
-      {tab === 'prescriptions' && <MedicationTimeline records={records ?? []} />}
+      {tab === 'prescriptions' && (
+        <div className="space-y-5">
+          <PrescriptionList patientId={id} />
+          <div>
+            <h3 className="mb-3 text-[13px] font-medium uppercase tracking-wide text-tx-3">
+              {t('rx.timeline_title')}
+            </h3>
+            <MedicationTimeline records={records ?? []} />
+          </div>
+        </div>
+      )}
 
       {tab === 'vitals' && <VitalsHistory records={records ?? []} />}
 
