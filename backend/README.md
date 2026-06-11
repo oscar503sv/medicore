@@ -59,7 +59,10 @@ En cifras: **16 entidades** y **10 value objects** de dominio, **16 repositorios
 - **Sesiones revocables server-side**: cada login crea una fila en `sessions` referenciada
   por el claim `sid` del JWT y validada en cada request. El logout revoca de verdad, el
   cambio de contraseña revoca las demás sesiones del usuario, y suspender o resetear la
-  contraseña de una cuenta cierra todas sus sesiones al instante.
+  contraseña de una cuenta cierra todas sus sesiones al instante. Vista de **sesiones
+  activas**: cada usuario ve y cierra las suyas (Configuración), el admin las de cualquier
+  usuario de su clínica, y el superadmin las de una clínica completa (revocaciones de
+  terceros auditadas como `session.revoked`).
 - **Lockout de login**: contador de intentos fallidos por `(organización, email)` con
   bloqueo temporal y backoff exponencial (HTTP 429 + `Retry-After`); cuenta también
   cuentas inexistentes para no revelar cuáles existen.
@@ -128,7 +131,7 @@ python -m venv .venv
 
 ## Pruebas y linting
 
-Suite de **388 tests** (89 dominio · 158 aplicación · 103 presentación · 38 infraestructura), casi
+Suite de **403 tests** (89 dominio · 168 aplicación · 108 presentación · 38 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
