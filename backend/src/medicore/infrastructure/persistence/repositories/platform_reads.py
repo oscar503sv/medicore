@@ -82,7 +82,8 @@ class SqlPlatformReadModel:
                 literal(kind).label("source_kind"),
             )
             if category:
-                s = s.where(model.action.like(f"{category}.%"))
+                # autoescape neutralizes LIKE wildcards in the user-provided category.
+                s = s.where(model.action.startswith(f"{category}.", autoescape=True))
             return s
 
         u = union_all(

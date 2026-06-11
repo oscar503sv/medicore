@@ -121,13 +121,18 @@ python -m venv .venv
 
 ## Pruebas y linting
 
-Suite de **271 tests** (78 dominio · 119 aplicación · 71 presentación · 3 infraestructura), casi
+Suite de **352 tests** (89 dominio · 144 aplicación · 97 presentación · 22 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
+Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_audit_repository_sql.py`)
+usan `TEST_DATABASE_URL` (o `DATABASE_URL` de la configuración), corren dentro de una transacción
+que siempre se revierte —no dejan rastro en la BD de desarrollo— y se **saltan automáticamente**
+si no hay PostgreSQL accesible.
+
 ```bash
 .venv/bin/pytest
-.venv/bin/ruff check src
+.venv/bin/ruff check src tests
 ```
 
 ## Despliegue
