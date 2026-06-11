@@ -25,5 +25,10 @@ def test_search_endpoint_uses_clinic_version(seed, client, auth_headers):
     assert [d["code"] for d in data] == ["BA00"]  # clinic default version is cie11
 
 
+def test_search_rejects_short_query(seed, client, auth_headers):
+    resp = client.get("/api/v1/diagnoses/search", params={"q": "h"}, headers=auth_headers)
+    assert resp.status_code == 422
+
+
 def test_search_requires_auth(client):
-    assert client.get("/api/v1/diagnoses/search", params={"q": "x"}).status_code == 401
+    assert client.get("/api/v1/diagnoses/search", params={"q": "xx"}).status_code == 401

@@ -138,7 +138,9 @@ class InMemoryDiagnosisCatalogRepository:
             if e.version == version
             and (e.code.upper().startswith(prefix) or norm in self._norm(f"{e.code} {e.label}"))
         ]
-        matches.sort(key=lambda e: e.code)
+        # Same ranking contract as the SQL repo: code-prefix matches first, shorter
+        # (more general) codes winning ties.
+        matches.sort(key=lambda e: (not e.code.upper().startswith(prefix), len(e.code), e.code))
         return matches[:limit]
 
     def count(self, version: str) -> int:

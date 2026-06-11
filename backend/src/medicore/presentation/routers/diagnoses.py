@@ -20,7 +20,7 @@ def diagnosis_config(actor: Actor, factory: UoWFactory):
 def search_diagnoses(
     actor: Actor,
     factory: UoWFactory,
-    q: str = Query("", min_length=0),
+    q: str = Query(..., min_length=2),
     limit: int = Query(20, ge=1, le=50),
 ):
     results = SearchDiagnoses(factory).execute(actor, q, limit)

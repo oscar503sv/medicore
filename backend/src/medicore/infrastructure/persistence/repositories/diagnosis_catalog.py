@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unicodedata
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.diagnosis_catalog import CatalogDiagnosis
@@ -31,16 +31,34 @@ class SqlDiagnosisCatalogRepository:
             return []
         norm = normalize_search(q)
         code_prefix = q.upper()
+        # autoescape neutralizes LIKE wildcards typed into the search box.
+        code_match = DiagnosisCodeModel.code.startswith(code_prefix, autoescape=True)
+        # word_similarity (not plain similarity): search_text is code + full label, and
+        # plain trigram similarity penalizes long strings; this matches the typo against
+        # the closest word sequence instead ("diabetis" still finds "diabetes").
+        word_sim = func.word_similarity(norm, DiagnosisCodeModel.search_text)
+        # The %> operator form is GIN-indexable (a bare word_similarity(...) >= x forces
+        # a seq scan over the whole catalog); SET LOCAL scopes the threshold to this
+        # transaction, so pooled connections are not affected.
+        self._s.execute(text("SET LOCAL pg_trgm.word_similarity_threshold = 0.4"))
         rows = (
             self._s.query(DiagnosisCodeModel)
             .filter(DiagnosisCodeModel.version == version)
             .filter(
                 or_(
-                    DiagnosisCodeModel.code.ilike(f"{code_prefix}%"),
-                    DiagnosisCodeModel.search_text.ilike(f"%{norm}%"),
+                    code_match,
+                    DiagnosisCodeModel.search_text.contains(norm, autoescape=True),
+                    DiagnosisCodeModel.search_text.bool_op("%>")(norm),
                 )
             )
-            .order_by(DiagnosisCodeModel.code)
+            # Doctors often type the code: exact/prefix code matches first, then the
+            # closest labels, with shorter (more general) codes winning ties.
+            .order_by(
+                code_match.desc(),
+                word_sim.desc(),
+                func.length(DiagnosisCodeModel.code),
+                DiagnosisCodeModel.code,
+            )
             .limit(limit)
             .all()
         )

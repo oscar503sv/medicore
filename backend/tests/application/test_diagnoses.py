@@ -43,3 +43,16 @@ def test_empty_query_returns_nothing():
     seed = seed_clinic()
     _seed_catalog(seed)
     assert SearchDiagnoses(seed.factory).execute(seed.doctor_actor, "") == []
+
+
+def test_code_prefix_matches_rank_first_and_shorter_codes_win():
+    seed = seed_clinic()
+    seed.tenant.icd_version = IcdVersion.CIE10
+    seed.factory.store.tenants[seed.tenant.id.value] = seed.tenant
+    with seed.factory.diagnosis_catalog() as cat:
+        cat.upsert(CatalogDiagnosis(version="cie10", code="E11.9", label="Diabetes tipo 2"))
+        cat.upsert(CatalogDiagnosis(version="cie10", code="E11", label="Diabetes mellitus tipo 2"))
+        # Label mentions the code-like token but its own code doesn't start with E11.
+        cat.upsert(CatalogDiagnosis(version="cie10", code="Z83.3", label="Historia de E11"))
+    results = SearchDiagnoses(seed.factory).execute(seed.doctor_actor, "E11")
+    assert [r.code for r in results][:2] == ["E11", "E11.9"]

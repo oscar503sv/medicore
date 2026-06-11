@@ -15,12 +15,19 @@ class DiagnosisCodeModel(Base):
     __tablename__ = "diagnosis_codes"
     __table_args__ = (
         UniqueConstraint("version", "code", name="uq_diagnosis_version_code"),
-        # Trigram index for fast ILIKE/substring search over code + label.
+        # Trigram index for fast substring/typo search over code + label.
         Index(
             "ix_diagnosis_search_trgm",
             "search_text",
             postgresql_using="gin",
             postgresql_ops={"search_text": "gin_trgm_ops"},
+        ),
+        # text_pattern_ops serves the LIKE 'E11%' code-prefix branch of the search.
+        Index(
+            "ix_diagnosis_version_code",
+            "version",
+            "code",
+            postgresql_ops={"code": "text_pattern_ops"},
         ),
     )
 
