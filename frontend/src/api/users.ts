@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { PaginatedResponse, User } from '@/types'
+import type { AuthSessionInfo, PaginatedResponse, User } from '@/types'
 
 export const usersApi = {
   list: (params: { role?: string; status?: string; offset?: number; limit?: number } = {}) =>
@@ -35,4 +35,12 @@ export const usersApi = {
 
   resetPassword: (id: string, password: string) =>
     api.post<User>(`/users/${id}/reset-password`, { password }).then((r) => r.data),
+
+  listSessions: (id: string) =>
+    api.get<{ items: AuthSessionInfo[] }>(`/users/${id}/sessions`).then((r) => r.data.items),
+
+  revokeSession: (id: string, sessionId: string) =>
+    api.delete(`/users/${id}/sessions/${sessionId}`),
+
+  revokeAllSessions: (id: string) => api.delete(`/users/${id}/sessions`),
 }

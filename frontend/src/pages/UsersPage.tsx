@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ConciergeBell, HeartPulse, KeyRound, Pencil, Plus, Search, ShieldCheck, Stethoscope } from 'lucide-react'
+import { ConciergeBell, HeartPulse, KeyRound, Monitor, MonitorSmartphone, Pencil, Plus, Search, ShieldCheck, Smartphone, Stethoscope } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { usersApi } from '@/api/users'
 import { PageHeader } from '@/components/PageHeader'
@@ -19,6 +19,7 @@ import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { describeUserAgent, deviceLabel } from '@/lib/userAgent'
 import type { Role, User } from '@/types'
 
 /** "miembro" / "miembros" depending on the count. */
@@ -46,6 +47,7 @@ export function UsersPage() {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<User | null>(null)
   const [resetTarget, setResetTarget] = useState<User | null>(null)
+  const [sessionsTarget, setSessionsTarget] = useState<User | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null)
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
   const [q, setQ] = useState('')
@@ -179,6 +181,10 @@ export function UsersPage() {
                         <KeyRound className="h-3.5 w-3.5" />
                         {t('users.reset_password')}
                       </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setSessionsTarget(u)}>
+                        <MonitorSmartphone className="h-3.5 w-3.5" />
+                        {t('users.view_sessions')}
+                      </Button>
                       {u.status === 'active' ? (
                         <Button
                           variant="ghost"
@@ -214,6 +220,7 @@ export function UsersPage() {
       <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} onDone={invalidate} />
       <EditUserModal user={editTarget} onClose={() => setEditTarget(null)} onDone={invalidate} />
       <ResetPasswordModal user={resetTarget} onClose={() => setResetTarget(null)} />
+      <SessionsModal user={sessionsTarget} onClose={() => setSessionsTarget(null)} />
 
       <Modal
         open={!!deactivateTarget}
@@ -422,6 +429,92 @@ function EditUserModal({
             </Button>
           </div>
         </form>
+      )}
+    </Modal>
+  )
+}
+
+function SessionsModal({ user, onClose }: { user: User | null; onClose: () => void }) {
+  const t = useT()
+  const qc = useQueryClient()
+
+  const { data: sessions, isLoading } = useQuery({
+    queryKey: ['user-sessions', user?.id],
+    queryFn: () => usersApi.listSessions(user!.id),
+    enabled: !!user,
+  })
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['user-sessions', user?.id] })
+  const revoke = useMutation({
+    mutationFn: (sessionId: string) => usersApi.revokeSession(user!.id, sessionId),
+    onSuccess: () => {
+      toast(t('sessions.closed_ok'))
+      invalidate()
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+  const revokeAll = useMutation({
+    mutationFn: () => usersApi.revokeAllSessions(user!.id),
+    onSuccess: () => {
+      toast(t('sessions.closed_ok'))
+      invalidate()
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  return (
+    <Modal open={!!user} onClose={onClose} title={t('users.sessions_title')}>
+      {user && (
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-tx-2">{user.name}</p>
+          {isLoading || !sessions ? (
+            <PageLoader />
+          ) : sessions.length === 0 ? (
+            <p className="py-6 text-center text-sm text-tx-3">{t('sessions.empty')}</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {sessions.map((s) => {
+                const DeviceIcon = describeUserAgent(s.user_agent).mobile ? Smartphone : Monitor
+                return (
+                  <li key={s.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                    <DeviceIcon className="h-4 w-4 shrink-0 text-tx-3" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-tx">
+                        {deviceLabel(s.user_agent, t('sessions.unknown_device'))}
+                      </p>
+                      <p className="text-[13px] text-tx-3">
+                        {[s.ip_address, `${t('sessions.started')} ${fmtDateTimeTz(s.created_at)}`]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={revoke.isPending && revoke.variables === s.id}
+                      onClick={() => revoke.mutate(s.id)}
+                    >
+                      {t('sessions.close')}
+                    </Button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+          <div className="flex justify-end gap-2 border-t border-line pt-4">
+            <Button variant="outline" onClick={onClose}>
+              {t('app.back')}
+            </Button>
+            <Button
+              variant="danger"
+              loading={revokeAll.isPending}
+              disabled={!sessions || sessions.length === 0}
+              onClick={() => revokeAll.mutate()}
+            >
+              {t('sessions.close_all')}
+            </Button>
+          </div>
+        </div>
       )}
     </Modal>
   )

@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { MyProfile, Session } from '@/types'
+import type { AuthSessionInfo, MyProfile, Session } from '@/types'
 
 export interface LoginPayload {
   slug: string
@@ -25,4 +25,9 @@ export const authApi = {
 
   updateMyProfile: (payload: { name?: string; phone?: string | null; bio?: string | null }) =>
     api.patch<MyProfile>('/auth/me', payload).then((r) => r.data),
+
+  listSessions: () =>
+    api.get<{ items: AuthSessionInfo[] }>('/auth/me/sessions').then((r) => r.data.items),
+
+  revokeSession: (sessionId: string) => api.delete(`/auth/me/sessions/${sessionId}`),
 }

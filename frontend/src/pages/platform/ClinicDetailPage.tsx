@@ -19,8 +19,10 @@ import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
+import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { TIMEZONES } from '@/lib/timezones'
+import { deviceLabel } from '@/lib/userAgent'
 import { Activity, CalendarCheck, FileText, Search, Users } from 'lucide-react'
 import type { TenantStatus } from '@/types'
 
@@ -414,6 +416,9 @@ export function ClinicDetailPage() {
         )}
       </Card>
 
+      {/* Active sessions */}
+      <ClinicSessionsCard tenantId={id} />
+
       {/* Roles & permissions */}
       <Card>
         <CardHeader title={t('permissions.title')} />
@@ -486,6 +491,72 @@ export function ClinicDetailPage() {
         </div>
       </Modal>
     </div>
+  )
+}
+
+function ClinicSessionsCard({ tenantId }: { tenantId: string }) {
+  const t = useT()
+  const qc = useQueryClient()
+
+  const { data: sessions, isLoading } = useQuery({
+    queryKey: ['platform-tenant-sessions', tenantId],
+    queryFn: () => platformTenantsApi.listSessions(tenantId),
+  })
+
+  const revoke = useMutation({
+    mutationFn: (sessionId: string) => platformTenantsApi.revokeSession(tenantId, sessionId),
+    onSuccess: () => {
+      toast(t('sessions.closed_ok'))
+      qc.invalidateQueries({ queryKey: ['platform-tenant-sessions', tenantId] })
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  return (
+    <Card>
+      <CardHeader title={t('platform.sessions')} />
+      {isLoading || !sessions ? (
+        <PageLoader />
+      ) : sessions.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-tx-3">{t('sessions.empty')}</p>
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <Th>{t('users.col_member')}</Th>
+              <Th>{t('sessions.col_device')}</Th>
+              <Th>IP</Th>
+              <Th>{t('sessions.col_started')}</Th>
+              <Th>{t('users.col_actions')}</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((s) => (
+              <Tr key={s.id}>
+                <Td>
+                  <p className="font-medium text-tx">{s.user_name ?? '—'}</p>
+                  {s.role && <p className="text-xs text-tx-3">{t(`role.${s.role}`)}</p>}
+                </Td>
+                <Td>{deviceLabel(s.user_agent, t('sessions.unknown_device'))}</Td>
+                <Td>{s.ip_address ?? '—'}</Td>
+                <Td>{fmtDateTimeTz(s.created_at)}</Td>
+                <Td>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-danger hover:bg-[var(--danger-10)]"
+                    loading={revoke.isPending && revoke.variables === s.id}
+                    onClick={() => revoke.mutate(s.id)}
+                  >
+                    {t('sessions.close')}
+                  </Button>
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </Card>
   )
 }
 

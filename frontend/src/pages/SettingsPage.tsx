@@ -1,23 +1,26 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Monitor, Moon, Sun } from 'lucide-react'
+import { Monitor, Moon, Smartphone, Sun } from 'lucide-react'
 import { authApi } from '@/api/auth'
 import { errorMessage } from '@/api/client'
 import { PageHeader } from '@/components/PageHeader'
 import { OrganizationSection } from '@/components/settings/OrganizationSection'
 import { Avatar } from '@/components/ui/Avatar'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { Input, Textarea } from '@/components/ui/Input'
 import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
+import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { describeUserAgent, deviceLabel } from '@/lib/userAgent'
 import { formatPhone, isValidPhone } from '@/lib/validation'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore, type Lang, type Theme } from '@/stores/ui'
 
-type Section = 'profile' | 'appearance' | 'organization' | 'notifications'
+type Section = 'profile' | 'appearance' | 'sessions' | 'organization' | 'notifications'
 
 export function SettingsPage() {
   const t = useT()
@@ -28,6 +31,7 @@ export function SettingsPage() {
   const sections: { id: Section; label: string }[] = [
     { id: 'profile', label: t('settings.profile') },
     { id: 'appearance', label: t('settings.appearance') },
+    { id: 'sessions', label: t('settings.sessions') },
     ...(canViewOrg
       ? [{ id: 'organization' as const, label: t('settings.organization') }]
       : []),
@@ -117,6 +121,8 @@ export function SettingsPage() {
             </Card>
           )}
 
+          {section === 'sessions' && <SessionsSection />}
+
           {section === 'organization' && <OrganizationSection />}
 
           {section === 'notifications' && (
@@ -125,6 +131,71 @@ export function SettingsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function SessionsSection() {
+  const t = useT()
+  const queryClient = useQueryClient()
+
+  const { data: sessions, isLoading } = useQuery({
+    queryKey: ['my-sessions'],
+    queryFn: authApi.listSessions,
+  })
+
+  const revoke = useMutation({
+    mutationFn: (id: string) => authApi.revokeSession(id),
+    onSuccess: () => {
+      toast(t('sessions.closed_ok'))
+      queryClient.invalidateQueries({ queryKey: ['my-sessions'] })
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  if (isLoading || !sessions) return <PageLoader />
+
+  return (
+    <Card>
+      <CardHeader title={t('settings.sessions')} />
+      <div className="p-5">
+        <p className="-mt-1 mb-4 text-[13px] text-tx-3">{t('settings.sessions_hint')}</p>
+        {sessions.length === 0 ? (
+          <p className="py-6 text-center text-sm text-tx-3">{t('sessions.empty')}</p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {sessions.map((s) => {
+              const DeviceIcon = describeUserAgent(s.user_agent).mobile ? Smartphone : Monitor
+              return (
+                <li key={s.id} className="flex items-center gap-4 py-3.5 first:pt-0 last:pb-0">
+                  <DeviceIcon className="h-5 w-5 shrink-0 text-tx-3" />
+                  <div className="min-w-0 flex-1">
+                    <p className="flex items-center gap-2 text-sm font-medium text-tx">
+                      {deviceLabel(s.user_agent, t('sessions.unknown_device'))}
+                      {s.current && <Badge tone="ok">{t('sessions.current')}</Badge>}
+                    </p>
+                    <p className="text-[13px] text-tx-3">
+                      {[s.ip_address, `${t('sessions.started')} ${fmtDateTimeTz(s.created_at)}`]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  </div>
+                  {!s.current && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={revoke.isPending && revoke.variables === s.id}
+                      onClick={() => revoke.mutate(s.id)}
+                    >
+                      {t('sessions.close')}
+                    </Button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
+    </Card>
   )
 }
 

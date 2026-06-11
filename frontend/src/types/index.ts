@@ -62,6 +62,19 @@ export interface MyProfile {
   permissions: Permission[]
 }
 
+// A live server-side login session (the backing row of a JWT's sid claim).
+export interface AuthSessionInfo {
+  id: string
+  user_id: string
+  user_name: string | null
+  role: Role | null
+  ip_address: string | null
+  user_agent: string | null
+  created_at: string
+  expires_at: string
+  current: boolean
+}
+
 // ── Platform (superadmin) ──────────────────────────────────────────────────────
 export type TenantStatus = 'active' | 'suspended' | 'archived'
 export type IcdVersion = 'cie10' | 'cie11'

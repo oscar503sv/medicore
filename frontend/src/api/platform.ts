@@ -1,5 +1,6 @@
 import { api, platformApi } from './client'
 import type {
+  AuthSessionInfo,
   GlobalAuditEntry,
   GlobalStats,
   PaginatedResponse,
@@ -76,6 +77,14 @@ export const platformTenantsApi = {
     platformApi
       .get<PaginatedResponse<User>>(`/platform/tenants/${id}/users`)
       .then((r) => r.data),
+
+  listSessions: (id: string) =>
+    platformApi
+      .get<{ items: AuthSessionInfo[] }>(`/platform/tenants/${id}/sessions`)
+      .then((r) => r.data.items),
+
+  revokeSession: (id: string, sessionId: string) =>
+    platformApi.delete(`/platform/tenants/${id}/sessions/${sessionId}`),
 
   resetUserPassword: (id: string, userId: string, password: string) =>
     platformApi
