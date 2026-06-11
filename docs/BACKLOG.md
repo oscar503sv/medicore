@@ -13,12 +13,6 @@ La pieza más grande. Existe la base pero nada la usa:
 - **Falta**: casos de uso, router/endpoints, emisión de notificaciones desde los flujos
   (cita creada/cancelada, resultado subido…) y UI (campana en el Topbar).
 
-### Ciclo de vida de recetas
-`Prescription.complete()` y `Prescription.cancel()` existen en el dominio
-(`domain/entities/prescription.py`) pero no hay caso de uso ni endpoint que los invoque:
-las recetas nacen `active` y nunca cambian de estado. La UI muestra "recetas activas"
-calculadas, pero nadie puede completar/cancelar una.
-
 ### Otros cabos sueltos
 - Caso de uso `AttachDocument` (`application/use_cases/consultations.py`) sin endpoint:
   adjuntar documentos a una consulta en curso no es alcanzable vía API.
