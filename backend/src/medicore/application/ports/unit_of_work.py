@@ -16,6 +16,7 @@ from typing import Protocol, runtime_checkable
 from medicore.domain.repositories import (
     AppointmentRepository,
     AuditLogRepository,
+    AuthSessionRepository,
     ConsultationRepository,
     DoctorAvailabilityRepository,
     DoctorProfileRepository,
@@ -53,6 +54,7 @@ class UnitOfWork(Protocol):
     role_permissions: RolePermissionOverrideRepository
     tenants: TenantRepository  # global (not tenant-filtered)
     platform_audit: PlatformAuditLogRepository  # global (not tenant-filtered)
+    sessions: AuthSessionRepository  # global (not tenant-filtered)
 
     def __enter__(self) -> UnitOfWork: ...
 
@@ -75,6 +77,7 @@ class PlatformUnitOfWork(Protocol):
     tenants: TenantRepository
     platform_admins: PlatformAdminRepository
     platform_audit: PlatformAuditLogRepository
+    sessions: AuthSessionRepository
 
     def __enter__(self) -> PlatformUnitOfWork: ...
 

@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 from medicore.application.common.login_throttle import WINDOW_MINUTES, lockout_until
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.audit_log import AuditLog
+from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.medical_document import MedicalDocument
@@ -43,6 +44,7 @@ from medicore.domain.shared.identifiers import (
     PlatformAdminId,
     PrescriptionId,
     RecordId,
+    SessionId,
     TenantId,
     UserId,
 )
@@ -115,6 +117,38 @@ class InMemoryPlatformAuditLogRepository:
             self._store.platform_audit.values(), key=lambda e: e.timestamp, reverse=True
         )
         return entries[offset : offset + limit]
+
+
+class InMemoryAuthSessionRepository:
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def get(self, session_id: SessionId) -> AuthSession | None:
+        return self._store.sessions.get(session_id.value)
+
+    def add(self, session: AuthSession) -> None:
+        self._store.sessions[session.id.value] = session
+
+    def revoke(self, session_id: SessionId, now: datetime) -> None:
+        session = self._store.sessions.get(session_id.value)
+        if session is not None:
+            session.revoke(now)
+
+    def revoke_all_for_user(
+        self, user_id, now: datetime, except_id: SessionId | None = None
+    ) -> None:
+        for session in self._store.sessions.values():
+            if session.user_id == user_id and (except_id is None or session.id != except_id):
+                session.revoke(now)
+
+    def delete_expired_for_user(self, user_id, now: datetime) -> None:
+        expired = [
+            key
+            for key, s in self._store.sessions.items()
+            if s.user_id == user_id and s.expires_at < now
+        ]
+        for key in expired:
+            del self._store.sessions[key]
 
 
 class InMemoryLoginThrottleRepository:

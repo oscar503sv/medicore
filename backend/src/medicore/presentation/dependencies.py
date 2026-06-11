@@ -17,7 +17,8 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.permissions import effective_permissions
 from medicore.domain.enums import Role
-from medicore.domain.shared.identifiers import PlatformAdminId, TenantId, UserId
+from medicore.domain.shared.errors import InvalidValueObject
+from medicore.domain.shared.identifiers import PlatformAdminId, SessionId, TenantId, UserId
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
 from medicore.infrastructure.auth.jwt_token_issuer import JwtTokenIssuer
@@ -91,6 +92,42 @@ def _session_token(request: Request, authorization: str | None, cookie_name: str
     return token
 
 
+def _session_id_or_401(claims) -> SessionId:
+    """Extract the ``sid`` claim; tokens without one (or malformed) are rejected."""
+    if not claims.session_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked or expired"
+        )
+    try:
+        return SessionId.parse(claims.session_id)
+    except InvalidValueObject as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked or expired"
+        ) from exc
+
+
+def revoke_session_token(token: str | None, issuer: JwtTokenIssuer, factory, now) -> None:
+    """Best-effort server-side revocation on logout: an invalid or expired token simply
+    has nothing left to revoke, so it never raises."""
+    if not token:
+        return
+    try:
+        claims = issuer.decode(token)
+        if not claims.session_id:
+            return
+        session_id = SessionId.parse(claims.session_id)
+        if claims.scope == "platform":
+            with factory.platform_uow() as uow:
+                uow.sessions.revoke(session_id, now)
+                uow.commit()
+        elif claims.tenant_id:
+            with factory.for_tenant(TenantId.parse(claims.tenant_id)) as uow:
+                uow.sessions.revoke(session_id, now)
+                uow.commit()
+    except (jwt.InvalidTokenError, InvalidValueObject):
+        return
+
+
 def _decode_or_401(issuer: JwtTokenIssuer, token: str):
     try:
         return issuer.decode(token)
@@ -109,11 +146,14 @@ def get_actor(
     authorization: Annotated[str | None, Header()] = None,
     issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
     factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
+    clock: SystemClock = Depends(get_clock),
 ) -> ActorContext:
     """Authenticate the request (Bearer header or mc_session cookie) and return the actor.
 
     Resolves the tenant's role-permission override so every permission check in the
-    request honors the clinic's customization. Raises 401 if no valid credential is
+    request honors the clinic's customization, and requires the token's server-side
+    session (``sid``) to still be alive — a revoked session means 401 immediately, no
+    matter how long the JWT itself remains valid. Raises 401 if no valid credential is
     present, 403 if a cookie-authenticated mutation fails the CSRF check.
     """
     token = _session_token(request, authorization, SESSION_COOKIE)
@@ -124,10 +164,16 @@ def get_actor(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a tenant session"
         )
 
+    session_id = _session_id_or_401(claims)
     tenant_id = TenantId.parse(claims.tenant_id)
     role = Role(claims.role)
     with factory.for_tenant(tenant_id) as uow:
         override = uow.role_permissions.get_by_role(role)
+        session = uow.sessions.get(session_id)
+    if session is None or not session.is_active(clock.now()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked or expired"
+        )
     effective = effective_permissions(role, override.permissions if override else None)
 
     return ActorContext(
@@ -140,6 +186,7 @@ def get_actor(
         ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
         permissions=frozenset(str(p) for p in effective),
+        session_id=session_id,
     )
 
 
@@ -147,11 +194,14 @@ def get_platform_actor(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
     issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
+    factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
+    clock: SystemClock = Depends(get_clock),
 ) -> PlatformActorContext:
     """Authenticate the platform superadmin (Bearer header or mc_platform cookie).
 
-    Raises 401 if no valid credential is present or the token is not a platform session,
-    403 if a cookie-authenticated mutation fails the CSRF check.
+    Raises 401 if no valid credential is present, the token is not a platform session,
+    or its server-side session has been revoked; 403 if a cookie-authenticated mutation
+    fails the CSRF check.
     """
     token = _session_token(request, authorization, PLATFORM_COOKIE)
     claims = _decode_or_401(issuer, token)
@@ -159,6 +209,14 @@ def get_platform_actor(
     if claims.scope != "platform":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a platform session"
+        )
+
+    session_id = _session_id_or_401(claims)
+    with factory.platform_uow() as uow:
+        session = uow.sessions.get(session_id)
+    if session is None or not session.is_active(clock.now()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked or expired"
         )
 
     return PlatformActorContext(

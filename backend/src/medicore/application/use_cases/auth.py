@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
@@ -18,10 +19,17 @@ from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
 from medicore.application.ports.unit_of_work import UnitOfWork, UnitOfWorkFactory
 from medicore.domain.entities.audit_log import AuditLog
+from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.user import DoctorProfile
 from medicore.domain.enums import LangPref, Role, Sex, ThemePref, UserStatus
 from medicore.domain.shared.errors import InvalidValueObject
-from medicore.domain.shared.identifiers import AuditLogId, DoctorProfileId, TenantId, UserId
+from medicore.domain.shared.identifiers import (
+    AuditLogId,
+    DoctorProfileId,
+    SessionId,
+    TenantId,
+    UserId,
+)
 from medicore.domain.value_objects.slug import Slug
 
 
@@ -30,6 +38,9 @@ class AuthenticateUserCommand:
     slug: str
     email: str
     password: str
+    # Network context recorded on the AuthSession row for the future "active sessions" view.
+    ip_address: str | None = None
+    user_agent: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,8 +148,25 @@ class AuthenticateUser:
             if user.status != UserStatus.ACTIVE:
                 raise AuthenticationFailed("account is not active")
             override = uow.role_permissions.get_by_role(user.role)
-            user.last_seen_at = self._clock.now()
+            now = self._clock.now()
+            user.last_seen_at = now
             uow.users.save(user)
+            # Server-side session: the token is only valid while this row stays active,
+            # so logout / password change / suspension revoke access immediately.
+            session_id = SessionId.new()
+            uow.sessions.delete_expired_for_user(user.id.value, now)
+            uow.sessions.add(
+                AuthSession(
+                    id=session_id,
+                    scope="tenant",
+                    user_id=user.id.value,
+                    tenant_id=tenant.id,
+                    created_at=now,
+                    expires_at=now + timedelta(minutes=self._tokens.ttl_minutes()),
+                    ip_address=cmd.ip_address,
+                    user_agent=cmd.user_agent,
+                )
+            )
             uow.audit.append(
                 AuditLog(
                     id=AuditLogId.new(),
@@ -147,13 +175,18 @@ class AuthenticateUser:
                     action="auth.login",
                     entity_type="User",
                     entity_id=str(user.id),
-                    timestamp=self._clock.now(),
+                    timestamp=now,
                 )
             )
             uow.commit()
 
         token = self._tokens.issue(
-            SessionClaims(user_id=str(user.id), tenant_id=str(tenant.id), role=str(user.role))
+            SessionClaims(
+                user_id=str(user.id),
+                tenant_id=str(tenant.id),
+                role=str(user.role),
+                session_id=str(session_id),
+            )
         )
         return SessionDTO(
             token=token,
@@ -207,12 +240,16 @@ class ChangePassword:
     """Change the actor's own password, verifying the current one first.
 
     Used both for the forced change after a temporary-password invite and for
-    routine password changes. Clears the ``must_change_password`` flag on success.
+    routine password changes. Clears the ``must_change_password`` flag on success and
+    revokes every other session of the user (a stolen token dies with the old password).
     """
 
-    def __init__(self, uow_factory: UnitOfWorkFactory, hasher: PasswordHasher) -> None:
+    def __init__(
+        self, uow_factory: UnitOfWorkFactory, hasher: PasswordHasher, clock: Clock
+    ) -> None:
         self._factory = uow_factory
         self._hasher = hasher
+        self._clock = clock
 
     def execute(self, actor: ActorContext, current_password: str, new_password: str) -> None:
         if not new_password or len(new_password) < 8:
@@ -225,6 +262,9 @@ class ChangePassword:
                 raise AuthenticationFailed("current password is incorrect")
             user.change_password(self._hasher.hash(new_password))
             uow.users.save(user)
+            uow.sessions.revoke_all_for_user(
+                actor.user_id.value, self._clock.now(), except_id=actor.session_id
+            )
             uow.commit()
 
 

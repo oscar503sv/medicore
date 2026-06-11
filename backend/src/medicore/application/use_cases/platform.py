@@ -8,6 +8,7 @@ specific clinic's data must be touched atomically (e.g. seeding its first admin 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.errors import (
@@ -23,6 +24,7 @@ from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
 from medicore.application.ports.unit_of_work import UnitOfWorkFactory
 from medicore.application.use_cases import role_permissions
+from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
@@ -39,6 +41,7 @@ from medicore.domain.shared.identifiers import (
     AuditLogId,
     LocationId,
     PlatformAdminId,
+    SessionId,
     TenantId,
     UserId,
 )
@@ -130,10 +133,24 @@ class AuthenticatePlatformAdmin:
                 raise AuthenticationFailed("invalid credentials")
             if not admin.is_active:
                 raise AuthenticationFailed("account is not active")
-            admin.last_seen_at = self._clock.now()
+            now = self._clock.now()
+            admin.last_seen_at = now
             uow.platform_admins.save(admin)
+            session_id = SessionId.new()
+            uow.sessions.delete_expired_for_user(admin.id.value, now)
+            uow.sessions.add(
+                AuthSession(
+                    id=session_id,
+                    scope="platform",
+                    user_id=admin.id.value,
+                    created_at=now,
+                    expires_at=now + timedelta(minutes=self._tokens.ttl_minutes()),
+                )
+            )
             uow.commit()
-        token = self._tokens.issue(SessionClaims(user_id=str(admin.id), scope="platform"))
+        token = self._tokens.issue(
+            SessionClaims(user_id=str(admin.id), scope="platform", session_id=str(session_id))
+        )
         return PlatformSessionDTO(
             token=token, admin_id=admin.id, name=admin.name, email=admin.email
         )
@@ -468,6 +485,7 @@ class ResetUserPassword:
             user = _require_user(uow, tenant_id, user_id)
             user.set_temporary_password(self._hasher.hash(password))
             uow.users.save(user)
+            uow.sessions.revoke_all_for_user(user_id.value, self._clock.now())
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), "user.password_reset", "User", str(user_id),
@@ -519,9 +537,24 @@ class ImpersonateTenant:
                 raise ValidationError("clinic has no active admin to impersonate")
             target = admins[0]
             override = uow.role_permissions.get_by_role(target.role)
+            now = self._clock.now()
+            session_id = SessionId.new()
+            uow.sessions.add(
+                AuthSession(
+                    id=session_id,
+                    scope="tenant",
+                    user_id=target.id.value,
+                    tenant_id=tenant_id,
+                    created_at=now,
+                    expires_at=now
+                    + timedelta(minutes=self._tokens.ttl_minutes(impersonated=True)),
+                    ip_address=actor.ip_address,
+                    user_agent=actor.user_agent,
+                )
+            )
             uow.platform_audit.append(
                 _audit(
-                    actor, self._clock.now(), "support.access.started", "Tenant", str(tenant_id),
+                    actor, now, "support.access.started", "Tenant", str(tenant_id),
                     tenant_id=tenant_id, as_user=str(target.id), reason=reason.strip(),
                 )
             )
@@ -533,6 +566,7 @@ class ImpersonateTenant:
                 role=str(target.role),
                 scope="tenant",
                 impersonator=str(actor.admin_id),
+                session_id=str(session_id),
             )
         )
         return ImpersonationSessionDTO(
@@ -569,6 +603,8 @@ class EndImpersonation:
         if actor.impersonated_by is None:
             raise ValidationError("not a support session")
         with self._factory.for_tenant(actor.tenant_id) as uow:
+            if actor.session_id is not None:
+                uow.sessions.revoke(actor.session_id, self._clock.now())
             uow.platform_audit.append(
                 PlatformAuditLog(
                     id=AuditLogId.new(),
@@ -654,6 +690,7 @@ class SuspendTenantUser:
             user = _require_user(uow, tenant_id, user_id)
             user.suspend()
             uow.users.save(user)
+            uow.sessions.revoke_all_for_user(user_id.value, self._clock.now())
             uow.platform_audit.append(
                 _audit(
                     actor, self._clock.now(), "user.suspended", "User", str(user_id),

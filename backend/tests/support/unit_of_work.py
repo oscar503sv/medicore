@@ -10,6 +10,7 @@ from medicore.domain.shared.identifiers import TenantId
 from tests.support.repositories import (
     InMemoryAppointmentRepository,
     InMemoryAuditLogRepository,
+    InMemoryAuthSessionRepository,
     InMemoryConsultationRepository,
     InMemoryDiagnosisCatalogRepository,
     InMemoryDoctorAvailabilityRepository,
@@ -53,6 +54,7 @@ class InMemoryUnitOfWork:
         self.role_permissions = InMemoryRolePermissionOverrideRepository(store, tenant_id)
         self.tenants = InMemoryTenantRepository(store)
         self.platform_audit = InMemoryPlatformAuditLogRepository(store)
+        self.sessions = InMemoryAuthSessionRepository(store)
         self._snapshot: dict | None = None
         self._committed = False
 
@@ -89,6 +91,7 @@ class InMemoryPlatformUnitOfWork:
         self.tenants = InMemoryTenantRepository(store)
         self.platform_admins = InMemoryPlatformAdminRepository(store)
         self.platform_audit = InMemoryPlatformAuditLogRepository(store)
+        self.sessions = InMemoryAuthSessionRepository(store)
         self._snapshot: dict | None = None
         self._committed = False
 

@@ -2,6 +2,7 @@
 
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.audit_log import AuditLogModel
+from medicore.infrastructure.persistence.models.auth_session import AuthSessionModel
 from medicore.infrastructure.persistence.models.availability import (
     AvailabilityExceptionModel,
     DoctorAvailabilityModel,
@@ -29,6 +30,7 @@ from medicore.infrastructure.persistence.models.user import DoctorProfileModel, 
 __all__ = [
     "AppointmentModel",
     "AuditLogModel",
+    "AuthSessionModel",
     "AvailabilityExceptionModel",
     "ConsultationModel",
     "DiagnosisCodeModel",

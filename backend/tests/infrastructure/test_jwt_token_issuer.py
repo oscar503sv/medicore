@@ -39,3 +39,19 @@ def test_support_session_has_shorter_ttl(monkeypatch):
         assert _ttl(support) == timedelta(minutes=60)
     finally:
         get_settings.cache_clear()
+
+
+def test_session_id_claim_round_trips(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", _SECRET)
+    get_settings.cache_clear()
+    try:
+        issuer = JwtTokenIssuer()
+        token = issuer.issue(
+            SessionClaims(user_id="u", tenant_id="t", role="admin", session_id="sid-123")
+        )
+        assert issuer.decode(token).session_id == "sid-123"
+        # a token issued without a session (pre-deploy) decodes to None → rejected upstream
+        legacy = issuer.issue(SessionClaims(user_id="u", tenant_id="t", role="admin"))
+        assert issuer.decode(legacy).session_id is None
+    finally:
+        get_settings.cache_clear()

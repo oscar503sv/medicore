@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from medicore.domain.enums import Role
-from medicore.domain.shared.identifiers import PlatformAdminId, TenantId, UserId
+from medicore.domain.shared.identifiers import PlatformAdminId, SessionId, TenantId, UserId
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +25,9 @@ class ActorContext:
     # keep this module free of the application permission catalog. None → the permission
     # checks fall back to the role's code defaults (tests and scripts rely on this).
     permissions: frozenset[str] | None = None
+    # Server-side session backing this request, so use cases can revoke "all the others"
+    # (e.g. on password change) while keeping the current one alive.
+    session_id: SessionId | None = None
 
 
 @dataclass(frozen=True, slots=True)

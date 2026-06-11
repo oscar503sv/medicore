@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from medicore.application.common.permissions import permissions_for
+from medicore.application.ports.token_issuer import SessionClaims
 from medicore.domain.enums import Role
 from tests.support.builders import PASSWORD
+from tests.support.fakes import FakeTokenIssuer
 
 
 def test_health(client):
@@ -65,6 +69,41 @@ def test_protected_endpoint_requires_token(client):
 def test_invalid_token_rejected(client):
     resp = client.get("/api/v1/patients", headers={"Authorization": "Bearer invalid.token.here"})
     assert resp.status_code == 401
+
+
+def test_token_without_session_claim_rejected(seed, client):
+    # A structurally valid token lacking the sid claim (e.g. issued before the deploy)
+    # must not authenticate.
+    token = FakeTokenIssuer().issue(
+        SessionClaims(
+            user_id=str(seed.doctor.id), tenant_id=str(seed.tenant.id), role="doctor"
+        )
+    )
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 401
+
+
+def test_logout_revokes_the_server_side_session(seed, client):
+    resp = client.post(
+        "/api/v1/auth/login",
+        json={"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
+    )
+    assert resp.status_code == 200
+    token = client.cookies.get("mc_session")
+
+    assert client.post("/api/v1/auth/logout").status_code == 204
+    client.cookies.clear()
+    # the old token is dead even though the JWT itself has not expired
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 401
+
+
+def test_revoked_session_rejected_even_with_valid_token(seed, client, auth_headers):
+    assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 200
+
+    for session in seed.factory.store.sessions.values():
+        session.revoke(datetime(2026, 5, 31, 9, 1))
+    assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 401
 
 
 def test_switch_theme(client, auth_headers):

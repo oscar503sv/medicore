@@ -48,17 +48,20 @@ class PlainPasswordHasher:
 
 
 class FakeTokenIssuer:
+    def ttl_minutes(self, impersonated: bool = False) -> int:
+        return 60 if impersonated else 1440
+
     def issue(self, claims: SessionClaims) -> str:
         return (
             f"{claims.user_id}|{claims.tenant_id}|{claims.role}|{claims.scope}|"
-            f"{claims.impersonator}"
+            f"{claims.impersonator}|{claims.session_id}"
         )
 
     def decode(self, token: str) -> SessionClaims:
         import jwt
 
         try:
-            user_id, tenant_id, role, scope, imp = token.split("|")
+            user_id, tenant_id, role, scope, imp, sid = token.split("|")
         except ValueError as exc:
             raise jwt.DecodeError("invalid fake token format") from exc
         return SessionClaims(
@@ -67,6 +70,7 @@ class FakeTokenIssuer:
             role=role,
             scope=scope,
             impersonator=None if imp == "None" else imp,
+            session_id=None if sid == "None" else sid,
         )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -10,11 +11,13 @@ from medicore.application.common.errors import AuthenticationFailed, TooManyLogi
 from medicore.application.use_cases.auth import (
     AuthenticateUser,
     AuthenticateUserCommand,
+    ChangePassword,
     GetMyProfile,
     SwitchTheme,
     UpdateMyProfile,
 )
 from medicore.domain.enums import Role, ThemePref, UserStatus
+from medicore.domain.shared.identifiers import SessionId
 from tests.support.builders import PASSWORD, seed_clinic
 from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
 
@@ -92,6 +95,46 @@ def test_suspended_user_cannot_authenticate():
                 slug="clinica-norte", email=seed.doctor.email, password=PASSWORD
             )
         )
+
+
+def _session_id(token: str) -> SessionId:
+    return SessionId.parse(FakeTokenIssuer().decode(token).session_id)
+
+
+def test_login_creates_active_session_row():
+    seed = seed_clinic()
+    clock = FixedClock()
+    auth = AuthenticateUser(seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), clock)
+
+    session = auth.execute(
+        AuthenticateUserCommand(slug="clinica-norte", email=seed.doctor.email, password=PASSWORD)
+    )
+
+    stored = seed.factory.store.sessions[_session_id(session.token).value]
+    assert stored.is_active(clock.now())
+    assert stored.scope == "tenant"
+    assert stored.user_id == seed.doctor.id.value
+    assert stored.expires_at == clock.now() + timedelta(minutes=1440)
+
+
+def test_change_password_revokes_other_sessions_but_keeps_current():
+    seed = seed_clinic()
+    clock = FixedClock()
+    auth = AuthenticateUser(seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), clock)
+    cmd = AuthenticateUserCommand(
+        slug="clinica-norte", email=seed.doctor.email, password=PASSWORD
+    )
+    old_sid = _session_id(auth.execute(cmd).token)
+    current_sid = _session_id(auth.execute(cmd).token)
+
+    actor = replace(seed.doctor_actor, session_id=current_sid)
+    ChangePassword(seed.factory, PlainPasswordHasher(), clock).execute(
+        actor, PASSWORD, "nueva-clave-123"
+    )
+
+    sessions = seed.factory.store.sessions
+    assert not sessions[old_sid.value].is_active(clock.now())
+    assert sessions[current_sid.value].is_active(clock.now())
 
 
 def _login_cmd(email: str, password: str) -> AuthenticateUserCommand:

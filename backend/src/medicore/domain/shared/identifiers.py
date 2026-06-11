@@ -129,5 +129,12 @@ class PlatformAdminId(Identifier):
 
 
 @dataclass(frozen=True, slots=True)
+class SessionId(Identifier):
+    """Identity of a revocable server-side login session (the ``sid`` JWT claim)."""
+
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class RolePermissionOverrideId(Identifier):
     pass

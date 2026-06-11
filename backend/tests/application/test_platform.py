@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from medicore.application.common.context import ActorContext, PlatformActorContext
@@ -31,7 +33,7 @@ from medicore.application.use_cases.platform import (
     UpdateTenantUser,
 )
 from medicore.domain.enums import IcdVersion, Role, TenantStatus, UserStatus
-from medicore.domain.shared.identifiers import UserId
+from medicore.domain.shared.identifiers import SessionId, UserId
 from tests.support.builders import PASSWORD, seed_clinic
 from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
 
@@ -74,6 +76,76 @@ def test_platform_unknown_email_still_runs_password_verification():
     with pytest.raises(AuthenticationFailed):
         auth.execute("nadie@example.com", "whatever")
     assert calls == ["whatever"]
+
+
+def _session_id(token: str) -> SessionId:
+    return SessionId.parse(FakeTokenIssuer().decode(token).session_id)
+
+
+def test_platform_login_creates_session_row():
+    seed = seed_clinic()
+    clock = FixedClock()
+    auth = AuthenticatePlatformAdmin(
+        seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), clock
+    )
+    session = auth.execute(seed.platform_admin.email, PASSWORD)
+    stored = seed.factory.store.sessions[_session_id(session.token).value]
+    assert stored.scope == "platform"
+    assert stored.is_active(clock.now())
+
+
+def test_end_impersonation_revokes_the_support_session():
+    seed = seed_clinic()
+    clock = FixedClock()
+    imp = ImpersonateTenant(seed.factory, FakeTokenIssuer(), clock).execute(
+        actor_for(seed), seed.tenant.id, reason="soporte"
+    )
+    sid = _session_id(imp.token)
+    stored = seed.factory.store.sessions[sid.value]
+    # support sessions expire sooner than regular ones (60 vs 1440 min)
+    assert stored.expires_at == clock.now() + timedelta(minutes=60)
+
+    end_actor = ActorContext(
+        user_id=UserId.parse(imp.user_id),
+        tenant_id=seed.tenant.id,
+        role=Role.ADMIN,
+        impersonated_by=seed.platform_admin.id,
+        session_id=sid,
+    )
+    EndImpersonation(seed.factory, clock).execute(end_actor)
+    assert not seed.factory.store.sessions[sid.value].is_active(clock.now())
+
+
+def test_suspend_tenant_user_revokes_their_sessions():
+    seed = seed_clinic()
+    clock = FixedClock()
+    login = AuthenticateUser(
+        seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), clock
+    ).execute(
+        AuthenticateUserCommand(slug="clinica-norte", email=seed.doctor.email, password=PASSWORD)
+    )
+    sid = _session_id(login.token)
+
+    SuspendTenantUser(seed.factory, clock).execute(
+        actor_for(seed), seed.tenant.id, seed.doctor.id
+    )
+    assert not seed.factory.store.sessions[sid.value].is_active(clock.now())
+
+
+def test_platform_reset_password_revokes_user_sessions():
+    seed = seed_clinic()
+    clock = FixedClock()
+    login = AuthenticateUser(
+        seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), clock
+    ).execute(
+        AuthenticateUserCommand(slug="clinica-norte", email=seed.doctor.email, password=PASSWORD)
+    )
+    sid = _session_id(login.token)
+
+    ResetUserPassword(seed.factory, PlainPasswordHasher(), clock).execute(
+        actor_for(seed), seed.tenant.id, seed.doctor.id, "temporal-123"
+    )
+    assert not seed.factory.store.sessions[sid.value].is_active(clock.now())
 
 
 def test_platform_login_lockout_after_five_failures():

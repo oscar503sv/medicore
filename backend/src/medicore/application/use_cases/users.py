@@ -151,6 +151,7 @@ class SuspendUser:
         with self._uow:
             user.suspend()
             self._uow.users.save(user)
+            self._uow.sessions.revoke_all_for_user(user.id.value, self._clock.now())
             self._uow.audit.append(
                 audit_entry(
                     actor, self._clock.now(), "user.suspended", "User", str(user.id),
@@ -208,6 +209,7 @@ class ResetUserPassword:
         with self._uow:
             user.set_temporary_password(self._hasher.hash(cmd.password))
             self._uow.users.save(user)
+            self._uow.sessions.revoke_all_for_user(user.id.value, self._clock.now())
             self._uow.audit.append(
                 audit_entry(
                     actor, self._clock.now(), "user.password_reset", "User", str(user.id),

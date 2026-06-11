@@ -19,9 +19,15 @@ class SessionClaims:
     role: str = ""
     scope: str = "tenant"
     impersonator: str | None = None  # platform admin id when this is a support session
+    session_id: str | None = None  # AuthSession id (the ``sid`` claim); required to act
 
 
 class TokenIssuer(Protocol):
     def issue(self, claims: SessionClaims) -> str: ...
 
     def decode(self, token: str) -> SessionClaims: ...
+
+    def ttl_minutes(self, impersonated: bool = False) -> int:
+        """Lifetime of the tokens this issuer emits, so the matching AuthSession row
+        can be given the same expiry."""
+        ...

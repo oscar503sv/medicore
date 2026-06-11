@@ -14,6 +14,7 @@ from medicore.domain.repositories._support import (
 )
 from medicore.domain.repositories.appointment_repository import AppointmentRepository
 from medicore.domain.repositories.audit_log_repository import AuditLogRepository
+from medicore.domain.repositories.auth_session_repository import AuthSessionRepository
 from medicore.domain.repositories.consultation_repository import ConsultationRepository
 from medicore.domain.repositories.doctor_availability_repository import (
     DoctorAvailabilityRepository,
@@ -48,6 +49,7 @@ __all__ = [
     "UserFilter",
     "AppointmentRepository",
     "AuditLogRepository",
+    "AuthSessionRepository",
     "ConsultationRepository",
     "DoctorAvailabilityRepository",
     "InsurerRepository",

@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 
 from medicore.domain.shared.identifiers import TenantId
 from medicore.infrastructure.persistence.repositories.appointment import SqlAppointmentRepository
+from medicore.infrastructure.persistence.repositories.auth_session import (
+    SqlAuthSessionRepository,
+)
 from medicore.infrastructure.persistence.repositories.clinical import (
     SqlConsultationRepository,
     SqlMedicalDocumentRepository,
@@ -68,6 +71,7 @@ class SqlAlchemyUnitOfWork:
         self.role_permissions = SqlRolePermissionOverrideRepository(session, tenant_id)
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
         self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
+        self.sessions = SqlAuthSessionRepository(session)  # global (non-scoped)
 
         self._committed = False
 
@@ -108,6 +112,7 @@ class PlatformUnitOfWork:
         self.tenants = SqlTenantRepository(session)
         self.platform_admins = SqlPlatformAdminRepository(session)
         self.platform_audit = SqlPlatformAuditLogRepository(session)
+        self.sessions = SqlAuthSessionRepository(session)
         self._committed = False
 
     def __enter__(self) -> PlatformUnitOfWork:

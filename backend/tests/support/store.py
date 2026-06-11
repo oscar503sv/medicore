@@ -8,6 +8,7 @@ from uuid import UUID
 
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.audit_log import AuditLog
+from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.diagnosis_catalog import CatalogDiagnosis
@@ -52,6 +53,8 @@ class InMemoryStore:
     diagnosis_codes: dict[str, CatalogDiagnosis] = field(default_factory=dict)
     # Global login throttle keyed by identifier: (failed_count, last_failed_at, locked_until).
     login_attempts: dict[str, tuple] = field(default_factory=dict)
+    # Global revocable sessions (tenant and platform scopes share the store).
+    sessions: dict[UUID, AuthSession] = field(default_factory=dict)
 
     def snapshot(self) -> dict[str, dict]:
         return {f.name: copy.deepcopy(getattr(self, f.name)) for f in fields(self)}

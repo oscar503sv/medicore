@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Request, Response
 
 from medicore.application.use_cases.auth import (
     AuthenticateUser,
@@ -20,7 +20,15 @@ from medicore.presentation.cookies import (
     clear_session_cookies,
     set_session_cookies,
 )
-from medicore.presentation.dependencies import Actor, Clock, Hasher, JwtIssuer, UoWFactory
+from medicore.presentation.dependencies import (
+    Actor,
+    Clock,
+    Hasher,
+    JwtIssuer,
+    UoWFactory,
+    _client_ip,
+    revoke_session_token,
+)
 from medicore.presentation.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
@@ -38,6 +46,7 @@ router = APIRouter(tags=["auth"])
 @router.post("/auth/login", response_model=SessionResponse)
 def login(
     body: LoginRequest,
+    request: Request,
     response: Response,
     factory: UoWFactory,
     hasher: Hasher,
@@ -45,7 +54,13 @@ def login(
     clock: Clock,
 ):
     session = AuthenticateUser(factory, hasher, issuer, clock).execute(
-        AuthenticateUserCommand(slug=body.slug, email=body.email, password=body.password)
+        AuthenticateUserCommand(
+            slug=body.slug,
+            email=body.email,
+            password=body.password,
+            ip_address=_client_ip(request),
+            user_agent=request.headers.get("user-agent"),
+        )
     )
     # The JWT travels only in an httpOnly cookie — never in the body, never in storage.
     set_session_cookies(
@@ -68,8 +83,19 @@ def login(
 
 
 @router.post("/auth/logout", status_code=204)
-def logout(response: Response):
-    """Clear the session cookies. No auth required — clearing cookies is harmless."""
+def logout(
+    request: Request,
+    response: Response,
+    factory: UoWFactory,
+    issuer: JwtIssuer,
+    clock: Clock,
+):
+    """Revoke the server-side session (best effort) and clear the cookies.
+
+    No auth required: with a valid token this is a real logout, without one there is
+    simply nothing to revoke.
+    """
+    revoke_session_token(request.cookies.get(SESSION_COOKIE), issuer, factory, clock.now())
     clear_session_cookies(response, SESSION_COOKIE)
 
 
@@ -85,9 +111,11 @@ def switch_locale(body: SwitchLocaleRequest, actor: Actor, factory: UoWFactory):
 
 @router.post("/auth/change-password", status_code=204)
 def change_password(
-    body: ChangePasswordRequest, actor: Actor, factory: UoWFactory, hasher: Hasher
+    body: ChangePasswordRequest, actor: Actor, factory: UoWFactory, hasher: Hasher, clock: Clock
 ):
-    ChangePassword(factory, hasher).execute(actor, body.current_password, body.new_password)
+    ChangePassword(factory, hasher, clock).execute(
+        actor, body.current_password, body.new_password
+    )
 
 
 @router.get("/auth/me", response_model=MyProfileResponse)

@@ -97,6 +97,17 @@ class TestPlatformCookies:
         assert client.post("/api/v1/platform/logout").status_code == 204
         assert client.get("/api/v1/platform/tenants").status_code == 401
 
+    def test_platform_logout_revokes_the_server_side_session(self, seed, client):
+        _platform_login(seed, client)
+        token = client.cookies.get("mc_platform")
+        assert client.post("/api/v1/platform/logout").status_code == 204
+        client.cookies.clear()
+        # the old token is dead even though the JWT itself has not expired
+        resp = client.get(
+            "/api/v1/platform/tenants", headers={"Authorization": f"Bearer {token}"}
+        )
+        assert resp.status_code == 401
+
     def test_impersonation_sets_tenant_cookie(self, seed, client):
         _platform_login(seed, client)
         csrf = client.cookies.get("mc_csrf")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Query, Request, Response
 
 from medicore.application.use_cases.platform import (
     AuthenticatePlatformAdmin,
@@ -44,6 +44,7 @@ from medicore.presentation.dependencies import (
     JwtIssuer,
     PlatformActor,
     UoWFactory,
+    revoke_session_token,
 )
 from medicore.presentation.routers.role_permissions import parse_role, ser_matrix
 from medicore.presentation.schemas.platform import (
@@ -101,8 +102,15 @@ def login(body: PlatformLoginRequest, response: Response, factory: UoWFactory, h
 
 
 @router.post("/logout", status_code=204)
-def logout(response: Response):
-    """Clear the platform session cookies."""
+def logout(
+    request: Request,
+    response: Response,
+    factory: UoWFactory,
+    issuer: JwtIssuer,
+    clock: Clock,
+):
+    """Revoke the server-side session (best effort) and clear the platform cookies."""
+    revoke_session_token(request.cookies.get(PLATFORM_COOKIE), issuer, factory, clock.now())
     clear_session_cookies(response, PLATFORM_COOKIE)
 
 

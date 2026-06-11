@@ -42,8 +42,8 @@ from medicore.domain.enums import (
 from medicore.domain.services.slot_resolver import SlotStatus
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.value_objects.time_range import TimeRange
-from tests.support.builders import seed_clinic
-from tests.support.fakes import FixedClock, PlainPasswordHasher
+from tests.support.builders import PASSWORD, seed_clinic
+from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
 
 
 class TestUsers:
@@ -94,6 +94,28 @@ class TestUsers:
         assert uow.users.get_by_id(seed.nurse.id).role == Role.RECEPTIONIST
         SuspendUser(uow, FixedClock()).execute(admin, seed.nurse.id)
         assert uow.users.get_by_id(seed.nurse.id).status == UserStatus.SUSPENDED
+
+    def test_suspend_revokes_user_sessions(self):
+        from medicore.application.use_cases.auth import (
+            AuthenticateUser,
+            AuthenticateUserCommand,
+        )
+        from medicore.domain.shared.identifiers import SessionId
+
+        seed = seed_clinic()
+        clock = FixedClock()
+        login = AuthenticateUser(
+            seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), clock
+        ).execute(
+            AuthenticateUserCommand(
+                slug="clinica-norte", email=seed.nurse.email, password=PASSWORD
+            )
+        )
+        sid = SessionId.parse(FakeTokenIssuer().decode(login.token).session_id)
+
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        SuspendUser(uow, clock).execute(seed.actor(seed.admin), seed.nurse.id)
+        assert not seed.factory.store.sessions[sid.value].is_active(clock.now())
 
     def test_update_user_edits_profile_fields(self):
         seed = seed_clinic()
