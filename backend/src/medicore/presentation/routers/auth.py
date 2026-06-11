@@ -13,7 +13,9 @@ from medicore.application.use_cases.auth import (
     SwitchTheme,
     UpdateMyProfile,
 )
+from medicore.application.use_cases.sessions import ListMySessions, RevokeMySession
 from medicore.domain.enums import LangPref, ThemePref
+from medicore.domain.shared.identifiers import SessionId
 from medicore.infrastructure.config import get_settings
 from medicore.presentation.cookies import (
     SESSION_COOKIE,
@@ -25,6 +27,7 @@ from medicore.presentation.dependencies import (
     Clock,
     Hasher,
     JwtIssuer,
+    UoW,
     UoWFactory,
     _client_ip,
     revoke_session_token,
@@ -33,12 +36,13 @@ from medicore.presentation.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
     MyProfileResponse,
+    SessionListResponse,
     SessionResponse,
     SwitchLocaleRequest,
     SwitchThemeRequest,
     UpdateMyProfileRequest,
 )
-from medicore.presentation.serializers import ser_my_profile
+from medicore.presentation.serializers import ser_my_profile, ser_session_info
 
 router = APIRouter(tags=["auth"])
 
@@ -121,6 +125,17 @@ def change_password(
 @router.get("/auth/me", response_model=MyProfileResponse)
 def get_my_profile(actor: Actor, factory: UoWFactory):
     return ser_my_profile(GetMyProfile(factory).execute(actor))
+
+
+@router.get("/auth/me/sessions", response_model=SessionListResponse)
+def list_my_sessions(actor: Actor, uow: UoW, clock: Clock):
+    sessions = ListMySessions(uow, clock).execute(actor)
+    return SessionListResponse(items=[ser_session_info(s) for s in sessions])
+
+
+@router.delete("/auth/me/sessions/{session_id}", status_code=204)
+def revoke_my_session(session_id: str, actor: Actor, uow: UoW, clock: Clock):
+    RevokeMySession(uow, clock).execute(actor, SessionId.parse(session_id))
 
 
 @router.patch("/auth/me", response_model=MyProfileResponse)

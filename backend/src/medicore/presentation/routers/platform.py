@@ -27,9 +27,10 @@ from medicore.application.use_cases.platform import (
     UpdateTenantRolePermissions,
     UpdateTenantUser,
 )
+from medicore.application.use_cases.sessions import ListTenantSessions, RevokeTenantSession
 from medicore.domain.enums import IcdVersion, Role, Sex, TenantStatus
 from medicore.domain.repositories._support import Paging, TenantFilter
-from medicore.domain.shared.identifiers import TenantId, UserId
+from medicore.domain.shared.identifiers import SessionId, TenantId, UserId
 from medicore.infrastructure.config import get_settings
 from medicore.presentation.cookies import (
     PLATFORM_COOKIE,
@@ -47,6 +48,7 @@ from medicore.presentation.dependencies import (
     revoke_session_token,
 )
 from medicore.presentation.routers.role_permissions import parse_role, ser_matrix
+from medicore.presentation.schemas.auth import SessionListResponse
 from medicore.presentation.schemas.platform import (
     CreateTenantRequest,
     CreateTenantResponse,
@@ -74,6 +76,7 @@ from medicore.presentation.serializers import (
     ser_global_audit_row,
     ser_global_stats,
     ser_platform_admin,
+    ser_session_info,
     ser_tenant,
     ser_tenant_stats,
     ser_user,
@@ -232,6 +235,21 @@ def list_tenant_users(
         total=page.total,
         offset=page.offset,
         limit=page.limit,
+    )
+
+
+@router.get("/tenants/{tenant_id}/sessions", response_model=SessionListResponse)
+def list_tenant_sessions(tenant_id: str, actor: PlatformActor, factory: UoWFactory, clock: Clock):
+    sessions = ListTenantSessions(factory, clock).execute(actor, TenantId.parse(tenant_id))
+    return SessionListResponse(items=[ser_session_info(s) for s in sessions])
+
+
+@router.delete("/tenants/{tenant_id}/sessions/{session_id}", status_code=204)
+def revoke_tenant_session(
+    tenant_id: str, session_id: str, actor: PlatformActor, factory: UoWFactory, clock: Clock
+):
+    RevokeTenantSession(factory, clock).execute(
+        actor, TenantId.parse(tenant_id), SessionId.parse(session_id)
     )
 
 

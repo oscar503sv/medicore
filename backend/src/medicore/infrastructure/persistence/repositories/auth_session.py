@@ -52,6 +52,32 @@ class SqlAuthSessionRepository:
             )
         )
 
+    def list_active_for_user(self, user_id: UUID, now: datetime) -> list[AuthSession]:
+        rows = (
+            self._s.query(AuthSessionModel)
+            .filter(
+                AuthSessionModel.user_id == user_id,
+                AuthSessionModel.revoked_at.is_(None),
+                AuthSessionModel.expires_at > now,
+            )
+            .order_by(AuthSessionModel.created_at.desc())
+            .all()
+        )
+        return [_to_entity(r) for r in rows]
+
+    def list_active_for_tenant(self, tenant_id: TenantId, now: datetime) -> list[AuthSession]:
+        rows = (
+            self._s.query(AuthSessionModel)
+            .filter(
+                AuthSessionModel.tenant_id == tenant_id.value,
+                AuthSessionModel.revoked_at.is_(None),
+                AuthSessionModel.expires_at > now,
+            )
+            .order_by(AuthSessionModel.created_at.desc())
+            .all()
+        )
+        return [_to_entity(r) for r in rows]
+
     def revoke(self, session_id: SessionId, now: datetime) -> None:
         self._s.query(AuthSessionModel).filter(
             AuthSessionModel.id == session_id.value,

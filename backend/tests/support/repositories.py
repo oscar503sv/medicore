@@ -129,6 +129,28 @@ class InMemoryAuthSessionRepository:
     def add(self, session: AuthSession) -> None:
         self._store.sessions[session.id.value] = session
 
+    def list_active_for_user(self, user_id, now: datetime) -> list[AuthSession]:
+        return sorted(
+            (
+                s
+                for s in self._store.sessions.values()
+                if s.user_id == user_id and s.is_active(now)
+            ),
+            key=lambda s: s.created_at,
+            reverse=True,
+        )
+
+    def list_active_for_tenant(self, tenant_id: TenantId, now: datetime) -> list[AuthSession]:
+        return sorted(
+            (
+                s
+                for s in self._store.sessions.values()
+                if s.tenant_id == tenant_id and s.is_active(now)
+            ),
+            key=lambda s: s.created_at,
+            reverse=True,
+        )
+
     def revoke(self, session_id: SessionId, now: datetime) -> None:
         session = self._store.sessions.get(session_id.value)
         if session is not None:

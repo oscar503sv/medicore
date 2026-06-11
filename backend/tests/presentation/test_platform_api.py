@@ -156,3 +156,22 @@ def test_global_audit_endpoint(seed, client, platform_headers):
     assert login["clinic_name"] == seed.tenant.legal_name
     assert login["actor_name"] == seed.doctor.name
     assert "ip_address" in login
+
+
+def test_platform_lists_and_revokes_tenant_sessions(seed, client, platform_headers, auth_headers):
+    # auth_headers logged the doctor in → the clinic has one live session
+    resp = client.get(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/sessions", headers=platform_headers
+    )
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 1
+    assert items[0]["user_name"] == seed.doctor.name
+
+    resp = client.delete(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/sessions/{items[0]['id']}",
+        headers=platform_headers,
+    )
+    assert resp.status_code == 204
+    # the doctor's token is dead immediately
+    assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 401

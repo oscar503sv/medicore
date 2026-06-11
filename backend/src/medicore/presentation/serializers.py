@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from medicore.application.use_cases.auth import MyProfileDTO
+from medicore.application.use_cases.sessions import SessionInfoDTO
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
@@ -132,6 +133,20 @@ def ser_my_profile(p: MyProfileDTO) -> dict:
         "phone": p.phone,
         "bio": p.bio,
         "permissions": list(p.permissions),
+    }
+
+
+def ser_session_info(s: SessionInfoDTO) -> dict:
+    return {
+        "id": str(s.id),
+        "user_id": s.user_id,
+        "user_name": s.user_name,
+        "role": s.role,
+        "ip_address": s.ip_address,
+        "user_agent": s.user_agent,
+        "created_at": s.created_at,
+        "expires_at": s.expires_at,
+        "current": s.current,
     }
 
 

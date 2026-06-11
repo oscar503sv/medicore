@@ -56,6 +56,23 @@ class TestUsers:
         )
         assert resp.status_code == 200
 
+    def test_admin_lists_and_revokes_user_sessions(self, seed, client, admin_headers, auth_headers):
+        # auth_headers logged the doctor in → one live session
+        resp = client.get(f"/api/v1/users/{seed.doctor.id}/sessions", headers=admin_headers)
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["user_name"] == seed.doctor.name
+
+        resp = client.delete(f"/api/v1/users/{seed.doctor.id}/sessions", headers=admin_headers)
+        assert resp.status_code == 204
+        # the doctor's token is dead immediately
+        assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 401
+
+    def test_non_admin_cannot_view_sessions(self, seed, client, auth_headers):
+        resp = client.get(f"/api/v1/users/{seed.nurse.id}/sessions", headers=auth_headers)
+        assert resp.status_code == 403
+
     def test_duplicate_email_rejected(self, seed, client, admin_headers):
         resp = client.post(
             "/api/v1/users",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -51,3 +53,19 @@ class UpdateMyProfileRequest(BaseModel):
     name: str | None = None
     phone: str | None = None
     bio: str | None = None
+
+
+class SessionInfoResponse(BaseModel):
+    id: str
+    user_id: str
+    user_name: str | None = None
+    role: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
+    created_at: datetime
+    expires_at: datetime
+    current: bool = False
+
+
+class SessionListResponse(BaseModel):
+    items: list[SessionInfoResponse]

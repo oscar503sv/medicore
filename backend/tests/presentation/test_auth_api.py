@@ -98,6 +98,36 @@ def test_logout_revokes_the_server_side_session(seed, client):
     assert resp.status_code == 401
 
 
+def test_list_and_revoke_my_sessions(seed, client):
+    from tests.presentation.conftest import bearer_login
+
+    payload = {"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD}
+    other = bearer_login(client, "/api/v1/auth/login", payload)
+    current = bearer_login(client, "/api/v1/auth/login", payload)
+
+    items = client.get("/api/v1/auth/me/sessions", headers=current).json()["items"]
+    assert len(items) == 2
+    assert sum(1 for i in items if i["current"]) == 1
+
+    remote = next(i for i in items if not i["current"])
+    resp = client.delete(f"/api/v1/auth/me/sessions/{remote['id']}", headers=current)
+    assert resp.status_code == 204
+    # the revoked session can no longer authenticate; the current one still can
+    assert client.get("/api/v1/auth/me", headers=other).status_code == 401
+    items = client.get("/api/v1/auth/me/sessions", headers=current).json()["items"]
+    assert len(items) == 1 and items[0]["current"]
+
+
+def test_cannot_revoke_a_foreign_session(seed, client, auth_headers, admin_headers):
+    admin_items = client.get("/api/v1/auth/me/sessions", headers=admin_headers).json()["items"]
+    resp = client.delete(
+        f"/api/v1/auth/me/sessions/{admin_items[0]['id']}", headers=auth_headers
+    )
+    assert resp.status_code == 404
+    # the admin session is untouched
+    assert client.get("/api/v1/auth/me", headers=admin_headers).status_code == 200
+
+
 def test_revoked_session_rejected_even_with_valid_token(seed, client, auth_headers):
     assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 200
 

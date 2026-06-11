@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
+from medicore.application.use_cases.sessions import (
+    ListUserSessions,
+    RevokeAllUserSessions,
+    RevokeUserSession,
+)
 from medicore.application.use_cases.users import (
     InviteUser,
     InviteUserCommand,
@@ -17,8 +22,9 @@ from medicore.application.use_cases.users import (
 )
 from medicore.domain.enums import Role, Sex
 from medicore.domain.repositories._support import Paging, UserFilter
-from medicore.domain.shared.identifiers import UserId
+from medicore.domain.shared.identifiers import SessionId, UserId
 from medicore.presentation.dependencies import Actor, Clock, Hasher, UoW
+from medicore.presentation.schemas.auth import SessionListResponse
 from medicore.presentation.schemas.users import (
     InviteUserRequest,
     ResetPasswordRequest,
@@ -27,7 +33,7 @@ from medicore.presentation.schemas.users import (
     UserListResponse,
     UserResponse,
 )
-from medicore.presentation.serializers import ser_user
+from medicore.presentation.serializers import ser_session_info, ser_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -94,6 +100,24 @@ def suspend_user(user_id: str, actor: Actor, uow: UoW, clock: Clock):
 def reactivate_user(user_id: str, actor: Actor, uow: UoW, clock: Clock):
     user = ReactivateUser(uow, clock).execute(actor, UserId.parse(user_id))
     return ser_user(user)
+
+
+@router.get("/{user_id}/sessions", response_model=SessionListResponse)
+def list_user_sessions(user_id: str, actor: Actor, uow: UoW, clock: Clock):
+    sessions = ListUserSessions(uow, clock).execute(actor, UserId.parse(user_id))
+    return SessionListResponse(items=[ser_session_info(s) for s in sessions])
+
+
+@router.delete("/{user_id}/sessions/{session_id}", status_code=204)
+def revoke_user_session(user_id: str, session_id: str, actor: Actor, uow: UoW, clock: Clock):
+    RevokeUserSession(uow, clock).execute(
+        actor, UserId.parse(user_id), SessionId.parse(session_id)
+    )
+
+
+@router.delete("/{user_id}/sessions", status_code=204)
+def revoke_all_user_sessions(user_id: str, actor: Actor, uow: UoW, clock: Clock):
+    RevokeAllUserSessions(uow, clock).execute(actor, UserId.parse(user_id))
 
 
 @router.post("/{user_id}/reset-password", response_model=UserResponse)
