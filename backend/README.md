@@ -95,6 +95,7 @@ Copia `.env.example` a `.env` y ajusta los valores:
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Expiración de sesiones de soporte/impersonación | `60` (1 h) |
 | `CORS_ORIGINS` | Orígenes permitidos (coma-separados); `*` solo en desarrollo | `*` |
 | `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` (dev) / `false` (prod, salvo opt-in explícito) |
+| `TRUSTED_PROXIES` | IPs/CIDRs (coma-separados) de los reverse-proxies cuya cabecera `X-Forwarded-For` se honra (p. ej. `127.0.0.1` o `10.0.0.0/8`). Vacío → la cabecera se ignora y se registra la IP del socket. Un valor inválido impide el arranque. | vacío |
 
 > En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue
 > siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*`. Además los docs
@@ -131,7 +132,7 @@ python -m venv .venv
 
 ## Pruebas y linting
 
-Suite de **403 tests** (89 dominio · 168 aplicación · 108 presentación · 38 infraestructura), casi
+Suite de **415 tests** (89 dominio · 168 aplicación · 120 presentación · 38 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
@@ -169,8 +170,14 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 - `JWT_SECRET` fuerte (`openssl rand -hex 32`) — la app no arranca si es inseguro.
 - `DATABASE_URL` apuntando a la base de datos real.
 - `CORS_ORIGINS` con los orígenes del frontend (no `*`).
+- `TRUSTED_PROXIES` con la IP del reverse-proxy (p. ej. `127.0.0.1` si nginx corre en el
+  mismo host) para que la auditoría registre la IP real del cliente.
 - Opcional: `ENABLE_DOCS=false` para ocultar Swagger/OpenAPI.
 
 > Para varios workers: `uvicorn ... --workers N` (sobreescribiendo el `CMD`) o un gestor de procesos.
-> La app se sirve detrás de un reverse-proxy que termina TLS y reenvía `X-Forwarded-For`
-> (la auditoría registra la IP del cliente a partir de esa cabecera).
+> La app se sirve detrás de un reverse-proxy que termina TLS y reenvía `X-Forwarded-For`.
+> La cabecera **solo se honra** si la conexión viene de un proxy listado en
+> `TRUSTED_PROXIES` (recorriendo la cadena de derecha a izquierda y descartando los hops
+> confiables); en cualquier otro caso se registra la IP del socket. La imagen arranca
+> uvicorn con `--no-proxy-headers` para que la app sea la única que interprete la
+> cabecera — mantenlo así si sobreescribes el `CMD`.

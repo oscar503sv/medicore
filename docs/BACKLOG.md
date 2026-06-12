@@ -47,16 +47,16 @@ ya se consulta en cada request autenticado):
 - **Revocación de sesiones**: tabla `sessions` + claim `sid` en el JWT validada en cada
   request; logout real, cambio de contraseña revoca las demás sesiones, suspensión/reset
   revoca todas, y las sesiones de soporte (impersonación) también son revocables.
+- **`X-Forwarded-For` confiable**: la cabecera solo se honra desde proxies listados en
+  `TRUSTED_PROXIES` (IPs/CIDRs; cadena recorrida de derecha a izquierda descartando hops
+  confiables); vacío → se registra la IP del socket. La imagen Docker arranca uvicorn con
+  `--no-proxy-headers` para que la app sea la única que interprete la cabecera.
 
 Pendiente, en orden de valor aproximado:
 
-1. **`X-Forwarded-For` confiable** — `_client_ip()` en `presentation/dependencies.py` toma
-   la cabecera sin validar que venga de un proxy de confianza; la IP registrada en
-   auditoría es spoofeable si la app se expone sin reverse-proxy. Solución: lista de
-   proxies de confianza configurable.
-2. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
+1. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
    (`use_cases/auth.py`). NIST sugiere ≥12 o chequeo de entropía (zxcvbn).
-3. **Enumeración de organizaciones en login** — el formulario de login revela si un slug
+2. **Enumeración de organizaciones en login** — el formulario de login revela si un slug
    de organización existe (mensaje distinto). Riesgo bajo: los slugs son semi-públicos.
-4. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
+3. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
    explícitamente de desarrollo, pero podría generar una contraseña aleatoria e imprimirla.
