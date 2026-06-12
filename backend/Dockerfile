@@ -24,4 +24,7 @@ USER appuser
 EXPOSE 8000
 
 # Single worker by default; scale with --workers N or run behind a process manager.
-CMD ["uvicorn", "medicore.presentation.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --no-proxy-headers: the app resolves X-Forwarded-For itself against TRUSTED_PROXIES;
+# uvicorn's own (default-on) proxy handling would rewrite request.client first and
+# bypass that single source of truth.
+CMD ["uvicorn", "medicore.presentation.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]

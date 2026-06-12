@@ -48,6 +48,19 @@ def test_login_unknown_org(seed, client):
     assert resp.status_code == 401
 
 
+def test_spoofed_forwarded_for_is_ignored(seed, client):
+    # With no TRUSTED_PROXIES configured (the default), the header is hostile input:
+    # the session row must not record the forged address.
+    resp = client.post(
+        "/api/v1/auth/login",
+        json={"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
+        headers={"X-Forwarded-For": "6.6.6.6"},
+    )
+    assert resp.status_code == 200
+    ips = {s.ip_address for s in seed.factory.store.sessions.values()}
+    assert "6.6.6.6" not in ips
+
+
 def test_login_lockout_returns_429_with_retry_after(seed, client):
     bad = {"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": "wrong"}
     for _ in range(5):

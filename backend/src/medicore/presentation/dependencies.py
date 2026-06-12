@@ -23,11 +23,13 @@ from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
 from medicore.infrastructure.auth.jwt_token_issuer import JwtTokenIssuer
 from medicore.infrastructure.auth.system_clock import SystemClock
+from medicore.infrastructure.config import get_settings
 from medicore.infrastructure.database.engine import get_session_factory
 from medicore.infrastructure.persistence.unit_of_work import (
     SqlAlchemyUnitOfWork,
     SqlAlchemyUnitOfWorkFactory,
 )
+from medicore.presentation.client_ip import resolve_client_ip
 from medicore.presentation.cookies import (
     CSRF_COOKIE,
     CSRF_HEADER,
@@ -57,12 +59,14 @@ def get_uow_factory() -> SqlAlchemyUnitOfWorkFactory:
 # ── Authentication ─────────────────────────────────────────────────────────────
 
 def _client_ip(request: Request) -> str | None:
-    """Best-effort client IP: first ``X-Forwarded-For`` hop, else the socket peer."""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    first = forwarded.split(",")[0].strip() if forwarded else ""
-    if first:
-        return first
-    return request.client.host if request.client else None
+    """Client IP for audit trails: ``X-Forwarded-For`` is honored only when the request
+    comes through a proxy listed in ``TRUSTED_PROXIES`` (else it is spoofable noise and
+    the socket peer is used)."""
+    return resolve_client_ip(
+        request.client.host if request.client else None,
+        request.headers.get("x-forwarded-for"),
+        get_settings().trusted_proxy_networks,
+    )
 
 
 def _session_token(request: Request, authorization: str | None, cookie_name: str) -> str:

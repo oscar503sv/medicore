@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from functools import lru_cache
 
 from pydantic import model_validator
@@ -13,6 +14,25 @@ _INSECURE_SECRETS = {
     "change-me",
     "cambia-esto-en-produccion-usa-openssl-rand-hex-32",
 }
+
+TrustedNetworks = tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]
+
+
+@lru_cache
+def _parse_networks(spec: str) -> TrustedNetworks:
+    """Parse a comma-separated list of IPs/CIDRs (e.g. "127.0.0.1, 10.0.0.0/8")."""
+    networks = []
+    for value in spec.split(","):
+        value = value.strip()
+        if not value:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(value, strict=False))
+        except ValueError as exc:
+            raise ValueError(
+                f"TRUSTED_PROXIES contains an invalid IP or CIDR: {value!r}"
+            ) from exc
+    return tuple(networks)
 
 
 class Settings(BaseSettings):
@@ -29,6 +49,9 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     # Expose Swagger/OpenAPI docs. Consider disabling in production.
     enable_docs: bool = True
+    # Reverse proxies whose X-Forwarded-For we honor (comma-separated IPs/CIDRs).
+    # Empty (default) means the header is ignored and the socket peer is the client IP.
+    trusted_proxies: str = ""
 
     @property
     def is_production(self) -> bool:
@@ -40,6 +63,16 @@ class Settings(BaseSettings):
         if value == "*":
             return ["*"]
         return [o.strip() for o in value.split(",") if o.strip()]
+
+    @property
+    def trusted_proxy_networks(self) -> TrustedNetworks:
+        return _parse_networks(self.trusted_proxies)
+
+    @model_validator(mode="after")
+    def _validate_trusted_proxies(self) -> Settings:
+        # Fail fast on a typo'd CIDR rather than silently distrusting the proxy.
+        _parse_networks(self.trusted_proxies)
+        return self
 
     @model_validator(mode="after")
     def _enforce_production_secret(self) -> Settings:
