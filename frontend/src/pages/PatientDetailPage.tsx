@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, ArrowLeft, Lock, Pencil, RotateCcw } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -41,6 +41,21 @@ export function PatientDetailPage() {
   // not a grantable capability); the clinical tabs follow records.view.
   const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
   const canClinical = useAuthStore((s) => s.can('records.view'))
+
+  // Deep links (e.g. from a notification): ?tab= selects a tab the user may open and
+  // ?record= opens that record. Re-applied when the params change on a mounted page.
+  const [searchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const recordParam = searchParams.get('record')
+  useEffect(() => {
+    const allowed: Tab[] = [
+      'summary',
+      ...(isDoctor ? (['history'] as const) : []),
+      ...(canClinical ? (['prescriptions', 'vitals', 'documents'] as const) : []),
+    ]
+    if (tabParam && allowed.includes(tabParam as Tab)) setTab(tabParam as Tab)
+    if (recordParam && isDoctor) setOpenRecordId(recordParam)
+  }, [id, tabParam, recordParam, isDoctor, canClinical])
 
   const { data, isLoading } = useQuery({
     queryKey: ['patient', id],

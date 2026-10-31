@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, LogOut, Monitor, Moon, Sun } from 'lucide-react'
+import { LogOut, Monitor, Moon, Sun } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore, type Theme } from '@/stores/ui'
 import { Avatar } from '@/components/ui/Avatar'
+import { NotificationBell } from './NotificationBell'
 
 export function Topbar() {
   const t = useT()
@@ -39,10 +40,7 @@ export function Topbar() {
         <ThemeIcon className="h-[18px] w-[18px]" />
       </button>
 
-      <button className="relative rounded-md p-2 text-tx-2 hover:bg-surface-2">
-        <Bell className="h-[18px] w-[18px]" />
-        <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-pill bg-accent" />
-      </button>
+      <NotificationBell />
 
       <div className="relative ml-1">
         <button onClick={() => setMenuOpen((v) => !v)} className="flex items-center gap-2 rounded-lg p-1 hover:bg-surface-2">

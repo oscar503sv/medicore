@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns'
+import { format, formatDistanceToNowStrict, parseISO } from 'date-fns'
 import { enUS, es } from 'date-fns/locale'
 import { formatInTimeZone } from 'date-fns-tz'
 import { useAuthStore } from '@/stores/auth'
@@ -59,6 +59,12 @@ export function fmtDateTimeTz(iso: string | null | undefined): string {
 export function fmtTimeTz(iso: string | null | undefined): string {
   if (!iso) return '—'
   return formatInTimeZone(iso, clinicTz(), 'HH:mm')
+}
+
+/** "hace 5 minutos" / "5 minutes ago" — timezone-independent, for recent events. */
+export function fmtRelative(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return formatDistanceToNowStrict(parseISO(iso), { addSuffix: true, locale: locale() })
 }
 
 /** Today's date (yyyy-MM-dd) in the clinic's timezone — for agenda/day defaults. */

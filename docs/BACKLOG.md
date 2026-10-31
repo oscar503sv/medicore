@@ -7,10 +7,12 @@ conviene revisar que las referencias sigan vigentes.
 ## Funcionalidad incompleta (backend tiene más de lo que se usa)
 
 ### Sistema de notificaciones
-Backend completo (emisión desde citas, enmiendas, documentos y gestión de usuarios; router
-`/notifications`). **Falta**: la UI —campana del Topbar con contador real y desplegable— y,
-más adelante, canales externos (email/push/SMS, que ya tienen preferencias por usuario
-guardadas pero ningún proveedor) y recordatorios, que requieren un scheduler.
+Notificaciones in-app completas: emisión desde citas, enmiendas, documentos y gestión de
+usuarios; router `/notifications`; campana del Topbar con contador (sondeo cada 60 s) y
+desplegable con enlaces directos (`/appointments?date=`, `/patients/:id?tab=…&record=…`).
+**Falta**: canales externos (email/push/SMS — las preferencias por usuario ya se guardan pero
+no hay proveedor, y la sección "Notificaciones" de Ajustes sigue "en desarrollo") y
+recordatorios de citas, que requieren un scheduler.
 
 ### Otros cabos sueltos
 - Caso de uso `AttachDocument` (`application/use_cases/consultations.py`) sin endpoint:

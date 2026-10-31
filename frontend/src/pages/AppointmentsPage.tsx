@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarCheck, CalendarClock, Check, CheckCheck, Clock, Plus, Search, Stethoscope, UserX, X } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
@@ -31,7 +31,13 @@ export function AppointmentsPage() {
   const qc = useQueryClient()
   const canConsult = useAuthStore((s) => s.can('consultations.start'))
   const canManage = useAuthStore((s) => s.can('appointments.manage'))
-  const [date, setDate] = useState(clinicToday())
+  const [searchParams] = useSearchParams()
+  const dateParam = searchParams.get('date')
+  const [date, setDate] = useState(dateParam ?? clinicToday())
+  // Deep links (e.g. from a notification) can change ?date= while the page stays mounted.
+  useEffect(() => {
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) setDate(dateParam)
+  }, [dateParam])
   const [modalOpen, setModalOpen] = useState(false)
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
   const [noShowTarget, setNoShowTarget] = useState<Appointment | null>(null)

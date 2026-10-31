@@ -75,6 +75,28 @@ export interface AuthSessionInfo {
   current: boolean
 }
 
+// ── Notifications ──────────────────────────────────────────────────────────────
+// The backend stores what happened (type + data); the client renders the text.
+
+export type NotificationType =
+  | 'appointment.created'
+  | 'appointment.rescheduled'
+  | 'appointment.cancelled'
+  | 'appointment.no_show'
+  | 'record.amended'
+  | 'document.uploaded'
+  | 'user.created'
+  | 'user.role_changed'
+
+export interface AppNotification {
+  id: string
+  type: NotificationType | string
+  /** Ids for linking plus display labels frozen at emission time (all strings). */
+  data: Record<string, string>
+  read_at: string | null
+  created_at: string
+}
+
 // ── Platform (superadmin) ──────────────────────────────────────────────────────
 export type TenantStatus = 'active' | 'suspended' | 'archived'
 export type IcdVersion = 'cie10' | 'cie11'
