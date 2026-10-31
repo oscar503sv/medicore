@@ -10,9 +10,8 @@ conviene revisar que las referencias sigan vigentes.
 Notificaciones in-app completas: emisión desde citas, enmiendas, documentos y gestión de
 usuarios; router `/notifications`; campana del Topbar con contador (sondeo cada 60 s) y
 desplegable con enlaces directos (`/appointments?date=`, `/patients/:id?tab=…&record=…`).
-**Falta**: canales externos (email/push/SMS — las preferencias por usuario ya se guardan pero
-no hay proveedor, y la sección "Notificaciones" de Ajustes sigue "en desarrollo") y
-recordatorios de citas, que requieren un scheduler.
+Canales externos y recordatorios quedan planificados como evolución futura (ver
+[A futuro](#a-futuro)).
 
 ### Otros cabos sueltos
 - Caso de uso `AttachDocument` (`application/use_cases/consultations.py`) sin endpoint:
@@ -23,6 +22,32 @@ recordatorios de citas, que requieren un scheduler.
   `ComingSoonPage` de forma intencional (badge "Próximamente" en el sidebar).
 - El almacenamiento de documentos médicos guarda **solo metadata** (nombre, mime, tamaño,
   `storage_key`); no hay backend de archivos (S3/disco). La UI lo comunica explícitamente.
+
+## A futuro
+
+Funcionalidad planificada para una siguiente etapa del producto, sin fecha.
+
+### Notificaciones por canales externos
+Avisar también fuera de la app (hoy solo existe la campana in-app). Base ya presente: las
+preferencias por usuario y tema (`appointments`, `reminders`, `lab_results`,
+`internal_messages`, `weekly_reports`) con canal `email | push | sms | none` se guardan
+(`domain/value_objects/user_preferences.py`), pero nada las lee: no hay endpoint, ni
+pantalla (la sección "Notificaciones" de Ajustes sigue "en desarrollo"), ni proveedor de
+envío.
+
+Requiere: puerto + adaptador de envío (SMTP o un servicio tipo SendGrid/Twilio), respetar
+las preferencias al emitir cada notificación, pantalla de preferencias en el perfil y
+envío en segundo plano para no bloquear la petición.
+
+### Recordatorios de citas
+Avisos disparados por tiempo: recordatorio al paciente (p. ej. 24 h antes) para reducir
+inasistencias y, opcionalmente, resumen diario de agenda para el médico. Requiere un
+proceso programado (cron/worker) idempotente que busque citas próximas y no repita
+envíos; usa los datos de contacto de la ficha del paciente. Depende de los canales
+externos: el paciente no usa la app.
+
+Orden sugerido: (1) email, el canal más simple y barato; (2) recordatorios de cita a
+pacientes por email; (3) SMS/WhatsApp, con coste por mensaje y proveedor externo.
 
 ## Seguridad — diferido conscientemente
 
