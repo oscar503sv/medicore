@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.patient import Patient
@@ -49,6 +51,9 @@ class SqlPatientRepository:
         return Page(
             items=[to_patient(r) for r in rows], total=total, offset=pg.offset, limit=pg.limit
         )
+
+    def count_created_since(self, since: datetime) -> int:
+        return self._q().filter(PatientModel.created_at >= since).count()
 
     def search(self, query: str, paging: Paging | None = None) -> Page[Patient]:
         term = f"%{query.strip().lower()}%"

@@ -85,6 +85,10 @@ En cifras: **16 entidades** y **10 value objects** de dominio, **16 repositorios
   nombres de archivo) y el cliente redacta el texto en su idioma. Router `notifications`:
   listado paginado, contador de no leídas, marcar una / todas; las leídas con más de 90 días
   se purgan al marcar. Durante una impersonación se pueden leer pero no se marcan como leídas.
+- **Panel** (`GET /dashboard/summary`): métricas reales del día —citas (sin canceladas) y
+  pendientes, pacientes registrados y ocupación de la agenda (franjas reservadas sobre franjas
+  dentro del horario)— comparadas con el mismo día de la semana anterior. Un médico ve solo su
+  agenda; los demás roles, la clínica entera. Sin permiso para una métrica, esta llega como `null`.
 - **Auditoría (HIPAA/GDPR)** por tenant y consola global de plataforma; cada acción guarda un
   `subject` legible en su metadata para una columna de detalle útil.
 - **Consola de plataforma** (superadmin): alta/gestión de clínicas, estadísticas globales,
@@ -141,7 +145,7 @@ python -m venv .venv
 
 ## Pruebas y linting
 
-Suite de **451 tests** (89 dominio · 193 aplicación · 127 presentación · 42 infraestructura), casi
+Suite de **460 tests** (89 dominio · 200 aplicación · 129 presentación · 42 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 

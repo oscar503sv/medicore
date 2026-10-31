@@ -349,6 +349,9 @@ class InMemoryDoctorProfileRepository(_Scoped):
 
 
 class InMemoryPatientRepository(_Scoped):
+    def count_created_since(self, since: datetime) -> int:
+        return sum(1 for p in self._mine(self._store.patients.values()) if p.created_at >= since)
+
     def get_by_id(self, patient_id: PatientId) -> Patient | None:
         p = self._store.patients.get(patient_id.value)
         return p if p and p.tenant_id == self._tenant else None

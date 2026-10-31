@@ -9,12 +9,15 @@ export function StatCard({
   value,
   unit,
   delta,
+  deltaSuffix = '%',
 }: {
   icon: LucideIcon
   label: string
   value: string
   unit?: string
-  delta?: number
+  /** Change vs. last week; null/undefined hides the trend line (no baseline). */
+  delta?: number | null
+  deltaSuffix?: string
 }) {
   const t = useT()
   return (
@@ -27,7 +30,7 @@ export function StatCard({
         {value}
         {unit && <span className="ml-2 font-sans text-sm text-tx-3">{unit}</span>}
       </p>
-      {delta !== undefined && (
+      {delta != null && (
         <div className="mt-1 flex items-center gap-1 text-[13px]">
           {delta >= 0 ? (
             <TrendingUp className="h-3.5 w-3.5 text-ok" />
@@ -36,7 +39,8 @@ export function StatCard({
           )}
           <span className={delta >= 0 ? 'text-ok' : 'text-danger'}>
             {delta >= 0 ? '+' : ''}
-            {delta}%
+            {delta}
+            {deltaSuffix}
           </span>
           <span className="text-tx-4">{t('dash.vs_last_week')}</span>
         </div>

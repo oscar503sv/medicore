@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { Activity, CalendarCheck, Clock, Users } from 'lucide-react'
+import { Activity, CalendarCheck, Hourglass, Users } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
+import { dashboardApi } from '@/api/dashboard'
 import { patientsApi } from '@/api/patients'
 import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
@@ -33,21 +34,41 @@ export function DashboardPage() {
     queryFn: () => patientsApi.list({ limit: 5 }),
   })
 
+  const { data: summary } = useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: dashboardApi.summary,
+  })
+
   if (isLoading) return <PageLoader />
 
   const appts = appointments ?? []
-  const completed = appts.filter((a) => a.status === 'completed').length
-  const occupancy = appts.length ? Math.round((completed / appts.length) * 100) : 0
+  const num = (v: number | null | undefined) => (v == null ? '—' : String(v))
 
   return (
     <div className="space-y-6 p-8">
       <PageHeader eyebrow={fmtNow('EEEE, d MMMM')} title={`${t(greetingKey)}, ${who}`} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={CalendarCheck} label={t('dash.today_appointments')} value={String(appts.length)} delta={12} />
-        <StatCard icon={Users} label={t('dash.patients')} value={String(patients?.total ?? 0)} delta={4} />
-        <StatCard icon={Activity} label={t('dash.occupancy')} value={`${occupancy}%`} delta={-3} />
-        <StatCard icon={Clock} label={t('dash.avg_wait')} value="12 min" delta={-8} />
+        <StatCard
+          icon={CalendarCheck}
+          label={t('dash.today_appointments')}
+          value={num(summary?.appointments_today)}
+          delta={summary?.appointments_delta_pct}
+        />
+        <StatCard
+          icon={Users}
+          label={t('dash.patients')}
+          value={num(summary?.patients_total)}
+          delta={summary?.patients_delta_pct}
+        />
+        <StatCard
+          icon={Activity}
+          label={t('dash.occupancy')}
+          value={summary?.occupancy_pct == null ? '—' : `${summary.occupancy_pct}%`}
+          delta={summary?.occupancy_delta_pts}
+          deltaSuffix={` ${t('dash.points')}`}
+        />
+        <StatCard icon={Hourglass} label={t('dash.pending_today')} value={num(summary?.pending_today)} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
