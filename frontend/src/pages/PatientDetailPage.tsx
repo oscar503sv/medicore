@@ -124,7 +124,7 @@ export function PatientDetailPage() {
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-tx-3">
             <span className="font-mono">{p.code}</span>
-            <span>{p.age} años</span>
+            <span>{t('patient.age_years').replace('{n}', String(p.age))}</span>
             <span>{p.sex === 'male' ? 'Masculino' : p.sex === 'female' ? 'Femenino' : 'Otro'}</span>
             {p.blood_type && <span>Grupo {p.blood_type}</span>}
             {p.status === 'inactive' && <Badge tone="neutral">{t('patients.inactive')}</Badge>}

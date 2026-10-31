@@ -65,7 +65,7 @@ export function DashboardPage() {
               </div>
             ))}
             {appts.length === 0 && (
-              <p className="px-5 py-8 text-center text-sm text-tx-3">Sin citas para hoy</p>
+              <p className="px-5 py-8 text-center text-sm text-tx-3">{t('dash.no_appointments_today')}</p>
             )}
           </div>
         </Card>
@@ -82,7 +82,7 @@ export function DashboardPage() {
                   </p>
                   <p className="font-mono text-xs text-tx-3">{p.code}</p>
                 </div>
-                <span className="text-xs text-tx-3">{p.age} años</span>
+                <span className="text-xs text-tx-3">{t('patient.age_years').replace('{n}', String(p.age))}</span>
               </div>
             ))}
           </div>

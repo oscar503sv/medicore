@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
+import { useT } from '@/lib/i18n'
 
 export function StatCard({
   icon: Icon,
@@ -15,6 +16,7 @@ export function StatCard({
   unit?: string
   delta?: number
 }) {
+  const t = useT()
   return (
     <Card className="p-5">
       <div className="flex items-center justify-between">
@@ -36,7 +38,7 @@ export function StatCard({
             {delta >= 0 ? '+' : ''}
             {delta}%
           </span>
-          <span className="text-tx-4">vs semana anterior</span>
+          <span className="text-tx-4">{t('dash.vs_last_week')}</span>
         </div>
       )}
     </Card>
