@@ -1,91 +1,91 @@
-# Backlog — trabajo diferido y hallazgos pendientes
+# Backlog — deferred work and pending findings
 
-Inventario de funcionalidad a medio implementar y de hallazgos de seguridad que se decidió
-**documentar pero no abordar todavía** (auditoría de junio 2026). Cuando se retome alguno,
-conviene revisar que las referencias sigan vigentes.
+**English** · [Español](BACKLOG.es.md)
 
-## Funcionalidad incompleta (backend tiene más de lo que se usa)
+An inventory of partially implemented functionality and of security findings that were
+**documented but deliberately not addressed yet** (June 2026 audit). When picking one up, check
+that the references are still accurate.
 
-### Sistema de notificaciones
-Notificaciones in-app completas: emisión desde citas, enmiendas, documentos y gestión de
-usuarios; router `/notifications`; campana del Topbar con contador (sondeo cada 60 s) y
-desplegable con enlaces directos (`/appointments?date=`, `/patients/:id?tab=…&record=…`).
-Canales externos y recordatorios quedan planificados como evolución futura (ver
-[A futuro](#a-futuro)).
+## Incomplete functionality (the backend has more than is used)
 
-### Otros cabos sueltos
-- Caso de uso `AttachDocument` (`application/use_cases/consultations.py`) sin endpoint:
-  adjuntar documentos a una consulta en curso no es alcanzable vía API.
-- Value object `Money` (`domain/value_objects/money.py`) sin uso — presumiblemente
-  reservado para facturación.
-- Rutas del frontend `/applications`, `/procedures`, `/vaccination` apuntan a
-  `ComingSoonPage` de forma intencional (badge "Próximamente" en el sidebar).
-- El almacenamiento de documentos médicos guarda **solo metadata** (nombre, mime, tamaño,
-  `storage_key`); no hay backend de archivos (S3/disco). La UI lo comunica explícitamente.
+### Notification system
+Complete in-app notifications: emitted from appointments, amendments, documents and user
+management; `/notifications` router; a bell in the top bar with an unread counter (polled every
+60 s) and a dropdown with deep links (`/appointments?date=`, `/patients/:id?tab=…&record=…`).
+External channels and reminders are planned as a future evolution (see [Future](#future)).
 
-## A futuro
+### Other loose ends
+- The `AttachDocument` use case (`application/use_cases/consultations.py`) has no endpoint:
+  attaching documents to a consultation in progress isn't reachable through the API.
+- The `Money` value object (`domain/value_objects/money.py`) is unused — presumably reserved
+  for billing.
+- The frontend routes `/applications`, `/procedures` and `/vaccination` intentionally point to
+  `ComingSoonPage` ("Coming soon" badge in the sidebar).
+- Medical document storage keeps **metadata only** (name, mime type, size, `storage_key`);
+  there is no file backend (S3/disk). The UI says so explicitly.
 
-Funcionalidad planificada para una siguiente etapa del producto, sin fecha.
+## Future
 
-### Notificaciones por canales externos
-Avisar también fuera de la app (hoy solo existe la campana in-app). Base ya presente: las
-preferencias por usuario y tema (`appointments`, `reminders`, `lab_results`,
-`internal_messages`, `weekly_reports`) con canal `email | push | sms | none` se guardan
-(`domain/value_objects/user_preferences.py`), pero nada las lee: no hay endpoint, ni
-pantalla (la sección "Notificaciones" de Ajustes sigue "en desarrollo"), ni proveedor de
-envío.
+Functionality planned for a later stage of the product, with no set date.
 
-Requiere: puerto + adaptador de envío (SMTP o un servicio tipo SendGrid/Twilio), respetar
-las preferencias al emitir cada notificación, pantalla de preferencias en el perfil y
-envío en segundo plano para no bloquear la petición.
+### Notifications through external channels
+Notify people outside the app too (today only the in-app bell exists). The groundwork is in
+place: per-user, per-topic preferences (`appointments`, `reminders`, `lab_results`,
+`internal_messages`, `weekly_reports`) with an `email | push | sms | none` channel are stored
+(`domain/value_objects/user_preferences.py`), but nothing reads them: there is no endpoint, no
+screen (the "Notifications" section in Settings is still "in development") and no delivery
+provider.
 
-### Recordatorios de citas
-Avisos disparados por tiempo: recordatorio al paciente (p. ej. 24 h antes) para reducir
-inasistencias y, opcionalmente, resumen diario de agenda para el médico. Requiere un
-proceso programado (cron/worker) idempotente que busque citas próximas y no repita
-envíos; usa los datos de contacto de la ficha del paciente. Depende de los canales
-externos: el paciente no usa la app.
+Requires: a delivery port + adapter (SMTP or a service such as SendGrid/Twilio), honoring the
+preferences when emitting each notification, a preferences screen in the profile, and
+background delivery so requests aren't blocked.
 
-Orden sugerido: (1) email, el canal más simple y barato; (2) recordatorios de cita a
-pacientes por email; (3) SMS/WhatsApp, con coste por mensaje y proveedor externo.
+### Appointment reminders
+Time-triggered notices: a reminder to the patient (e.g. 24 h before) to reduce no-shows and,
+optionally, a daily schedule summary for the doctor. Requires an idempotent scheduled process
+(cron/worker) that finds upcoming appointments without sending duplicates; it uses the contact
+details from the patient's file. Depends on the external channels: patients don't use the app.
 
-## Seguridad — diferido conscientemente
+Suggested order: (1) email, the simplest and cheapest channel; (2) appointment reminders to
+patients by email; (3) SMS/WhatsApp, with a per-message cost and an external provider.
 
-Quick wins ya aplicados (jun 2026): login en tiempo constante, validación de CORS/docs en
-producción, security headers, validación de metadata de uploads, auditoría de lectura de
-expediente (`patient.chart_viewed`) y `startswith` en el filtro de auditoría. Además, el
-token de sesión ya no se guarda en localStorage: vive en una cookie httpOnly
-(SameSite=Lax, Secure en producción) con CSRF double-submit (`mc_csrf` +
-`X-CSRF-Token`); el header `Authorization: Bearer` sigue aceptándose para clientes API.
-También: tests de integración del repo SQL de auditoría contra PostgreSQL real
-(`tests/infrastructure/test_audit_repository_sql.py` — destaparon y corrigieron un escape
-de comodines LIKE faltante en los filtros de categoría) y CSP estricta inyectada en el
-build de la SPA (meta en `dist/index.html` vía plugin de Vite; el header completo con
-`frame-ancestors` queda documentado para el reverse-proxy en el README del frontend).
+## Security — consciously deferred
 
-Resueltos en jun 2026 (sin Redis — el contador y las sesiones viven en PostgreSQL, que
-ya se consulta en cada request autenticado):
+Quick wins already applied (June 2026): constant-time login, CORS/docs validation in
+production, security headers, upload metadata validation, auditing of chart reads
+(`patient.chart_viewed`) and `startswith` in the audit filter. In addition, the session token
+is no longer stored in localStorage: it lives in an httpOnly cookie (SameSite=Lax, Secure in
+production) with double-submit CSRF (`mc_csrf` + `X-CSRF-Token`); the
+`Authorization: Bearer` header is still accepted for API clients. Also: integration tests of
+the SQL audit repository against real PostgreSQL
+(`tests/infrastructure/test_audit_repository_sql.py` — they uncovered and fixed a missing
+LIKE wildcard escape in the category filters) and a strict CSP injected into the SPA build
+(meta tag in `dist/index.html` through a Vite plugin; the full header with `frame-ancestors`
+is documented for the reverse proxy in the frontend README).
 
-- **Lockout en login**: contador de fallos en BD por `(slug, email)` con lockout temporal
-  y backoff exponencial (5 fallos → 1 min, duplicando hasta 15); responde 429 con
-  `Retry-After`, cuenta también cuentas inexistentes (anti-enumeración) y audita
+Resolved in June 2026 (without Redis — the counter and the sessions live in PostgreSQL, which
+is already queried on every authenticated request):
+
+- **Login lockout**: a failure counter in the DB per `(slug, email)` with a temporary lockout
+  and exponential backoff (5 failures → 1 min, doubling up to 15); answers 429 with
+  `Retry-After`, also counts non-existent accounts (anti-enumeration) and audits
   `auth.login_locked`.
-- **Revocación de sesiones**: tabla `sessions` + claim `sid` en el JWT validada en cada
-  request; logout real, cambio de contraseña revoca las demás sesiones, suspensión/reset
-  revoca todas, y las sesiones de soporte (impersonación) también son revocables.
-- **`X-Forwarded-For` confiable**: la cabecera solo se honra desde proxies listados en
-  `TRUSTED_PROXIES` (IPs/CIDRs; cadena recorrida de derecha a izquierda descartando hops
-  confiables); vacío → se registra la IP del socket. La imagen Docker arranca uvicorn con
-  `--no-proxy-headers` para que la app sea la única que interprete la cabecera.
-- **Enumeración de organizaciones en login**: un slug inexistente o inválido responde
-  igual que una contraseña incorrecta (`invalid credentials`) y ejecuta el verify contra
-  el hash dummy, así que ni el mensaje ni el tiempo revelan qué slugs existen. El estado
-  de la clínica (`this organization is not active`) solo se informa tras credenciales
-  válidas, igual que el de la cuenta.
+- **Session revocation**: a `sessions` table + a `sid` claim in the JWT validated on every
+  request; real logout, a password change revokes the other sessions, suspension/reset
+  revokes all of them, and support (impersonation) sessions are revocable too.
+- **Trusted `X-Forwarded-For`**: the header is only honored from proxies listed in
+  `TRUSTED_PROXIES` (IPs/CIDRs; the chain is walked right to left discarding trusted hops);
+  empty → the socket IP is recorded. The Docker image starts uvicorn with
+  `--no-proxy-headers` so the app is the only one interpreting the header.
+- **Organization enumeration at login**: an unknown or invalid slug answers exactly like a
+  wrong password (`invalid credentials`) and runs the verify against the dummy hash, so
+  neither the message nor the timing reveals which slugs exist. The clinic's status
+  (`this organization is not active`) is only reported after valid credentials, just like
+  the account's.
 
-Pendiente, en orden de valor aproximado:
+Pending, in rough order of value:
 
-1. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
-   (`use_cases/auth.py`). NIST sugiere ≥12 o chequeo de entropía (zxcvbn).
-2. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
-   explícitamente de desarrollo, pero podría generar una contraseña aleatoria e imprimirla.
+1. **Password policy** — the current minimum is 8 characters with no other requirements
+   (`use_cases/auth.py`). NIST suggests ≥12 or an entropy check (zxcvbn).
+2. **Demo seed password** — `scripts/seed_demo.py` uses a fixed `demo1234`. It's explicitly a
+   development script, but it could generate a random password and print it.

@@ -1,218 +1,222 @@
 # Medicore — Backend
 
-API y lógica de negocio de Medicore, un sistema de gestión clínica **multi-tenant**, organizado
-en **Clean Architecture**.
+**English** · [Español](README.es.md)
+
+API and business logic for Medicore, a **multi-tenant** clinic management system, organized
+with **Clean Architecture**.
 
 ## Stack
 
 - **Python ≥ 3.12**
-- **FastAPI** + **Uvicorn** — API REST (prefijo `/api/v1`)
-- **SQLAlchemy 2.0** + **PostgreSQL** (psycopg3) — persistencia
-- **Alembic** — migraciones de esquema
-- **PyJWT** + **bcrypt** — autenticación y hashing de contraseñas
-- **pydantic-settings** — configuración por entorno
-- **pytest** + **ruff** — pruebas y linting
+- **FastAPI** + **Uvicorn** — REST API (`/api/v1` prefix)
+- **SQLAlchemy 2.0** + **PostgreSQL** (psycopg3) — persistence
+- **Alembic** — schema migrations
+- **PyJWT** + **bcrypt** — authentication and password hashing
+- **pydantic-settings** — environment-based configuration
+- **pytest** + **ruff** — testing and linting
 
-## Capas
+## Layers
 
 ```
 src/medicore/
-├── domain/          # Núcleo del negocio. Sin dependencias de framework.
+├── domain/          # Business core. No framework dependencies.
 │   ├── enums.py
-│   ├── shared/        # errores de dominio + identificadores (UUID + code)
+│   ├── shared/        # domain errors + identifiers (UUID + code)
 │   ├── value_objects/ # Vitals, SoapNote, IcdCode, ContactInfo, BloodType, Slug…
 │   ├── entities/      # Patient, Appointment, Consultation, MedicalRecord, Prescription…
-│   ├── services/      # domain services (lógica que no pertenece a una sola entidad)
-│   └── repositories/  # interfaces (puertos); las implementaciones viven en infrastructure
-├── application/     # casos de uso (interactors), DTOs, puertos de infra
-├── infrastructure/  # SQLAlchemy, auth JWT/bcrypt, generador de códigos, filtro multi-tenant
-└── presentation/    # FastAPI: routers, schemas, serializers, manejo de errores
+│   ├── services/      # domain services (logic that doesn't belong to a single entity)
+│   └── repositories/  # interfaces (ports); implementations live in infrastructure
+├── application/     # use cases (interactors), DTOs, infrastructure ports
+├── infrastructure/  # SQLAlchemy, JWT/bcrypt auth, code generator, multi-tenant filter
+└── presentation/    # FastAPI: routers, schemas, serializers, error handling
 ```
 
-La **regla de dependencia** apunta hacia adentro: `domain` no importa de ninguna otra capa;
-`application` solo de `domain`; `infrastructure`/`presentation` de las internas.
+The **dependency rule** points inward: `domain` imports from no other layer; `application`
+only from `domain`; `infrastructure`/`presentation` from the inner layers.
 
-En cifras: **16 entidades** y **10 value objects** de dominio, **16 repositorios (Protocols)**,
-**5 puertos de aplicación** (Clock, CodeGenerator, PasswordHasher, TokenIssuer, UnitOfWork),
-**13 grupos de casos de uso** y **13 routers / 80 endpoints** bajo `/api/v1/`.
+By the numbers: **17 entities** and **10 value objects** in the domain, **17 repositories
+(Protocols)**, **5 application ports** (Clock, CodeGenerator, PasswordHasher, TokenIssuer,
+UnitOfWork), **17 use-case groups** and **16 routers / 99 endpoints** under `/api/v1/`.
 
-## Convenciones del dominio
+## Domain conventions
 
-- **Value Objects**: `@dataclass(frozen=True)`, validan invariantes en `__post_init__`.
-- **Entidades / agregados**: `@dataclass` mutable; la mutación pasa por métodos que preservan
-  invariantes (p. ej. la máquina de estados de `Appointment`, o la firma inmutable de
+- **Value Objects**: `@dataclass(frozen=True)`, validating invariants in `__post_init__`.
+- **Entities / aggregates**: mutable `@dataclass`; mutation goes through methods that preserve
+  invariants (e.g. the `Appointment` state machine, or the immutable signature of
   `MedicalRecord`).
-- **Identidad**: UUID (`*Id`) como clave real; un `code` legible aparte para la UI
+- **Identity**: a UUID (`*Id`) is the real key; a separate human-readable `code` for the UI
   (`P-00142`, `A-2401`, `REC-2026-0512-CR`).
-- **Multi-tenant**: toda entidad de negocio lleva `tenant_id`; el filtrado por tenant es
-  responsabilidad de los repositorios, no del caller.
-- **Inmutabilidad clínica**: un `MedicalRecord` firmado no se modifica; una corrección genera una
-  **enmienda** (nuevo registro con `status=amended` que referencia al original).
+- **Multi-tenancy**: every business entity carries a `tenant_id`; tenant filtering is the
+  repositories' responsibility, not the caller's.
+- **Clinical immutability**: a signed `MedicalRecord` is never modified; a correction creates an
+  **amendment** (a new record with `status=amended` that references the original).
 
-## Funcionalidades
+## Features
 
-- **Autenticación** por JWT con roles (`admin`, `doctor`, `nurse`, `receptionist`) y cambio de
-  contraseña forzado en el primer ingreso. La sesión viaja en una **cookie httpOnly**
-  (`mc_session` / `mc_platform`, SameSite=Lax, Secure en producción) con **CSRF
-  double-submit** (cookie `mc_csrf` + cabecera `X-CSRF-Token` en mutaciones); el header
-  `Authorization: Bearer` se acepta como alternativa para clientes API.
-- **Sesiones revocables server-side**: cada login crea una fila en `sessions` referenciada
-  por el claim `sid` del JWT y validada en cada request. El logout revoca de verdad, el
-  cambio de contraseña revoca las demás sesiones del usuario, y suspender o resetear la
-  contraseña de una cuenta cierra todas sus sesiones al instante. Vista de **sesiones
-  activas**: cada usuario ve y cierra las suyas (Configuración), el admin las de cualquier
-  usuario de su clínica, y el superadmin las de una clínica completa (revocaciones de
-  terceros auditadas como `session.revoked`).
-- **Lockout de login**: contador de intentos fallidos por `(organización, email)` con
-  bloqueo temporal y backoff exponencial (HTTP 429 + `Retry-After`); cuenta también
-  cuentas inexistentes para no revelar cuáles existen.
-- **Permisos granulares** (`application/common/permissions.py`): catálogo de **23 permisos**
-  (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
-  tenant** vía `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults
-  vs. override e intersecta con el catálogo vigente; la capa de presentación los coloca en
-  `ActorContext.permissions`, de modo que cada `ensure_permission(...)` honra la personalización
-  de la clínica. Router `role_permissions` (`GET`/`PUT`/`DELETE`) para administrarlos.
-- **Agenda**: disponibilidad por médico, resolución de slots, ciclo de vida de la cita
-  (agendada → confirmada → en curso → completada).
-- **Consulta → historial**: al firmar una consulta se emite un `MedicalRecord` inmutable + las
-  recetas, y se completa la cita, todo en una transacción.
-- **Notificaciones in-app** (`application/common/notifications.py`): los casos de uso las
-  emiten dentro de su propia transacción —se guardan junto con la acción o no se guardan—,
-  nunca al propio autor. Eventos: cita creada/reprogramada/cancelada/no-show (al médico de la
-  cita), historial enmendado (al autor original), documento subido (al médico asignado del
-  paciente o, si no tiene, al de su última cita completada) y usuario creado/cambio de rol (a
-  los admins activos). Se guarda `type` + `data` (ids y etiquetas, nunca contenido clínico ni
-  nombres de archivo) y el cliente redacta el texto en su idioma. Router `notifications`:
-  listado paginado, contador de no leídas, marcar una / todas; las leídas con más de 90 días
-  se purgan al marcar. Durante una impersonación se pueden leer pero no se marcan como leídas.
-- **Panel** (`GET /dashboard/summary`): métricas reales del día —citas (sin canceladas) y
-  pendientes, pacientes registrados y ocupación de la agenda (franjas reservadas sobre franjas
-  dentro del horario)— comparadas con el mismo día de la semana anterior. Un médico ve solo su
-  agenda; los demás roles, la clínica entera. Sin permiso para una métrica, esta llega como `null`.
-- **Auditoría (HIPAA/GDPR)** por tenant y consola global de plataforma; cada acción guarda un
-  `subject` legible en su metadata para una columna de detalle útil.
-- **Consola de plataforma** (superadmin): alta/gestión de clínicas, estadísticas globales,
-  auditoría consolidada y **sesiones de soporte** (impersonación con TTL corto y traza).
+- **Authentication** with JWT and roles (`admin`, `doctor`, `nurse`, `receptionist`), with a
+  forced password change on first sign-in. The session travels in an **httpOnly cookie**
+  (`mc_session` / `mc_platform`, SameSite=Lax, Secure in production) with **double-submit
+  CSRF** (`mc_csrf` cookie + `X-CSRF-Token` header on mutations); the
+  `Authorization: Bearer` header is accepted as an alternative for API clients.
+- **Server-side revocable sessions**: every login creates a row in `sessions` referenced by
+  the JWT's `sid` claim and validated on every request. Logout really revokes, changing the
+  password revokes the user's other sessions, and suspending an account or resetting its
+  password ends all its sessions immediately. **Active sessions** view: each user sees and
+  ends their own (Settings), an admin those of any user in their clinic, and the superadmin
+  those of a whole clinic (third-party revocations audited as `session.revoked`).
+- **Login lockout**: failed-attempt counter per `(organization, email)` with a temporary
+  lock and exponential backoff (HTTP 429 + `Retry-After`); it also counts non-existent
+  accounts so it doesn't reveal which ones exist.
+- **Granular permissions** (`application/common/permissions.py`): a catalog of **23
+  permissions** (`Permission`, `StrEnum`), a default set per role (`ROLE_PERMISSIONS`) and
+  **per-tenant overrides** via `RolePermissionOverride`. `effective_permissions(role, stored)`
+  resolves defaults vs. override and intersects with the current catalog; the presentation
+  layer puts them in `ActorContext.permissions`, so every `ensure_permission(...)` honors the
+  clinic's customization. The `role_permissions` router (`GET`/`PUT`/`DELETE`) manages them.
+- **Scheduling**: per-doctor availability, slot resolution, appointment lifecycle
+  (scheduled → confirmed → in progress → completed).
+- **Consultation → record**: signing a consultation issues an immutable `MedicalRecord` plus
+  the prescriptions and completes the appointment, all in one transaction.
+- **In-app notifications** (`application/common/notifications.py`): use cases emit them inside
+  their own transaction — they are saved together with the action or not at all — and never
+  to the author themselves. Events: appointment created/rescheduled/cancelled/no-show (to the
+  appointment's doctor), record amended (to the original author), document uploaded (to the
+  patient's assigned doctor or, if none, the doctor of their last completed appointment) and
+  user created/role changed (to active admins). Only `type` + `data` are stored (ids and
+  labels, never clinical content or file names) and the client writes the text in its own
+  language. `notifications` router: paginated list, unread count, mark one / all; read ones
+  older than 90 days are purged when marking. During impersonation they can be read but are
+  not marked as read.
+- **Dashboard** (`GET /dashboard/summary`): real metrics for the day — appointments (excluding
+  cancelled) and pending ones, registered patients and schedule occupancy (booked slots over
+  slots within working hours) — compared with the same weekday of the previous week. A doctor
+  sees only their own schedule; other roles see the whole clinic. Without permission for a
+  metric, it comes back as `null`.
+- **Auditing (HIPAA/GDPR)** per tenant plus a global platform console; every action stores a
+  readable `subject` in its metadata for a useful detail column.
+- **Platform console** (superadmin): clinic onboarding/management, global stats, consolidated
+  audit and **support sessions** (impersonation with a short TTL and a trail).
 
-## Configuración
+## Configuration
 
-Copia `.env.example` a `.env` y ajusta los valores:
+Copy `.env.example` to `.env` and adjust the values:
 
-| Variable | Descripción | Default |
+| Variable | Description | Default |
 |----------|-------------|---------|
-| `ENVIRONMENT` | `development` o `production`. En producción se activan validaciones estrictas. | `development` |
-| `DATABASE_URL` | Cadena de conexión PostgreSQL (psycopg3) | `postgresql+psycopg://localhost/medicore` |
-| `JWT_SECRET` | Secreto para firmar tokens. **Obligatorio y fuerte en producción** (`openssl rand -hex 32`). | `change-me` (solo dev) |
-| `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
-| `JWT_EXPIRE_MINUTES` | Expiración del token | `1440` (24 h) |
-| `JWT_SUPPORT_EXPIRE_MINUTES` | Expiración de sesiones de soporte/impersonación | `60` (1 h) |
-| `CORS_ORIGINS` | Orígenes permitidos (coma-separados); `*` solo en desarrollo | `*` |
-| `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` (dev) / `false` (prod, salvo opt-in explícito) |
-| `TRUSTED_PROXIES` | IPs/CIDRs (coma-separados) de los reverse-proxies cuya cabecera `X-Forwarded-For` se honra (p. ej. `127.0.0.1` o `10.0.0.0/8`). Vacío → la cabecera se ignora y se registra la IP del socket. Un valor inválido impide el arranque. | vacío |
+| `ENVIRONMENT` | `development` or `production`. Production enables strict validation. | `development` |
+| `DATABASE_URL` | PostgreSQL connection string (psycopg3) | `postgresql+psycopg://localhost/medicore` |
+| `JWT_SECRET` | Secret used to sign tokens. **Required and strong in production** (`openssl rand -hex 32`). | `change-me` (dev only) |
+| `JWT_ALGORITHM` | JWT algorithm | `HS256` |
+| `JWT_EXPIRE_MINUTES` | Token lifetime | `1440` (24 h) |
+| `JWT_SUPPORT_EXPIRE_MINUTES` | Lifetime of support/impersonation sessions | `60` (1 h) |
+| `CORS_ORIGINS` | Allowed origins (comma-separated); `*` only in development | `*` |
+| `ENABLE_DOCS` | Expose Swagger/OpenAPI at `/api/v1/docs` | `true` (dev) / `false` (prod, unless explicitly enabled) |
+| `TRUSTED_PROXIES` | IPs/CIDRs (comma-separated) of the reverse proxies whose `X-Forwarded-For` header is honored (e.g. `127.0.0.1` or `10.0.0.0/8`). Empty → the header is ignored and the socket IP is recorded. An invalid value prevents startup. | empty |
 
-> En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue
-> siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*`. Además los docs
-> quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida nada y los
-> defaults funcionan tal cual.
+> In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is
+> still the insecure default or too short, or if `CORS_ORIGINS` is `*`. API docs are also
+> disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and
+> the defaults work as-is.
 
-## Puesta en marcha
+## Getting started
 
 ```bash
-# 1) Entorno e instalación (incluye dependencias de desarrollo)
+# 1) Environment and install (includes dev dependencies)
 python -m venv .venv
 .venv/bin/pip install -e ".[dev]"        # Windows: .venv\Scripts\pip install -e ".[dev]"
 
-# 2) Esquema de base de datos
+# 2) Database schema
 .venv/bin/alembic upgrade head
 
-# 3) (opcional) catálogo de diagnósticos CIE-10/CIE-11
+# 3) (optional) ICD-10/ICD-11 diagnosis catalog
 .venv/bin/python scripts/import_icd.py
 
-# 4) Datos de demo (2 clínicas pobladas: usuarios, pacientes, citas, historiales, auditoría)
-.venv/bin/python scripts/seed_demo.py            # idempotente
-.venv/bin/python scripts/seed_demo.py --reset    # borra los tenants demo y los recrea
+# 4) Demo data (2 populated clinics: users, patients, appointments, records, audit)
+.venv/bin/python scripts/seed_demo.py            # idempotent
+.venv/bin/python scripts/seed_demo.py --reset    # deletes the demo tenants and recreates them
 
-# 5) (opcional) Alta de un superadmin de plataforma
+# 5) (optional) Create a platform superadmin
 .venv/bin/python scripts/create_platform_admin.py
 
-# 6) Levantar la API
+# 6) Start the API
 .venv/bin/uvicorn medicore.presentation.main:app --reload
 ```
 
-- API en `http://localhost:8000/api/v1`, documentación interactiva en `/api/v1/docs`,
-  health-check en `/health`.
-- Tras correr el seed, todos los usuarios demo usan la contraseña **`demo1234`**.
+- API at `http://localhost:8000/api/v1`, interactive docs at `/api/v1/docs`, health check at
+  `/health`.
+- After running the seed, every demo user has the password **`demo1234`**.
 
-## Formato de errores
+## Error format
 
-Toda respuesta de error tiene la misma forma:
+Every error response has the same shape:
 
 ```json
 {"detail": "user with email x@y.test already exists", "code": "user.email_taken", "params": {"email": "x@y.test"}}
 ```
 
-- `code` es estable y es lo que traduce el frontend (`err.<code>` en `frontend/src/lib/i18n.ts`,
-  con `{param}` interpolado desde `params`). `detail` es texto en inglés para clientes de la API y
-  logs; no se muestra al usuario.
-- Los errores llevan un código por defecto según su clase (`not_found`, `permission_denied`,
-  `invalid_transition`…) y uno específico en el punto donde se lanzan (`code="slot.not_bookable"`).
-  Las `HTTPException` sin código propio salen como `http.<status>`; la validación de FastAPI (422)
-  como `request_invalid` (con `detail` en su formato original de lista y los campos en
-  `params.fields`); un fallo inesperado (500) como `internal`.
-- `tests/presentation/test_error_codes_api.py` falla si el backend emite un código sin traducción
-  en español **y** en inglés: al añadir un código nuevo hay que añadir sus dos textos.
-- 401 solo para "¿quién eres?" (credenciales, sesión): el cliente cierra la sesión ante un 401. Una
-  contraseña actual incorrecta al cambiarla es un 400 (`password.current_incorrect`).
+- `code` is stable and is what the frontend translates (`err.<code>` in
+  `frontend/src/lib/i18n.ts`, with `{param}` interpolated from `params`). `detail` is English
+  text for API clients and logs; it is not shown to the user.
+- Errors carry a default code from their class (`not_found`, `permission_denied`,
+  `invalid_transition`…) and a specific one where they are raised (`code="slot.not_bookable"`).
+  `HTTPException`s without their own code come out as `http.<status>`; FastAPI validation (422)
+  as `request_invalid` (with `detail` in its original list shape and the fields in
+  `params.fields`); an unexpected failure (500) as `internal`.
+- Enum fields (`role`, `sex`, `kind`, `status`…) are declared with the enum in the schemas: an
+  unknown value is a 422 `request_invalid` naming the field, never a 500.
+- `tests/presentation/test_error_codes_api.py` fails if the backend emits a code without a
+  Spanish **and** an English translation: adding a new code means adding both texts.
+- 401 is only for "who are you?" failures (credentials, session): the client drops the session
+  on a 401. A wrong current password when changing it is a 400 (`password.current_incorrect`).
 
-## Pruebas y linting
+## Tests and linting
 
-Suite de **485 tests** (89 dominio · 200 aplicación · 154 presentación · 42 infraestructura), casi
-toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
-contrato multi-tenant que los repos SQLAlchemy.
+A suite of **485 tests** (89 domain · 200 application · 154 presentation · 42 infrastructure),
+almost entirely database-independent thanks to in-memory adapters that honor the same
+multi-tenant contract as the SQLAlchemy repos.
 
-Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_audit_repository_sql.py`,
-`test_diagnosis_catalog_sql.py` — ranking y búsqueda por trigram del autocomplete de diagnósticos —
-`test_login_throttle_sql.py` — UPSERT atómico del lockout de login — y
-`test_notification_repository_sql.py` — JSONB y UPDATE/DELETE masivos de la bandeja) usan `TEST_DATABASE_URL`
-(o `DATABASE_URL` de la configuración),
-corren dentro de una transacción que siempre se revierte —no dejan rastro en la BD de desarrollo—
-y se **saltan automáticamente** si no hay PostgreSQL accesible.
+The integration tests against real PostgreSQL (`tests/infrastructure/test_audit_repository_sql.py`,
+`test_diagnosis_catalog_sql.py` — ranking and trigram search for the diagnosis autocomplete —
+`test_login_throttle_sql.py` — atomic UPSERT of the login lockout — and
+`test_notification_repository_sql.py` — JSONB and bulk UPDATE/DELETE of the inbox) use
+`TEST_DATABASE_URL` (or the configured `DATABASE_URL`), run inside a transaction that is always
+rolled back — they leave no trace in the development database — and are **skipped
+automatically** when PostgreSQL isn't reachable.
 
 ```bash
 .venv/bin/pytest
 .venv/bin/ruff check src tests
 ```
 
-## Despliegue
+## Deployment
 
-Imagen Docker lista para producción (`Dockerfile` en esta carpeta; usuario no-root, arranca con
-uvicorn en el puerto 8000):
+Production-ready Docker image (`Dockerfile` in this folder; non-root user, starts uvicorn on
+port 8000):
 
 ```bash
 # Build
 docker build -t medicore-backend .
 
-# Migraciones (paso aparte, antes de levantar la app)
+# Migrations (a separate step, before starting the app)
 docker run --rm --env-file .env medicore-backend alembic upgrade head
 
-# Levantar la API
+# Start the API
 docker run -d -p 8000:8000 --env-file .env medicore-backend
 ```
 
-Checklist de producción (vía variables de entorno, ver tabla de **Configuración**):
+Production checklist (via environment variables, see the **Configuration** table):
 
 - `ENVIRONMENT=production`
-- `JWT_SECRET` fuerte (`openssl rand -hex 32`) — la app no arranca si es inseguro.
-- `DATABASE_URL` apuntando a la base de datos real.
-- `CORS_ORIGINS` con los orígenes del frontend (no `*`).
-- `TRUSTED_PROXIES` con la IP del reverse-proxy (p. ej. `127.0.0.1` si nginx corre en el
-  mismo host) para que la auditoría registre la IP real del cliente.
-- Opcional: `ENABLE_DOCS=false` para ocultar Swagger/OpenAPI.
+- A strong `JWT_SECRET` (`openssl rand -hex 32`) — the app won't start if it's insecure.
+- `DATABASE_URL` pointing to the real database.
+- `CORS_ORIGINS` with the frontend's origins (not `*`).
+- `TRUSTED_PROXIES` with the reverse proxy's IP (e.g. `127.0.0.1` if nginx runs on the same
+  host) so the audit trail records the real client IP.
+- Optional: `ENABLE_DOCS=false` to hide Swagger/OpenAPI.
 
-> Para varios workers: `uvicorn ... --workers N` (sobreescribiendo el `CMD`) o un gestor de procesos.
-> La app se sirve detrás de un reverse-proxy que termina TLS y reenvía `X-Forwarded-For`.
-> La cabecera **solo se honra** si la conexión viene de un proxy listado en
-> `TRUSTED_PROXIES` (recorriendo la cadena de derecha a izquierda y descartando los hops
-> confiables); en cualquier otro caso se registra la IP del socket. La imagen arranca
-> uvicorn con `--no-proxy-headers` para que la app sea la única que interprete la
-> cabecera — mantenlo así si sobreescribes el `CMD`.
+> For multiple workers: `uvicorn ... --workers N` (overriding the `CMD`) or a process manager.
+> The app is served behind a reverse proxy that terminates TLS and forwards `X-Forwarded-For`.
+> The header is **only honored** if the connection comes from a proxy listed in
+> `TRUSTED_PROXIES` (walking the chain right to left and discarding trusted hops); otherwise
+> the socket IP is recorded. The image starts uvicorn with `--no-proxy-headers` so the app is
+> the only one interpreting the header — keep it that way if you override the `CMD`.

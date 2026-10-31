@@ -119,7 +119,7 @@ El control de acceso es **granular y personalizable por clínica** (`application
 - `X-Forwarded-For` solo se honra desde los proxies listados en `TRUSTED_PROXIES`.
 - Security headers en la API y CSP estricta en el build del frontend.
 
-Los hallazgos pendientes están en [`docs/BACKLOG.md`](docs/BACKLOG.md).
+Los hallazgos pendientes están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).
 
 ---
 
@@ -138,7 +138,7 @@ Toda respuesta de error tiene la misma forma:
 {"detail": "user with email x@y.test already exists", "code": "user.email_taken", "params": {"email": "x@y.test"}}
 ```
 
-`code` es estable y el frontend lo traduce (claves `err.<code>` en `frontend/src/lib/i18n.ts`), interpolando `params`; `detail` es texto en inglés para clientes de API y logs. Un test falla si el backend emite un código sin traducción en ambos idiomas. Detalles en [`backend/README.md`](backend/README.md#formato-de-errores).
+`code` es estable y el frontend lo traduce (claves `err.<code>` en `frontend/src/lib/i18n.ts`), interpolando `params`; `detail` es texto en inglés para clientes de API y logs. Un test falla si el backend emite un código sin traducción en ambos idiomas. Detalles en [`backend/README.es.md`](backend/README.es.md#formato-de-errores).
 
 ---
 
@@ -150,7 +150,7 @@ medicore/
 ├── README.es.md              # Este archivo
 ├── LICENSE
 ├── docs/
-│   └── BACKLOG.md            # Trabajo diferido, hallazgos pendientes y planes a futuro
+│   └── BACKLOG(.es).md       # Trabajo diferido, hallazgos pendientes y planes a futuro
 ├── backend/
 │   ├── .env.example          # Plantilla de variables de entorno (sin secretos)
 │   ├── .env                  # Variables reales — gitignoreado, nunca commitear
@@ -242,7 +242,7 @@ cp .env.example .env
 ```
 
 Tras el seed, todos los usuarios demo usan la contraseña **`demo1234`**. Ver detalles en
-[`backend/README.md`](backend/README.md).
+[`backend/README.es.md`](backend/README.es.md).
 
 ### Frontend
 
@@ -254,7 +254,7 @@ npm run lint           # eslint
 npm run build          # type-check (tsc -b) + build de producción → dist/
 ```
 
-Detalles de variables `VITE_*` y despliegue en [`frontend/README.md`](frontend/README.md).
+Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](frontend/README.es.md).
 
 ### Comandos habituales
 
@@ -342,10 +342,10 @@ Los tests verifican, entre otras cosas:
 
 ## Despliegue
 
-El backend incluye un `Dockerfile` listo para producción (usuario no-root, uvicorn en el puerto 8000). El frontend se sirve como estático (`dist/`) en el mismo origen tras un reverse-proxy, o en un host separado con `VITE_API_BASE_URL` definido al hacer el build. Pasos detallados en [`backend/README.md`](backend/README.md) y [`frontend/README.md`](frontend/README.md).
+El backend incluye un `Dockerfile` listo para producción (usuario no-root, uvicorn en el puerto 8000). El frontend se sirve como estático (`dist/`) en el mismo origen tras un reverse-proxy, o en un host separado con `VITE_API_BASE_URL` definido al hacer el build. Pasos detallados en [`backend/README.es.md`](backend/README.es.md) y [`frontend/README.es.md`](frontend/README.es.md).
 
 ---
 
 ## Backlog y planes a futuro
 
-El trabajo diferido, los hallazgos de seguridad pendientes y la funcionalidad planificada a futuro (notificaciones por email/SMS, recordatorios de citas) están en [`docs/BACKLOG.md`](docs/BACKLOG.md).
+El trabajo diferido, los hallazgos de seguridad pendientes y la funcionalidad planificada a futuro (notificaciones por email/SMS, recordatorios de citas) están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).

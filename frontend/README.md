@@ -1,91 +1,102 @@
 # Medicore — Frontend
 
-Interfaz web de Medicore: panel clínico multi-tenant y consola de plataforma (superadmin).
+**English** · [Español](README.es.md)
 
-La UI se **condiciona por los permisos efectivos del actor**: cada acción y entrada de navegación
-se muestra según los permisos que el backend resuelve para el rol del usuario (con los overrides
-de la clínica ya aplicados), y la pantalla **Roles & Permisos** permite a un admin editar esos
-overrides. La validación de fondo siempre vive en el backend; la UI solo refleja el mismo modelo.
+Medicore's web interface: the multi-tenant clinic panel and the platform console (superadmin).
+
+The UI **adapts to the actor's effective permissions**: every action and navigation entry is
+shown according to the permissions the backend resolves for the user's role (with the clinic's
+overrides already applied), and the **Roles & Permissions** screen lets an admin edit those
+overrides. Enforcement always lives in the backend; the UI only mirrors the same model.
 
 ## Stack
 
 - **React 18** + **TypeScript** + **Vite 6**
-- **Tailwind CSS 3** (PostCSS + autoprefixer) — estilos
-- **TanStack Query** — fetching y caché de datos del servidor
-- **Zustand** — estado global (sesión, plataforma, preferencias de UI)
-- **React Router 6** — enrutado
-- **Axios** — cliente HTTP
-- **date-fns** / **date-fns-tz** — formateo de fechas con zona horaria de la clínica
-- **lucide-react** — iconos
-- **i18n propio** (español / inglés) en `src/lib/i18n.ts`
+- **Tailwind CSS 3** (PostCSS + autoprefixer) — styling
+- **TanStack Query** — server data fetching and caching
+- **Zustand** — global state (session, platform, UI preferences)
+- **React Router 6** — routing
+- **Axios** — HTTP client
+- **date-fns** / **date-fns-tz** — date formatting in the clinic's timezone
+- **lucide-react** — icons
+- **Custom i18n** (Spanish / English) in `src/lib/i18n.ts`
 - **ESLint 9** (flat config) + **typescript-eslint**
 
-## Estructura
+## Structure
 
 ```
 src/
-├── api/          # cliente axios (client.ts) + 14 módulos por dominio (patients,
-│                 # appointments, permissions, audit, platform…)
-├── components/   # primitivos ui/, shell/, componentes de dominio (appointments, audit,
-│                 # patients, permissions, records) y guards (RequireAuth, RequirePlatformAuth)
-├── pages/        # 16 pantallas del tenant (Patients, PatientDetail, Appointments, Schedule,
+├── api/          # axios client (client.ts: cookies, CSRF, error translation)
+│                 # + 16 per-domain modules (patients, appointments, notifications…)
+├── components/   # ui/ primitives, shell/ (top bar, notification bell…), domain
+│                 # components (appointments, audit, patients, permissions, records,
+│                 # settings) and guards (RequireAuth, RequirePlatformAuth)
+├── pages/        # 16 tenant screens (Patients, PatientDetail, Appointments, Schedule,
 │                 # Consultation, Records, Availability, Insurers, Users, Audit,
 │                 # Permissions, Settings…)
-│   └── platform/ # 5 pantallas de superadmin (ClinicsList, ClinicDetail, GlobalStats,
+│   └── platform/ # 5 superadmin screens (ClinicsList, ClinicDetail, GlobalStats,
 │                 # GlobalAudit, PlatformLogin)
-├── stores/       # zustand: auth (tenant), platformAuth (superadmin), ui (tema/idioma)
-├── lib/          # i18n, format, cn, audit, validation, timezones
-└── types/        # tipos compartidos (entidades, respuestas de API)
+├── stores/       # zustand: auth (tenant), platformAuth (superadmin), ui (theme/language)
+├── lib/          # i18n, format, cn, audit, notifications, validation, timezones…
+└── types/        # shared types (entities, API responses)
 ```
 
-## Puesta en marcha
+## Getting started
 
 ```bash
 npm install
-cp .env.example .env       # opcional (los valores por defecto sirven para desarrollo local)
+cp .env.example .env       # optional (the defaults work for local development)
 npm run dev                # http://localhost:3000
 ```
 
-El servidor de desarrollo proxyea las peticiones `/api` al backend (por defecto
-`http://localhost:8000`), así que **el backend debe estar corriendo**. Consulta `backend/README.md`.
+The dev server proxies `/api` requests to the backend (by default `http://localhost:8000`),
+so **the backend must be running**. See `backend/README.md`.
 
-## Variables de entorno
+## Languages and error messages
 
-Vite expone variables con prefijo `VITE_` (ver `.env.example`):
+The whole interface is available in Spanish and English (`src/lib/i18n.ts`). API errors carry a
+stable `code` and its `params`; `errorMessage()` (`src/api/client.ts`) translates it through the
+`err.<code>` key, showing permissions, statuses and roles with their translated labels. The
+`detail` text sent by the backend (in English) is never shown to the user.
 
-| Variable | Descripción | Default |
+## Environment variables
+
+Vite exposes variables prefixed with `VITE_` (see `.env.example`):
+
+| Variable | Description | Default |
 |----------|-------------|---------|
-| `VITE_API_BASE_URL` | URL base del backend para el **build**. Útil cuando frontend y backend están en orígenes distintos (p. ej. `https://api.midominio.com/api/v1`). | `/api/v1` (mismo origen) |
-| `VITE_API_PROXY_TARGET` | Solo desarrollo: a dónde proxyea `vite dev` las peticiones `/api`. | `http://localhost:8000` |
+| `VITE_API_BASE_URL` | Backend base URL for the **build**. Useful when frontend and backend live on different origins (e.g. `https://api.mydomain.com/api/v1`). | `/api/v1` (same origin) |
+| `VITE_API_PROXY_TARGET` | Development only: where `vite dev` proxies `/api` requests. | `http://localhost:8000` |
 
 ## Scripts
 
 ```bash
-npm run dev       # servidor de desarrollo (HMR) en :3000
-npm run build     # type-check (tsc -b) + build de producción → dist/
-npm run preview   # sirve el build de producción localmente
+npm run dev       # dev server (HMR) on :3000
+npm run build     # type-check (tsc -b) + production build → dist/
+npm run preview   # serves the production build locally
 npm run lint      # ESLint
 ```
 
-## Despliegue
+## Deployment
 
-Dos modelos según cómo se sirva la app:
+Two models, depending on how the app is served:
 
-- **Mismo origen** (recomendado): un reverse-proxy (p. ej. nginx) sirve el contenido estático de
-  `dist/` y enruta `/api/v1` al backend. No hace falta configurar nada — el cliente usa la ruta
-  relativa `/api/v1` por defecto.
-- **Orígenes distintos** (frontend y backend en hosts separados): define
-  `VITE_API_BASE_URL=https://<tu-backend>/api/v1` **al hacer el build**. El backend ya habilita CORS.
+- **Same origin** (recommended): a reverse proxy (e.g. nginx) serves the static content of
+  `dist/` and routes `/api/v1` to the backend. Nothing to configure — the client uses the
+  relative path `/api/v1` by default.
+- **Different origins** (frontend and backend on separate hosts): set
+  `VITE_API_BASE_URL=https://<your-backend>/api/v1` **at build time**. The backend already
+  enables CORS.
 
 ### Content-Security-Policy
 
-El build inyecta automáticamente un meta CSP estricto en `dist/index.html`
-(`script-src 'self'`, Google Fonts permitido, `connect-src` incluye el origen de
-`VITE_API_BASE_URL` si es absoluta). Solo aplica al build de producción: en `npm run dev`
-no se inyecta porque el HMR de Vite usa scripts inline.
+The build automatically injects a strict CSP meta tag into `dist/index.html`
+(`script-src 'self'`, Google Fonts allowed, `connect-src` includes the origin of
+`VITE_API_BASE_URL` when it is absolute). It only applies to the production build: it isn't
+injected during `npm run dev` because Vite's HMR uses inline scripts.
 
-`frame-ancestors` no puede declararse vía meta — el reverse-proxy debería añadirlo como
-header real (y con ello toda la política tiene prioridad sobre el meta):
+`frame-ancestors` can't be declared through a meta tag — the reverse proxy should add it as a
+real header (which then makes the whole policy take precedence over the meta):
 
 ```nginx
 add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'; frame-ancestors 'none'" always;

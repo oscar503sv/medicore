@@ -6,7 +6,7 @@ import react from '@vitejs/plugin-react'
  * Inject a strict Content-Security-Policy meta tag into the PRODUCTION index.html.
  * Build-only: in dev, @vitejs/plugin-react injects an inline HMR preamble that a strict
  * `script-src 'self'` would block. `frame-ancestors` cannot be set via meta — the reverse
- * proxy should add it as a real header (see README → Despliegue).
+ * proxy should add it as a real header (see README → Deployment).
  */
 function injectCsp(apiBaseUrl: string): PluginOption {
   // Split-origin deployments need the API origin in connect-src; same-origin needs none.

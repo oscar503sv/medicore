@@ -119,7 +119,7 @@ Access control is **granular and customizable per clinic** (`application/common/
 - `X-Forwarded-For` is only honored from the proxies listed in `TRUSTED_PROXIES`.
 - Security headers on the API and a strict CSP in the frontend build.
 
-Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md) (in Spanish).
+Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ---
 
@@ -138,7 +138,7 @@ Every error response has the same shape:
 {"detail": "user with email x@y.test already exists", "code": "user.email_taken", "params": {"email": "x@y.test"}}
 ```
 
-`code` is stable and the frontend translates it (`err.<code>` keys in `frontend/src/lib/i18n.ts`), interpolating `params`; `detail` is English text for API clients and logs. A test fails if the backend emits a code without a translation in both languages. Details in [`backend/README.md`](backend/README.md#formato-de-errores) (in Spanish).
+`code` is stable and the frontend translates it (`err.<code>` keys in `frontend/src/lib/i18n.ts`), interpolating `params`; `detail` is English text for API clients and logs. A test fails if the backend emits a code without a translation in both languages. Details in [`backend/README.md`](backend/README.md#error-format).
 
 ---
 
@@ -150,7 +150,7 @@ medicore/
 ├── README.es.md              # Spanish version
 ├── LICENSE
 ├── docs/
-│   └── BACKLOG.md            # Deferred work, pending findings and future plans
+│   └── BACKLOG(.es).md       # Deferred work, pending findings and future plans
 ├── backend/
 │   ├── .env.example          # Environment variable template (no secrets)
 │   ├── .env                  # Real values — gitignored, never commit
@@ -242,7 +242,7 @@ cp .env.example .env
 ```
 
 After seeding, every demo user has the password **`demo1234`**. See
-[`backend/README.md`](backend/README.md) for details (in Spanish).
+[`backend/README.md`](backend/README.md) for details.
 
 ### Frontend
 
@@ -254,7 +254,7 @@ npm run lint           # eslint
 npm run build          # type-check (tsc -b) + production build → dist/
 ```
 
-`VITE_*` variables and deployment are covered in [`frontend/README.md`](frontend/README.md) (in Spanish).
+`VITE_*` variables and deployment are covered in [`frontend/README.md`](frontend/README.md).
 
 ### Common commands
 
@@ -342,10 +342,10 @@ Among other things, the tests verify:
 
 ## Deployment
 
-The backend ships a production-ready `Dockerfile` (non-root user, uvicorn on port 8000). The frontend is served as static files (`dist/`) on the same origin behind a reverse proxy, or from a separate host with `VITE_API_BASE_URL` set at build time. Step-by-step instructions in [`backend/README.md`](backend/README.md) and [`frontend/README.md`](frontend/README.md) (in Spanish).
+The backend ships a production-ready `Dockerfile` (non-root user, uvicorn on port 8000). The frontend is served as static files (`dist/`) on the same origin behind a reverse proxy, or from a separate host with `VITE_API_BASE_URL` set at build time. Step-by-step instructions in [`backend/README.md`](backend/README.md) and [`frontend/README.md`](frontend/README.md).
 
 ---
 
 ## Backlog and future plans
 
-Deferred work, pending security findings and planned future features (email/SMS notifications, appointment reminders) are listed in [`docs/BACKLOG.md`](docs/BACKLOG.md) (in Spanish).
+Deferred work, pending security findings and planned future features (email/SMS notifications, appointment reminders) are listed in [`docs/BACKLOG.md`](docs/BACKLOG.md).
