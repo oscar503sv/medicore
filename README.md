@@ -1,296 +1,351 @@
 # Medicore
 
-Sistema de gestión clínica **multi-tenant** construido con **Clean Architecture**.
+**English** · [Español](README.es.md)
 
-Cubre el ciclo completo de atención: autenticación por organización, dashboard, gestión de pacientes, agenda y citas, consulta en curso (bitácora SOAP) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app** y ajustes de organización.
+A **multi-tenant** clinic management system built with **Clean Architecture**.
 
-Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión) e **impersonación auditada** de una clínica para dar soporte.
+It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (SOAP notes) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications** and organization settings. The interface is available in **Spanish and English**, including the backend's error messages.
+
+It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, global stats and audit, account support (password reset, unlock, suspension) and **audited impersonation** of a clinic for support.
 
 ---
 
 ## Stack
 
-| Capa | Tecnología |
+| Layer | Technology |
 |---|---|
-| Lenguaje | Python ≥ 3.12 |
+| Language | Python ≥ 3.12 |
 | API | FastAPI ≥ 0.115 + Uvicorn |
 | ORM | SQLAlchemy 2.0 (sync) |
-| Migraciones | Alembic ≥ 1.13 |
-| Base de datos | PostgreSQL (psycopg3) |
-| Auth | PyJWT ≥ 2.8 + bcrypt ≥ 4 |
-| Validación config | pydantic-settings |
-| Tests / Lint | pytest ≥ 8 + ruff (adaptadores en memoria) |
+| Migrations | Alembic ≥ 1.13 |
+| Database | PostgreSQL (psycopg3) |
+| Auth | PyJWT ≥ 2.8 + bcrypt ≥ 4 · httpOnly cookie + double-submit CSRF |
+| Config validation | pydantic-settings |
+| Tests / Lint | pytest ≥ 8 + ruff (in-memory adapters) |
 | Frontend | React 18 + TypeScript 5 + Vite 6 |
-| Estado / datos (FE) | Zustand + TanStack Query + Axios |
-| Estilos (FE) | Tailwind CSS 3 + design tokens |
-| Enrutado / i18n (FE) | React Router 6 + i18n propio ES/EN |
+| State / data (FE) | Zustand + TanStack Query + Axios |
+| Styling (FE) | Tailwind CSS 3 + design tokens |
+| Routing / i18n (FE) | React Router 6 + custom ES/EN i18n |
 
 ---
 
-## Arquitectura
+## Architecture
 
-El backend sigue **Clean Architecture** estricta con cuatro capas. La regla de dependencia apunta siempre hacia adentro — `domain` no importa nada externo:
+The backend follows strict **Clean Architecture** with four layers. The dependency rule always points inward — `domain` imports nothing external:
 
 ```
 src/medicore/
-├── domain/           # Núcleo de negocio — sin dependencias de framework
+├── domain/           # Business core — no framework dependencies
 │   ├── enums.py
-│   ├── shared/         # Errores de dominio + identificadores UUID tipados
+│   ├── shared/         # Domain errors (with a translatable code) + typed UUID identifiers
 │   ├── value_objects/  # 10 VOs: TimeRange, DateRange, Vitals, IcdCode, Slug,
 │   │                   # SoapNote, ContactInfo, BloodType, Money, UserPreferences
-│   ├── entities/       # 16 agregados: Appointment (FSM), Consultation, MedicalRecord,
+│   ├── entities/       # 17 aggregates: Appointment (FSM), Consultation, MedicalRecord,
 │   │                   # Prescription, Patient, User, Tenant, Insurer, MedicalDocument,
-│   │                   # Availability, Notification, AuditLog, CatalogDiagnosis,
-│   │                   # RolePermissionOverride, PlatformAdmin, PlatformAuditLog
-│   ├── services/       # slot_resolver — lógica de disponibilidad pura
-│   └── repositories/   # Interfaces (puertos): 16 Protocols de repositorio
+│   │                   # Availability, Notification, AuditLog, AuthSession,
+│   │                   # CatalogDiagnosis, RolePermissionOverride, PlatformAdmin,
+│   │                   # PlatformAuditLog
+│   ├── services/       # slot_resolver — pure availability logic
+│   └── repositories/   # Interfaces (ports): 17 repository Protocols
 │
-├── application/      # Casos de uso (interactors) + puertos de infra
-│   ├── ports/          # 5 puertos: Clock, CodeGenerator, PasswordHasher,
+├── application/      # Use cases (interactors) + infrastructure ports
+│   ├── ports/          # 5 ports: Clock, CodeGenerator, PasswordHasher,
 │   │                   # TokenIssuer, UnitOfWork
-│   ├── common/         # ActorContext, errores de app, catálogo de permisos
-│   │                   # (permissions.py), timezone, audit_entry
-│   └── use_cases/      # 14 grupos: auth, patients, appointments, consultations,
-│                       # records, availability, users, organization, insurers,
-│                       # diagnoses, audit, role_permissions, platform, notifications
+│   ├── common/         # ActorContext, app errors, permission catalog, auditing,
+│   │                   # login lockout, notification emission, timezone
+│   └── use_cases/      # 17 groups: auth, sessions, patients, appointments,
+│                       # consultations, records, prescriptions, availability, users,
+│                       # organization, insurers, diagnoses, audit, role_permissions,
+│                       # notifications, dashboard, platform
 │
-├── infrastructure/   # Implementaciones concretas
-│   ├── config.py       # Settings desde .env (pydantic-settings) — dev-safe por defecto
-│   ├── database/       # Engine SQLAlchemy + session factory
+├── infrastructure/   # Concrete implementations
+│   ├── config.py       # Settings from .env (pydantic-settings) — dev-safe defaults
+│   ├── database/       # SQLAlchemy engine + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (20 tablas; VOs complejos como JSONB)
-│   │   ├── mappers/    # ORM ↔ domain entity (sin contaminar el dominio)
-│   │   └── repositories/  # Implementaciones SQLAlchemy de los puertos
-│   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, DbSequentialCodeGenerator
+│   │   ├── models/     # ORM models (22 tables; complex VOs as JSONB)
+│   │   ├── mappers/    # ORM ↔ domain entity (keeps the domain clean)
+│   │   └── repositories/  # SQLAlchemy implementations of the ports
+│   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, code generator, SystemClock
 │
 └── presentation/
-    ├── app.py           # Factory: crea FastAPI + CORS + error handlers + routers
+    ├── app.py           # Factory: builds FastAPI + CORS + security headers + error handlers + routers
     ├── main.py          # Entry point (uvicorn medicore.presentation.main:app)
-    ├── dependencies.py  # DI: get_actor / get_platform_actor (JWT→Context),
-    │                    # get_uow (yield, cierra sesión), get_codes, get_clock
-    ├── serializers.py   # domain entity → dict (sin tocar el dominio)
-    ├── error_handlers.py# DomainError/AppError → HTTP 4xx/5xx
-    ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 13 routers, 80 endpoints bajo /api/v1/
+    ├── dependencies.py  # DI: get_actor / get_platform_actor (cookie or Bearer → Context,
+    │                    # revocable session, CSRF), get_uow, get_codes, get_clock
+    ├── cookies.py       # httpOnly session cookies + CSRF token
+    ├── client_ip.py     # Real client IP (X-Forwarded-For only from trusted proxies)
+    ├── serializers.py   # domain entity → dict (without touching the domain)
+    ├── errors.py        # ApiError: HTTPException with a translatable code
+    ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
+    ├── schemas/         # Pydantic request + response models per resource
+    └── routers/         # 16 routers, 99 endpoints under /api/v1/
 ```
 
-### Multi-tenant
-Toda entidad de negocio lleva `tenant_id`. El filtro se aplica **en cada repositorio**, no en el caller — el aislamiento se cumple estructuralmente. El `UnitOfWork` está scoped por tenant: `factory.for_tenant(tenant_id)`. Las operaciones globales (resolución de slug, superadmin) usan un `UnitOfWork` no scopeado o helpers de solo lectura.
+### Multi-tenancy
+Every business entity carries a `tenant_id`. The filter is applied **in every repository**, not by the caller — isolation is enforced structurally. The `UnitOfWork` is tenant-scoped: `factory.for_tenant(tenant_id)`. Global operations (slug resolution, superadmin) use an unscoped `UnitOfWork` or read-only helpers.
 
-### Plataforma (superadmin)
-Sesión separada (token de scope `platform`) que opera por encima del límite multi-tenant: alta/edición de clínicas, cambio de estado (activa / suspendida / archivada), estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión de usuarios) e **impersonación**. La impersonación emite un token de tenant marcado con `impersonated_by` y con TTL más corta, de modo que toda escritura durante el soporte queda auditada.
+### Platform (superadmin)
+A separate session (`platform`-scoped token) that operates above the multi-tenant boundary: clinic creation/editing, status changes (active / suspended / archived), global stats and audit, account support (password reset, unlock, user suspension) and **impersonation**. Impersonation issues a tenant token marked with `impersonated_by` and a shorter TTL, so every write made during support is audited.
 
-### Reglas de negocio críticas
-- Citas solo dentro de la disponibilidad del doctor, sin solapes, respetando las reglas de reserva.
-- `MedicalRecord` firmado es **inmutable**; las correcciones son **enmiendas versionadas** (`status=amended` que referencia al original).
-- `SignConsultation` es **atómico**: record + recetas + cita `completed` en una sola transacción.
-- Diagnósticos en consulta limitados al catálogo de la **versión CIE configurada por cada clínica** (CIE-10 / CIE-11), con autocompletado.
-- **Permisos granulares** validados en la capa de aplicación (no solo en UI) — ver sección siguiente.
-- Contraseña temporal con cambio forzado en el primer ingreso.
-- Auditoría de accesos y cambios sensibles (HIPAA/GDPR), por tenant y global.
-
----
-
-## Permisos
-
-El control de acceso es **granular y personalizable por clínica** (`application/common/permissions.py`):
-
-- **Catálogo de 23 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (incluye `sign` y `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`.
-- **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — con un conjunto de permisos por defecto en `ROLE_PERMISSIONS`.
-- **Overrides por tenant**: cada clínica puede personalizar el set de un rol mediante una fila `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults vs. override (e intersecta con el catálogo vigente para tolerar permisos retirados).
-- En cada request, la capa de presentación coloca los permisos efectivos en `ActorContext.permissions`, de modo que toda comprobación `ensure_permission(...)` honra la personalización de la clínica.
-- El frontend consume el mismo modelo: la UI se condiciona por los permisos efectivos del actor y la pantalla **Roles & Permisos** edita los overrides (router `role_permissions`: `GET`/`PUT`/`DELETE`).
+### Critical business rules
+- Appointments only within the doctor's availability, with no overlaps, honoring the booking rules.
+- A signed `MedicalRecord` is **immutable**; corrections are **versioned amendments** (`status=amended` referencing the original).
+- `SignConsultation` is **atomic**: record + prescriptions + appointment `completed` in a single transaction.
+- Consultation diagnoses are limited to the catalog of the **ICD version configured per clinic** (ICD-10 / ICD-11), with autocomplete.
+- **Granular permissions** enforced in the application layer (not just the UI) — see the next section.
+- Temporary password with a forced change on first sign-in.
+- Auditing of access and sensitive changes (HIPAA/GDPR), per tenant and global.
 
 ---
 
-## Estructura del monorepo
+## Permissions
+
+Access control is **granular and customizable per clinic** (`application/common/permissions.py`):
+
+- **Catalog of 23 permissions** (`Permission`, `StrEnum`) grouped by resource: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (including `sign` and `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`.
+- **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — each with a default permission set in `ROLE_PERMISSIONS`.
+- **Per-tenant overrides**: each clinic can customize a role's set through a `RolePermissionOverride` row. `effective_permissions(role, stored)` resolves defaults vs. override (and intersects with the current catalog to tolerate retired permissions).
+- On every request, the presentation layer puts the effective permissions in `ActorContext.permissions`, so every `ensure_permission(...)` check honors the clinic's customization.
+- The frontend uses the same model: the UI adapts to the actor's effective permissions, and the **Roles & Permissions** screen edits the overrides (`role_permissions` router: `GET`/`PUT`/`DELETE`).
+
+---
+
+## Security
+
+- **Sessions in an httpOnly cookie** (SameSite=Lax, `Secure` in production) with **double-submit CSRF** (`mc_csrf` + `X-CSRF-Token` header); the token is never reachable from JavaScript. `Authorization: Bearer` is still accepted for API clients.
+- **Revocable sessions** (`sessions` table + `sid` claim): real logout; changing the password ends the other sessions; suspending or resetting a user ends all of them.
+- **Login lockout** with exponential backoff (5 failures → 1 min, doubling up to 15) and a 429 response with `Retry-After`.
+- **No enumeration**: constant-time login; an unknown slug or email answers exactly like a wrong password.
+- `X-Forwarded-For` is only honored from the proxies listed in `TRUSTED_PROXIES`.
+- Security headers on the API and a strict CSP in the frontend build.
+
+Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md) (in Spanish).
+
+---
+
+## Notifications and dashboard
+
+- **In-app notifications**: appointments created, rescheduled, cancelled or marked as no-show (to the doctor), record amendments (to the original author), uploaded documents (to the treating doctor) and new users or role changes (to administrators). A bell in the top bar with an unread counter (polled every 60 s), an unread-only filter and deep links to the item. Kept for 90 days.
+- **Dashboard with real data** (`GET /dashboard/summary`): today's appointments, pending ones, registered patients and schedule occupancy, each compared with the previous week. Doctors see their own schedule; other roles see the whole clinic.
+
+---
+
+## API errors
+
+Every error response has the same shape:
+
+```json
+{"detail": "user with email x@y.test already exists", "code": "user.email_taken", "params": {"email": "x@y.test"}}
+```
+
+`code` is stable and the frontend translates it (`err.<code>` keys in `frontend/src/lib/i18n.ts`), interpolating `params`; `detail` is English text for API clients and logs. A test fails if the backend emits a code without a translation in both languages. Details in [`backend/README.md`](backend/README.md#formato-de-errores) (in Spanish).
+
+---
+
+## Monorepo layout
 
 ```
 medicore/
-├── README.md                 # Este archivo
+├── README.md                 # This file
+├── README.es.md              # Spanish version
 ├── LICENSE
+├── docs/
+│   └── BACKLOG.md            # Deferred work, pending findings and future plans
 ├── backend/
-│   ├── .env.example          # Plantilla de variables de entorno (sin secretos)
-│   ├── .env                  # Variables reales — gitignoreado, nunca commitear
-│   ├── Dockerfile            # Imagen de producción (usuario no-root, uvicorn :8000)
-│   ├── alembic.ini           # Config de Alembic (URL inyectada desde .env)
-│   ├── migrations/           # 10 migraciones Alembic (autogenerate)
+│   ├── .env.example          # Environment variable template (no secrets)
+│   ├── .env                  # Real values — gitignored, never commit
+│   ├── Dockerfile            # Production image (non-root user, uvicorn :8000)
+│   ├── alembic.ini           # Alembic config (URL injected from .env)
+│   ├── migrations/           # 14 Alembic migrations
 │   ├── scripts/
-│   │   ├── seed_demo.py            # Datos demo: clínicas, staff por rol, pacientes
-│   │   ├── import_icd.py           # Carga del catálogo CIE-10/CIE-11
-│   │   └── create_platform_admin.py # Alta de superadmin de plataforma
-│   ├── pyproject.toml        # Metadata + deps + config pytest/ruff
-│   ├── src/medicore/         # Código fuente (ver Arquitectura arriba)
+│   │   ├── seed_demo.py            # Demo data: clinics, staff per role, patients
+│   │   ├── import_icd.py           # Loads the ICD-10/ICD-11 catalog
+│   │   └── create_platform_admin.py # Creates a platform superadmin
+│   ├── pyproject.toml        # Metadata + deps + pytest/ruff config
+│   ├── src/medicore/         # Source code (see Architecture above)
 │   └── tests/
-│       ├── domain/           # Tests de dominio (VOs, FSM, slot_resolver…)
-│       ├── application/      # Tests de casos de uso con repos en memoria
-│       ├── presentation/     # Tests de endpoints HTTP (TestClient)
-│       ├── infrastructure/   # Tests del repositorio SQLAlchemy real
+│       ├── domain/           # Domain tests (VOs, FSM, slot_resolver…)
+│       ├── application/      # Use-case tests with in-memory repos
+│       ├── presentation/     # HTTP endpoint tests (TestClient)
+│       ├── infrastructure/   # Tests against real PostgreSQL (skipped without a DB)
 │       └── support/          # InMemoryStore, repos, UoW, fakes, builders
-└── frontend/                 # SPA React + TS + Vite
+└── frontend/                 # React + TS + Vite SPA
     └── src/
-        ├── api/              # Cliente Axios + 14 módulos por recurso
-        ├── stores/           # Zustand: auth + platformAuth + ui (tema/idioma/sidebar)
-        ├── lib/              # i18n ES/EN, formato, QueryClient, cn(), timezones
-        ├── types/            # Tipos TS espejo del dominio backend
-        ├── components/       # ui/ + shell/ + appointments/ + audit/ + patients/
-        │                     # + permissions/ + records/ + guards (RequireAuth…)
-        └── pages/            # 16 pantallas de clínica (Login, Dashboard, Patients,
+        ├── api/              # Axios client (cookies, CSRF, error translation)
+        │                     # + 16 per-resource modules
+        ├── stores/           # Zustand: auth + platformAuth + ui (theme/language/sidebar)
+        ├── lib/              # ES/EN i18n, formatting, QueryClient, notifications, timezones…
+        ├── types/            # TS types mirroring the backend domain
+        ├── components/       # ui/ + shell/ (top bar, notification bell…)
+        │                     # + appointments/ + audit/ + patients/ + permissions/
+        │                     # + records/ + settings/ + guards (RequireAuth…)
+        └── pages/            # 16 clinic screens (Login, Dashboard, Patients,
                               # PatientDetail, Appointments, Schedule, Consultation,
                               # Records, Availability, Insurers, Users, Settings,
                               # Audit, Permissions, ChangePassword, ComingSoon)
-                              # + platform/ (5 pantallas de superadmin)
+                              # + platform/ (5 superadmin screens)
 ```
 
 ---
 
-## Estado del proyecto
+## Project status
 
-| Fase | Contenido | Estado |
+| Phase | Scope | Status |
 |---|---|---|
-| **1** | Dominio completo | ✅ Completada |
-| **2** | Casos de uso (interactors) + repos en memoria | ✅ Completada |
-| **3** | SQLAlchemy, Alembic, JWT, bcrypt, multi-tenant | ✅ Completada |
-| **4** | API FastAPI bajo `/api/v1/` | ✅ Completada |
-| **5** | Frontend React — todas las pantallas de clínica | ✅ Completada |
-| **6** | Plataforma superadmin, catálogo CIE y aseguradoras | ✅ Completada |
-| **7** | Permisos granulares con overrides por tenant + UI por permisos | ✅ Completada |
-| **8** | Hardening de producción (dev-safe defaults) + Dockerfile | ✅ Completada |
+| **1** | Complete domain | ✅ Done |
+| **2** | Use cases (interactors) + in-memory repos | ✅ Done |
+| **3** | SQLAlchemy, Alembic, JWT, bcrypt, multi-tenancy | ✅ Done |
+| **4** | FastAPI API under `/api/v1/` | ✅ Done |
+| **5** | React frontend — every clinic screen | ✅ Done |
+| **6** | Superadmin platform, ICD catalog and insurers | ✅ Done |
+| **7** | Granular permissions with per-tenant overrides + permission-driven UI | ✅ Done |
+| **8** | Production hardening (dev-safe defaults) + Dockerfile | ✅ Done |
+| **9** | Security: cookie sessions + CSRF, revocable sessions, login lockout, anti-enumeration | ✅ Done |
+| **10** | In-app notifications (backend + bell) | ✅ Done |
+| **11** | Real dashboard metrics, fully ES/EN interface and translatable API errors | ✅ Done |
+| — | Password policy | ⏳ Pending |
+| — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 
 ---
 
-## Configuración y desarrollo
+## Setup and development
 
-### Requisitos
+### Requirements
 - Python 3.12+
-- PostgreSQL (base de datos `medicore` creada)
-- Node.js (para el frontend)
+- PostgreSQL (with a `medicore` database created)
+- Node.js (for the frontend)
 
 ### Backend
 
 ```bash
 cd backend
 
-# 1. Entorno e instalación (incluye dependencias de desarrollo)
+# 1. Environment and install (includes dev dependencies)
 python -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 
-# 2. Configurar variables de entorno
+# 2. Configure environment variables
 cp .env.example .env
 #   DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/medicore
 #   JWT_SECRET=$(openssl rand -hex 32)
 
-# 3. Crear tablas
+# 3. Create the tables
 .venv/bin/alembic upgrade head
 
-# 4. (Opcional) Catálogo CIE-10/CIE-11 y datos demo
+# 4. (Optional) ICD-10/ICD-11 catalog and demo data
 .venv/bin/python scripts/import_icd.py
-.venv/bin/python scripts/seed_demo.py        # idempotente (--reset recrea)
+.venv/bin/python scripts/seed_demo.py        # idempotent (--reset recreates)
 
-# 5. Levantar la API
+# 5. Start the API
 .venv/bin/uvicorn medicore.presentation.main:app --reload
-# API en http://localhost:8000/api/v1/ · docs en /api/v1/docs · health en /health
+# API at http://localhost:8000/api/v1/ · docs at /api/v1/docs · health at /health
 ```
 
-Tras el seed, todos los usuarios demo usan la contraseña **`demo1234`**. Ver detalles en
-[`backend/README.md`](backend/README.md).
+After seeding, every demo user has the password **`demo1234`**. See
+[`backend/README.md`](backend/README.md) for details (in Spanish).
 
 ### Frontend
 
 ```bash
 cd frontend
-npm install            # primera vez
-npm run dev            # http://localhost:3000 (proxy /api → :8000)
-npm run build          # type-check (tsc -b) + build de producción → dist/
+npm install            # first time
+npm run dev            # http://localhost:3000 (proxies /api → :8000)
+npm run lint           # eslint
+npm run build          # type-check (tsc -b) + production build → dist/
 ```
 
-Detalles de variables `VITE_*` y despliegue en [`frontend/README.md`](frontend/README.md).
+`VITE_*` variables and deployment are covered in [`frontend/README.md`](frontend/README.md) (in Spanish).
 
-### Comandos habituales
+### Common commands
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (271 tests)
-.venv/bin/pytest tests/domain/            # solo tests de dominio
-.venv/bin/ruff check src tests            # lint (--fix para corregir)
+.venv/bin/pytest                          # full suite (485 tests)
+.venv/bin/pytest tests/domain/            # domain tests only
+.venv/bin/ruff check src tests            # lint (--fix to autofix)
 
-# Migraciones
-.venv/bin/alembic upgrade head            # aplicar migraciones pendientes
-.venv/bin/alembic revision --autogenerate -m "descripción"  # nueva migración
+# Migrations
+.venv/bin/alembic upgrade head            # apply pending migrations
+.venv/bin/alembic revision --autogenerate -m "description"  # new migration
 ```
 
 ---
 
-## Base de datos
+## Database
 
-**20 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores (aseguradoras, estado de clínica + versión CIE, overrides de permisos por rol, superadmin de plataforma, catálogo de diagnósticos):
+**22 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
 
-| Tabla | Descripción |
+| Table | Description |
 |---|---|
-| `tenants` + `locations` | Organización / clínica y sus sedes |
-| `users` + `doctor_profiles` | Cuentas de acceso y perfil clínico |
-| `patients` | Pacientes (datos demográficos, etiquetas, alergias) |
-| `appointments` | Citas con FSM de estado |
-| `consultations` | Consulta en curso (borrador mutable) |
-| `medical_records` | Historiales firmados e inmutables |
-| `prescriptions` | Recetas emitidas |
-| `medical_documents` | Archivos médicos |
-| `insurers` | Aseguradoras de la clínica |
-| `doctor_availability` + `availability_exceptions` | Horario + excepciones |
-| `notifications` | Notificaciones in-app |
-| `audit_logs` | Trazabilidad HIPAA/GDPR por tenant |
-| `tenant_counters` | Contadores para códigos legibles (`P-00142`, `A-2401`…) |
-| `role_permission_overrides` | Personalización de permisos por rol y tenant |
-| `diagnosis_codes` | Catálogo CIE-10/CIE-11 (global, para autocompletado) |
-| `platform_admins` | Superadmins de la plataforma |
-| `platform_audit_logs` | Auditoría global de operaciones de plataforma |
+| `tenants` + `locations` | Organization / clinic and its sites |
+| `users` + `doctor_profiles` | User accounts and clinical profile |
+| `sessions` | Active (revocable) clinic, support and platform sessions |
+| `login_attempts` | Failed-login counter for the lockout |
+| `patients` | Patients (demographics, assigned doctor, tags, allergies) |
+| `appointments` | Appointments with a status FSM |
+| `consultations` | Consultation in progress (mutable draft) |
+| `medical_records` | Signed, immutable medical records |
+| `prescriptions` | Issued prescriptions |
+| `medical_documents` | Medical files (metadata) |
+| `insurers` | The clinic's insurers |
+| `doctor_availability` + `availability_exceptions` | Working hours + exceptions |
+| `notifications` | In-app notifications (JSONB payload) |
+| `audit_logs` | Per-tenant HIPAA/GDPR audit trail |
+| `tenant_counters` | Counters for human-readable codes (`P-00142`, `A-2401`…) |
+| `role_permission_overrides` | Per-role, per-tenant permission customization |
+| `diagnosis_codes` | ICD-10/ICD-11 catalog (global, for autocomplete) |
+| `platform_admins` | Platform superadmins |
+| `platform_audit_logs` | Global audit of platform operations |
 
 ---
 
 ## Tests
 
-Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy; un grupo pequeño de tests de infraestructura ejerce además el repositorio SQLAlchemy real.
+Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-271 tests en verde
-    78  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
-   119  — aplicación (auth, citas, consultas, records, diagnósticos, plataforma,
-            permisos granulares, aislamiento multi-tenant)
-    71  — presentación (endpoints HTTP: auth guards, booking, lifecycle, 403 por permiso, plataforma)
-     3  — infraestructura (repositorio SQLAlchemy real)
+485 passing tests
+    89  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
+   200  — application (auth, sessions, appointments, consultations, records, notifications,
+            dashboard, platform, granular permissions, multi-tenant isolation)
+   154  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+            permission, error codes, validation, platform)
+    42  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
-Los tests verifican, entre otras cosas:
-- Atomicidad de `SignConsultation`: un fallo revierte record, recetas y estado de cita.
-- Aislamiento multi-tenant: los repos de un tenant no filtran datos de otro.
-- Permisos efectivos por rol y override por tenant, y de scope de plataforma.
-- Login de todos los roles y cierre correcto de las sesiones de BD (sin fuga de conexiones).
+Among other things, the tests verify:
+- `SignConsultation` atomicity: a failure rolls back the record, prescriptions and appointment status.
+- Multi-tenant isolation: one tenant's repos never leak another tenant's data.
+- Effective permissions per role and per-tenant override, plus platform scope.
+- Login lockout, session revocation and CSRF protection.
+- That every backend error code has a Spanish and an English translation.
 
 ---
 
-## Variables de entorno (backend)
+## Environment variables (backend)
 
-| Variable | Descripción | Default |
+| Variable | Description | Default |
 |---|---|---|
-| `ENVIRONMENT` | `development` o `production`. En producción se activan validaciones estrictas. | `development` |
-| `DATABASE_URL` | URL de conexión PostgreSQL (psycopg3) | `postgresql+psycopg://localhost/medicore` |
-| `JWT_SECRET` | Clave HMAC para tokens. **Obligatoria y fuerte en producción** (`openssl rand -hex 32`) | `change-me` (solo dev) |
-| `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
-| `JWT_EXPIRE_MINUTES` | Expiración del token en minutos | `1440` (24 h) |
-| `JWT_SUPPORT_EXPIRE_MINUTES` | Expiración (min) de sesiones de impersonación/soporte — más corta por seguridad | `60` (1 h) |
-| `CORS_ORIGINS` | Orígenes permitidos (coma-separados) o `*` para cualquiera | `*` |
-| `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` |
+| `ENVIRONMENT` | `development` or `production`. Production enables strict validation. | `development` |
+| `DATABASE_URL` | PostgreSQL connection URL (psycopg3) | `postgresql+psycopg://localhost/medicore` |
+| `JWT_SECRET` | HMAC key for tokens. **Required and strong in production** (`openssl rand -hex 32`) | `change-me` (dev only) |
+| `JWT_ALGORITHM` | JWT algorithm | `HS256` |
+| `JWT_EXPIRE_MINUTES` | Token lifetime in minutes | `1440` (24 h) |
+| `JWT_SUPPORT_EXPIRE_MINUTES` | Lifetime (min) of impersonation/support sessions — shorter for safety | `60` (1 h) |
+| `CORS_ORIGINS` | Allowed origins (comma-separated); `*` only in development | `*` |
+| `ENABLE_DOCS` | Expose Swagger/OpenAPI at `/api/v1/docs` | `true` (dev) / `false` (prod) |
+| `TRUSTED_PROXIES` | IPs/CIDRs of reverse proxies whose `X-Forwarded-For` is honored; empty → socket IP | empty |
 
-> En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue siendo el default inseguro o es demasiado corto. En desarrollo no se valida y los defaults funcionan tal cual.
-
----
-
-## Despliegue
-
-El backend incluye un `Dockerfile` listo para producción (usuario no-root, uvicorn en el puerto 8000). El frontend se sirve como estático (`dist/`) en el mismo origen tras un reverse-proxy, o en un host separado con `VITE_API_BASE_URL` definido al hacer el build. Pasos detallados en [`backend/README.md`](backend/README.md) y [`frontend/README.md`](frontend/README.md).
+> In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is still the insecure default or too short, or if `CORS_ORIGINS` is `*`; API docs are also disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and the defaults work as-is.
 
 ---
 
-## Backlog
+## Deployment
 
-El trabajo diferido (funcionalidad a medio implementar y hallazgos de seguridad pendientes) está inventariado en [`docs/BACKLOG.md`](docs/BACKLOG.md).
+The backend ships a production-ready `Dockerfile` (non-root user, uvicorn on port 8000). The frontend is served as static files (`dist/`) on the same origin behind a reverse proxy, or from a separate host with `VITE_API_BASE_URL` set at build time. Step-by-step instructions in [`backend/README.md`](backend/README.md) and [`frontend/README.md`](frontend/README.md) (in Spanish).
+
+---
+
+## Backlog and future plans
+
+Deferred work, pending security findings and planned future features (email/SMS notifications, appointment reminders) are listed in [`docs/BACKLOG.md`](docs/BACKLOG.md) (in Spanish).
