@@ -76,6 +76,15 @@ En cifras: **16 entidades** y **10 value objects** de dominio, **16 repositorios
   (agendada → confirmada → en curso → completada).
 - **Consulta → historial**: al firmar una consulta se emite un `MedicalRecord` inmutable + las
   recetas, y se completa la cita, todo en una transacción.
+- **Notificaciones in-app** (`application/common/notifications.py`): los casos de uso las
+  emiten dentro de su propia transacción —se guardan junto con la acción o no se guardan—,
+  nunca al propio autor. Eventos: cita creada/reprogramada/cancelada/no-show (al médico de la
+  cita), historial enmendado (al autor original), documento subido (al médico asignado del
+  paciente o, si no tiene, al de su última cita completada) y usuario creado/cambio de rol (a
+  los admins activos). Se guarda `type` + `data` (ids y etiquetas, nunca contenido clínico ni
+  nombres de archivo) y el cliente redacta el texto en su idioma. Router `notifications`:
+  listado paginado, contador de no leídas, marcar una / todas; las leídas con más de 90 días
+  se purgan al marcar. Durante una impersonación se pueden leer pero no se marcan como leídas.
 - **Auditoría (HIPAA/GDPR)** por tenant y consola global de plataforma; cada acción guarda un
   `subject` legible en su metadata para una columna de detalle útil.
 - **Consola de plataforma** (superadmin): alta/gestión de clínicas, estadísticas globales,
@@ -132,13 +141,14 @@ python -m venv .venv
 
 ## Pruebas y linting
 
-Suite de **415 tests** (89 dominio · 168 aplicación · 120 presentación · 38 infraestructura), casi
+Suite de **449 tests** (89 dominio · 193 aplicación · 125 presentación · 42 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
 Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_audit_repository_sql.py`,
 `test_diagnosis_catalog_sql.py` — ranking y búsqueda por trigram del autocomplete de diagnósticos —
-y `test_login_throttle_sql.py` — UPSERT atómico del lockout de login) usan `TEST_DATABASE_URL`
+`test_login_throttle_sql.py` — UPSERT atómico del lockout de login — y
+`test_notification_repository_sql.py` — JSONB y UPDATE/DELETE masivos de la bandeja) usan `TEST_DATABASE_URL`
 (o `DATABASE_URL` de la configuración),
 corren dentro de una transacción que siempre se revierte —no dejan rastro en la BD de desarrollo—
 y se **saltan automáticamente** si no hay PostgreSQL accesible.

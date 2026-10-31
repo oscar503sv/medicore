@@ -8,6 +8,14 @@ from datetime import date, datetime, timedelta
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
+from medicore.application.common.notifications import (
+    APPOINTMENT_CANCELLED,
+    APPOINTMENT_CREATED,
+    APPOINTMENT_NO_SHOW,
+    APPOINTMENT_RESCHEDULED,
+    appointment_payload,
+    notify,
+)
 from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
@@ -223,6 +231,10 @@ class CreateAppointment:
                     subject=_appt_subject(self._uow, appointment),
                 )
             )
+            notify(
+                self._uow, actor, self._clock.now(), APPOINTMENT_CREATED,
+                [appointment.doctor_id], **appointment_payload(self._uow, appointment),
+            )
             self._uow.commit()
         return appointment
 
@@ -261,6 +273,7 @@ class RescheduleAppointment:
         ):
             raise SlotUnavailable("new slot is not bookable")
 
+        previous_start = appointment.scheduled_start
         with self._uow:
             appointment.reschedule(new_start, duration)
             self._uow.appointments.save(appointment)
@@ -269,6 +282,11 @@ class RescheduleAppointment:
                     actor, self._clock.now(), "appointment.rescheduled", "Appointment",
                     str(appointment.id), subject=_appt_subject(self._uow, appointment),
                 )
+            )
+            notify(
+                self._uow, actor, self._clock.now(), APPOINTMENT_RESCHEDULED,
+                [appointment.doctor_id], **appointment_payload(self._uow, appointment),
+                previous_start=previous_start.isoformat(),
             )
             self._uow.commit()
         return appointment
@@ -284,6 +302,8 @@ class _AppointmentTransition:
     """Shared base for the simple status-change use cases."""
 
     action = "appointment.changed"
+    # Notification sent to the appointment's doctor, or None for transitions not worth one.
+    notification: str | None = None
 
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
@@ -306,6 +326,11 @@ class _AppointmentTransition:
                     subject=_appt_subject(self._uow, appointment),
                 )
             )
+            if self.notification is not None:
+                notify(
+                    self._uow, actor, self._clock.now(), self.notification,
+                    [appointment.doctor_id], **appointment_payload(self._uow, appointment),
+                )
             self._uow.commit()
         return appointment
 
@@ -319,6 +344,7 @@ class ConfirmAppointment(_AppointmentTransition):
 
 class CancelAppointment(_AppointmentTransition):
     action = "appointment.cancelled"
+    notification = APPOINTMENT_CANCELLED
 
     def _apply(self, appointment: Appointment) -> None:
         appointment.cancel()
@@ -326,6 +352,7 @@ class CancelAppointment(_AppointmentTransition):
 
 class MarkNoShow(_AppointmentTransition):
     action = "appointment.no_show"
+    notification = APPOINTMENT_NO_SHOW
 
     def _apply(self, appointment: Appointment) -> None:
         appointment.mark_no_show()

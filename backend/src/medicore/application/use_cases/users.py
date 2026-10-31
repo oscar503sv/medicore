@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
+from medicore.application.common.notifications import (
+    USER_CREATED,
+    USER_ROLE_CHANGED,
+    active_admins,
+    notify,
+)
 from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
@@ -79,8 +85,25 @@ class InviteUser:
                     subject=subject(user.name),
                 )
             )
+            notify(
+                self._uow, actor, self._clock.now(), USER_CREATED,
+                active_admins(self._uow, exclude=user.id),
+                user_id=str(user.id), user_name=user.name, role=str(user.role),
+            )
             self._uow.commit()
         return user
+
+
+def _notify_role_change(
+    uow: UnitOfWork, actor: ActorContext, clock: Clock, user: User, previous_role: Role
+) -> None:
+    if user.role == previous_role:
+        return
+    notify(
+        uow, actor, clock.now(), USER_ROLE_CHANGED, active_admins(uow, exclude=user.id),
+        user_id=str(user.id), user_name=user.name,
+        previous_role=str(previous_role), role=str(user.role),
+    )
 
 
 class UpdateUserRole:
@@ -91,6 +114,7 @@ class UpdateUserRole:
     def execute(self, actor: ActorContext, user_id: UserId, role: Role) -> User:
         ensure_permission(actor, Permission.USERS_MANAGE)
         user = self._require(user_id)
+        previous_role = user.role
         with self._uow:
             user.change_role(role)
             self._uow.users.save(user)
@@ -100,6 +124,7 @@ class UpdateUserRole:
                     role=str(role), subject=subject(user.name),
                 )
             )
+            _notify_role_change(self._uow, actor, self._clock, user, previous_role)
             self._uow.commit()
         return user
 
@@ -123,6 +148,7 @@ class UpdateUser:
         if user is None:
             raise EntityNotFound("User", user_id)
         allowed = {"name", "role", "sex", "phone", "specialty"}
+        previous_role = user.role
         with self._uow:
             for key, value in changes.items():
                 if key in allowed:
@@ -134,6 +160,7 @@ class UpdateUser:
                     subject=subject(user.name),
                 )
             )
+            _notify_role_change(self._uow, actor, self._clock, user, previous_role)
             self._uow.commit()
         return user
 

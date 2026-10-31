@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
+from medicore.application.common.notifications import (
+    DOCUMENT_UPLOADED,
+    RECORD_AMENDED,
+    notify,
+    treating_doctor,
+)
 from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -98,6 +104,13 @@ class AmendMedicalRecord:
                     subject=subject(amendment.code, patient.full_name if patient else None),
                 )
             )
+            notify(
+                self._uow, actor, self._clock.now(), RECORD_AMENDED, [original.author_id],
+                record_id=str(amendment.id),
+                record_code=amendment.code,
+                patient_id=str(amendment.patient_id),
+                patient_name=patient.full_name if patient else None,
+            )
             self._uow.commit()
         return amendment
 
@@ -131,7 +144,8 @@ class UploadDocument:
     def execute(self, actor: ActorContext, cmd: UploadDocumentCommand) -> MedicalDocument:
         ensure_permission(actor, Permission.RECORDS_UPLOAD)
         _validate_upload(cmd)
-        if self._uow.patients.get_by_id(cmd.patient_id) is None:
+        patient = self._uow.patients.get_by_id(cmd.patient_id)
+        if patient is None:
             raise EntityNotFound("Patient", cmd.patient_id)
         if cmd.record_id is not None and self._uow.medical_records.get_by_id(cmd.record_id) is None:
             raise EntityNotFound("MedicalRecord", cmd.record_id)
@@ -155,6 +169,15 @@ class UploadDocument:
                     actor, self._clock.now(), "document.uploaded", "MedicalDocument",
                     str(document.id), subject=subject(document.file_name),
                 )
+            )
+            # The file name is deliberately left out: it often describes clinical content.
+            notify(
+                self._uow, actor, self._clock.now(), DOCUMENT_UPLOADED,
+                [treating_doctor(self._uow, patient)],
+                document_id=str(document.id),
+                kind=str(document.kind),
+                patient_id=str(document.patient_id),
+                patient_name=patient.full_name,
             )
             self._uow.commit()
         return document

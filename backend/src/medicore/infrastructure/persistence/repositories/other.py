@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.audit_log import AuditLog
@@ -86,21 +88,44 @@ class SqlNotificationRepository:
     def _q(self):
         return self._s.query(NotificationModel).filter(NotificationModel.tenant_id == self._tid)
 
-    def list_by_user(self, user_id: UserId, unread_only: bool = False) -> list[Notification]:
-        q = (
-            self._q()
-            .filter(NotificationModel.user_id == user_id.value)
-            .order_by(NotificationModel.created_at.desc())
-        )
+    def _mine(self, user_id: UserId):
+        return self._q().filter(NotificationModel.user_id == user_id.value)
+
+    def get_by_id(self, notification_id: NotificationId) -> Notification | None:
+        row = self._q().filter(NotificationModel.id == notification_id.value).first()
+        return to_notification(row) if row else None
+
+    def list_by_user(
+        self, user_id: UserId, unread_only: bool = False, paging: Paging | None = None
+    ) -> list[Notification]:
+        paging = paging or Paging()
+        q = self._mine(user_id)
         if unread_only:
             q = q.filter(NotificationModel.read_at.is_(None))
-        return [to_notification(r) for r in q.all()]
+        rows = (
+            q.order_by(NotificationModel.created_at.desc(), NotificationModel.id.desc())
+            .offset(paging.offset)
+            .limit(paging.limit)
+            .all()
+        )
+        return [to_notification(r) for r in rows]
 
-    def mark_read(self, notification_id: NotificationId) -> None:
-        from datetime import UTC, datetime
-        row = self._q().filter(NotificationModel.id == notification_id.value).first()
-        if row and row.read_at is None:
-            row.read_at = datetime.now(UTC)
+    def count_unread(self, user_id: UserId) -> int:
+        return self._mine(user_id).filter(NotificationModel.read_at.is_(None)).count()
+
+    def mark_all_read(self, user_id: UserId, when: datetime) -> int:
+        return (
+            self._mine(user_id)
+            .filter(NotificationModel.read_at.is_(None))
+            .update({NotificationModel.read_at: when}, synchronize_session=False)
+        )
+
+    def delete_read_before(self, user_id: UserId, cutoff: datetime) -> int:
+        return (
+            self._mine(user_id)
+            .filter(NotificationModel.read_at.is_not(None), NotificationModel.read_at < cutoff)
+            .delete(synchronize_session=False)
+        )
 
     def save(self, notification: Notification) -> None:
         row = self._s.get(NotificationModel, notification.id.value)
@@ -110,8 +135,7 @@ class SqlNotificationRepository:
         row.tenant_id = notification.tenant_id.value
         row.user_id = notification.user_id.value
         row.type = notification.type
-        row.title = notification.title
-        row.body = notification.body
+        row.data = dict(notification.data)
         row.read_at = notification.read_at
         row.created_at = notification.created_at
 

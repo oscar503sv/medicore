@@ -578,19 +578,35 @@ class InMemoryDoctorAvailabilityRepository(_Scoped):
 
 
 class InMemoryNotificationRepository(_Scoped):
-    def list_by_user(self, user_id: UserId, unread_only: bool = False) -> list[Notification]:
-        result = [
-            n
-            for n in self._mine(self._store.notifications.values())
-            if n.user_id == user_id and (not unread_only or not n.is_read)
-        ]
-        result.sort(key=lambda n: n.created_at, reverse=True)
-        return result
+    def _of(self, user_id: UserId) -> list[Notification]:
+        return [n for n in self._mine(self._store.notifications.values()) if n.user_id == user_id]
 
-    def mark_read(self, notification_id: NotificationId) -> None:
+    def get_by_id(self, notification_id: NotificationId) -> Notification | None:
         n = self._store.notifications.get(notification_id.value)
-        if n and n.tenant_id == self._tenant:
-            n.mark_read()
+        return n if n and n.tenant_id == self._tenant else None
+
+    def list_by_user(
+        self, user_id: UserId, unread_only: bool = False, paging: Paging | None = None
+    ) -> list[Notification]:
+        paging = paging or Paging()
+        result = [n for n in self._of(user_id) if not unread_only or not n.is_read]
+        result.sort(key=lambda n: (n.created_at, n.id.value), reverse=True)
+        return result[paging.offset : paging.offset + paging.limit]
+
+    def count_unread(self, user_id: UserId) -> int:
+        return sum(1 for n in self._of(user_id) if not n.is_read)
+
+    def mark_all_read(self, user_id: UserId, when: datetime) -> int:
+        unread = [n for n in self._of(user_id) if not n.is_read]
+        for n in unread:
+            n.mark_read(when)
+        return len(unread)
+
+    def delete_read_before(self, user_id: UserId, cutoff: datetime) -> int:
+        stale = [n for n in self._of(user_id) if n.read_at is not None and n.read_at < cutoff]
+        for n in stale:
+            del self._store.notifications[n.id.value]
+        return len(stale)
 
     def save(self, notification: Notification) -> None:
         self._store.notifications[notification.id.value] = notification

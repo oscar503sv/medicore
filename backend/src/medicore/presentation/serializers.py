@@ -12,6 +12,7 @@ from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
+from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.tenant import Tenant
@@ -147,6 +148,16 @@ def ser_session_info(s: SessionInfoDTO) -> dict:
         "created_at": s.created_at,
         "expires_at": s.expires_at,
         "current": s.current,
+    }
+
+
+def ser_notification(n: Notification) -> dict:
+    return {
+        "id": str(n.id),
+        "type": n.type,
+        "data": dict(n.data),
+        "read_at": n.read_at,
+        "created_at": n.created_at,
     }
 
 

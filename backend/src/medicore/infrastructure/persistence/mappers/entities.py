@@ -322,8 +322,7 @@ def to_notification(row: NotificationModel) -> Notification:
         tenant_id=TenantId.parse(row.tenant_id),
         user_id=UserId.parse(row.user_id),
         type=row.type,
-        title=row.title,
-        body=row.body,
+        data=dict(row.data or {}),
         read_at=row.read_at,
         created_at=row.created_at,
     )

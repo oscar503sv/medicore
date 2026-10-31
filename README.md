@@ -50,9 +50,9 @@ src/medicore/
 │   │                   # TokenIssuer, UnitOfWork
 │   ├── common/         # ActorContext, errores de app, catálogo de permisos
 │   │                   # (permissions.py), timezone, audit_entry
-│   └── use_cases/      # 13 grupos: auth, patients, appointments, consultations,
+│   └── use_cases/      # 14 grupos: auth, patients, appointments, consultations,
 │                       # records, availability, users, organization, insurers,
-│                       # diagnoses, audit, role_permissions, platform
+│                       # diagnoses, audit, role_permissions, platform, notifications
 │
 ├── infrastructure/   # Implementaciones concretas
 │   ├── config.py       # Settings desde .env (pydantic-settings) — dev-safe por defecto

@@ -7,11 +7,10 @@ conviene revisar que las referencias sigan vigentes.
 ## Funcionalidad incompleta (backend tiene más de lo que se usa)
 
 ### Sistema de notificaciones
-La pieza más grande. Existe la base pero nada la usa:
-- Entidad `Notification` con `mark_read()` — `backend/src/medicore/domain/entities/notification.py`
-- Repositorio (puerto + implementación) y tabla `notifications` en la BD.
-- **Falta**: casos de uso, router/endpoints, emisión de notificaciones desde los flujos
-  (cita creada/cancelada, resultado subido…) y UI (campana en el Topbar).
+Backend completo (emisión desde citas, enmiendas, documentos y gestión de usuarios; router
+`/notifications`). **Falta**: la UI —campana del Topbar con contador real y desplegable— y,
+más adelante, canales externos (email/push/SMS, que ya tienen preferencias por usuario
+guardadas pero ningún proveedor) y recordatorios, que requieren un scheduler.
 
 ### Otros cabos sueltos
 - Caso de uso `AttachDocument` (`application/use_cases/consultations.py`) sin endpoint:
