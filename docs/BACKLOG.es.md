@@ -11,7 +11,8 @@ conviene revisar que las referencias sigan vigentes.
 ### Sistema de notificaciones
 Notificaciones in-app completas: emisión desde citas, enmiendas, documentos y gestión de
 usuarios; router `/notifications`; campana del Topbar con contador (sondeo cada 60 s) y
-desplegable con enlaces directos (`/appointments?date=`, `/patients/:id?tab=…&record=…`).
+desplegable con enlaces directos (`/appointments?date=`, `/patients/:id?tab=…&record=…`);
+buzón completo en `/notifications` (filtros por estado y categoría, agrupado por día).
 Canales externos y recordatorios quedan planificados como evolución futura (ver
 [A futuro](#a-futuro)).
 
@@ -30,12 +31,11 @@ Canales externos y recordatorios quedan planificados como evolución futura (ver
 Funcionalidad planificada para una siguiente etapa del producto, sin fecha.
 
 ### Notificaciones por canales externos
-Avisar también fuera de la app (hoy solo existe la campana in-app). Base ya presente: las
+Avisar también fuera de la app (hoy solo existen la campana y el buzón in-app). Base ya presente: las
 preferencias por usuario y tema (`appointments`, `reminders`, `lab_results`,
 `internal_messages`, `weekly_reports`) con canal `email | push | sms | none` se guardan
 (`domain/value_objects/user_preferences.py`), pero nada las lee: no hay endpoint, ni
-pantalla (la sección "Notificaciones" de Ajustes sigue "en desarrollo"), ni proveedor de
-envío.
+pantalla de preferencias, ni proveedor de envío.
 
 Requiere: puerto + adaptador de envío (SMTP o un servicio tipo SendGrid/Twilio), respetar
 las preferencias al emitir cada notificación, pantalla de preferencias en el perfil y

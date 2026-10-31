@@ -31,9 +31,9 @@ src/
 ├── components/   # primitivos ui/, shell/ (topbar, campana de notificaciones…), componentes
 │                 # de dominio (appointments, audit, patients, permissions, records,
 │                 # settings) y guards (RequireAuth, RequirePlatformAuth)
-├── pages/        # 16 pantallas del tenant (Patients, PatientDetail, Appointments, Schedule,
+├── pages/        # 17 pantallas del tenant (Patients, PatientDetail, Appointments, Schedule,
 │                 # Consultation, Records, Availability, Insurers, Users, Audit,
-│                 # Permissions, Settings…)
+│                 # Permissions, Notifications, Settings…)
 │   └── platform/ # 5 pantallas de superadmin (ClinicsList, ClinicDetail, GlobalStats,
 │                 # GlobalAudit, PlatformLogin)
 ├── stores/       # zustand: auth (tenant), platformAuth (superadmin), ui (tema/idioma)

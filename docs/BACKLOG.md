@@ -11,7 +11,8 @@ that the references are still accurate.
 ### Notification system
 Complete in-app notifications: emitted from appointments, amendments, documents and user
 management; `/notifications` router; a bell in the top bar with an unread counter (polled every
-60 s) and a dropdown with deep links (`/appointments?date=`, `/patients/:id?tab=…&record=…`).
+60 s) and a dropdown with deep links (`/appointments?date=`, `/patients/:id?tab=…&record=…`);
+full inbox page at `/notifications` (filters by status and category, grouped by day).
 External channels and reminders are planned as a future evolution (see [Future](#future)).
 
 ### Other loose ends
@@ -29,12 +30,11 @@ External channels and reminders are planned as a future evolution (see [Future](
 Functionality planned for a later stage of the product, with no set date.
 
 ### Notifications through external channels
-Notify people outside the app too (today only the in-app bell exists). The groundwork is in
+Notify people outside the app too (today only the in-app bell and inbox exist). The groundwork is in
 place: per-user, per-topic preferences (`appointments`, `reminders`, `lab_results`,
 `internal_messages`, `weekly_reports`) with an `email | push | sms | none` channel are stored
 (`domain/value_objects/user_preferences.py`), but nothing reads them: there is no endpoint, no
-screen (the "Notifications" section in Settings is still "in development") and no delivery
-provider.
+preferences screen and no delivery provider.
 
 Requires: a delivery port + adapter (SMTP or a service such as SendGrid/Twilio), honoring the
 preferences when emitting each notification, a preferences screen in the profile, and

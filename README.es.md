@@ -125,7 +125,7 @@ Los hallazgos pendientes están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).
 
 ## Notificaciones y dashboard
 
-- **Notificaciones in-app**: citas creadas, reprogramadas, canceladas o marcadas como no-show (al doctor), enmiendas de historial (al autor original), documentos subidos (al médico tratante) y altas o cambios de rol de usuarios (a los administradores). Campana en la barra superior con contador (sondeo cada 60 s), filtro de no leídas y enlaces directos al elemento. Se conservan 90 días.
+- **Notificaciones in-app**: citas creadas, reprogramadas, canceladas o marcadas como no-show (al doctor), enmiendas de historial (al autor original), documentos subidos (al médico tratante) y altas o cambios de rol de usuarios (a los administradores). Campana en la barra superior con contador (sondeo cada 60 s), filtro de no leídas y enlaces directos al elemento, además de una **página de buzón** (`/notifications`) filtrable por estado y categoría y agrupada por día. Se conservan 90 días.
 - **Dashboard con datos reales** (`GET /dashboard/summary`): citas de hoy, pendientes, pacientes registrados y ocupación de la agenda, cada uno comparado con la semana anterior. El doctor ve su propia agenda; los demás roles, la clínica completa.
 
 ---
@@ -158,7 +158,7 @@ medicore/
 │   ├── alembic.ini           # Config de Alembic (URL inyectada desde .env)
 │   ├── migrations/           # 14 migraciones Alembic
 │   ├── scripts/
-│   │   ├── seed_demo.py            # Datos demo: clínicas, staff por rol, pacientes
+│   │   ├── seed_demo.py            # Datos demo: ~8 semanas de historia + 4 de agenda, vía casos de uso
 │   │   ├── import_icd.py           # Carga del catálogo CIE-10/CIE-11
 │   │   └── create_platform_admin.py # Alta de superadmin de plataforma
 │   ├── pyproject.toml        # Metadata + deps + config pytest/ruff
@@ -179,10 +179,11 @@ medicore/
         ├── components/       # ui/ + shell/ (topbar, campana de notificaciones…)
         │                     # + appointments/ + audit/ + patients/ + permissions/
         │                     # + records/ + settings/ + guards (RequireAuth…)
-        └── pages/            # 16 pantallas de clínica (Login, Dashboard, Patients,
+        └── pages/            # 17 pantallas de clínica (Login, Dashboard, Patients,
                               # PatientDetail, Appointments, Schedule, Consultation,
                               # Records, Availability, Insurers, Users, Settings,
-                              # Audit, Permissions, ChangePassword, ComingSoon)
+                              # Audit, Permissions, Notifications, ChangePassword,
+                              # ComingSoon)
                               # + platform/ (5 pantallas de superadmin)
 ```
 
@@ -201,7 +202,7 @@ medicore/
 | **7** | Permisos granulares con overrides por tenant + UI por permisos | ✅ Completada |
 | **8** | Hardening de producción (dev-safe defaults) + Dockerfile | ✅ Completada |
 | **9** | Seguridad: sesiones en cookie + CSRF, sesiones revocables, lockout de login, anti-enumeración | ✅ Completada |
-| **10** | Notificaciones in-app (backend + campana) | ✅ Completada |
+| **10** | Notificaciones in-app (backend, campana y buzón) | ✅ Completada |
 | **11** | Dashboard con métricas reales, interfaz 100 % ES/EN y errores de la API traducibles | ✅ Completada |
 | — | Política de contraseñas | ⏳ Pendiente |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
@@ -241,7 +242,7 @@ cp .env.example .env
 # API en http://localhost:8000/api/v1/ · docs en /api/v1/docs · health en /health
 ```
 
-Tras el seed, todos los usuarios demo usan la contraseña **`demo1234`**. Ver detalles en
+El seed reproduce ~8 semanas de actividad de la clínica y las próximas 4 semanas de agenda respecto al día en que se ejecuta (vuelve a correrlo con `--reset` para actualizar las fechas). Tras el seed, todos los usuarios demo usan la contraseña **`demo1234`**. Ver detalles en
 [`backend/README.es.md`](backend/README.es.md).
 
 ### Frontend
@@ -260,7 +261,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (485 tests)
+.venv/bin/pytest                          # suite completa (489 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -304,13 +305,13 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-485 tests en verde
+489 tests en verde
     89  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
-   200  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   201  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   154  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   156  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    42  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    43  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

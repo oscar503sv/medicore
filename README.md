@@ -125,7 +125,7 @@ Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## Notifications and dashboard
 
-- **In-app notifications**: appointments created, rescheduled, cancelled or marked as no-show (to the doctor), record amendments (to the original author), uploaded documents (to the treating doctor) and new users or role changes (to administrators). A bell in the top bar with an unread counter (polled every 60 s), an unread-only filter and deep links to the item. Kept for 90 days.
+- **In-app notifications**: appointments created, rescheduled, cancelled or marked as no-show (to the doctor), record amendments (to the original author), uploaded documents (to the treating doctor) and new users or role changes (to administrators). A bell in the top bar with an unread counter (polled every 60 s), an unread-only filter and deep links to the item, plus a full **inbox page** (`/notifications`) filterable by status and category and grouped by day. Kept for 90 days.
 - **Dashboard with real data** (`GET /dashboard/summary`): today's appointments, pending ones, registered patients and schedule occupancy, each compared with the previous week. Doctors see their own schedule; other roles see the whole clinic.
 
 ---
@@ -158,7 +158,7 @@ medicore/
 │   ├── alembic.ini           # Alembic config (URL injected from .env)
 │   ├── migrations/           # 14 Alembic migrations
 │   ├── scripts/
-│   │   ├── seed_demo.py            # Demo data: clinics, staff per role, patients
+│   │   ├── seed_demo.py            # Demo data: ~8 weeks of history + 4 of agenda, via the use cases
 │   │   ├── import_icd.py           # Loads the ICD-10/ICD-11 catalog
 │   │   └── create_platform_admin.py # Creates a platform superadmin
 │   ├── pyproject.toml        # Metadata + deps + pytest/ruff config
@@ -179,10 +179,11 @@ medicore/
         ├── components/       # ui/ + shell/ (top bar, notification bell…)
         │                     # + appointments/ + audit/ + patients/ + permissions/
         │                     # + records/ + settings/ + guards (RequireAuth…)
-        └── pages/            # 16 clinic screens (Login, Dashboard, Patients,
+        └── pages/            # 17 clinic screens (Login, Dashboard, Patients,
                               # PatientDetail, Appointments, Schedule, Consultation,
                               # Records, Availability, Insurers, Users, Settings,
-                              # Audit, Permissions, ChangePassword, ComingSoon)
+                              # Audit, Permissions, Notifications, ChangePassword,
+                              # ComingSoon)
                               # + platform/ (5 superadmin screens)
 ```
 
@@ -201,7 +202,7 @@ medicore/
 | **7** | Granular permissions with per-tenant overrides + permission-driven UI | ✅ Done |
 | **8** | Production hardening (dev-safe defaults) + Dockerfile | ✅ Done |
 | **9** | Security: cookie sessions + CSRF, revocable sessions, login lockout, anti-enumeration | ✅ Done |
-| **10** | In-app notifications (backend + bell) | ✅ Done |
+| **10** | In-app notifications (backend, bell and inbox) | ✅ Done |
 | **11** | Real dashboard metrics, fully ES/EN interface and translatable API errors | ✅ Done |
 | — | Password policy | ⏳ Pending |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
@@ -241,7 +242,7 @@ cp .env.example .env
 # API at http://localhost:8000/api/v1/ · docs at /api/v1/docs · health at /health
 ```
 
-After seeding, every demo user has the password **`demo1234`**. See
+The seed replays ~8 weeks of clinic activity and the next 4 weeks of agenda relative to the day it runs (re-run it with `--reset` to refresh the dates). After seeding, every demo user has the password **`demo1234`**. See
 [`backend/README.md`](backend/README.md) for details.
 
 ### Frontend
@@ -260,7 +261,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (485 tests)
+.venv/bin/pytest                          # full suite (489 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -304,13 +305,13 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-485 passing tests
+489 passing tests
     89  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
-   200  — application (auth, sessions, appointments, consultations, records, notifications,
+   201  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   154  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   156  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    42  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    43  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

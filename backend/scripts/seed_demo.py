@@ -1,17 +1,25 @@
-"""Seed rich demo data that reflects the current system.
+"""Seed rich, up-to-date demo data by replaying the clinic's history through the real use cases.
 
-Per tenant: 1 admin, 5 doctors (with availability), 1 nurse, 1 receptionist, 30 patients,
-4 insurers — plus realistic activity so the app looks populated:
+Per tenant: 2 admins, 5 doctors (each with a specialty and working hours), 1 nurse,
+1 receptionist, 4 insurers and ~70 patients (some children for pediatrics, a few registered
+this week). Everything is relative to the day the script runs:
 
-* Past (~8 weeks → today): weekly signed consultations per doctor → MedicalRecords with
-  vitals, diagnoses and prescriptions (insurer frozen on the record), and matching audit.
-* Future (today → end of October 2026): weekly scheduled/confirmed appointments → agenda
-  and "next appointment".
-* Audit entries (logins, patient.created, appointment.created, consultation.signed,
-  record.viewed) carry a human ``subject`` so the audit Detail column is meaningful.
+* Past ~8 weeks: appointments booked by reception, confirmed, attended (consultation started,
+  vitals + SOAP + CIE-11 diagnoses + prescriptions, then signed → medical record), plus
+  cancellations and no-shows.
+* Today: the morning already attended, the rest of the day confirmed — the dashboard shows
+  real numbers and a comparison with last week.
+* Next ~4 weeks: an agenda that thins out with distance, with some reschedules and
+  cancellations, a doctor's vacation and an extra Saturday shift.
+* Amendments (some by a covering doctor), uploaded documents (lab results, imaging…), a
+  recently invited user whose role was corrected, and login history.
 
-Idempotent: re-running skips tenants/users/patients that already exist and skips activity if
-the tenant already has appointments. Use ``--reset`` to wipe the demo tenants first (cascade).
+Because every action goes through its use case with a simulated clock, audit entries and
+in-app notifications come out exactly as in real use. Older notifications are marked as read;
+the last couple of days stay mostly unread.
+
+Idempotent: re-running skips tenants that already have appointments. ``--reset`` wipes the
+demo tenants first (cascade) and recreates them.
 
 Usage:
     .venv/bin/python scripts/seed_demo.py [--reset]
@@ -21,39 +29,69 @@ from __future__ import annotations
 
 import argparse
 import random
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select, update
 
-from medicore.application.common.audit import audit_entry, subject
+from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
-from medicore.domain.entities.appointment import Appointment
-from medicore.domain.entities.availability import BookingRules, DoctorAvailability, WeeklyDay
+from medicore.application.common.errors import ApplicationError
+from medicore.application.use_cases.appointments import (
+    CancelAppointment,
+    ConfirmAppointment,
+    CreateAppointment,
+    CreateAppointmentCommand,
+    MarkNoShow,
+    RescheduleAppointment,
+)
+from medicore.application.use_cases.availability import AddAvailabilityException
+from medicore.application.use_cases.consultations import (
+    AddDiagnosis,
+    AddPrescriptionDraft,
+    AutosaveConsultation,
+    ConsultationPatch,
+    SignConsultation,
+    SignConsultationCommand,
+    StartConsultation,
+)
+from medicore.application.use_cases.patients import CreatePatient, CreatePatientCommand
+from medicore.application.use_cases.records import (
+    AmendMedicalRecord,
+    GetMedicalRecord,
+    UploadDocument,
+    UploadDocumentCommand,
+)
+from medicore.application.use_cases.users import InviteUser, InviteUserCommand, UpdateUserRole
+from medicore.domain.entities.availability import (
+    AvailabilityException,
+    BookingRules,
+    DoctorAvailability,
+    WeeklyDay,
+)
 from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.patient import Patient
-from medicore.domain.entities.prescription import Prescription, PrescriptionSnapshot
+from medicore.domain.entities.prescription import PrescriptionDraft
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import (
-    AppointmentStatus,
     AppointmentType,
-    ClinicalRecordType,
-    PatientStatus,
+    AvailabilityExceptionKind,
+    DocumentKind,
     PrescriptionStatus,
     Role,
     Sex,
     UserStatus,
 )
+from medicore.domain.shared.errors import DomainError
 from medicore.domain.shared.identifiers import (
-    AppointmentId,
     AvailabilityId,
+    ExceptionId,
     InsurerId,
     LocationId,
-    PatientId,
-    PrescriptionId,
-    RecordId,
     TenantId,
     UserId,
 )
@@ -68,22 +106,44 @@ from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
 from medicore.infrastructure.database.engine import get_session
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
+from medicore.infrastructure.persistence.models.notification import NotificationModel
 from medicore.infrastructure.persistence.models.tenant import TenantModel
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 PASSWORD = "demo1234"
 HASHER = BcryptPasswordHasher()
 RNG = random.Random(42)
+TIMEZONE = "America/El_Salvador"
 
+PAST_WEEKS = 8
+FUTURE_WEEKS = 4
+PATIENTS_PER_TENANT = 70
+CHILDREN_PER_TENANT = 12
+NEW_PATIENTS_THIS_WEEK = 5
+
+# ── reference data ────────────────────────────────────────────────────────────────────────
 LAST_NAMES = [
-    "García", "Fernández", "González", "Rodríguez", "López", "Martínez", "Sánchez",
-    "Pérez", "Gómez", "Ruiz", "Díaz", "Moreno", "Álvarez", "Romero", "Torres",
+    "García", "Fernández", "González", "Rodríguez", "López", "Martínez", "Sánchez", "Pérez",
+    "Gómez", "Ruiz", "Díaz", "Moreno", "Álvarez", "Romero", "Torres", "Navarro", "Ramos",
+    "Castro", "Ortega", "Rubio", "Molina", "Delgado", "Herrera", "Flores", "Vargas", "Rivas",
 ]
-FEMALE_NAMES = ["María", "Carmen", "Ana", "Laura", "Lucía", "Elena", "Sofía", "Marta", "Paula", "Rosa"]
-MALE_NAMES = ["Juan", "Carlos", "Miguel", "Antonio", "Javier", "David", "Pablo", "Sergio", "Hugo", "Diego"]
-BLOOD = ["O+", "A+", "B+", "O-", "A-", "AB+"]
-TAGS = [["Hipertensión"], ["Diabetes tipo 2"], ["Asma"], [], ["Hipotiroidismo"], ["Migraña"]]
-ALLERGIES = [["Penicilina"], [], ["Polen"], ["Frutos secos"], [], ["AINE"]]
+FEMALE_NAMES = [
+    "María", "Carmen", "Ana", "Laura", "Lucía", "Sofía", "Marta", "Paula", "Rosa", "Isabel",
+    "Valeria", "Daniela", "Gabriela", "Andrea", "Claudia", "Patricia", "Teresa", "Julia",
+]
+MALE_NAMES = [
+    "Juan", "Carlos", "Miguel", "Antonio", "Javier", "David", "Pablo", "Sergio", "Hugo",
+    "Diego", "Alejandro", "Fernando", "Ricardo", "Andrés", "Manuel", "Raúl", "Óscar", "Luis",
+]
+CHILD_FEMALE = ["Valentina", "Camila", "Emma", "Martina", "Lola", "Alba"]
+CHILD_MALE = ["Mateo", "Leo", "Lucas", "Daniel", "Thiago", "Bruno"]
+BLOOD = ["O+", "O+", "A+", "A+", "B+", "O-", "A-", "AB+"]
+ADULT_TAGS = [
+    [], [], ["Hipertensión"], ["Diabetes tipo 2"], ["Asma"], ["Hipotiroidismo"], ["Migraña"],
+    ["Hipertensión", "Dislipidemia"], ["Obesidad"], ["Ansiedad"], [],
+]
+CHILD_TAGS = [[], [], ["Asma"], ["Dermatitis atópica"], []]
+ALLERGIES = [[], [], [], ["Penicilina"], ["Polen"], ["Frutos secos"], ["AINE"], ["Látex"]]
 
 INSURERS = [
     ("Sanitas", "900100100", "atencion@sanitas.test", "Calle Ribera del Loira 52, Madrid"),
@@ -92,153 +152,219 @@ INSURERS = [
     ("Mapfre Salud", "900400400", "salud@mapfre.test", "Ctra. de Pozuelo 52, Majadahonda"),
 ]
 
-DIAGNOSES = [
-    ("I10", "Hipertensión esencial"),
-    ("E11.9", "Diabetes mellitus tipo 2"),
-    ("J45.909", "Asma no especificada"),
-    ("M54.5", "Lumbalgia"),
-    ("J06.9", "Infección respiratoria aguda"),
-    ("K21.9", "Reflujo gastroesofágico"),
-    ("N39.0", "Infección de vías urinarias"),
-    ("F41.1", "Trastorno de ansiedad generalizada"),
-]
-MEDS = [
-    ("Enalapril", "20 mg", "1× día · mañana", 30),
-    ("Metformina", "850 mg", "2× día", 90),
-    ("Salbutamol", "100 mcg", "2 inhalaciones c/8h", 30),
-    ("Ibuprofeno", "400 mg", "c/8h", 7),
-    ("Amoxicilina", "500 mg", "c/8h", 10),
+
+@dataclass(frozen=True)
+class Specialty:
+    reasons: list[str]
+    diagnoses: list[tuple[str, str]]  # CIE-11 (the demo clinics use CIE-11)
+    meds: list[tuple[str, str, str, int]]  # drug, dose, schedule, days
+
+
+MEDS_GENERAL = [
+    ("Paracetamol", "500 mg", "c/8h si dolor o fiebre", 5),
+    ("Ibuprofeno", "400 mg", "c/8h con alimentos", 7),
     ("Omeprazol", "20 mg", "1× día · ayunas", 28),
     ("Loratadina", "10 mg", "1× día", 15),
+    ("Amoxicilina", "500 mg", "c/8h", 10),
 ]
-REASONS = [
-    "Control de hipertensión", "Dolor abdominal", "Revisión general", "Seguimiento diabetes",
-    "Cefalea persistente", "Dolor lumbar", "Tos y fiebre", "Chequeo anual", "Reacción alérgica",
-    "Control de tiroides",
-]
-WORK_HOURS = [9, 10, 11, 12, 13, 16, 17, 18]
-
-# Per-tenant staff: (name, email_local, role, specialty). Admin is added separately.
-STAFF = {
-    "clinica-demo": [
-        ("Dra. Elena Ruiz", "elena.ruiz", Role.DOCTOR, "Cardiología"),
-        ("Dr. Marco Vidal", "marco.vidal", Role.DOCTOR, "Medicina General"),
-        ("Dra. Paula Méndez", "paula.mendez", Role.DOCTOR, "Pediatría"),
-        ("Dr. Andrés Soto", "andres.soto", Role.DOCTOR, "Dermatología"),
-        ("Dra. Carla Núñez", "carla.nunez", Role.DOCTOR, "Ginecología"),
-        ("Lucía Méndez", "lucia.mendez", Role.NURSE, "Enfermería"),
-        ("Sara Gil", "sara.gil", Role.RECEPTIONIST, None),
-    ],
-    "centro-norte": [
-        ("Dra. Núria Soler", "nuria.soler", Role.DOCTOR, "Pediatría"),
-        ("Dr. Iván Costa", "ivan.costa", Role.DOCTOR, "Traumatología"),
-        ("Dr. Pol Ferrer", "pol.ferrer", Role.DOCTOR, "Medicina General"),
-        ("Dra. Aina Vidal", "aina.vidal", Role.DOCTOR, "Endocrinología"),
-        ("Dr. Marc Roig", "marc.roig", Role.DOCTOR, "Cardiología"),
-        ("Marta Roca", "marta.roca", Role.NURSE, "Enfermería"),
-        ("Jordi Pla", "jordi.pla", Role.RECEPTIONIST, None),
-    ],
+SPECIALTIES: dict[str, Specialty] = {
+    "Medicina General": Specialty(
+        ["Revisión general", "Tos y fiebre", "Dolor de garganta", "Dolor abdominal",
+         "Cefalea persistente", "Malestar general", "Chequeo anual", "Ardor al orinar"],
+        [("CA07.0", "Infección respiratoria aguda de las vías altas, sitio no especificado"),
+         ("CA02", "Faringitis aguda"), ("DA42.Z", "Gastritis, sin especificación"),
+         ("GC08.Z", "Infección urinaria, localización y microbio patógeno no especificados"),
+         ("8A80.Z", "Migraña, sin especificación"),
+         ("1A40", "Gastroenteritis o colitis sin especificación del agente infeccioso")],
+        MEDS_GENERAL,
+    ),
+    "Cardiología": Specialty(
+        ["Control de hipertensión", "Palpitaciones", "Dolor torácico atípico",
+         "Revisión de electrocardiograma", "Control de colesterol"],
+        [("BA00.Z", "Hipertensión esencial, sin especificación"),
+         ("5C80.0", "Hipercolesterolemia"), ("BC81", "Taquiarritmia supraventricular")],
+        [("Enalapril", "20 mg", "1× día · mañana", 90), ("Amlodipino", "5 mg", "1× día", 90),
+         ("Atorvastatina", "20 mg", "1× día · noche", 90), ("Ácido acetilsalicílico",
+                                                             "100 mg", "1× día", 90)],
+    ),
+    "Pediatría": Specialty(
+        ["Control de niño sano", "Fiebre", "Tos", "Vacunación", "Dolor de oído",
+         "Erupción en la piel"],
+        [("CA07.0", "Infección respiratoria aguda de las vías altas, sitio no especificado"),
+         ("AB00", "Otitis media aguda"), ("EA80", "Eccema atópico"),
+         ("1A40", "Gastroenteritis o colitis sin especificación del agente infeccioso")],
+        [("Paracetamol jarabe", "15 mg/kg", "c/6h si fiebre", 5),
+         ("Amoxicilina suspensión", "50 mg/kg/día", "c/8h", 10),
+         ("Suero oral", "200 ml", "tras cada deposición", 3)],
+    ),
+    "Dermatología": Specialty(
+        ["Acné", "Revisión de lunares", "Dermatitis", "Caída del cabello", "Picor persistente"],
+        [("ED80", "Acné"), ("EA80", "Eccema atópico"), ("EA90", "Psoriasis"),
+         ("ED70", "Alopecia o caída del pelo")],
+        [("Peróxido de benzoilo gel", "5%", "1× día · noche", 60),
+         ("Hidrocortisona crema", "1%", "2× día", 10), ("Cetirizina", "10 mg", "1× día", 15)],
+    ),
+    "Ginecología": Specialty(
+        ["Control ginecológico anual", "Dolor pélvico", "Control prenatal",
+         "Irregularidad menstrual", "Planificación familiar"],
+        [("GA34.3", "Dismenorrea"), ("QA42", "Supervisión de embarazo normal"),
+         ("GA20.0", "Amenorrea"),
+         ("GC08.Z", "Infección urinaria, localización y microbio patógeno no especificados")],
+        [("Ácido fólico", "5 mg", "1× día", 90), ("Ibuprofeno", "600 mg", "c/8h", 5),
+         ("Hierro", "80 mg", "1× día", 60)],
+    ),
+    "Traumatología": Specialty(
+        ["Dolor lumbar", "Dolor de rodilla", "Esguince de tobillo", "Dolor de hombro",
+         "Control post-fractura"],
+        [("ME84.2", "Dolor lumbar"), ("FA01", "Osteoartritis de la rodilla"),
+         ("ND14.7", "Distensión o esguince del tobillo"), ("FB53", "Lesiones del hombro")],
+        [("Ibuprofeno", "600 mg", "c/8h con alimentos", 10),
+         ("Metocarbamol", "500 mg", "c/8h", 7), ("Paracetamol", "1 g", "c/8h", 10)],
+    ),
+    "Endocrinología": Specialty(
+        ["Seguimiento diabetes", "Control de tiroides", "Control de peso",
+         "Resultados de laboratorio"],
+        [("5A11", "Diabetes mellitus tipo 2"), ("5A00.Z", "Hipotiroidismo, sin especificación"),
+         ("5B81", "Obesidad"), ("5C80.0", "Hipercolesterolemia")],
+        [("Metformina", "850 mg", "2× día con comidas", 90), ("Levotiroxina", "50 mcg",
+                                                              "1× día · ayunas", 90),
+         ("Atorvastatina", "10 mg", "1× día · noche", 90)],
+    ),
 }
 
+# Per tenant: (name, email_local, role, specialty, works_afternoons). Admin is added apart.
+STAFF = {
+    "clinica-demo": [
+        ("Dra. Elena Ruiz", "elena.ruiz", Role.DOCTOR, "Cardiología", True),
+        ("Dr. Marco Vidal", "marco.vidal", Role.DOCTOR, "Medicina General", True),
+        ("Dra. Paula Méndez", "paula.mendez", Role.DOCTOR, "Pediatría", False),
+        ("Dr. Andrés Soto", "andres.soto", Role.DOCTOR, "Dermatología", True),
+        ("Dra. Carla Núñez", "carla.nunez", Role.DOCTOR, "Ginecología", False),
+        ("Lucía Méndez", "lucia.mendez", Role.NURSE, None, True),
+        ("Sara Gil", "sara.gil", Role.RECEPTIONIST, None, True),
+        ("Raúl Herrera", "raul.herrera", Role.ADMIN, None, True),
+    ],
+    "centro-norte": [
+        ("Dra. Núria Soler", "nuria.soler", Role.DOCTOR, "Pediatría", False),
+        ("Dr. Iván Costa", "ivan.costa", Role.DOCTOR, "Traumatología", True),
+        ("Dr. Pol Ferrer", "pol.ferrer", Role.DOCTOR, "Medicina General", True),
+        ("Dra. Aina Vidal", "aina.vidal", Role.DOCTOR, "Endocrinología", False),
+        ("Dr. Marc Roig", "marc.roig", Role.DOCTOR, "Cardiología", True),
+        ("Marta Roca", "marta.roca", Role.NURSE, None, True),
+        ("Jordi Pla", "jordi.pla", Role.RECEPTIONIST, None, True),
+        ("Clara Puig", "clara.puig", Role.ADMIN, None, True),
+    ],
+}
+# A user invited a few days ago by the second admin (as nurse, then corrected to reception).
+INVITED = {
+    "clinica-demo": ("Andrea Molina", "andrea.molina"),
+    "centro-norte": ("Pau Serra", "pau.serra"),
+}
+DOCUMENTS = [
+    (DocumentKind.LAB, "Hemograma completo.pdf", "application/pdf"),
+    (DocumentKind.LAB, "Perfil lipídico.pdf", "application/pdf"),
+    (DocumentKind.LAB, "Glucosa y HbA1c.pdf", "application/pdf"),
+    (DocumentKind.LAB, "Examen general de orina.pdf", "application/pdf"),
+    (DocumentKind.IMAGING, "Radiografía de tórax.jpg", "image/jpeg"),
+    (DocumentKind.IMAGING, "Ecografía abdominal.pdf", "application/pdf"),
+    (DocumentKind.IMAGING, "Electrocardiograma.png", "image/png"),
+    (DocumentKind.CONSENT, "Consentimiento informado.pdf", "application/pdf"),
+    (DocumentKind.OTHER, "Referencia de especialista.pdf", "application/pdf"),
+    (DocumentKind.RX, "Receta externa.jpg", "image/jpeg"),
+]
 
-# ── builders ────────────────────────────────────────────────────────────────
-def weekday_availability(tid: TenantId, doctor_id: UserId) -> DoctorAvailability:
-    """Mon–Fri 09:00–14:00 + 16:00–19:00."""
-    weekly = [
-        WeeklyDay(
-            day_of_week=d,
-            enabled=d < 5,
-            blocks=[TimeRange(time(9, 0), time(14, 0)), TimeRange(time(16, 0), time(19, 0))]
-            if d < 5
-            else [],
-        )
-        for d in range(7)
-    ]
+
+# ── simulated clock ───────────────────────────────────────────────────────────────────────
+class SimClock:
+    """A settable clock. Times are given as clinic wall-clock and returned as UTC instants,
+    like ``SystemClock``, so use cases convert them back with the tenant's timezone."""
+
+    def __init__(self, tz: ZoneInfo) -> None:
+        self.tz = tz
+        self._now = datetime.now(UTC)
+
+    def at(self, local: datetime) -> SimClock:
+        self._now = local.replace(tzinfo=self.tz).astimezone(UTC)
+        return self
+
+    def now(self) -> datetime:
+        return self._now
+
+
+@dataclass
+class Clinic:
+    """Everything the activity generators need about one tenant."""
+
+    session: object
+    tenant: Tenant
+    clock: SimClock
+    now: datetime  # clinic wall-clock when the script runs
+    admin: User
+    second_admin: User
+    doctors: list[User]
+    specialty: dict[UserId, str]
+    nurse: User
+    reception: User
+    insurer_ids: list[InsurerId]
+    patients: list[Patient] = field(default_factory=list)
+    signed: list[MedicalRecord] = field(default_factory=list)
+    taken: set[tuple[UserId, datetime]] = field(default_factory=set)
+    stats: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def tid(self) -> TenantId:
+        return self.tenant.id
+
+    @property
+    def today(self) -> date:
+        return self.now.date()
+
+    def uow(self) -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(self.session, self.tid)
+
+    def codes(self) -> DbSequentialCodeGenerator:
+        return DbSequentialCodeGenerator(self.session, self.tid.value)
+
+    def at(self, local: datetime) -> SimClock:
+        return self.clock.at(local)
+
+    def count(self, key: str, n: int = 1) -> None:
+        self.stats[key] = self.stats.get(key, 0) + n
+
+
+def actor(c: Clinic, user: User) -> ActorContext:
+    return ActorContext(
+        user_id=user.id, tenant_id=c.tid, role=user.role, ip_address="10.0.0.12",
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0",
+    )
+
+
+# ── setup: tenant, staff, insurers ────────────────────────────────────────────────────────
+def availability_for(tid: TenantId, doctor_id: UserId, afternoons: bool) -> DoctorAvailability:
+    """Mon–Fri 09:00–14:00, plus 16:00–19:00 for doctors who work afternoons."""
+    blocks = [TimeRange(time(9, 0), time(14, 0))]
+    if afternoons:
+        blocks.append(TimeRange(time(16, 0), time(19, 0)))
+    weekly = [WeeklyDay(day_of_week=d, enabled=d < 5, blocks=list(blocks) if d < 5 else [])
+              for d in range(7)]
     return DoctorAvailability(
-        id=AvailabilityId.new(),
-        tenant_id=tid,
-        doctor_id=doctor_id,
-        weekly=weekly,
+        id=AvailabilityId.new(), tenant_id=tid, doctor_id=doctor_id, weekly=weekly,
         rules=BookingRules(slot_minutes=30),
     )
 
 
 def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) -> User:
     first = name.replace("Dr. ", "").replace("Dra. ", "").split()[0]
-    sex = Sex.FEMALE if first.lower().endswith("a") else Sex.MALE
+    female = name.startswith("Dra. ") or first.lower().endswith("a")
     return User(
-        id=UserId.new(),
-        tenant_id=tid,
-        name=name,
-        email=email,
-        password_hash=HASHER.hash(PASSWORD),
-        role=role,
-        status=UserStatus.ACTIVE,
-        sex=sex,
-        specialty=specialty,
+        id=UserId.new(), tenant_id=tid, name=name, email=email,
+        password_hash=HASHER.hash(PASSWORD), role=role, status=UserStatus.ACTIVE,
+        sex=Sex.FEMALE if female else Sex.MALE, specialty=specialty,
+        phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
     )
 
 
-def make_patient(tid: TenantId, code: str, i: int, doctor_id: UserId) -> Patient:
-    is_female = i % 2 == 0
-    first = (FEMALE_NAMES if is_female else MALE_NAMES)[i % 10]
-    last = f"{LAST_NAMES[i % len(LAST_NAMES)]} {LAST_NAMES[(i + 5) % len(LAST_NAMES)]}"
-    year = 1955 + (i * 37) % 50
-    month = 1 + (i * 7) % 12
-    day = 1 + (i * 13) % 28
-    return Patient(
-        id=PatientId.new(),
-        tenant_id=tid,
-        code=code,
-        first_name=first,
-        last_name=last,
-        sex=Sex.FEMALE if is_female else Sex.MALE,
-        date_of_birth=date(year, month, day),
-        blood_type=BloodType(BLOOD[i % len(BLOOD)]),
-        primary_doctor_id=doctor_id,
-        status=PatientStatus.ACTIVE,
-        tags=list(TAGS[i % len(TAGS)]),
-        allergies=list(ALLERGIES[i % len(ALLERGIES)]),
-        contact=ContactInfo(
-            phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
-            email=f"{first.lower()}.{i}@example.com",
-            address=f"Calle {LAST_NAMES[i % len(LAST_NAMES)]} {10 + i}, Col. Centro",
-            emergency_contact_name=f"{MALE_NAMES[i % 10]} {last.split()[0]}",
-            emergency_contact_phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
-        ),
-    )
-
-
-def make_vitals() -> Vitals:
-    sys, dia = RNG.randint(108, 148), RNG.randint(68, 96)
-    return Vitals(
-        blood_pressure=f"{sys}/{dia}",
-        heart_rate=RNG.randint(58, 96),
-        spo2=RNG.randint(95, 100),
-        temperature=Decimal(f"{RNG.randint(360, 378) / 10:.1f}"),
-        weight=Decimal(f"{RNG.randint(550, 980) / 10:.1f}"),
-        glucose=RNG.randint(78, 145),
-        height=Decimal(RNG.randint(150, 190)),
-    )
-
-
-def ctx(tid: TenantId, user: User) -> ActorContext:
-    return ActorContext(
-        user_id=user.id, tenant_id=tid, role=user.role, ip_address="127.0.0.1",
-        user_agent="seed-demo/1.0",
-    )
-
-
-def mondays(start: date, end: date):
-    """Yield the Monday of each week from ``start``'s week through ``end``."""
-    d = start - timedelta(days=start.weekday())
-    while d <= end:
-        yield d
-        d += timedelta(weeks=1)
-
-
-# ── tenant seeding ────────────────────────────────────────────────────────────
-def get_or_create_tenant(session, slug: str, legal_name: str, location_name: str) -> Tenant:
+def get_or_create_tenant(session, slug: str, legal_name: str, location: str) -> Tenant:
     row = session.query(TenantModel).filter(TenantModel.slug == slug).first()
     if row:
         print(f"  tenant '{slug}' ya existe")
@@ -246,12 +372,8 @@ def get_or_create_tenant(session, slug: str, legal_name: str, location_name: str
         return SqlAlchemyUnitOfWork(session, tid).tenants.get_by_id(tid)
     tid = TenantId.new()
     tenant = Tenant(
-        id=tid,
-        legal_name=legal_name,
-        tax_id="B00000000",
-        slug=Slug(slug),
-        timezone="America/El_Salvador",
-        locations=[Location(id=LocationId.new(), tenant_id=tid, name=location_name, is_primary=True)],
+        id=tid, legal_name=legal_name, tax_id="B00000000", slug=Slug(slug), timezone=TIMEZONE,
+        locations=[Location(id=LocationId.new(), tenant_id=tid, name=location, is_primary=True)],
     )
     uow = SqlAlchemyUnitOfWork(session, tid)
     with uow:
@@ -261,243 +383,501 @@ def get_or_create_tenant(session, slug: str, legal_name: str, location_name: str
     return tenant
 
 
-def seed_staff(session, tenant: Tenant) -> tuple[User, list[User], User, User]:
-    """Create admin + staff; return (admin, doctors, nurse, receptionist)."""
+def seed_staff(session, tenant: Tenant) -> dict:
     tid = tenant.id
     uow = SqlAlchemyUnitOfWork(session, tid)
-    doctors: list[User] = []
-    nurse: User | None = None
-    receptionist: User | None = None
+    out: dict = {"doctors": [], "specialty": {}, "admins": []}
     with uow:
-        admin_email = f"admin@{tenant.slug}.test"
-        admin = uow.users.get_by_email(admin_email) or make_user(tid, "Admin Demo", admin_email, Role.ADMIN)
-        if uow.users.get_by_email(admin_email) is None:
+        email = f"admin@{tenant.slug}.test"
+        admin = uow.users.get_by_email(email)
+        if admin is None:
+            admin = make_user(tid, "Admin Demo", email, Role.ADMIN)
             uow.users.save(admin)
-
-        for name, local, role, specialty in STAFF[str(tenant.slug)]:
+        out["admins"].append(admin)
+        for name, local, role, specialty, afternoons in STAFF[str(tenant.slug)]:
             email = f"{local}@{tenant.slug}.test"
-            existing = uow.users.get_by_email(email)
-            user = existing or make_user(tid, name, email, role, specialty)
-            if existing is None:
+            user = uow.users.get_by_email(email)
+            if user is None:
+                user = make_user(tid, name, email, role, specialty)
                 uow.users.save(user)
                 if role == Role.DOCTOR:
-                    uow.availability.save(weekday_availability(tid, user.id))
+                    uow.availability.save(availability_for(tid, user.id, afternoons))
             if role == Role.DOCTOR:
-                doctors.append(user)
+                out["doctors"].append(user)
+                out["specialty"][user.id] = specialty
             elif role == Role.NURSE:
-                nurse = user
+                out["nurse"] = user
             elif role == Role.RECEPTIONIST:
-                receptionist = user
+                out["reception"] = user
+            else:
+                out["admins"].append(user)
         uow.commit()
-    print(f"    + staff: admin, {len(doctors)} doctores, enfermera, recepción")
-    return admin, doctors, nurse, receptionist
+    return out
 
 
-def seed_insurers(session, tid: TenantId) -> list[InsurerId | None]:
+def seed_insurers(session, tid: TenantId) -> list[InsurerId]:
     uow = SqlAlchemyUnitOfWork(session, tid)
-    ids: list[InsurerId | None] = []
     with uow:
         existing = {ins.name: ins.id for ins in uow.insurers.list()}
+        ids = []
         for name, phone, email, address in INSURERS:
-            if name in existing:
-                ids.append(existing[name])
-                continue
-            ins = Insurer(id=InsurerId.new(), tenant_id=tid, name=name, phone=phone, email=email, address=address)
-            uow.insurers.save(ins)
-            ids.append(ins.id)
+            if name not in existing:
+                ins = Insurer(id=InsurerId.new(), tenant_id=tid, name=name, phone=phone,
+                              email=email, address=address)
+                uow.insurers.save(ins)
+                existing[name] = ins.id
+            ids.append(existing[name])
         uow.commit()
-    ids.append(None)  # some patients are private
     return ids
 
 
-def seed_patients(session, tid: TenantId, doctors: list[User], insurer_ids) -> list[Patient]:
-    uow = SqlAlchemyUnitOfWork(session, tid)
-    codes = DbSequentialCodeGenerator(session, tid.value)
-    existing = uow.patients.list()
-    if existing.total >= 30:
-        print(f"    pacientes: ya hay {existing.total}, omitido")
-        return uow.patients.list().items
-    patients: list[Patient] = []
-    with uow:
-        for i in range(30):
-            p = make_patient(tid, codes.next_patient_code(), i, doctors[i % len(doctors)].id)
-            uow.patients.save(p)
-            patients.append(p)
-        uow.commit()
-    print("    + 30 pacientes")
-    return patients
-
-
-def seed_activity(
-    session,
-    tid: TenantId,
-    admin: User,
-    doctors: list[User],
-    reception: User,
-    patients: list[Patient],
-    insurer_ids,
-    today: date,
-) -> None:
-    if session.query(AppointmentModel).filter(AppointmentModel.tenant_id == tid.value).first():
-        print("    actividad: el tenant ya tiene citas, omitido")
-        return
-
-    uow = SqlAlchemyUnitOfWork(session, tid)
-    codes = DbSequentialCodeGenerator(session, tid.value)
-    reader = SqlAlchemyUnitOfWork(session, tid)
-    location_id = reader.tenants.get_by_id(tid).locations[0].id
-    insurer_names = {ins.id: ins.name for ins in reader.insurers.list()}
-
-    n_past = n_future = 0
-    with uow:
-        # Account creation + login audit, spread before the activity window.
-        base = datetime.now(UTC) - timedelta(days=63)
-        for n, p in enumerate(patients):
-            uow.audit.append(
-                audit_entry(
-                    ctx(tid, reception), base + timedelta(hours=n), "patient.created", "Patient",
-                    str(p.id), subject=subject(p.code, p.full_name),
-                )
-            )
-        for n, u in enumerate([admin, reception, *doctors]):
-            uow.audit.append(
-                audit_entry(
-                    ctx(tid, u), datetime.now(UTC) - timedelta(days=RNG.randint(0, 5), hours=n),
-                    "auth.login", "User", str(u.id),
-                )
-            )
-
-        # Past: signed consultations (records + prescriptions + audit).
-        for monday in mondays(today - timedelta(weeks=8), today - timedelta(days=1)):
-            for doc in doctors:
-                for _ in range(RNG.randint(2, 3)):
-                    day = monday + timedelta(days=RNG.randint(0, 4))
-                    if day >= today:
-                        continue
-                    start = datetime.combine(day, time(RNG.choice(WORK_HOURS), 0))
-                    encounter = start.replace(tzinfo=UTC)
-                    patient = RNG.choice(patients)
-                    insurer_id = patient_insurer(patient, insurer_ids)
-                    appt = Appointment(
-                        id=AppointmentId.new(), tenant_id=tid, code=codes.next_appointment_code(),
-                        patient_id=patient.id, doctor_id=doc.id, location_id=location_id,
-                        type=AppointmentType.CONSULT, scheduled_start=start, duration_minutes=30,
-                        reason=RNG.choice(REASONS), created_by_id=reception.id,
-                        status=AppointmentStatus.COMPLETED, insurance_id=insurer_id,
-                        created_at=encounter - timedelta(days=3), updated_at=encounter,
-                    )
-                    uow.appointments.save(appt)
-
-                    dx = [IcdCode(*RNG.choice(DIAGNOSES))]
-                    snaps, scripts = build_prescriptions(tid, patient, doc, day, today)
-                    record = MedicalRecord(
-                        id=RecordId.new(), tenant_id=tid,
-                        code=codes.next_record_code(ClinicalRecordType.CONSULTATION, day),
-                        patient_id=patient.id, author_id=doc.id,
-                        type=ClinicalRecordType.CONSULTATION, encounter_at=encounter,
-                        location_name="Sede principal", insurer_name=insurer_names.get(insurer_id),
-                        chief_complaint=appt.reason, soap=make_soap(appt.reason), vitals=make_vitals(),
-                        signed_at=encounter, signed_by_id=doc.id, appointment_id=appt.id,
-                        diagnoses=tuple(dx), prescriptions=tuple(snaps),
-                    )
-                    uow.medical_records.save(record)
-                    for rx in scripts:
-                        uow.prescriptions.save(rx)
-                    uow.audit.append(
-                        audit_entry(
-                            ctx(tid, reception), encounter - timedelta(days=3),
-                            "appointment.created", "Appointment", str(appt.id),
-                            subject=subject(appt.code, patient.full_name),
-                        )
-                    )
-                    uow.audit.append(
-                        audit_entry(
-                            ctx(tid, doc), encounter, "consultation.signed", "MedicalRecord",
-                            str(record.id), prescriptions=len(scripts),
-                            subject=subject(record.code, patient.full_name),
-                        )
-                    )
-                    uow.audit.append(
-                        audit_entry(
-                            ctx(tid, doc), encounter + timedelta(minutes=RNG.randint(5, 90)),
-                            "record.viewed", "MedicalRecord", str(record.id),
-                            subject=subject(record.code, patient.full_name),
-                        )
-                    )
-                    n_past += 1
-
-        # Future: scheduled/confirmed appointments (agenda + next visit).
-        end = date(today.year, 10, 31)
-        for monday in mondays(today + timedelta(days=1), end):
-            for doc in doctors:
-                for k in range(2):
-                    day = monday + timedelta(days=RNG.randint(0, 4))
-                    if day <= today or day > end:
-                        continue
-                    start = datetime.combine(day, time(RNG.choice(WORK_HOURS), 0))
-                    patient = RNG.choice(patients)
-                    insurer_id = patient_insurer(patient, insurer_ids)
-                    appt = Appointment(
-                        id=AppointmentId.new(), tenant_id=tid, code=codes.next_appointment_code(),
-                        patient_id=patient.id, doctor_id=doc.id, location_id=location_id,
-                        type=AppointmentType.CONSULT, scheduled_start=start, duration_minutes=30,
-                        reason=RNG.choice(REASONS), created_by_id=reception.id,
-                        status=AppointmentStatus.CONFIRMED if k == 0 else AppointmentStatus.SCHEDULED,
-                        insurance_id=insurer_id,
-                    )
-                    uow.appointments.save(appt)
-                    uow.audit.append(
-                        audit_entry(
-                            ctx(tid, reception),
-                            datetime.now(UTC) - timedelta(days=RNG.randint(0, 7)),
-                            "appointment.created", "Appointment", str(appt.id),
-                            subject=subject(appt.code, patient.full_name),
-                        )
-                    )
-                    n_future += 1
-        uow.commit()
-    print(f"    + actividad: {n_past} consultas firmadas, {n_future} citas futuras")
-
-
-def patient_insurer(patient: Patient, insurer_ids):
-    """Deterministic insurer per patient (every 4th is private)."""
-    h = int(patient.code.split("-")[-1]) if "-" in patient.code else 0
-    return None if h % 4 == 0 else insurer_ids[h % (len(insurer_ids) - 1)]
-
-
-def build_prescriptions(tid, patient, doctor, day, today):
-    """Return (snapshots for the record, Prescription aggregates) for ~0–2 meds."""
-    snaps: list[PrescriptionSnapshot] = []
-    scripts: list[Prescription] = []
-    for drug, dose, sched, dur in RNG.sample(MEDS, RNG.randint(0, 2)):
-        end = day + timedelta(days=dur)
-        snaps.append(PrescriptionSnapshot(drug=drug, dose=dose, schedule=sched, start_date=day, end_date=end, duration_days=dur))
-        scripts.append(
-            Prescription(
-                id=PrescriptionId.new(), tenant_id=tid, patient_id=patient.id, prescriber_id=doctor.id,
-                drug=drug, dose=dose, schedule=sched, start_date=day, end_date=end, duration_days=dur,
-                status=PrescriptionStatus.ACTIVE if end >= today else PrescriptionStatus.COMPLETED,
-            )
+# ── patients ──────────────────────────────────────────────────────────────────────────────
+def seed_patients(c: Clinic) -> None:
+    pediatrician = next(d for d in c.doctors if c.specialty[d.id] == "Pediatría")
+    adult_doctors = [d for d in c.doctors if d.id != pediatrician.id]
+    used: set[str] = set()
+    for i in range(PATIENTS_PER_TENANT):
+        child = i < CHILDREN_PER_TENANT
+        female = RNG.random() < (0.5 if child else 0.58)
+        names = (CHILD_FEMALE if female else CHILD_MALE) if child else (
+            FEMALE_NAMES if female else MALE_NAMES)
+        while True:
+            first = RNG.choice(names)
+            last = f"{RNG.choice(LAST_NAMES)} {RNG.choice(LAST_NAMES)}"
+            if f"{first} {last}" not in used:
+                used.add(f"{first} {last}")
+                break
+        age = RNG.randint(1, 13) if child else RNG.randint(18, 84)
+        born = c.today - timedelta(days=age * 365 + RNG.randint(0, 364))
+        if child:
+            doctor = pediatrician
+        elif not female:
+            doctor = RNG.choice([d for d in adult_doctors if c.specialty[d.id] != "Ginecología"])
+        else:
+            doctor = RNG.choice(adult_doctors)
+        # Most patients registered months ago; a handful this week (dashboard growth).
+        if i >= PATIENTS_PER_TENANT - NEW_PATIENTS_THIS_WEEK:
+            created = c.now - timedelta(days=RNG.randint(0, 6), hours=RNG.randint(1, 8))
+        else:
+            created = c.now - timedelta(days=RNG.randint(PAST_WEEKS * 7 + 5, 240))
+        created = created.replace(hour=RNG.randint(8, 17), minute=RNG.choice([0, 15, 30, 45]))
+        if created > c.now:
+            created -= timedelta(days=1)
+        handle = f"{first}.{last.split()[0]}".lower().translate(str.maketrans("áéíóúñü", "aeiounu"))
+        cmd = CreatePatientCommand(
+            first_name=first, last_name=last, sex=Sex.FEMALE if female else Sex.MALE,
+            date_of_birth=born, blood_type=BloodType(RNG.choice(BLOOD)),
+            primary_doctor_id=doctor.id,
+            tags=tuple(RNG.choice(CHILD_TAGS if child else ADULT_TAGS)),
+            allergies=tuple(RNG.choice(ALLERGIES)),
+            contact=ContactInfo(
+                phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
+                email=None if child else f"{handle}@example.com",
+                address=f"Calle {RNG.choice(LAST_NAMES)} {RNG.randint(1, 120)}, Col. Centro",
+                emergency_contact_name=f"{RNG.choice(FEMALE_NAMES + MALE_NAMES)} "
+                                       f"{last.split()[0]}",
+                emergency_contact_phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
+            ),
         )
-    return snaps, scripts
+        patient = CreatePatient(c.uow(), c.codes(), c.at(created)).execute(
+            actor(c, c.reception), cmd)
+        c.patients.append(patient)
+    print(f"    + {len(c.patients)} pacientes ({CHILDREN_PER_TENANT} niños, "
+          f"{NEW_PATIENTS_THIS_WEEK} registrados esta semana)")
 
 
-def make_soap(reason: str) -> SoapNote:
-    return SoapNote(
-        subjective=f"Paciente refiere {reason.lower()}.",
-        objective="Constantes dentro de parámetros. Exploración sin hallazgos relevantes.",
-        assessment="Cuadro compatible con el motivo de consulta; evolución favorable.",
-        plan="Tratamiento indicado, medidas higiénico-dietéticas y control evolutivo.",
+# ── availability exceptions ───────────────────────────────────────────────────────────────
+def seed_exceptions(c: Clinic) -> None:
+    def add(doctor: User, on: date, kind, reason: str, blocks=()) -> None:
+        exc = AvailabilityException(id=ExceptionId.new(), date=on, kind=kind, reason=reason,
+                                    blocks=list(blocks))
+        AddAvailabilityException(c.uow(), c.at(c.now - timedelta(days=30))).execute(
+            actor(c, doctor), exc)
+
+    monday = c.today - timedelta(days=c.today.weekday())
+    general = next(d for d in c.doctors if c.specialty[d.id] == "Medicina General")
+    # Vacation (3 weekdays the week after next), a past congress day and an extra Saturday.
+    for k in range(3):
+        add(c.doctors[2], monday + timedelta(weeks=2, days=k), AvailabilityExceptionKind.OFF,
+            "Vacaciones")
+    add(c.doctors[0], monday - timedelta(weeks=2) + timedelta(days=2),
+        AvailabilityExceptionKind.OFF, "Congreso médico")
+    saturday = monday + timedelta(days=5 if c.today.weekday() <= 5 else 12)
+    add(general, saturday, AvailabilityExceptionKind.EXTRA, "Jornada de vacunación",
+        [TimeRange(time(9, 0), time(13, 0))])
+
+
+# ── appointments and consultations ────────────────────────────────────────────────────────
+def day_slots(c: Clinic, doctor: User, on: date) -> list[datetime]:
+    av = c.uow().availability.get_by_doctor(doctor.id)
+    exc = av.exception_on(on)
+    if exc is not None and exc.kind == AvailabilityExceptionKind.OFF:
+        return []
+    blocks = exc.blocks if exc is not None else av.day(on.weekday()).blocks
+    if exc is None and not av.day(on.weekday()).enabled:
+        return []
+    slots = []
+    for b in blocks:
+        t = datetime.combine(on, b.start)
+        while t + timedelta(minutes=30) <= datetime.combine(on, b.end):
+            slots.append(t)
+            t += timedelta(minutes=30)
+    return slots
+
+
+def daily_load(c: Clinic, on: date) -> float:
+    """Share of a doctor's slots that get booked: busier around today, thinner far ahead."""
+    delta = (on - c.today).days
+    if delta < -14:
+        return RNG.uniform(0.3, 0.5)
+    if delta <= 0:
+        return RNG.uniform(0.5, 0.7)
+    if delta <= 7:
+        return RNG.uniform(0.45, 0.65)
+    if delta <= 14:
+        return RNG.uniform(0.2, 0.35)
+    return RNG.uniform(0.05, 0.2)
+
+
+def pick_patient(c: Clinic, doctor: User, before: datetime) -> Patient | None:
+    specialty = c.specialty[doctor.id]
+    eligible = [p for p in c.patients
+                if p.created_at.astimezone(c.clock.tz).replace(tzinfo=None) < before]
+    if specialty == "Pediatría":
+        eligible = [p for p in eligible if p.age(c.today) < 14]
+    else:
+        eligible = [p for p in eligible if p.age(c.today) >= 14]
+        if specialty == "Ginecología":
+            eligible = [p for p in eligible if p.sex == Sex.FEMALE]
+    if not eligible:
+        return None
+    own = [p for p in eligible if p.primary_doctor_id == doctor.id]
+    return RNG.choice(own if own and RNG.random() < 0.6 else eligible)
+
+
+def insurer_for(c: Clinic, patient: Patient):
+    n = int(patient.code.split("-")[-1]) % (len(c.insurer_ids) + 1)
+    return None if n == len(c.insurer_ids) else c.insurer_ids[n]
+
+
+def book(c: Clinic, doctor: User, start: datetime):
+    patient = pick_patient(c, doctor, start - timedelta(days=1))
+    if patient is None:
+        return None
+    patient_since = patient.created_at.astimezone(c.clock.tz).replace(tzinfo=None)
+    booked = start - timedelta(days=RNG.randint(1, 12), hours=RNG.randint(0, 6))
+    latest = min(c.now - timedelta(minutes=RNG.randint(30, 600)), start - timedelta(hours=2))
+    if booked > latest:
+        # Future appointments were booked over the last two weeks, not all just now.
+        booked = c.now - timedelta(days=RNG.uniform(0.2, 14))
+    booked = min(max(booked, patient_since + timedelta(hours=2)), latest)
+    booked = booked.replace(hour=RNG.randint(8, 17), minute=RNG.choice([0, 10, 25, 40, 55]))
+    booked = min(booked, latest)
+    booked = booked.replace(second=0, microsecond=0)
+    cmd = CreateAppointmentCommand(
+        patient_id=patient.id, doctor_id=doctor.id,
+        location_id=c.tenant.primary_location.id,
+        type=AppointmentType.CONSULT, scheduled_start=start,
+        reason=RNG.choice(SPECIALTIES[c.specialty[doctor.id]].reasons),
+        insurance_id=insurer_for(c, patient),
+    )
+    try:
+        appt = CreateAppointment(c.uow(), c.codes(), c.at(booked)).execute(
+            actor(c, c.reception), cmd)
+    except (ApplicationError, DomainError):
+        return None
+    c.taken.add((doctor.id, start))
+    c.count("citas")
+    return appt, patient, booked
+
+
+def vitals_for(patient: Patient, on: date) -> Vitals:
+    age = patient.age(on)
+    if age < 14:
+        return Vitals(
+            heart_rate=RNG.randint(80, 120), spo2=RNG.randint(96, 100),
+            temperature=Decimal(f"{RNG.randint(362, 389) / 10:.1f}"),
+            weight=Decimal(f"{max(8.0, age * 3.2 + RNG.uniform(6, 10)):.1f}"),
+            height=Decimal(int(min(165, 70 + age * 6.5 + RNG.randint(-4, 4)))),
+        )
+    return Vitals(
+        blood_pressure=f"{RNG.randint(108, 152)}/{RNG.randint(66, 96)}",
+        heart_rate=RNG.randint(58, 98), spo2=RNG.randint(94, 100),
+        temperature=Decimal(f"{RNG.randint(360, 382) / 10:.1f}"),
+        weight=Decimal(f"{RNG.randint(480, 1050) / 10:.1f}"),
+        glucose=RNG.randint(78, 165), height=Decimal(RNG.randint(150, 192)),
     )
 
 
-def seed_tenant(session, slug: str, legal_name: str, location_name: str, today: date) -> None:
+def soap_for(reason: str, dx_label: str) -> SoapNote:
+    return SoapNote(
+        subjective=RNG.choice([
+            f"Acude por {reason.lower()}. Evolución de {RNG.randint(2, 14)} días.",
+            f"Refiere {reason.lower()}; sin otros síntomas asociados.",
+            f"Consulta por {reason.lower()}. Niega fiebre ni pérdida de peso.",
+        ]),
+        objective=RNG.choice([
+            "Buen estado general. Constantes estables. Exploración sin hallazgos de alarma.",
+            "Consciente y orientado. Auscultación normal. Abdomen blando y depresible.",
+            "Paciente colaborador, hidratado. Exploración física dentro de la normalidad.",
+        ]),
+        assessment=f"Cuadro compatible con {dx_label.lower()}.",
+        plan=RNG.choice([
+            "Tratamiento indicado y control en 2 semanas. Signos de alarma explicados.",
+            "Se solicitan análisis de control. Revisión con resultados.",
+            "Medidas higiénico-dietéticas, tratamiento pautado y seguimiento en 1 mes.",
+        ]),
+    )
+
+
+def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
+    """Start, document and sign the consultation like the doctor would in the app."""
+    me = actor(c, doctor)
+    start = appt.scheduled_start + timedelta(minutes=RNG.randint(0, 12))
+    consultation = StartConsultation(c.uow(), c.at(start)).execute(me, appt.id)
+    spec = SPECIALTIES[c.specialty[doctor.id]]
+    dx = RNG.sample(spec.diagnoses, 1 if RNG.random() < 0.75 else 2)
+    AutosaveConsultation(c.uow(), c.at(start + timedelta(minutes=6))).execute(
+        me, consultation.id,
+        ConsultationPatch(vitals=vitals_for(patient, start.date()), soap=soap_for(
+            appt.reason, dx[0][1])),
+    )
+    for code, label in dx:
+        AddDiagnosis(c.uow(), c.at(start + timedelta(minutes=10))).execute(
+            me, consultation.id, IcdCode(code, label))
+    for drug, dose, schedule, days in RNG.sample(spec.meds, RNG.choice([0, 1, 1, 2])):
+        AddPrescriptionDraft(c.uow(), c.at(start + timedelta(minutes=14))).execute(
+            me, consultation.id,
+            PrescriptionDraft(drug=drug, dose=dose, schedule=schedule, duration_days=days,
+                              start_date=start.date()),
+        )
+    record = SignConsultation(c.uow(), c.codes(),
+                              c.at(start + timedelta(minutes=RNG.randint(18, 27)))).execute(
+        me, SignConsultationCommand(consultation_id=consultation.id))
+    c.signed.append(record)
+    c.count("consultas firmadas")
+    reopened = start + timedelta(days=RNG.randint(1, 6), hours=2)
+    if RNG.random() < 0.3 and reopened < c.now:  # reopened later (audited as record.viewed)
+        GetMedicalRecord(c.uow(), c.at(reopened)).execute(me, record.id)
+
+
+def seed_agenda(c: Clinic) -> None:
+    first = c.today - timedelta(weeks=PAST_WEEKS)
+    last = c.today + timedelta(weeks=FUTURE_WEEKS)
+    day = first
+    while day <= last:
+        for doctor in c.doctors:
+            slots = day_slots(c, doctor, day)
+            if not slots:
+                continue
+            chosen = sorted(RNG.sample(slots, round(len(slots) * daily_load(c, day))))
+            for start in chosen:
+                if (doctor.id, start) in c.taken:
+                    continue
+                booked = book(c, doctor, start)
+                if booked is None:
+                    continue
+                appt, patient, booked_at = booked
+                play_out(c, doctor, appt, patient, booked_at)
+        if day.weekday() == 0:
+            print(f"      semana del {day:%d/%m}: {c.stats.get('citas', 0)} citas acumuladas")
+        day += timedelta(days=1)
+
+
+def play_out(c: Clinic, doctor: User, appt, patient: Patient, booked_at: datetime) -> None:
+    """What happened (or is expected to happen) to an appointment after it was booked."""
+    rec = actor(c, c.reception)
+    start = appt.scheduled_start
+    roll = RNG.random()
+    finished = start + timedelta(minutes=30) <= c.now
+
+    # Cancelled somewhere between booking and the appointment (or before now).
+    if roll < 0.06:
+        when = booked_at + (min(start, c.now) - booked_at) * RNG.uniform(0.3, 0.9)
+        CancelAppointment(c.uow(), c.at(when)).execute(rec, appt.id)
+        c.count("canceladas")
+        return
+
+    # Upcoming appointments: some get moved to a later free slot, some get confirmed.
+    if not finished:
+        if roll < 0.12 and start.date() > c.today:
+            for _ in range(6):
+                target = start + timedelta(days=RNG.randint(1, 6))
+                slots = [s for s in day_slots(c, doctor, target.date())
+                         if (doctor.id, s) not in c.taken]
+                if not slots:
+                    continue
+                new_start = RNG.choice(slots)
+                try:
+                    when = booked_at + (c.now - booked_at) * RNG.uniform(0.3, 0.9)
+                    RescheduleAppointment(c.uow(), c.at(when)).execute(rec, appt.id, new_start)
+                except (ApplicationError, DomainError):
+                    continue
+                c.taken.add((doctor.id, new_start))
+                c.count("reprogramadas")
+                break
+            return
+        if start.date() <= c.today + timedelta(days=3) and RNG.random() < 0.7:
+            confirm_at = min(c.now - timedelta(minutes=RNG.randint(10, 480)),
+                             start - timedelta(hours=RNG.randint(4, 26)))
+            confirm_at = max(confirm_at, booked_at + timedelta(hours=1))
+            if confirm_at < start and confirm_at <= c.now:
+                ConfirmAppointment(c.uow(), c.at(confirm_at)).execute(rec, appt.id)
+        return
+
+    # Past appointments: mostly confirmed the day before, then attended or missed.
+    if RNG.random() < 0.8:
+        confirm_at = max(booked_at + timedelta(minutes=30), start - timedelta(hours=RNG.randint(
+            16, 30)))
+        if confirm_at < start:
+            ConfirmAppointment(c.uow(), c.at(confirm_at)).execute(rec, appt.id)
+    if roll < 0.11:
+        MarkNoShow(c.uow(), c.at(start + timedelta(minutes=25))).execute(rec, appt.id)
+        c.count("no-show")
+        return
+    attend(c, doctor, appt, patient)
+
+
+# ── amendments, documents, users, logins ──────────────────────────────────────────────────
+def seed_amendments(c: Clinic) -> None:
+    recent = [r for r in c.signed if r.signed_at.date() >= c.today - timedelta(days=21)
+              and r.signed_at.date() < c.today - timedelta(days=1)]
+    RNG.shuffle(recent)
+    by_id = {d.id: d for d in c.doctors}
+    covering = 0
+    for record in recent[:12]:
+        author = by_id[record.author_id]
+        # About a third are added by a covering colleague → the author gets notified.
+        if covering < 4 and c.specialty[author.id] != "Pediatría":
+            amender = RNG.choice([d for d in c.doctors if d.id != author.id
+                                  and c.specialty[d.id] != "Pediatría"])
+            covering += 1
+        else:
+            amender = author
+        when_utc = record.signed_at + timedelta(days=RNG.randint(1, 4), hours=RNG.randint(1, 5))
+        when = min(when_utc.astimezone(c.clock.tz).replace(tzinfo=None),
+                   c.now - timedelta(hours=1))
+        soap = SoapNote(
+            subjective=record.soap.subjective, objective=record.soap.objective,
+            assessment=record.soap.assessment,
+            plan=record.soap.plan + " Adenda: " + RNG.choice([
+                "resultados de laboratorio dentro de la normalidad.",
+                "se ajusta la dosis según evolución telefónica.",
+                "paciente refiere mejoría; se mantiene el tratamiento.",
+                "se añade derivación a especialista.",
+            ]),
+        )
+        AmendMedicalRecord(c.uow(), c.at(when)).execute(actor(c, amender), record.id, soap=soap)
+        c.count("enmiendas")
+
+
+def seed_documents(c: Clinic) -> None:
+    candidates = [r for r in c.signed if r.signed_at.date() >= c.today - timedelta(days=42)]
+    for record in RNG.sample(candidates, min(30, len(candidates))):
+        kind, name, mime = RNG.choice(DOCUMENTS)
+        signed_local = record.signed_at.astimezone(c.clock.tz).replace(tzinfo=None)
+        when = min(signed_local + timedelta(days=RNG.randint(0, 5), hours=RNG.randint(1, 6)),
+                   c.now - timedelta(minutes=RNG.randint(20, 300)))
+        # Mostly the nurse; sometimes another doctor (e.g. the one who ordered the test).
+        uploader = c.nurse if RNG.random() < 0.7 else RNG.choice(c.doctors)
+        UploadDocument(c.uow(), c.at(when)).execute(actor(c, uploader), UploadDocumentCommand(
+            patient_id=record.patient_id, file_name=name, kind=kind, mime_type=mime,
+            size_bytes=RNG.randint(80_000, 3_500_000),
+            storage_key=f"demo/{c.tenant.slug}/{record.code.lower()}-{RNG.randint(1000, 9999)}",
+            record_id=record.id if RNG.random() < 0.6 else None,
+        ))
+        c.count("documentos")
+
+
+def seed_users(c: Clinic) -> None:
+    name, local = INVITED[str(c.tenant.slug)]
+    second = actor(c, c.second_admin)
+    user = InviteUser(c.uow(), HASHER, c.at(c.now - timedelta(days=4, hours=3))).execute(
+        second, InviteUserCommand(name=name, email=f"{local}@{c.tenant.slug}.test",
+                                  role=Role.NURSE, password=PASSWORD))
+    UpdateUserRole(c.uow(), c.at(c.now - timedelta(hours=5))).execute(
+        second, user.id, Role.RECEPTIONIST)
+
+
+def seed_logins(c: Clinic) -> None:
+    staff = [c.admin, c.second_admin, c.nurse, c.reception, *c.doctors]
+    uow = c.uow()
+    with uow:
+        for back in range(14, -1, -1):
+            day = c.today - timedelta(days=back)
+            if day.weekday() >= 5:
+                continue
+            for user in staff:
+                if RNG.random() < 0.15:
+                    continue
+                local = datetime.combine(day, time(8, RNG.randint(0, 55)))
+                if local > c.now:
+                    continue
+                uow.audit.append(audit_entry(
+                    actor(c, user), local.replace(tzinfo=c.clock.tz).astimezone(UTC),
+                    "auth.login", "User", str(user.id)))
+        uow.commit()
+
+
+# ── finishing touches ─────────────────────────────────────────────────────────────────────
+def finish(c: Clinic) -> None:
+    """Expire finished prescriptions and mark older notifications as read."""
+    uow = c.uow()
+    with uow:
+        expired = 0
+        for patient in c.patients:
+            for rx in uow.prescriptions.list_by_patient(patient.id):
+                if rx.status == PrescriptionStatus.ACTIVE and rx.is_expired_on(c.today):
+                    rx.complete()
+                    uow.prescriptions.save(rx)
+                    expired += 1
+        uow.commit()
+    now_utc = c.clock.at(c.now).now()
+    session = c.session
+    rows = session.execute(
+        select(NotificationModel.id, NotificationModel.created_at)
+        .where(NotificationModel.tenant_id == c.tid.value)
+    ).all()
+    for nid, created in rows:
+        age = now_utc - created
+        if age > timedelta(days=2) or (age > timedelta(hours=6) and RNG.random() < 0.4):
+            session.execute(update(NotificationModel).where(NotificationModel.id == nid).values(
+                read_at=created + timedelta(minutes=RNG.randint(5, 600))))
+    session.commit()
+    c.count("recetas finalizadas", expired)
+    unread = sum(1 for _, created in rows if now_utc - created <= timedelta(days=2))
+    c.count("notificaciones", len(rows))
+    c.stats["notificaciones recientes"] = unread
+
+
+# ── orchestration ─────────────────────────────────────────────────────────────────────────
+def seed_tenant(session, slug: str, legal_name: str, location: str) -> None:
     print(f"Tenant: {slug}")
-    tenant = get_or_create_tenant(session, slug, legal_name, location_name)
-    admin, doctors, _nurse, reception = seed_staff(session, tenant)
+    tenant = get_or_create_tenant(session, slug, legal_name, location)
+    staff = seed_staff(session, tenant)
     insurer_ids = seed_insurers(session, tenant.id)
-    patients = seed_patients(session, tenant.id, doctors, insurer_ids)
-    seed_activity(session, tenant.id, admin, doctors, reception, patients, insurer_ids, today)
+    has_activity = session.query(AppointmentModel).filter(
+        AppointmentModel.tenant_id == tenant.id.value).first()
+    if has_activity:
+        print("    ya tiene actividad, omitido (usa --reset para regenerar)")
+        return
+    tz = ZoneInfo(tenant.timezone)
+    now = datetime.now(tz).replace(tzinfo=None, second=0, microsecond=0)
+    c = Clinic(
+        session=session, tenant=tenant, clock=SimClock(tz), now=now,
+        admin=staff["admins"][0], second_admin=staff["admins"][1], doctors=staff["doctors"],
+        specialty=staff["specialty"], nurse=staff["nurse"], reception=staff["reception"],
+        insurer_ids=insurer_ids,
+    )
+    seed_patients(c)
+    seed_exceptions(c)
+    seed_agenda(c)
+    seed_amendments(c)
+    seed_documents(c)
+    seed_users(c)
+    seed_logins(c)
+    finish(c)
+    print("    + " + ", ".join(f"{v} {k}" for k, v in c.stats.items()))
 
 
 def reset_demo(session, slugs: list[str]) -> None:
@@ -508,20 +888,17 @@ def reset_demo(session, slugs: list[str]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--reset", action="store_true", help="borra los tenants demo antes de sembrar")
+    parser.add_argument("--reset", action="store_true",
+                        help="borra los tenants demo antes de sembrar")
     args = parser.parse_args()
 
     session = get_session()
-    today = date.today()
     demo = [("clinica-demo", "Clínica Demo SL", "San Salvador · Centro"),
             ("centro-norte", "Centro Médico Norte SL", "Santa Tecla · Las Palmas")]
-
     if args.reset:
         reset_demo(session, [s for s, _, _ in demo])
-
-    for slug, legal_name, location_name in demo:
-        seed_tenant(session, slug, legal_name, location_name, today)
-
+    for slug, legal_name, location in demo:
+        seed_tenant(session, slug, legal_name, location)
     session.close()
     print("\nListo. Contraseña de todos los usuarios demo:", PASSWORD)
 

@@ -85,7 +85,8 @@ En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios
   paciente o, si no tiene, al de su última cita completada) y usuario creado/cambio de rol (a
   los admins activos). Se guarda `type` + `data` (ids y etiquetas, nunca contenido clínico ni
   nombres de archivo) y el cliente redacta el texto en su idioma. Router `notifications`:
-  listado paginado, contador de no leídas, marcar una / todas; las leídas con más de 90 días
+  listado paginado (filtrable por no leídas y por categoría: `appointment`, `record`,
+  `document`, `user`), contador de no leídas, marcar una / todas; las leídas con más de 90 días
   se purgan al marcar. Durante una impersonación se pueden leer pero no se marcan como leídas.
 - **Panel** (`GET /dashboard/summary`): métricas reales del día —citas (sin canceladas) y
   pendientes, pacientes registrados y ocupación de la agenda (franjas reservadas sobre franjas
@@ -130,7 +131,8 @@ python -m venv .venv
 # 3) (opcional) catálogo de diagnósticos CIE-10/CIE-11
 .venv/bin/python scripts/import_icd.py
 
-# 4) Datos de demo (2 clínicas pobladas: usuarios, pacientes, citas, historiales, auditoría)
+# 4) Datos de demo: 2 clínicas con ~8 semanas de historia y 4 de agenda, generadas ejecutando
+#    los casos de uso reales con un reloj simulado (incluye auditoría y notificaciones)
 .venv/bin/python scripts/seed_demo.py            # idempotente
 .venv/bin/python scripts/seed_demo.py --reset    # borra los tenants demo y los recrea
 
@@ -170,7 +172,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **485 tests** (89 dominio · 200 aplicación · 154 presentación · 42 infraestructura), casi
+Suite de **489 tests** (89 dominio · 201 aplicación · 156 presentación · 43 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
