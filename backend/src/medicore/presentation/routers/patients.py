@@ -48,7 +48,9 @@ def list_patients(
         if q:
             page = SearchPatients(uow).execute(actor, q, Paging(offset=offset, limit=limit))
         else:
-            f = PatientFilter(status=status, doctor_id=doctor_id) if (status or doctor_id) else None
+            # Parse here so a malformed id is a 422, not a ValueError deep in the repository.
+            did = str(UserId.parse(doctor_id)) if doctor_id else None
+            f = PatientFilter(status=status, doctor_id=did) if (status or did) else None
             page = ListPatients(uow).execute(actor, f, Paging(offset=offset, limit=limit))
         visits = PatientsNextVisits(uow, clock).execute(actor, [p.id for p in page.items])
     return PatientListResponse(

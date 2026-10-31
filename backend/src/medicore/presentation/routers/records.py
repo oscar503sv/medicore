@@ -36,7 +36,9 @@ def list_records(
     type: str | None = Query(None),
 ):
     with uow:
-        f = RecordFilter(patient_id=patient_id, type=type) if (patient_id or type) else None
+        # Parse here so a malformed id is a 422, not a ValueError deep in the repository.
+        pid = str(PatientId.parse(patient_id)) if patient_id else None
+        f = RecordFilter(patient_id=pid, type=type) if (pid or type) else None
         records = ListMedicalRecords(uow).execute(actor, f)
         # Resolve patient names with per-id caching (mirrors _ser_appointments).
         names: dict = {}

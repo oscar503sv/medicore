@@ -141,7 +141,7 @@ python -m venv .venv
 
 ## Pruebas y linting
 
-Suite de **449 tests** (89 dominio · 193 aplicación · 125 presentación · 42 infraestructura), casi
+Suite de **451 tests** (89 dominio · 193 aplicación · 127 presentación · 42 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 

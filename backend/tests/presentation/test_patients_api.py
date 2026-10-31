@@ -56,6 +56,23 @@ def test_receptionist_cannot_list_records(seed, client, receptionist_headers):
     assert resp.status_code == 403
 
 
+def test_malformed_id_filters_return_422_not_500(client, auth_headers):
+    # The ids are parsed in the router; before, the SQL repository raised ValueError → 500.
+    for url in ("/api/v1/records?patient_id=abc", "/api/v1/patients?doctor_id=abc"):
+        resp = client.get(url, headers=auth_headers)
+        assert resp.status_code == 422, (url, resp.text)
+
+
+def test_valid_id_filters_still_filter(seed, client, auth_headers):
+    resp = client.get(f"/api/v1/records?patient_id={seed.patient.id}", headers=auth_headers)
+    assert resp.status_code == 200
+    resp = client.get(f"/api/v1/patients?doctor_id={seed.doctor.id}", headers=auth_headers)
+    assert resp.status_code == 200
+    assert [p["id"] for p in resp.json()["items"]] == [str(seed.patient.id)]
+    resp = client.get(f"/api/v1/patients?doctor_id={seed.nurse.id}", headers=auth_headers)
+    assert resp.json()["items"] == []
+
+
 def test_archive_then_reactivate_patient(seed, client, auth_headers):
     archived = client.post(
         f"/api/v1/patients/{seed.patient.id}/archive", headers=auth_headers
