@@ -47,7 +47,7 @@ export function Sidebar() {
             <button
               onClick={toggle}
               className="rounded-md p-1 text-tx-3 hover:bg-surface-2"
-              aria-label="Collapse sidebar"
+              aria-label={t('nav.collapse')}
             >
               <ChevronLeft className="h-4 w-4" />
             </button>

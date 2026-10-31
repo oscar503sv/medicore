@@ -35,7 +35,9 @@ export function PlatformLoginPage() {
       setError(
         errorStatus(err) === 429
           ? t('login.locked')
-          : errorMessage(err, t('platform.bad_credentials')),
+          : errorStatus(err) === 401
+            ? t('platform.bad_credentials')
+            : errorMessage(err),
       )
     } finally {
       setLoading(false)
@@ -94,7 +96,7 @@ export function PlatformLoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-label={showPassword ? t('app.hide_password') : t('app.show_password')}
                 className="absolute right-2 rounded-md p-1.5 text-tx-3 transition-colors hover:text-tx"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

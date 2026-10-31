@@ -36,6 +36,7 @@ const FLOATERS = [
 const themeIcons: Record<Theme, typeof Sun> = { light: Sun, dark: Moon, system: Monitor }
 
 export function AuthShell({ children }: { children: ReactNode }) {
+  const t = useT()
   const { theme, setTheme, lang, setLang } = useUIStore()
   const ThemeIcon = themeIcons[theme]
   const cycleTheme = () => {
@@ -88,7 +89,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
         <button
           type="button"
           onClick={cycleTheme}
-          aria-label="Cambiar tema"
+          aria-label={t('app.toggle_theme')}
           className="rounded-md border border-line bg-surface p-2 text-tx-3 transition-colors hover:bg-surface-2 hover:text-tx"
         >
           <ThemeIcon className="h-[18px] w-[18px]" />

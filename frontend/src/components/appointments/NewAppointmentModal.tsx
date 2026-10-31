@@ -95,7 +95,7 @@ export function NewAppointmentModal({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       qc.invalidateQueries({ queryKey: ['slots'] })
-      toast('Cita agendada')
+      toast(t('appt.created_ok'))
       reset()
       onClose()
     },

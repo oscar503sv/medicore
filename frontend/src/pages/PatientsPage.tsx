@@ -147,7 +147,7 @@ export function PatientsPage() {
             </tbody>
           </Table>
         ) : (
-          <EmptyState title="Sin pacientes" description="Registra el primer paciente para empezar." />
+          <EmptyState title={t('patients.empty_title')} description={t('patients.empty_desc')} />
         )}
         {data && data.total > PAGE_SIZE && (
           <Pager offset={offset} limit={PAGE_SIZE} count={data.items.length} total={data.total} onChange={setOffset} />

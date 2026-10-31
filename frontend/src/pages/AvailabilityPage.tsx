@@ -19,7 +19,8 @@ import { clinicToday, fmtDate } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { AvailabilityException, BookingRules, TimeRange, WeeklyDay } from '@/types'
 
-const DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+// Monday-first, matching the backend's weekday index (0 = Monday).
+const DAY_KEYS = ['day.mon', 'day.tue', 'day.wed', 'day.thu', 'day.fri', 'day.sat', 'day.sun']
 type Tab = 'weekly' | 'exceptions' | 'rules' | 'preview'
 
 // Fixed grid of selectable times (07:00–22:00 every 15 min) — selects, not free text,
@@ -97,7 +98,7 @@ export function AvailabilityPage() {
             try {
               await availabilityApi.updateWeekly(weekly)
               qc.invalidateQueries({ queryKey: ['availability'] })
-              toast('Horario actualizado')
+              toast(t('avail.weekly_saved'))
             } catch (err) {
               toast(errorMessage(err), 'danger')
             }
@@ -114,7 +115,7 @@ export function AvailabilityPage() {
             try {
               await availabilityApi.updateRules(rules)
               qc.invalidateQueries({ queryKey: ['availability'] })
-              toast('Reglas actualizadas')
+              toast(t('avail.rules_saved'))
             } catch (err) {
               toast(errorMessage(err), 'danger')
             }
@@ -223,7 +224,7 @@ function WeeklyEditor({ weekly, onSave }: { weekly: WeeklyDay[]; onSave: (weekly
                   onChange={(e) => update(i, { enabled: e.target.checked })}
                   className="accent-accent"
                 />
-                <span className="text-sm font-medium text-tx">{DAYS[i]}</span>
+                <span className="text-sm font-medium text-tx">{t(DAY_KEYS[i])}</span>
               </label>
               {day.enabled ? (
                 <div className="flex-1 space-y-1.5">
@@ -508,7 +509,7 @@ function PreviewTab() {
               <th className="w-14" />
               {dayKeys.map((d, i) => (
                 <th key={d} className="px-1 py-1 text-[11px] font-medium text-tx-3">
-                  {DAYS[i]}
+                  {t(DAY_KEYS[i])}
                 </th>
               ))}
             </tr>

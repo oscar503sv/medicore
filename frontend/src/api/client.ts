@@ -1,4 +1,5 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
+import { translate } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { usePlatformAuthStore } from '@/stores/platformAuth'
 
@@ -70,11 +71,11 @@ export function errorStatus(error: unknown): number | undefined {
 }
 
 /** Extract a human-readable message from an Axios error. */
-export function errorMessage(error: unknown, fallback = 'Algo salió mal'): string {
+export function errorMessage(error: unknown, fallback?: string): string {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail
     if (typeof detail === 'string') return detail
     if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg
   }
-  return fallback
+  return fallback ?? translate('app.error_generic')
 }

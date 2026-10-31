@@ -19,6 +19,7 @@ function PasswordField({
   value: string
   onChange: (v: string) => void
 }) {
+  const t = useT()
   const [show, setShow] = useState(false)
   return (
     <div>
@@ -36,7 +37,7 @@ function PasswordField({
           type="button"
           onClick={() => setShow((v) => !v)}
           className="absolute right-2 rounded-md p-1.5 text-tx-3 hover:text-tx"
-          aria-label={show ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+          aria-label={show ? t('app.hide_password') : t('app.show_password')}
         >
           {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>

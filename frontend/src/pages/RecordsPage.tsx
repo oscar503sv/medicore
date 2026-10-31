@@ -146,7 +146,7 @@ export function RecordsPage() {
         ) : data && data.length > 0 ? (
           <EmptyState title={t('records.title')} description={t('records.empty_filtered')} />
         ) : (
-          <EmptyState title="Sin historiales" description="Aún no hay registros firmados." />
+          <EmptyState title={t('records.empty_title')} description={t('records.empty_desc')} />
         )}
       </Card>
 

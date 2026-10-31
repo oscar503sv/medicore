@@ -11,21 +11,22 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
+import { unitLabel } from '@/components/patients/vitalsData'
 import { useT } from '@/lib/i18n'
 import type { Consultation, Patient, Soap, Vitals } from '@/types'
 
 const VITAL_FIELDS: {
   key: keyof Vitals
-  label: string
+  labelKey: string
   placeholder: string
-  unit: string
+  unit: string // literal unit or a `vital.unit_*` i18n key
 }[] = [
-  { key: 'blood_pressure', label: 'TA', placeholder: '120/80', unit: 'mmHg' },
-  { key: 'heart_rate', label: 'FC', placeholder: '72', unit: 'lpm' },
-  { key: 'spo2', label: 'SpO₂', placeholder: '98', unit: '%' },
-  { key: 'temperature', label: 'Temp', placeholder: '36.5', unit: '°C' },
-  { key: 'weight', label: 'Peso', placeholder: '70', unit: 'kg' },
-  { key: 'glucose', label: 'Glucemia', placeholder: '90', unit: 'mg/dL' },
+  { key: 'blood_pressure', labelKey: 'vital.blood_pressure', placeholder: '120/80', unit: 'mmHg' },
+  { key: 'heart_rate', labelKey: 'vital.heart_rate', placeholder: '72', unit: 'vital.unit_bpm' },
+  { key: 'spo2', labelKey: 'vital.spo2', placeholder: '98', unit: '%' },
+  { key: 'temperature', labelKey: 'vital.temperature', placeholder: '36.5', unit: '°C' },
+  { key: 'weight', labelKey: 'vital.weight', placeholder: '70', unit: 'kg' },
+  { key: 'glucose', labelKey: 'vital.glucose_full', placeholder: '90', unit: 'mg/dL' },
 ]
 
 const SOAP_FIELDS: { key: keyof Soap; letter: string; labelKey: string; helpKey: string }[] = [
@@ -94,7 +95,7 @@ export function ConsultationPage() {
       consultationsApi.sign(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
-      toast('Consulta firmada')
+      toast(t('consult.signed_ok'))
       navigate('/appointments')
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
@@ -184,7 +185,7 @@ export function ConsultationPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {VITAL_FIELDS.map((f) => (
                 <div key={f.key} className="rounded-lg border border-line bg-surface p-3">
-                  <p className="eyebrow mb-1">{f.label}</p>
+                  <p className="eyebrow mb-1">{t(f.labelKey)}</p>
                   <div className="flex items-baseline gap-1.5">
                     <input
                       value={(vitals[f.key] as string | number | null) ?? ''}
@@ -196,7 +197,7 @@ export function ConsultationPage() {
                       placeholder={f.placeholder}
                       className="w-full min-w-0 bg-transparent font-serif text-2xl text-tx placeholder:text-tx-4 focus:outline-none"
                     />
-                    <span className="shrink-0 text-xs text-tx-3">{f.unit}</span>
+                    <span className="shrink-0 text-xs text-tx-3">{unitLabel(t, f.unit)}</span>
                   </div>
                 </div>
               ))}
@@ -540,7 +541,7 @@ function PrescriptionsSection({
             <input
               value={form.drug}
               onChange={(e) => setForm({ ...form, drug: e.target.value })}
-              placeholder="Ej. Paracetamol"
+              placeholder={t('consult.rx_drug_ph')}
               className={inputCls}
             />
           </div>
@@ -558,7 +559,7 @@ function PrescriptionsSection({
             <input
               value={form.schedule}
               onChange={(e) => setForm({ ...form, schedule: e.target.value })}
-              placeholder="1× día · mañana"
+              placeholder={t('consult.rx_schedule_ph')}
               className={inputCls}
             />
           </div>

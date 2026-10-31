@@ -126,7 +126,7 @@ export function SettingsPage() {
           {section === 'organization' && <OrganizationSection />}
 
           {section === 'notifications' && (
-            <Card className="p-8 text-center text-sm text-tx-3">Sección en desarrollo</Card>
+            <Card className="p-8 text-center text-sm text-tx-3">{t('settings.in_progress')}</Card>
           )}
         </div>
       </div>

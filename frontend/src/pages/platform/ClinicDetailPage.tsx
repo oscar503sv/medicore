@@ -21,7 +21,7 @@ import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-import { TIMEZONES } from '@/lib/timezones'
+import { TIMEZONES, tzLabel } from '@/lib/timezones'
 import { deviceLabel } from '@/lib/userAgent'
 import { Activity, CalendarCheck, FileText, Search, Users } from 'lucide-react'
 import type { TenantStatus } from '@/types'
@@ -255,7 +255,7 @@ export function ClinicDetailPage() {
             <Select label={t('platform.f_timezone')} value={timezone} onChange={(e) => setTimezone(e.target.value)}>
               {TIMEZONES.map((tz) => (
                 <option key={tz.value} value={tz.value}>
-                  {tz.label}
+                  {tzLabel(tz)}
                 </option>
               ))}
             </Select>

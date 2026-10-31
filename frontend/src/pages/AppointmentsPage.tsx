@@ -274,7 +274,7 @@ export function AppointmentsPage() {
             )}
           </>
         ) : (
-          <EmptyState title="Sin citas" description="No hay citas para esta fecha." />
+          <EmptyState title={t('appt.empty_title')} description={t('appt.empty_desc')} />
         )}
       </Card>
 

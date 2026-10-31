@@ -2,21 +2,22 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Table, Td, Th } from '@/components/ui/Table'
 import { fmtDateTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-import { VITAL_COLS, hasAnyVital, type VitalCol } from './vitalsData'
+import { VITAL_COLS, hasAnyVital, unitLabel, type VitalCol } from './vitalsData'
 import type { MedicalRecord, Vitals } from '@/types'
 
 /** A single vital reading as a bordered stat card (icon + label, value + unit). */
 export function VitalStat({ col, value }: { col: VitalCol; value: NonNullable<Vitals[keyof Vitals]> }) {
+  const t = useT()
   const Icon = col.icon
   return (
     <div className="rounded-lg border border-line bg-surface p-2.5 text-center">
       <p className="flex items-center justify-center gap-1 text-tx-3">
         <Icon className="h-3 w-3" />
-        <span className="eyebrow">{col.label}</span>
+        <span className="eyebrow">{t(col.labelKey)}</span>
       </p>
       <p className="mt-0.5 font-serif text-lg text-tx">
         {col.fmt(value)}
-        <span className="ml-1 text-sm text-tx-3">{col.unit}</span>
+        <span className="ml-1 text-sm text-tx-3">{unitLabel(t, col.unit)}</span>
       </p>
     </div>
   )
@@ -57,7 +58,7 @@ export function VitalsHistory({ records }: { records: MedicalRecord[] }) {
             <tr>
               <Th>{t('patient.vitals_date')}</Th>
               {VITAL_COLS.map((c) => (
-                <Th key={c.key}>{c.label}</Th>
+                <Th key={c.key}>{t(c.labelKey)}</Th>
               ))}
             </tr>
           </thead>

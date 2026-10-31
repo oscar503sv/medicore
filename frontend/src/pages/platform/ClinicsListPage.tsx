@@ -16,7 +16,7 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
-import { TIMEZONES } from '@/lib/timezones'
+import { TIMEZONES, tzLabel } from '@/lib/timezones'
 import type { TenantStatus } from '@/types'
 
 const STATUS_TONE: Record<TenantStatus, 'ok' | 'danger' | 'neutral'> = {
@@ -182,7 +182,7 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
           >
             {TIMEZONES.map((tz) => (
               <option key={tz.value} value={tz.value}>
-                {tz.label}
+                {tzLabel(tz)}
               </option>
             ))}
           </Select>

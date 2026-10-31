@@ -34,7 +34,11 @@ export function LoginPage() {
       navigate('/')
     } catch (err) {
       setError(
-        errorStatus(err) === 429 ? t('login.locked') : errorMessage(err, 'Credenciales inválidas'),
+        errorStatus(err) === 429
+          ? t('login.locked')
+          : errorStatus(err) === 401
+            ? t('login.invalid')
+            : errorMessage(err),
       )
     } finally {
       setLoading(false)
@@ -108,7 +112,7 @@ export function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                aria-label={showPassword ? t('app.hide_password') : t('app.show_password')}
                 className="absolute right-2 rounded-md p-1.5 text-tx-3 transition-colors hover:text-tx"
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

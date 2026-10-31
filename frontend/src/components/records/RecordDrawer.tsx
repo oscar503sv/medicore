@@ -77,12 +77,12 @@ export function RecordDrawer({
             <section className="mt-5">
               <p className="eyebrow mb-2">{t('consult.vitals')}</p>
               <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-                {record.vitals.blood_pressure && <Vital label="TA" value={record.vitals.blood_pressure} />}
-                {record.vitals.heart_rate != null && <Vital label="FC" value={String(record.vitals.heart_rate)} />}
-                {record.vitals.spo2 != null && <Vital label="SpO₂" value={`${record.vitals.spo2}%`} />}
-                {record.vitals.temperature && <Vital label="Temp" value={`${record.vitals.temperature}°`} />}
-                {record.vitals.weight && <Vital label="Peso" value={`${record.vitals.weight}kg`} />}
-                {record.vitals.glucose != null && <Vital label="Gluc" value={String(record.vitals.glucose)} />}
+                {record.vitals.blood_pressure && <Vital label={t('vital.blood_pressure')} value={record.vitals.blood_pressure} />}
+                {record.vitals.heart_rate != null && <Vital label={t('vital.heart_rate')} value={String(record.vitals.heart_rate)} />}
+                {record.vitals.spo2 != null && <Vital label={t('vital.spo2')} value={`${record.vitals.spo2}%`} />}
+                {record.vitals.temperature && <Vital label={t('vital.temperature')} value={`${record.vitals.temperature}°`} />}
+                {record.vitals.weight && <Vital label={t('vital.weight')} value={`${record.vitals.weight}kg`} />}
+                {record.vitals.glucose != null && <Vital label={t('vital.glucose')} value={String(record.vitals.glucose)} />}
               </div>
             </section>
           )}
