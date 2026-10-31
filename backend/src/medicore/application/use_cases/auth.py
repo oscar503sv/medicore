@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import NoReturn
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
@@ -125,18 +126,22 @@ class AuthenticateUser:
             )
             uow.commit()
 
+    def _reject_unknown(self, cmd: AuthenticateUserCommand) -> NoReturn:
+        # Unknown organization: burn the same bcrypt work and answer exactly like a
+        # wrong password, so neither the message nor the timing reveals which slugs exist.
+        self._hasher.verify(cmd.password, self._dummy())
+        raise AuthenticationFailed("invalid credentials")
+
     def _authenticate(self, cmd: AuthenticateUserCommand) -> SessionDTO:
         try:
             slug = Slug(cmd.slug.strip().lower())
-        except InvalidValueObject as exc:
-            raise AuthenticationFailed("invalid organization") from exc
+        except InvalidValueObject:
+            self._reject_unknown(cmd)
 
         with self._factory.global_tenants() as tenants:
             tenant = tenants.get_by_slug(slug)
         if tenant is None:
-            raise AuthenticationFailed("invalid organization")
-        if not tenant.is_active:
-            raise AuthenticationFailed("this organization is not active")
+            self._reject_unknown(cmd)
 
         with self._factory.for_tenant(tenant.id) as uow:
             user = uow.users.get_by_email(cmd.email)
@@ -145,6 +150,10 @@ class AuthenticateUser:
             )
             if user is None or not password_ok:
                 raise AuthenticationFailed("invalid credentials")
+            # Status messages only after valid credentials: the legitimate user learns why
+            # they cannot get in, an attacker without the password learns nothing.
+            if not tenant.is_active:
+                raise AuthenticationFailed("this organization is not active")
             if user.status != UserStatus.ACTIVE:
                 raise AuthenticationFailed("account is not active")
             override = uow.role_permissions.get_by_role(user.role)

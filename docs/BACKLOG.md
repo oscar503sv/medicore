@@ -51,12 +51,15 @@ ya se consulta en cada request autenticado):
   `TRUSTED_PROXIES` (IPs/CIDRs; cadena recorrida de derecha a izquierda descartando hops
   confiables); vacío → se registra la IP del socket. La imagen Docker arranca uvicorn con
   `--no-proxy-headers` para que la app sea la única que interprete la cabecera.
+- **Enumeración de organizaciones en login**: un slug inexistente o inválido responde
+  igual que una contraseña incorrecta (`invalid credentials`) y ejecuta el verify contra
+  el hash dummy, así que ni el mensaje ni el tiempo revelan qué slugs existen. El estado
+  de la clínica (`this organization is not active`) solo se informa tras credenciales
+  válidas, igual que el de la cuenta.
 
 Pendiente, en orden de valor aproximado:
 
 1. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
    (`use_cases/auth.py`). NIST sugiere ≥12 o chequeo de entropía (zxcvbn).
-2. **Enumeración de organizaciones en login** — el formulario de login revela si un slug
-   de organización existe (mensaje distinto). Riesgo bajo: los slugs son semi-públicos.
-3. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
+2. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
    explícitamente de desarrollo, pero podría generar una contraseña aleatoria e imprimirla.

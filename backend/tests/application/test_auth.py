@@ -48,12 +48,54 @@ def test_authenticate_success_returns_session():
     assert uow.audit.query(action="auth.login")
 
 
-def test_unknown_organization_fails():
+def _counting_auth(seed) -> tuple[AuthenticateUser, list[str]]:
+    hasher = PlainPasswordHasher()
+    calls: list[str] = []
+    original_verify = hasher.verify
+    hasher.verify = lambda plain, hashed: calls.append(plain) or original_verify(plain, hashed)
+    return AuthenticateUser(seed.factory, hasher, FakeTokenIssuer(), FixedClock()), calls
+
+
+@pytest.mark.parametrize("slug", ["otra-clinica", "!!no es un slug!!"])
+def test_unknown_organization_is_indistinguishable_from_wrong_password(slug):
+    # Anti-enumeration: same message as bad credentials, and verify() still runs so
+    # the response time does not reveal which organization slugs exist.
     seed = seed_clinic()
-    with pytest.raises(AuthenticationFailed):
-        make_auth(seed).execute(
-            AuthenticateUserCommand(slug="otra-clinica", email=seed.doctor.email, password=PASSWORD)
+    auth, calls = _counting_auth(seed)
+
+    with pytest.raises(AuthenticationFailed) as exc:
+        auth.execute(AuthenticateUserCommand(slug=slug, email=seed.doctor.email, password="x"))
+
+    assert str(exc.value) == "invalid credentials"
+    assert calls == ["x"]
+
+
+def test_suspended_organization_hidden_without_valid_password():
+    seed = seed_clinic()
+    seed.tenant.suspend()
+    auth, calls = _counting_auth(seed)
+
+    with pytest.raises(AuthenticationFailed) as exc:
+        auth.execute(
+            AuthenticateUserCommand(slug="clinica-norte", email=seed.doctor.email, password="nope")
         )
+
+    assert str(exc.value) == "invalid credentials"
+    assert calls == ["nope"]
+
+
+def test_suspended_organization_explained_after_valid_password():
+    seed = seed_clinic()
+    seed.tenant.suspend()
+
+    with pytest.raises(AuthenticationFailed) as exc:
+        make_auth(seed).execute(
+            AuthenticateUserCommand(
+                slug="clinica-norte", email=seed.doctor.email, password=PASSWORD
+            )
+        )
+
+    assert str(exc.value) == "this organization is not active"
 
 
 def test_wrong_password_fails():
