@@ -74,3 +74,19 @@ def test_someone_elses_notification_is_not_found(
 
 def test_limit_is_bounded(client, auth_headers):
     assert client.get(f"{BASE}?limit=101", headers=auth_headers).status_code == 422
+
+
+def test_category_filter(client, seed, auth_headers, receptionist_headers):
+    _book(client, seed, receptionist_headers)
+
+    def items(category):
+        return client.get(f"{BASE}?category={category}", headers=auth_headers).json()["items"]
+
+    assert len(items("appointment")) == 1
+    assert items("record") == []
+
+
+def test_unknown_category_is_a_422(client, auth_headers):
+    resp = client.get(f"{BASE}?category=billing", headers=auth_headers)
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "request_invalid"

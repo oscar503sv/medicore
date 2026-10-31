@@ -261,12 +261,14 @@ class TestUserNotifications:
         assert seed.factory.store.notifications == {}
 
 
-def _put(seed, user, *, minutes_ago: int, read_at: datetime | None = None) -> Notification:
+def _put(
+    seed, user, *, minutes_ago: int, read_at: datetime | None = None, type=APPOINTMENT_CREATED
+) -> Notification:
     n = Notification(
         id=NotificationId.new(),
         tenant_id=seed.tenant.id,
         user_id=user.id,
-        type=APPOINTMENT_CREATED,
+        type=type,
         data={"appointment_code": f"A-{minutes_ago}"},
         read_at=read_at,
         created_at=FixedClock().now() - timedelta(minutes=minutes_ago),
@@ -293,6 +295,24 @@ class TestInbox:
         page = inbox.execute(seed.doctor_actor, paging=Paging(offset=1, limit=1))
         assert [n.id for n in page] == [mid.id]
         assert CountMyUnreadNotifications(uow).execute(seed.doctor_actor) == 2
+
+    def test_filters_by_category_combined_with_unread(self):
+        seed = seed_clinic()
+        appt = _put(seed, seed.doctor, minutes_ago=30)
+        amended = _put(seed, seed.doctor, minutes_ago=20, type="record.amended")
+        _put(seed, seed.doctor, minutes_ago=15, type="record.amended", read_at=FixedClock().now())
+        doc = _put(seed, seed.doctor, minutes_ago=10, type="document.uploaded")
+        inbox = ListMyNotifications(seed.factory.for_tenant(seed.tenant.id))
+
+        assert [n.id for n in inbox.execute(seed.doctor_actor, category="appointment")] == [
+            appt.id
+        ]
+        assert len(inbox.execute(seed.doctor_actor, category="record")) == 2
+        assert [
+            n.id for n in inbox.execute(seed.doctor_actor, unread_only=True, category="record")
+        ] == [amended.id]
+        assert [n.id for n in inbox.execute(seed.doctor_actor, category="document")] == [doc.id]
+        assert inbox.execute(seed.doctor_actor, category="user") == []
 
     def test_mark_read(self):
         seed = seed_clinic()

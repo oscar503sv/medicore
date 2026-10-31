@@ -96,12 +96,18 @@ class SqlNotificationRepository:
         return to_notification(row) if row else None
 
     def list_by_user(
-        self, user_id: UserId, unread_only: bool = False, paging: Paging | None = None
+        self,
+        user_id: UserId,
+        unread_only: bool = False,
+        paging: Paging | None = None,
+        category: str | None = None,
     ) -> list[Notification]:
         paging = paging or Paging()
         q = self._mine(user_id)
         if unread_only:
             q = q.filter(NotificationModel.read_at.is_(None))
+        if category:
+            q = q.filter(NotificationModel.type.startswith(f"{category}.", autoescape=True))
         rows = (
             q.order_by(NotificationModel.created_at.desc(), NotificationModel.id.desc())
             .offset(paging.offset)

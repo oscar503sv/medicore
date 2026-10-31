@@ -14,9 +14,14 @@ class NotificationRepository(Protocol):
     def get_by_id(self, notification_id: NotificationId) -> Notification | None: ...
 
     def list_by_user(
-        self, user_id: UserId, unread_only: bool = False, paging: Paging | None = None
+        self,
+        user_id: UserId,
+        unread_only: bool = False,
+        paging: Paging | None = None,
+        category: str | None = None,
     ) -> list[Notification]:
-        """Newest first."""
+        """Newest first. ``category`` keeps the types starting with ``"<category>."``
+        (e.g. ``"appointment"`` → ``appointment.created``, ``appointment.cancelled``…)."""
         ...
 
     def count_unread(self, user_id: UserId) -> int: ...

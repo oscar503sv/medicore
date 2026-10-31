@@ -589,10 +589,19 @@ class InMemoryNotificationRepository(_Scoped):
         return n if n and n.tenant_id == self._tenant else None
 
     def list_by_user(
-        self, user_id: UserId, unread_only: bool = False, paging: Paging | None = None
+        self,
+        user_id: UserId,
+        unread_only: bool = False,
+        paging: Paging | None = None,
+        category: str | None = None,
     ) -> list[Notification]:
         paging = paging or Paging()
-        result = [n for n in self._of(user_id) if not unread_only or not n.is_read]
+        result = [
+            n
+            for n in self._of(user_id)
+            if (not unread_only or not n.is_read)
+            and (not category or n.type.startswith(f"{category}."))
+        ]
         result.sort(key=lambda n: (n.created_at, n.id.value), reverse=True)
         return result[paging.offset : paging.offset + paging.limit]
 

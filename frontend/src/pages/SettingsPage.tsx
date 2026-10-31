@@ -20,7 +20,7 @@ import { formatPhone, isValidPhone } from '@/lib/validation'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore, type Lang, type Theme } from '@/stores/ui'
 
-type Section = 'profile' | 'appearance' | 'sessions' | 'organization' | 'notifications'
+type Section = 'profile' | 'appearance' | 'sessions' | 'organization'
 
 export function SettingsPage() {
   const t = useT()
@@ -35,7 +35,6 @@ export function SettingsPage() {
     ...(canViewOrg
       ? [{ id: 'organization' as const, label: t('settings.organization') }]
       : []),
-    { id: 'notifications', label: t('settings.notifications') },
   ]
 
   const themes: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -125,9 +124,6 @@ export function SettingsPage() {
 
           {section === 'organization' && <OrganizationSection />}
 
-          {section === 'notifications' && (
-            <Card className="p-8 text-center text-sm text-tx-3">{t('settings.in_progress')}</Card>
-          )}
         </div>
       </div>
     </div>

@@ -14,6 +14,7 @@ import { ConsultationPage } from '@/pages/ConsultationPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { InsurersPage } from '@/pages/InsurersPage'
 import { LoginPage } from '@/pages/LoginPage'
+import { NotificationsPage } from '@/pages/NotificationsPage'
 import { PatientDetailPage } from '@/pages/PatientDetailPage'
 import { PatientsPage } from '@/pages/PatientsPage'
 import { ClinicDetailPage } from '@/pages/platform/ClinicDetailPage'
@@ -106,6 +107,7 @@ export function App() {
           <Route path="/insurers" element={<InsurersPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

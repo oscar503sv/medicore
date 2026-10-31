@@ -173,6 +173,15 @@ export function NotificationBell() {
                 </button>
               )}
             </div>
+            <button
+              onClick={() => {
+                close()
+                navigate('/notifications')
+              }}
+              className="border-t border-line-soft py-2.5 text-center text-xs font-medium text-accent hover:bg-surface-2"
+            >
+              {t('notif.view_all')}
+            </button>
           </div>
         </>
       )}

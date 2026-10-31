@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Query
 
 from medicore.application.use_cases.notifications import (
@@ -23,17 +25,21 @@ from medicore.presentation.serializers import ser_notification
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
+# Inbox filter: the prefix of the notification types (appointment.*, record.*, …).
+Category = Literal["appointment", "record", "document", "user"]
+
 
 @router.get("", response_model=NotificationListResponse)
 def list_notifications(
     actor: Actor,
     uow: UoW,
     unread_only: bool = Query(False),
+    category: Category | None = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
 ):
     items = ListMyNotifications(uow).execute(
-        actor, unread_only, Paging(offset=offset, limit=limit)
+        actor, unread_only, Paging(offset=offset, limit=limit), category
     )
     unread = CountMyUnreadNotifications(uow).execute(actor)
     return NotificationListResponse(

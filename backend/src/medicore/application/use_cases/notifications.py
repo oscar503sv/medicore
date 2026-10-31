@@ -26,10 +26,16 @@ class ListMyNotifications:
         self._uow = uow
 
     def execute(
-        self, actor: ActorContext, unread_only: bool = False, paging: Paging | None = None
+        self,
+        actor: ActorContext,
+        unread_only: bool = False,
+        paging: Paging | None = None,
+        category: str | None = None,
     ) -> list[Notification]:
         with self._uow:
-            return self._uow.notifications.list_by_user(actor.user_id, unread_only, paging)
+            return self._uow.notifications.list_by_user(
+                actor.user_id, unread_only, paging, category
+            )
 
 
 class CountMyUnreadNotifications:

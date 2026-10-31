@@ -67,12 +67,15 @@ def _tenant(session) -> TenantId:
     return tenant_id
 
 
-def _add(repo, tenant_id, user_id, *, minutes_ago=0, read_at=None, data=None) -> Notification:
+def _add(
+    repo, tenant_id, user_id, *, minutes_ago=0, read_at=None, data=None,
+    type="appointment.created",
+) -> Notification:
     n = Notification(
         id=NotificationId.new(),
         tenant_id=tenant_id,
         user_id=user_id,
-        type="appointment.created",
+        type=type,
         data=data or {"appointment_code": f"A-{minutes_ago}"},
         read_at=read_at,
         created_at=NOW - timedelta(minutes=minutes_ago),
@@ -142,3 +145,20 @@ def test_delete_read_before_keeps_unread_and_recent(session):
     session.expire_all()
     assert {n.id for n in repo.list_by_user(me)} == {recent.id, unread.id}
     assert repo.get_by_id(theirs.id) is not None
+
+
+def test_category_filters_by_type_prefix(session):
+    tid = _tenant(session)
+    repo = SqlNotificationRepository(session, tid)
+    me = UserId.new()
+    appt = _add(repo, tid, me, minutes_ago=30)
+    amended = _add(repo, tid, me, minutes_ago=20, type="record.amended")
+    _add(repo, tid, me, minutes_ago=10, type="record.amended", read_at=NOW)
+    session.flush()
+
+    assert [n.id for n in repo.list_by_user(me, category="appointment")] == [appt.id]
+    assert len(repo.list_by_user(me, category="record")) == 2
+    assert [n.id for n in repo.list_by_user(me, unread_only=True, category="record")] == [
+        amended.id
+    ]
+    assert repo.list_by_user(me, category="user") == []
