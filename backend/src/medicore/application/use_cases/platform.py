@@ -130,9 +130,9 @@ class AuthenticatePlatformAdmin:
                 password, admin.password_hash if admin else self._dummy()
             )
             if admin is None or not password_ok:
-                raise AuthenticationFailed("invalid credentials")
+                raise AuthenticationFailed("invalid credentials", code="auth.invalid_credentials")
             if not admin.is_active:
-                raise AuthenticationFailed("account is not active")
+                raise AuthenticationFailed("account is not active", code="auth.account_inactive")
             now = self._clock.now()
             admin.last_seen_at = now
             uow.platform_admins.save(admin)
@@ -236,13 +236,19 @@ class CreateTenantWithAdmin:
         try:
             slug = Slug(cmd.slug.strip().lower())
         except InvalidValueObject as exc:
-            raise ValidationError(str(exc)) from exc
+            raise ValidationError(str(exc), code="clinic.invalid_slug") from exc
         if not cmd.admin_password or len(cmd.admin_password) < 8:
-            raise ValidationError("temporary password must be at least 8 characters")
+            raise ValidationError(
+                "temporary password must be at least 8 characters",
+                code="password.too_short",
+                min=8,
+            )
 
         with self._factory.platform_uow() as platform:
             if platform.tenants.get_by_slug(slug) is not None:
-                raise ValidationError(f"slug already in use: {slug}")
+                raise ValidationError(
+                    f"slug already in use: {slug}", code="clinic.slug_taken", slug=str(slug)
+                )
 
         tenant_id = TenantId.new()
         tenant = Tenant(
@@ -480,7 +486,11 @@ class ResetUserPassword:
         password: str,
     ) -> User:
         if not password or len(password) < 8:
-            raise ValidationError("temporary password must be at least 8 characters")
+            raise ValidationError(
+                "temporary password must be at least 8 characters",
+                code="password.too_short",
+                min=8,
+            )
         with self._factory.for_tenant(tenant_id) as uow:
             user = _require_user(uow, tenant_id, user_id)
             user.set_temporary_password(self._hasher.hash(password))
@@ -530,11 +540,15 @@ class ImpersonateTenant:
         if tenant is None:
             raise EntityNotFound("Tenant", tenant_id)
         if tenant.status == TenantStatus.ARCHIVED:
-            raise ValidationError("cannot impersonate an archived clinic")
+            raise ValidationError(
+                "cannot impersonate an archived clinic", code="support.clinic_archived"
+            )
         with self._factory.for_tenant(tenant_id) as uow:
             admins = uow.users.list(filter=UserFilter(role="admin", status="active")).items
             if not admins:
-                raise ValidationError("clinic has no active admin to impersonate")
+                raise ValidationError(
+                    "clinic has no active admin to impersonate", code="support.no_active_admin"
+                )
             target = admins[0]
             override = uow.role_permissions.get_by_role(target.role)
             now = self._clock.now()
@@ -601,7 +615,7 @@ class EndImpersonation:
 
     def execute(self, actor: ActorContext) -> None:
         if actor.impersonated_by is None:
-            raise ValidationError("not a support session")
+            raise ValidationError("not a support session", code="support.not_a_support_session")
         with self._factory.for_tenant(actor.tenant_id) as uow:
             if actor.session_id is not None:
                 uow.sessions.revoke(actor.session_id, self._clock.now())
@@ -749,7 +763,9 @@ class ResetTenantRolePermissions:
 
     def execute(self, actor: PlatformActorContext, tenant_id: TenantId, role: Role):
         if role == Role.ADMIN:
-            raise ValidationError("the admin role is not customizable")
+            raise ValidationError(
+                "the admin role is not customizable", code="roles.admin_not_customizable"
+            )
         with self._factory.for_tenant(tenant_id) as uow:
             uow.role_permissions.delete_by_role(role)
             uow.platform_audit.append(

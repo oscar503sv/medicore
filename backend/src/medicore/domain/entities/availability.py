@@ -48,7 +48,10 @@ class AvailabilityException:
 
     def __post_init__(self) -> None:
         if self.kind == AvailabilityExceptionKind.EXTRA and not self.blocks:
-            raise InvalidValueObject("An 'extra' exception must define at least one time block")
+            raise InvalidValueObject(
+                "An 'extra' exception must define at least one time block",
+                code="availability.extra_needs_block",
+            )
         _assert_no_overlaps(self.blocks)
 
 
@@ -67,10 +70,14 @@ class BookingRules:
     def __post_init__(self) -> None:
         if self.slot_minutes not in _SLOT_CHOICES:
             raise InvalidValueObject(
-                f"slot_minutes must be one of {sorted(_SLOT_CHOICES)}, got {self.slot_minutes}"
+                f"slot_minutes must be one of {sorted(_SLOT_CHOICES)}, got {self.slot_minutes}",
+                code="availability.invalid_slot_minutes",
+                allowed=", ".join(str(m) for m in sorted(_SLOT_CHOICES)),
             )
         if self.min_advance_hours < 0:
-            raise InvalidValueObject("min_advance_hours must be non-negative")
+            raise InvalidValueObject(
+                "min_advance_hours must be non-negative", code="availability.negative_advance"
+            )
 
 
 @dataclass(slots=True)
@@ -112,7 +119,11 @@ class DoctorAvailability:
 
     def add_exception(self, exception: AvailabilityException) -> None:
         if self.exception_on(exception.date) is not None:
-            raise DomainError(f"An exception already exists for {exception.date}")
+            raise DomainError(
+                f"An exception already exists for {exception.date}",
+                code="availability.exception_exists",
+                date=exception.date.isoformat(),
+            )
         self.exceptions.append(exception)
 
     def remove_exception(self, exception_id: ExceptionId) -> None:
@@ -126,4 +137,7 @@ def _assert_no_overlaps(blocks: list[TimeRange]) -> None:
     ordered = sorted(blocks, key=lambda b: b.start)
     for earlier, later in zip(ordered, ordered[1:], strict=False):
         if earlier.overlaps(later):
-            raise InvalidValueObject(f"Overlapping time blocks: {earlier} and {later}")
+            raise InvalidValueObject(
+                f"Overlapping time blocks: {earlier} and {later}",
+                code="availability.overlapping_blocks",
+            )

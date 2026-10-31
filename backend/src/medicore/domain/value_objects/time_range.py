@@ -18,7 +18,10 @@ class TimeRange:
     def __post_init__(self) -> None:
         if self.start >= self.end:
             raise InvalidValueObject(
-                f"TimeRange.start ({self.start}) must be before end ({self.end})"
+                f"TimeRange.start ({self.start}) must be before end ({self.end})",
+                code="time_range.invalid",
+                start=self.start.strftime("%H:%M"),
+                end=self.end.strftime("%H:%M"),
             )
 
     def duration_minutes(self) -> int:

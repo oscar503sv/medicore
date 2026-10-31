@@ -138,7 +138,10 @@ class Consultation:
         if completion < MIN_COMPLETION_TO_SIGN:
             raise ConsultationNotSignable(
                 f"Consultation only {completion}% complete; "
-                f"minimum {MIN_COMPLETION_TO_SIGN}% required to sign"
+                f"minimum {MIN_COMPLETION_TO_SIGN}% required to sign",
+                code="consultation.incomplete",
+                completion=completion,
+                min=MIN_COMPLETION_TO_SIGN,
             )
 
         now = signed_at or datetime.now(UTC)
@@ -192,4 +195,7 @@ class Consultation:
 
     def _assert_draft(self) -> None:
         if self.status != ConsultationStatus.DRAFT:
-            raise ConsultationNotSignable("Consultation is already signed and cannot be modified")
+            raise ConsultationNotSignable(
+                "Consultation is already signed and cannot be modified",
+                code="consultation.already_signed",
+            )

@@ -184,7 +184,9 @@ class CreateAppointment:
 
         availability = self._uow.availability.get_by_doctor(cmd.doctor_id)
         if availability is None:
-            raise SlotUnavailable("doctor has no availability configured")
+            raise SlotUnavailable(
+                "doctor has no availability configured", code="slot.no_availability"
+            )
 
         # Appointment duration is the doctor's rule, never a caller choice.
         duration = availability.rules.slot_minutes
@@ -199,7 +201,8 @@ class CreateAppointment:
             now=clinic_now(self._uow, actor.tenant_id, self._clock),
         ):
             raise SlotUnavailable(
-                f"{cmd.scheduled_start.isoformat()} is not bookable for doctor {cmd.doctor_id}"
+                f"{cmd.scheduled_start.isoformat()} is not bookable for doctor {cmd.doctor_id}",
+                code="slot.not_bookable",
             )
 
         appointment = Appointment(
@@ -255,7 +258,9 @@ class RescheduleAppointment:
 
         availability = self._uow.availability.get_by_doctor(appointment.doctor_id)
         if availability is None:
-            raise SlotUnavailable("doctor has no availability configured")
+            raise SlotUnavailable(
+                "doctor has no availability configured", code="slot.no_availability"
+            )
         # Duration is recomputed from the doctor's current rules, not carried over.
         duration = availability.rules.slot_minutes
         end = new_start + timedelta(minutes=duration)
@@ -271,7 +276,7 @@ class RescheduleAppointment:
             busy=_busy_intervals(overlapping),
             now=clinic_now(self._uow, actor.tenant_id, self._clock),
         ):
-            raise SlotUnavailable("new slot is not bookable")
+            raise SlotUnavailable("new slot is not bookable", code="slot.not_bookable")
 
         previous_start = appointment.scheduled_start
         with self._uow:

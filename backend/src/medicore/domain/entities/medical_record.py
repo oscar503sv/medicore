@@ -95,7 +95,8 @@ class MedicalRecord:
         """
         if self.status not in (RecordStatus.SIGNED, RecordStatus.AMENDED):
             raise RecordAlreadySigned(
-                "Only a signed (or previously amended) record can be amended"
+                "Only a signed (or previously amended) record can be amended",
+                code="record.not_amendable",
             )
         return replace(
             self,

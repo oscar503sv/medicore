@@ -66,24 +66,34 @@ def build_matrix(uow: UnitOfWork) -> PermissionsMatrixDTO:
 def validate_role_update(role: Role, permissions: list[str]) -> frozenset[Permission]:
     """Apply the customization guardrails; return the parsed permission set."""
     if role == Role.ADMIN:
-        raise ValidationError("the admin role is not customizable")
+        raise ValidationError(
+            "the admin role is not customizable", code="roles.admin_not_customizable"
+        )
     catalog = {str(p): p for p in Permission}
     unknown = [s for s in permissions if s not in catalog]
     if unknown:
-        raise ValidationError(f"unknown permissions: {', '.join(sorted(unknown))}")
+        raise ValidationError(
+            f"unknown permissions: {', '.join(sorted(unknown))}",
+            code="roles.unknown_permissions",
+            permissions=",".join(sorted(unknown)),
+        )
     parsed = frozenset(catalog[s] for s in permissions)
     if role == Role.DOCTOR:
         missing = DOCTOR_ONLY - parsed
         if missing:
             raise ValidationError(
-                "the doctor role must keep: " + ", ".join(sorted(str(p) for p in missing))
+                "the doctor role must keep: " + ", ".join(sorted(str(p) for p in missing)),
+                code="roles.doctor_must_keep",
+                permissions=",".join(sorted(str(p) for p in missing)),
             )
     else:
         forbidden = DOCTOR_ONLY & parsed
         if forbidden:
             raise ValidationError(
                 "only the doctor role may hold: "
-                + ", ".join(sorted(str(p) for p in forbidden))
+                + ", ".join(sorted(str(p) for p in forbidden)),
+                code="roles.doctor_only",
+                permissions=",".join(sorted(str(p) for p in forbidden)),
             )
     return parsed
 
@@ -156,7 +166,9 @@ class ResetRolePermissions:
     def execute(self, actor: ActorContext, role: Role) -> PermissionsMatrixDTO:
         ensure_permission(actor, Permission.PERMISSIONS_MANAGE)
         if role == Role.ADMIN:
-            raise ValidationError("the admin role is not customizable")
+            raise ValidationError(
+                "the admin role is not customizable", code="roles.admin_not_customizable"
+            )
         with self._uow:
             self._uow.role_permissions.delete_by_role(role)
             self._uow.audit.append(

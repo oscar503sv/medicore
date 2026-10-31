@@ -23,5 +23,9 @@ class IcdCode:
     def __post_init__(self) -> None:
         normalized = self.code.strip().upper()
         if not _ICD_RE.match(normalized):
-            raise InvalidValueObject(f"Invalid diagnosis code: {self.code!r}")
+            raise InvalidValueObject(
+                f"Invalid diagnosis code: {self.code!r}",
+                code="diagnosis.invalid_code",
+                value=self.code,
+            )
         object.__setattr__(self, "code", normalized)

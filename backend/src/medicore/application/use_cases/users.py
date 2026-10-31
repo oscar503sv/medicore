@@ -59,9 +59,17 @@ class InviteUser:
     def execute(self, actor: ActorContext, cmd: InviteUserCommand) -> User:
         ensure_permission(actor, Permission.USERS_MANAGE)
         if self._uow.users.get_by_email(cmd.email) is not None:
-            raise ValidationError(f"email already in use within this tenant: {cmd.email}")
+            raise ValidationError(
+                f"email already in use within this tenant: {cmd.email}",
+                code="user.email_taken",
+                email=cmd.email,
+            )
         if not cmd.password or len(cmd.password) < 8:
-            raise ValidationError("temporary password must be at least 8 characters")
+            raise ValidationError(
+                "temporary password must be at least 8 characters",
+                code="password.too_short",
+                min=8,
+            )
 
         user = User(
             id=UserId.new(),
@@ -229,7 +237,11 @@ class ResetUserPassword:
     def execute(self, actor: ActorContext, cmd: ResetUserPasswordCommand) -> User:
         ensure_permission(actor, Permission.USERS_MANAGE)
         if not cmd.password or len(cmd.password) < 8:
-            raise ValidationError("temporary password must be at least 8 characters")
+            raise ValidationError(
+                "temporary password must be at least 8 characters",
+                code="password.too_short",
+                min=8,
+            )
         user = self._uow.users.get_by_id(cmd.user_id)
         if user is None:
             raise EntityNotFound("User", cmd.user_id)

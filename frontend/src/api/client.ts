@@ -1,4 +1,5 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
+import { fmtDate } from '@/lib/format'
 import { translate } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
 import { usePlatformAuthStore } from '@/stores/platformAuth'
@@ -71,11 +72,56 @@ export function errorStatus(error: unknown): number | undefined {
 }
 
 /** Extract a human-readable message from an Axios error. */
+// Params whose values are themselves codes get rendered through an existing label, so a
+// message reads "No tienes permiso para esta acción: Enmendar expedientes" rather than
+// "...: records.amend". Unknown values are shown as sent.
+const PARAM_LABELS: Record<string, (value: string) => string> = {
+  permission: (v) => `permission.${v.replace('.', '_')}`,
+  permissions: (v) => `permission.${v.replace('.', '_')}`,
+  current: (v) => `status.${v}`,
+  attempted: (v) => `status.${v}`,
+  entity: (v) => `audit.entity.${v}`,
+  field: (v) => `vital.${v}`,
+  role: (v) => `role.${v}`,
+}
+
+function label(key: string, raw: string): string {
+  const toKey = PARAM_LABELS[key]
+  if (!toKey) return raw
+  // List params ("a, b") are labelled item by item.
+  return raw
+    .split(', ')
+    .map((v) => {
+      const k = toKey(v)
+      const text = translate(k)
+      return text === k ? v : text
+    })
+    .join(', ')
+}
+
+function interpolate(template: string, params: Record<string, unknown>): string {
+  return template.replace(/\{(\w+)\}/g, (match, key: string) => {
+    const value = params[key]
+    if (value === undefined || value === null) return match
+    if (key === 'date') return fmtDate(String(value))
+    return label(key, String(value))
+  })
+}
+
+/**
+ * User-facing text for a failed request. Error bodies carry a stable `code` (+ `params`)
+ * that is translated here; the English `detail` is only for API clients and logs.
+ * Codes without a translation (e.g. a generic `http.404`) use the caller's fallback.
+ */
 export function errorMessage(error: unknown, fallback?: string): string {
   if (axios.isAxiosError(error)) {
-    const detail = error.response?.data?.detail
-    if (typeof detail === 'string') return detail
-    if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg
+    const data = error.response?.data
+    const code = typeof data?.code === 'string' ? data.code : null
+    if (code) {
+      const key = `err.${code}`
+      const template = translate(key)
+      if (template !== key) return interpolate(template, data.params ?? {})
+    }
   }
   return fallback ?? translate('app.error_generic')
 }

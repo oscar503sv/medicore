@@ -61,7 +61,9 @@ class StartConsultation:
         if appointment is None:
             raise EntityNotFound("Appointment", appointment_id)
         if not _owns(actor, appointment.doctor_id):
-            raise PermissionDenied("doctors may only start their own consultations")
+            raise PermissionDenied(
+                "doctors may only start their own consultations", code="consultation.not_own"
+            )
 
         existing = self._uow.consultations.get_by_appointment(appointment_id)
         if existing is not None:
@@ -104,7 +106,9 @@ class GetConsultation:
         if consultation is None:
             raise EntityNotFound("Consultation", consultation_id)
         if not _owns(actor, consultation.doctor_id):
-            raise PermissionDenied("doctors may only view their own consultations")
+            raise PermissionDenied(
+                "doctors may only view their own consultations", code="consultation.not_own"
+            )
         return consultation
 
 
@@ -121,7 +125,9 @@ class _ConsultationEditor:
         if consultation is None:
             raise EntityNotFound("Consultation", consultation_id)
         if not _owns(actor, consultation.doctor_id):
-            raise PermissionDenied("doctors may only edit their own consultations")
+            raise PermissionDenied(
+                "doctors may only edit their own consultations", code="consultation.not_own"
+            )
         return consultation
 
     def _save(self, consultation: Consultation) -> None:
@@ -205,7 +211,9 @@ class SignConsultation:
         if consultation is None:
             raise EntityNotFound("Consultation", cmd.consultation_id)
         if not _owns(actor, consultation.doctor_id):
-            raise PermissionDenied("doctors may only sign their own consultations")
+            raise PermissionDenied(
+                "doctors may only sign their own consultations", code="consultation.not_own"
+            )
         appointment = self._uow.appointments.get_by_id(consultation.appointment_id)
         if appointment is None:
             raise EntityNotFound("Appointment", consultation.appointment_id)

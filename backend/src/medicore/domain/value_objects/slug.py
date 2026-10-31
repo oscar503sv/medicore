@@ -22,10 +22,12 @@ class Slug:
     def __post_init__(self) -> None:
         if not _SLUG_RE.match(self.value):
             raise InvalidValueObject(
-                f"Slug must match ^[a-z0-9-]+$, got {self.value!r}"
+                f"Slug must match ^[a-z0-9-]+$, got {self.value!r}", code="clinic.invalid_slug"
             )
         if self.value.startswith("-") or self.value.endswith("-"):
-            raise InvalidValueObject(f"Slug must not start or end with '-': {self.value!r}")
+            raise InvalidValueObject(
+                f"Slug must not start or end with '-': {self.value!r}", code="clinic.invalid_slug"
+            )
 
     def __str__(self) -> str:
         return self.value

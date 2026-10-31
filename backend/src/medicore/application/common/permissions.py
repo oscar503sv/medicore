@@ -145,4 +145,8 @@ def has_permission(actor: ActorContext, permission: Permission) -> bool:
 
 def ensure_permission(actor: ActorContext, permission: Permission) -> None:
     if not has_permission(actor, permission):
-        raise PermissionDenied(f"role {actor.role} lacks permission '{permission}'")
+        raise PermissionDenied(
+            f"role {actor.role} lacks permission '{permission}'",
+            code="permission.missing",
+            permission=str(permission),
+        )

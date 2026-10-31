@@ -40,7 +40,7 @@ class Identifier:
         try:
             return cls(UUID(str(raw)))
         except (ValueError, AttributeError, TypeError) as exc:
-            raise InvalidValueObject(f"Invalid {cls.__name__}: {raw!r}") from exc
+            raise InvalidValueObject(f"Invalid {cls.__name__}: {raw!r}", code="invalid_id") from exc
 
     def __str__(self) -> str:
         return str(self.value)

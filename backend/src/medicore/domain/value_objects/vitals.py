@@ -27,18 +27,25 @@ class Vitals:
     def __post_init__(self) -> None:
         if self.blood_pressure is not None and not _BP_RE.match(self.blood_pressure):
             raise InvalidValueObject(
-                f"blood_pressure must look like '120/80', got {self.blood_pressure!r}"
+                f"blood_pressure must look like '120/80', got {self.blood_pressure!r}",
+                code="vitals.invalid_blood_pressure",
             )
         if self.spo2 is not None and not (0 <= self.spo2 <= 100):
-            raise InvalidValueObject(f"spo2 must be 0..100, got {self.spo2}")
+            raise InvalidValueObject(
+                f"spo2 must be 0..100, got {self.spo2}", code="vitals.spo2_out_of_range"
+            )
         for name in ("heart_rate", "glucose", "fetal_heart_rate"):
             v = getattr(self, name)
             if v is not None and v < 0:
-                raise InvalidValueObject(f"{name} must be non-negative, got {v}")
+                raise InvalidValueObject(
+                    f"{name} must be non-negative, got {v}", code="vitals.negative", field=name
+                )
         for name in ("temperature", "weight", "height"):
             v = getattr(self, name)
             if v is not None and v < 0:
-                raise InvalidValueObject(f"{name} must be non-negative, got {v}")
+                raise InvalidValueObject(
+                    f"{name} must be non-negative, got {v}", code="vitals.negative", field=name
+                )
 
     def bmi(self) -> Decimal | None:
         """Body mass index (kg/m²), or None if weight or height is missing."""

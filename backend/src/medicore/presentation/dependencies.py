@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, Request, status
 
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.permissions import effective_permissions
@@ -37,6 +37,7 @@ from medicore.presentation.cookies import (
     SESSION_COOKIE,
     is_mutating,
 )
+from medicore.presentation.errors import ApiError
 
 # ── Singletons (cheap to construct, no shared mutable state) ──────────────────
 
@@ -81,17 +82,17 @@ def _session_token(request: Request, authorization: str | None, cookie_name: str
 
     token = request.cookies.get(cookie_name)
     if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED,
+            "Missing or invalid Authorization header",
+            code="auth.not_authenticated",
         )
     if is_mutating(request.method):
         csrf_cookie = request.cookies.get(CSRF_COOKIE, "")
         csrf_header = request.headers.get(CSRF_HEADER, "")
         if not csrf_cookie or not secrets.compare_digest(csrf_cookie, csrf_header):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="CSRF token missing or invalid",
+            raise ApiError(
+                status.HTTP_403_FORBIDDEN, "CSRF token missing or invalid", code="auth.csrf_invalid"
             )
     return token
 
@@ -99,14 +100,14 @@ def _session_token(request: Request, authorization: str | None, cookie_name: str
 def _session_id_or_401(claims) -> SessionId:
     """Extract the ``sid`` claim; tokens without one (or malformed) are rejected."""
     if not claims.session_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked or expired"
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
         )
     try:
         return SessionId.parse(claims.session_id)
     except InvalidValueObject as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked or expired"
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
         ) from exc
 
 
@@ -136,12 +137,12 @@ def _decode_or_401(issuer: JwtTokenIssuer, token: str):
     try:
         return issuer.decode(token)
     except jwt.ExpiredSignatureError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired"
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Token expired", code="auth.session_expired"
         ) from exc
     except jwt.InvalidTokenError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Invalid token", code="auth.session_expired"
         ) from exc
 
 
@@ -164,8 +165,8 @@ def get_actor(
     claims = _decode_or_401(issuer, token)
 
     if claims.scope != "tenant" or not claims.tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a tenant session"
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Not a tenant session", code="auth.wrong_session"
         )
 
     session_id = _session_id_or_401(claims)
@@ -175,8 +176,8 @@ def get_actor(
         override = uow.role_permissions.get_by_role(role)
         session = uow.sessions.get(session_id)
     if session is None or not session.is_active(clock.now()):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked or expired"
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
         )
     effective = effective_permissions(role, override.permissions if override else None)
 
@@ -211,16 +212,16 @@ def get_platform_actor(
     claims = _decode_or_401(issuer, token)
 
     if claims.scope != "platform":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a platform session"
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Not a platform session", code="auth.wrong_session"
         )
 
     session_id = _session_id_or_401(claims)
     with factory.platform_uow() as uow:
         session = uow.sessions.get(session_id)
     if session is None or not session.is_active(clock.now()):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked or expired"
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
         )
 
     return PlatformActorContext(

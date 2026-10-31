@@ -12,6 +12,7 @@ from medicore.application.common.errors import (
     AuthenticationFailed,
     EntityNotFound,
     TooManyLoginAttempts,
+    ValidationError,
 )
 from medicore.application.common.login_throttle import tenant_login_identifier
 from medicore.application.common.permissions import effective_permissions
@@ -130,7 +131,7 @@ class AuthenticateUser:
         # Unknown organization: burn the same bcrypt work and answer exactly like a
         # wrong password, so neither the message nor the timing reveals which slugs exist.
         self._hasher.verify(cmd.password, self._dummy())
-        raise AuthenticationFailed("invalid credentials")
+        raise AuthenticationFailed("invalid credentials", code="auth.invalid_credentials")
 
     def _authenticate(self, cmd: AuthenticateUserCommand) -> SessionDTO:
         try:
@@ -149,13 +150,15 @@ class AuthenticateUser:
                 cmd.password, user.password_hash if user else self._dummy()
             )
             if user is None or not password_ok:
-                raise AuthenticationFailed("invalid credentials")
+                raise AuthenticationFailed("invalid credentials", code="auth.invalid_credentials")
             # Status messages only after valid credentials: the legitimate user learns why
             # they cannot get in, an attacker without the password learns nothing.
             if not tenant.is_active:
-                raise AuthenticationFailed("this organization is not active")
+                raise AuthenticationFailed(
+                    "this organization is not active", code="auth.organization_inactive"
+                )
             if user.status != UserStatus.ACTIVE:
-                raise AuthenticationFailed("account is not active")
+                raise AuthenticationFailed("account is not active", code="auth.account_inactive")
             override = uow.role_permissions.get_by_role(user.role)
             now = self._clock.now()
             user.last_seen_at = now
@@ -262,13 +265,17 @@ class ChangePassword:
 
     def execute(self, actor: ActorContext, current_password: str, new_password: str) -> None:
         if not new_password or len(new_password) < 8:
-            raise AuthenticationFailed("new password must be at least 8 characters")
+            raise ValidationError(
+                "new password must be at least 8 characters", code="password.too_short", min=8
+            )
         with self._factory.for_tenant(actor.tenant_id) as uow:
             user = uow.users.get_by_id(actor.user_id)
             if user is None:
                 raise EntityNotFound("User", actor.user_id)
             if not self._hasher.verify(current_password, user.password_hash):
-                raise AuthenticationFailed("current password is incorrect")
+                raise ValidationError(
+                    "current password is incorrect", code="password.current_incorrect"
+                )
             user.change_password(self._hasher.hash(new_password))
             uow.users.save(user)
             uow.sessions.revoke_all_for_user(

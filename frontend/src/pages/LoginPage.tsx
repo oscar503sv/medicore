@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Building2, Eye, EyeOff } from 'lucide-react'
 import { authApi } from '@/api/auth'
-import { errorMessage, errorStatus } from '@/api/client'
+import { errorMessage } from '@/api/client'
 import { AuthBrand, AuthCard, AuthShell, ComplianceRow } from '@/components/AuthShell'
 import { Button } from '@/components/ui/Button'
 import { useT } from '@/lib/i18n'
@@ -33,13 +33,8 @@ export function LoginPage() {
       setSession(session)
       navigate('/')
     } catch (err) {
-      setError(
-        errorStatus(err) === 429
-          ? t('login.locked')
-          : errorStatus(err) === 401
-            ? t('login.invalid')
-            : errorMessage(err),
-      )
+      // The backend's code tells bad credentials from an inactive account/clinic or a lockout.
+      setError(errorMessage(err, t('login.invalid')))
     } finally {
       setLoading(false)
     }

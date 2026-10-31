@@ -18,7 +18,8 @@ class DateRange:
     def __post_init__(self) -> None:
         if self.from_date > self.to_date:
             raise InvalidValueObject(
-                f"DateRange.from_date ({self.from_date}) must be <= to_date ({self.to_date})"
+                f"DateRange.from_date ({self.from_date}) must be <= to_date ({self.to_date})",
+                code="date_range.invalid",
             )
 
     def contains(self, d: date) -> bool:

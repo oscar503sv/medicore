@@ -18,7 +18,9 @@ class BloodType:
     def __post_init__(self) -> None:
         normalized = self.value.strip().upper()
         if normalized not in _VALID:
-            raise InvalidValueObject(f"Invalid blood type: {self.value!r}")
+            raise InvalidValueObject(
+                f"Invalid blood type: {self.value!r}", code="patient.invalid_blood_type"
+            )
         # frozen dataclass: bypass to store the normalized form
         object.__setattr__(self, "value", normalized)
 

@@ -126,14 +126,22 @@ _FILE_NAME_FORBIDDEN = ("/", "\\", "..", "\x00")
 
 def _validate_upload(cmd: UploadDocumentCommand) -> None:
     if cmd.mime_type not in _ALLOWED_MIME_TYPES:
-        raise ValidationError(f"unsupported mime type: {cmd.mime_type!r}")
+        raise ValidationError(
+            f"unsupported mime type: {cmd.mime_type!r}",
+            code="document.unsupported_type",
+            mime_type=cmd.mime_type,
+        )
     if cmd.size_bytes <= 0 or cmd.size_bytes > _MAX_DOCUMENT_BYTES:
-        raise ValidationError(f"size_bytes must be between 1 and {_MAX_DOCUMENT_BYTES}")
+        raise ValidationError(
+            f"size_bytes must be between 1 and {_MAX_DOCUMENT_BYTES}",
+            code="document.too_large",
+            max_mb=_MAX_DOCUMENT_BYTES // (1024 * 1024),
+        )
     name = cmd.file_name.strip()
     if not name or len(name) > 255 or any(seq in name for seq in _FILE_NAME_FORBIDDEN):
-        raise ValidationError("invalid file name")
+        raise ValidationError("invalid file name", code="document.invalid_name")
     if ".." in cmd.storage_key or not _STORAGE_KEY_RE.match(cmd.storage_key):
-        raise ValidationError("invalid storage key")
+        raise ValidationError("invalid storage key", code="document.invalid_storage_key")
 
 
 class UploadDocument:

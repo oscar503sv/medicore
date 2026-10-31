@@ -143,9 +143,30 @@ python -m venv .venv
   health-check en `/health`.
 - Tras correr el seed, todos los usuarios demo usan la contraseña **`demo1234`**.
 
+## Formato de errores
+
+Toda respuesta de error tiene la misma forma:
+
+```json
+{"detail": "user with email x@y.test already exists", "code": "user.email_taken", "params": {"email": "x@y.test"}}
+```
+
+- `code` es estable y es lo que traduce el frontend (`err.<code>` en `frontend/src/lib/i18n.ts`,
+  con `{param}` interpolado desde `params`). `detail` es texto en inglés para clientes de la API y
+  logs; no se muestra al usuario.
+- Los errores llevan un código por defecto según su clase (`not_found`, `permission_denied`,
+  `invalid_transition`…) y uno específico en el punto donde se lanzan (`code="slot.not_bookable"`).
+  Las `HTTPException` sin código propio salen como `http.<status>`; la validación de FastAPI (422)
+  como `request_invalid` (con `detail` en su formato original de lista y los campos en
+  `params.fields`); un fallo inesperado (500) como `internal`.
+- `tests/presentation/test_error_codes_api.py` falla si el backend emite un código sin traducción
+  en español **y** en inglés: al añadir un código nuevo hay que añadir sus dos textos.
+- 401 solo para "¿quién eres?" (credenciales, sesión): el cliente cierra la sesión ante un 401. Una
+  contraseña actual incorrecta al cambiarla es un 400 (`password.current_incorrect`).
+
 ## Pruebas y linting
 
-Suite de **460 tests** (89 dominio · 200 aplicación · 129 presentación · 42 infraestructura), casi
+Suite de **469 tests** (89 dominio · 200 aplicación · 138 presentación · 42 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 

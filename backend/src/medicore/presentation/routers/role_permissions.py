@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 
 from medicore.application.use_cases.role_permissions import (
     GetPermissionsMatrix,
@@ -12,6 +12,7 @@ from medicore.application.use_cases.role_permissions import (
 )
 from medicore.domain.enums import Role
 from medicore.presentation.dependencies import Actor, Clock, UoW
+from medicore.presentation.errors import ApiError
 from medicore.presentation.schemas.role_permissions import (
     PermissionsMatrixResponse,
     RolePermissionsResponse,
@@ -25,8 +26,11 @@ def parse_role(value: str) -> Role:
     try:
         return Role(value)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"unknown role: {value}"
+        raise ApiError(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"unknown role: {value}",
+            code="roles.unknown_role",
+            role=value,
         ) from exc
 
 
