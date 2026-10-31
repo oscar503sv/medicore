@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from medicore.domain.enums import IcdVersion, Role, Sex, TenantStatus
+
 
 class PlatformLoginRequest(BaseModel):
     email: str
@@ -58,7 +60,7 @@ class CreateTenantRequest(BaseModel):
     tax_id: str
     slug: str
     timezone: str = "Europe/Madrid"
-    icd_version: str = "cie11"
+    icd_version: IcdVersion = IcdVersion.CIE11
     location_name: str
     admin_name: str
     admin_email: str
@@ -77,12 +79,12 @@ class UpdateTenantRequest(BaseModel):
     timezone: str | None = None
     plan: str | None = None
     seat_limit: int | None = None
-    icd_version: str | None = None
+    icd_version: IcdVersion | None = None
     location_name: str | None = None  # renames the clinic's primary location
 
 
 class SetTenantStatusRequest(BaseModel):
-    status: str  # active | suspended | archived
+    status: TenantStatus
 
 
 class TenantStatsResponse(BaseModel):
@@ -151,8 +153,8 @@ class ResetPasswordRequest(BaseModel):
 
 class UpdateTenantUserRequest(BaseModel):
     name: str | None = None
-    role: str | None = None  # admin | doctor | nurse | receptionist
-    sex: str | None = None
+    role: Role | None = None
+    sex: Sex | None = None
     phone: str | None = None
     specialty: str | None = None
 

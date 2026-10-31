@@ -12,7 +12,6 @@ from medicore.application.use_cases.records import (
     UploadDocument,
     UploadDocumentCommand,
 )
-from medicore.domain.enums import DocumentKind
 from medicore.domain.repositories._support import RecordFilter
 from medicore.domain.shared.identifiers import PatientId, RecordId
 from medicore.domain.value_objects.soap_note import SoapNote
@@ -78,7 +77,7 @@ def upload_document(body: UploadDocumentRequest, actor: Actor, uow: UoW, clock: 
     cmd = UploadDocumentCommand(
         patient_id=PatientId.parse(body.patient_id),
         file_name=body.file_name,
-        kind=DocumentKind(body.kind),
+        kind=body.kind,
         mime_type=body.mime_type,
         size_bytes=body.size_bytes,
         storage_key=body.storage_key,

@@ -18,7 +18,6 @@ from medicore.application.use_cases.appointments import (
     MarkNoShow,
     RescheduleAppointment,
 )
-from medicore.domain.enums import AppointmentType
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     InsurerId,
@@ -135,7 +134,7 @@ def create_appointment(
         patient_id=PatientId.parse(body.patient_id),
         doctor_id=UserId.parse(body.doctor_id),
         location_id=LocationId.parse(body.location_id),
-        type=AppointmentType(body.type),
+        type=body.type,
         scheduled_start=body.scheduled_start,
         reason=body.reason,
         room=body.room,

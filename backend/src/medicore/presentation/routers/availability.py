@@ -19,7 +19,6 @@ from medicore.domain.entities.availability import (
     BookingRules,
     WeeklyDay,
 )
-from medicore.domain.enums import AvailabilityExceptionKind
 from medicore.domain.shared.identifiers import ExceptionId, UserId
 from medicore.domain.value_objects.time_range import TimeRange
 from medicore.presentation.dependencies import Actor, Clock, UoW
@@ -64,7 +63,7 @@ def add_exception(body: ExceptionRequest, actor: Actor, uow: UoW, clock: Clock):
     ex = AvailabilityException(
         id=ExceptionId.new(),
         date=body.date,
-        kind=AvailabilityExceptionKind(body.kind),
+        kind=body.kind,
         reason=body.reason,
         blocks=[
             TimeRange(time(*map(int, b.start.split(":"))), time(*map(int, b.end.split(":"))))

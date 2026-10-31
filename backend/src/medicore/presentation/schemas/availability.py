@@ -6,6 +6,8 @@ from datetime import date
 
 from pydantic import BaseModel
 
+from medicore.domain.enums import AvailabilityExceptionKind
+
 
 class TimeRangeSchema(BaseModel):
     start: str  # "HH:MM"
@@ -20,7 +22,7 @@ class WeeklyDayRequest(BaseModel):
 
 class ExceptionRequest(BaseModel):
     date: date
-    kind: str  # off | extra
+    kind: AvailabilityExceptionKind
     reason: str = ""
     blocks: list[TimeRangeSchema] = []
 

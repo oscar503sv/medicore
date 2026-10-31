@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from medicore.domain.enums import Sex
+
 
 class ContactInfoSchema(BaseModel):
     phone: str | None = None
@@ -19,7 +21,7 @@ class ContactInfoSchema(BaseModel):
 class CreatePatientRequest(BaseModel):
     first_name: str
     last_name: str
-    sex: str
+    sex: Sex
     date_of_birth: date
     contact: ContactInfoSchema = ContactInfoSchema()
     blood_type: str | None = None

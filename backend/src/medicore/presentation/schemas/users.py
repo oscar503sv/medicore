@@ -6,25 +6,27 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from medicore.domain.enums import Role, Sex
+
 
 class InviteUserRequest(BaseModel):
     name: str
     email: str
-    role: str
+    role: Role
     password: str
-    sex: str | None = None
+    sex: Sex | None = None
     phone: str | None = None
     specialty: str | None = None
 
 
 class UpdateRoleRequest(BaseModel):
-    role: str
+    role: Role
 
 
 class UpdateUserRequest(BaseModel):
     name: str | None = None
-    role: str | None = None
-    sex: str | None = None
+    role: Role | None = None
+    sex: Sex | None = None
     phone: str | None = None
     specialty: str | None = None
 

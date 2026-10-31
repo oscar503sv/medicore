@@ -28,7 +28,6 @@ from medicore.application.use_cases.platform import (
     UpdateTenantUser,
 )
 from medicore.application.use_cases.sessions import ListTenantSessions, RevokeTenantSession
-from medicore.domain.enums import IcdVersion, Role, Sex, TenantStatus
 from medicore.domain.repositories._support import Paging, TenantFilter
 from medicore.domain.shared.identifiers import SessionId, TenantId, UserId
 from medicore.infrastructure.config import get_settings
@@ -148,7 +147,7 @@ def create_tenant(body: CreateTenantRequest, actor: PlatformActor, factory: UoWF
         tax_id=body.tax_id,
         slug=body.slug,
         timezone=body.timezone,
-        icd_version=IcdVersion(body.icd_version),
+        icd_version=body.icd_version,
         location_name=body.location_name,
         admin_name=body.admin_name,
         admin_email=body.admin_email,
@@ -179,7 +178,7 @@ def update_tenant(tenant_id: str, body: UpdateTenantRequest, actor: PlatformActo
 def set_tenant_status(tenant_id: str, body: SetTenantStatusRequest, actor: PlatformActor,
                       factory: UoWFactory, clock: Clock):
     tenant = SetTenantStatus(factory, clock).execute(
-        actor, TenantId.parse(tenant_id), TenantStatus(body.status)
+        actor, TenantId.parse(tenant_id), body.status
     )
     return ser_tenant(tenant)
 
@@ -283,10 +282,6 @@ def unlock_user(tenant_id: str, user_id: str, actor: PlatformActor, factory: UoW
 def update_tenant_user(tenant_id: str, user_id: str, body: UpdateTenantUserRequest,
                        actor: PlatformActor, factory: UoWFactory, clock: Clock):
     changes = body.model_dump(exclude_none=True)
-    if "role" in changes:
-        changes["role"] = Role(changes["role"])
-    if "sex" in changes:
-        changes["sex"] = Sex(changes["sex"])
     UpdateTenantUser(factory, clock).execute(
         actor, TenantId.parse(tenant_id), UserId.parse(user_id), **changes
     )

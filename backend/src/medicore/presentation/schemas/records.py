@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from medicore.domain.enums import DocumentKind
+
 
 class AmendRequest(BaseModel):
     chief_complaint: str | None = None
@@ -16,7 +18,7 @@ class AmendRequest(BaseModel):
 class UploadDocumentRequest(BaseModel):
     patient_id: str
     file_name: str
-    kind: str
+    kind: DocumentKind
     mime_type: str
     size_bytes: int
     storage_key: str

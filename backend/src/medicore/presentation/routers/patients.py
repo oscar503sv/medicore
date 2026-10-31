@@ -15,7 +15,6 @@ from medicore.application.use_cases.patients import (
     SearchPatients,
     UpdatePatient,
 )
-from medicore.domain.enums import Sex
 from medicore.domain.repositories._support import Paging, PatientFilter
 from medicore.domain.shared.identifiers import PatientId, UserId
 from medicore.domain.value_objects.blood_type import BloodType
@@ -73,7 +72,7 @@ def create_patient(body: CreatePatientRequest, actor: Actor, uow: UoW, codes: Co
     cmd = CreatePatientCommand(
         first_name=body.first_name,
         last_name=body.last_name,
-        sex=Sex(body.sex),
+        sex=body.sex,
         date_of_birth=body.date_of_birth,
         contact=contact,
         blood_type=BloodType(body.blood_type) if body.blood_type else None,

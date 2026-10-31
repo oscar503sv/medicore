@@ -14,7 +14,6 @@ from medicore.application.use_cases.auth import (
     UpdateMyProfile,
 )
 from medicore.application.use_cases.sessions import ListMySessions, RevokeMySession
-from medicore.domain.enums import LangPref, ThemePref
 from medicore.domain.shared.identifiers import SessionId
 from medicore.infrastructure.config import get_settings
 from medicore.presentation.cookies import (
@@ -105,12 +104,12 @@ def logout(
 
 @router.post("/auth/theme", status_code=204)
 def switch_theme(body: SwitchThemeRequest, actor: Actor, factory: UoWFactory):
-    SwitchTheme(factory).execute(actor, ThemePref(body.theme))
+    SwitchTheme(factory).execute(actor, body.theme)
 
 
 @router.post("/auth/locale", status_code=204)
 def switch_locale(body: SwitchLocaleRequest, actor: Actor, factory: UoWFactory):
-    SwitchLocale(factory).execute(actor, LangPref(body.language))
+    SwitchLocale(factory).execute(actor, body.language)
 
 
 @router.post("/auth/change-password", status_code=204)

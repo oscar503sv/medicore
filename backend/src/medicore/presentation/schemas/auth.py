@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from medicore.domain.enums import LangPref, ThemePref
+
 
 class LoginRequest(BaseModel):
     slug: str
@@ -26,11 +28,11 @@ class SessionResponse(BaseModel):
 
 
 class SwitchThemeRequest(BaseModel):
-    theme: str  # light | dark | system
+    theme: ThemePref
 
 
 class SwitchLocaleRequest(BaseModel):
-    language: str  # es | en
+    language: LangPref
 
 
 class ChangePasswordRequest(BaseModel):

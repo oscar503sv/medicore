@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from medicore.domain.enums import AppointmentType
 from medicore.presentation.schemas.organization import LocationResponse
 from medicore.presentation.schemas.users import UserResponse
 
@@ -15,7 +16,7 @@ class CreateAppointmentRequest(BaseModel):
     patient_id: str
     doctor_id: str
     location_id: str
-    type: str
+    type: AppointmentType
     scheduled_start: datetime
     reason: str
     room: str | None = None

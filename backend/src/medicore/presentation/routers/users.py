@@ -20,7 +20,6 @@ from medicore.application.use_cases.users import (
     UpdateUser,
     UpdateUserRole,
 )
-from medicore.domain.enums import Role, Sex
 from medicore.domain.repositories._support import Paging, UserFilter
 from medicore.domain.shared.identifiers import SessionId, UserId
 from medicore.presentation.dependencies import Actor, Clock, Hasher, UoW
@@ -63,9 +62,9 @@ def invite_user(body: InviteUserRequest, actor: Actor, uow: UoW, hasher: Hasher,
     cmd = InviteUserCommand(
         name=body.name,
         email=body.email,
-        role=Role(body.role),
+        role=body.role,
         password=body.password,
-        sex=Sex(body.sex) if body.sex else None,
+        sex=body.sex,
         phone=body.phone,
         specialty=body.specialty,
     )
@@ -76,17 +75,13 @@ def invite_user(body: InviteUserRequest, actor: Actor, uow: UoW, hasher: Hasher,
 @router.patch("/{user_id}", response_model=UserResponse)
 def update_user(user_id: str, body: UpdateUserRequest, actor: Actor, uow: UoW, clock: Clock):
     changes = body.model_dump(exclude_none=True)
-    if "role" in changes:
-        changes["role"] = Role(changes["role"])
-    if "sex" in changes:
-        changes["sex"] = Sex(changes["sex"])
     user = UpdateUser(uow, clock).execute(actor, UserId.parse(user_id), **changes)
     return ser_user(user)
 
 
 @router.put("/{user_id}/role", response_model=UserResponse)
 def update_role(user_id: str, body: UpdateRoleRequest, actor: Actor, uow: UoW, clock: Clock):
-    user = UpdateUserRole(uow, clock).execute(actor, UserId.parse(user_id), Role(body.role))
+    user = UpdateUserRole(uow, clock).execute(actor, UserId.parse(user_id), body.role)
     return ser_user(user)
 
 
