@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
 export function Segmented<T extends string>({
@@ -7,7 +8,7 @@ export function Segmented<T extends string>({
 }: {
   value: T
   onChange: (value: T) => void
-  options: { value: T; label: string }[]
+  options: { value: T; label: ReactNode }[]
 }) {
   return (
     <div className="inline-flex rounded-xl border border-line bg-surface p-1">
