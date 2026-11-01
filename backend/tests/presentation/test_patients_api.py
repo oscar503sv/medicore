@@ -91,3 +91,25 @@ def test_reactivate_nonexistent_patient_returns_404(client, auth_headers):
     import uuid
     resp = client.post(f"/api/v1/patients/{uuid.uuid4()}/reactivate", headers=auth_headers)
     assert resp.status_code == 404
+
+
+def test_list_patients_exposes_last_visit(seed, client, auth_headers):
+    resp = client.get("/api/v1/patients", headers=auth_headers)
+    assert resp.status_code == 200
+    assert all("last_visit" in p for p in resp.json()["items"])
+
+
+def test_search_honours_status_filter(seed, client, auth_headers):
+    name = seed.patient.first_name
+    active = client.get(f"/api/v1/patients?q={name}&status=active", headers=auth_headers)
+    inactive = client.get(f"/api/v1/patients?q={name}&status=inactive", headers=auth_headers)
+    assert active.json()["total"] >= 1
+    assert inactive.json()["total"] == 0
+
+
+def test_patient_stats(seed, client, auth_headers):
+    resp = client.get("/api/v1/patients/stats", headers=auth_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert set(data) == {"active", "inactive", "new_recent", "with_upcoming"}
+    assert data["active"] >= 1

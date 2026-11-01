@@ -78,7 +78,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 16 routers, 99 endpoints bajo /api/v1/
+    └── routers/         # 16 routers, 100 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -261,7 +261,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (496 tests)
+.venv/bin/pytest                          # suite completa (506 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -305,7 +305,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-496 tests en verde
+506 tests en verde
     89  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
    205  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)

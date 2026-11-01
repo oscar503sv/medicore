@@ -1,6 +1,15 @@
 import { api } from './client'
 import type { PaginatedResponse, Patient, PatientDetail } from '@/types'
 
+export interface PatientStats {
+  active: number
+  inactive: number
+  /** Registered in the last 30 days. */
+  new_recent: number
+  /** With an active appointment ahead; null without permission to see appointments. */
+  with_upcoming: number | null
+}
+
 export interface PatientListParams {
   status?: string
   doctor_id?: string
@@ -24,6 +33,9 @@ export interface CreatePatientPayload {
 export const patientsApi = {
   list: (params: PatientListParams = {}) =>
     api.get<PaginatedResponse<Patient>>('/patients', { params }).then((r) => r.data),
+
+  /** Headline numbers for the patients page (independent of the list's filters). */
+  stats: () => api.get<PatientStats>('/patients/stats').then((r) => r.data),
 
   get: (id: string) => api.get<PatientDetail>(`/patients/${id}`).then((r) => r.data),
 

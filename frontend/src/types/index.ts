@@ -251,6 +251,8 @@ export interface Patient {
   created_at: string
   updated_at: string
   next_visit: string | null
+  /** Latest completed appointment (clinic wall-clock); only filled in list responses. */
+  last_visit?: string | null
 }
 
 export interface Insurer {

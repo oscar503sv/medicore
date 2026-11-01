@@ -36,7 +36,7 @@ La **regla de dependencia** apunta hacia adentro: `domain` no importa de ninguna
 
 En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios (Protocols)**,
 **5 puertos de aplicación** (Clock, CodeGenerator, PasswordHasher, TokenIssuer, UnitOfWork),
-**17 grupos de casos de uso** y **16 routers / 99 endpoints** bajo `/api/v1/`.
+**17 grupos de casos de uso** y **16 routers / 100 endpoints** bajo `/api/v1/`.
 
 ## Convenciones del dominio
 
@@ -74,6 +74,10 @@ En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios
   vs. override e intersecta con el catálogo vigente; la capa de presentación los coloca en
   `ActorContext.permissions`, de modo que cada `ensure_permission(...)` honra la personalización
   de la clínica. Router `role_permissions` (`GET`/`PUT`/`DELETE`) para administrarlos.
+- **Pacientes**: los filtros del listado (estado, médico de cabecera) se aplican también a la
+  búsqueda, que exige cada palabra en el nombre completo, el código o el teléfono, sin importar
+  los acentos. Cada paciente trae su última visita completada y la próxima; `GET /patients/stats`
+  da las cifras de la página (activos, inactivos, nuevos en 30 días, con cita próxima).
 - **Agenda**: disponibilidad por médico, resolución de slots, ciclo de vida de la cita
   (agendada → confirmada → en curso → completada).
 - **Consulta → historial**: al firmar una consulta se emite un `MedicalRecord` inmutable + las
@@ -174,14 +178,15 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **496 tests** (89 dominio · 205 aplicación · 158 presentación · 44 infraestructura), casi
+Suite de **506 tests** (89 dominio · 211 aplicación · 161 presentación · 45 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
 Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_audit_repository_sql.py`,
 `test_diagnosis_catalog_sql.py` — ranking y búsqueda por trigram del autocomplete de diagnósticos —
 `test_login_throttle_sql.py` — UPSERT atómico del lockout de login — y
-`test_notification_repository_sql.py` — JSONB y UPDATE/DELETE masivos de la bandeja) usan `TEST_DATABASE_URL`
+`test_notification_repository_sql.py` — JSONB y UPDATE/DELETE masivos de la bandeja —
+`test_patient_search_sql.py` — búsqueda sin acentos, dígitos del teléfono, últimas visitas) usan `TEST_DATABASE_URL`
 (o `DATABASE_URL` de la configuración),
 corren dentro de una transacción que siempre se revierte —no dejan rastro en la BD de desarrollo—
 y se **saltan automáticamente** si no hay PostgreSQL accesible.

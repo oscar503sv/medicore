@@ -9,7 +9,9 @@ from medicore.application.use_cases.patients import (
     CreatePatient,
     CreatePatientCommand,
     GetPatientDetail,
+    GetPatientStats,
     ListPatients,
+    PatientsLastVisits,
     PatientsNextVisits,
     ReactivatePatient,
     SearchPatients,
@@ -25,6 +27,7 @@ from medicore.presentation.schemas.patients import (
     PatientDetailResponse,
     PatientListResponse,
     PatientResponse,
+    PatientStatsResponse,
     UpdatePatientRequest,
 )
 from medicore.presentation.serializers import ser_appointment, ser_patient
@@ -44,19 +47,38 @@ def list_patients(
     limit: int = Query(50, ge=1, le=200),
 ):
     with uow:
-        if q:
-            page = SearchPatients(uow).execute(actor, q, Paging(offset=offset, limit=limit))
+        # Parse here so a malformed id is a 422, not a ValueError deep in the repository.
+        did = str(UserId.parse(doctor_id)) if doctor_id else None
+        f = PatientFilter(status=status, doctor_id=did) if (status or did) else None
+        paging = Paging(offset=offset, limit=limit)
+        # The status/doctor filters apply to searches too.
+        if q and q.strip():
+            page = SearchPatients(uow).execute(actor, q, paging, f)
         else:
-            # Parse here so a malformed id is a 422, not a ValueError deep in the repository.
-            did = str(UserId.parse(doctor_id)) if doctor_id else None
-            f = PatientFilter(status=status, doctor_id=did) if (status or did) else None
-            page = ListPatients(uow).execute(actor, f, Paging(offset=offset, limit=limit))
-        visits = PatientsNextVisits(uow, clock).execute(actor, [p.id for p in page.items])
+            page = ListPatients(uow).execute(actor, f, paging)
+        ids = [p.id for p in page.items]
+        upcoming = PatientsNextVisits(uow, clock).execute(actor, ids)
+        last = PatientsLastVisits(uow).execute(actor, ids)
     return PatientListResponse(
-        items=[ser_patient(p, next_visit=visits.get(p.id)) for p in page.items],
+        items=[
+            ser_patient(p, next_visit=upcoming.get(p.id), last_visit=last.get(p.id))
+            for p in page.items
+        ],
         total=page.total,
         offset=page.offset,
         limit=page.limit,
+    )
+
+
+@router.get("/stats", response_model=PatientStatsResponse)
+def patient_stats(actor: Actor, uow: UoW, clock: Clock):
+    with uow:
+        stats = GetPatientStats(uow, clock).execute(actor)
+    return PatientStatsResponse(
+        active=stats.active,
+        inactive=stats.inactive,
+        new_recent=stats.new_recent,
+        with_upcoming=stats.with_upcoming,
     )
 
 

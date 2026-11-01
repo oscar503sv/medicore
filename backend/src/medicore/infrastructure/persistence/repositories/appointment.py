@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import Date as SqlDate
-from sqlalchemy import cast
+from sqlalchemy import cast, func
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.appointment import Appointment
@@ -60,6 +60,33 @@ class SqlAppointmentRepository:
             .all()
         )
         return [to_appointment(r) for r in rows]
+
+    def last_visits(self, patient_ids: list[PatientId]) -> dict[PatientId, datetime]:
+        if not patient_ids:
+            return {}
+        rows = (
+            self._s.query(AppointmentModel.patient_id, func.max(AppointmentModel.scheduled_start))
+            .filter(
+                AppointmentModel.tenant_id == self._tid,
+                AppointmentModel.patient_id.in_([pid.value for pid in patient_ids]),
+                AppointmentModel.status == str(AppointmentStatus.COMPLETED),
+            )
+            .group_by(AppointmentModel.patient_id)
+            .all()
+        )
+        return {PatientId.parse(pid): last for pid, last in rows}
+
+    def count_patients_with_upcoming(self, now: datetime) -> int:
+        return (
+            self._q()
+            .filter(
+                AppointmentModel.status.in_(_ACTIVE),
+                AppointmentModel.scheduled_start > _naive(now),
+            )
+            .with_entities(func.count(func.distinct(AppointmentModel.patient_id)))
+            .scalar()
+            or 0
+        )
 
     def list_upcoming(
         self, after: datetime, limit: int, doctor_id: UserId | None = None

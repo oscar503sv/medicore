@@ -48,6 +48,7 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.shared.text import fold
 from medicore.domain.value_objects.slug import Slug
 from tests.support.store import InMemoryStore
 
@@ -373,14 +374,22 @@ class InMemoryPatientRepository(_Scoped):
         patients.sort(key=lambda p: (p.last_name, p.first_name))
         return _paginate(patients, paging)
 
-    def search(self, query: str, paging: Paging | None = None) -> Page[Patient]:
-        q = query.strip().lower()
-        matches = [
-            p
-            for p in self._mine(self._store.patients.values())
-            if q in p.full_name.lower() or q in p.code.lower()
-        ]
-        matches.sort(key=lambda p: (p.last_name, p.first_name))
+    def search(
+        self, query: str, paging: Paging | None = None, filter: PatientFilter | None = None
+    ) -> Page[Patient]:
+        candidates = self.list(filter, Paging(limit=10_000)).items
+        words = fold(query).split()
+
+        def hit(p: Patient, word: str) -> bool:
+            digits = "".join(ch for ch in word if ch.isdigit())
+            phone = "".join(ch for ch in (p.contact.phone or "") if ch.isdigit())
+            return (
+                word in fold(p.full_name)
+                or word in p.code.lower()
+                or (len(digits) >= 3 and digits in phone)
+            )
+
+        matches = [p for p in candidates if all(hit(p, w) for w in words)]
         return _paginate(matches, paging)
 
     def save(self, patient: Patient) -> None:
@@ -421,6 +430,26 @@ class InMemoryAppointmentRepository(_Scoped):
             if current is None or a.scheduled_start < current:
                 result[a.patient_id] = a.scheduled_start
         return result
+
+    def last_visits(self, patient_ids: list[PatientId]) -> dict[PatientId, datetime]:
+        wanted = set(patient_ids)
+        result: dict[PatientId, datetime] = {}
+        for a in self._mine(self._store.appointments.values()):
+            if a.patient_id not in wanted or a.status != AppointmentStatus.COMPLETED:
+                continue
+            current = result.get(a.patient_id)
+            if current is None or a.scheduled_start > current:
+                result[a.patient_id] = a.scheduled_start
+        return result
+
+    def count_patients_with_upcoming(self, now: datetime) -> int:
+        return len(
+            {
+                a.patient_id
+                for a in self._mine(self._store.appointments.values())
+                if a.is_active and a.scheduled_start > now
+            }
+        )
 
     def list_upcoming(
         self, after: datetime, limit: int, doctor_id: UserId | None = None

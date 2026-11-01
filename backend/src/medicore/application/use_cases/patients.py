@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
-from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.permissions import (
+    Permission,
+    ensure_permission,
+    has_permission,
+)
 from medicore.application.common.timezone import clinic_now, to_naive
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
@@ -181,10 +185,14 @@ class SearchPatients:
         self._uow = uow
 
     def execute(
-        self, actor: ActorContext, query: str, paging: Paging | None = None
+        self,
+        actor: ActorContext,
+        query: str,
+        paging: Paging | None = None,
+        filter: PatientFilter | None = None,
     ) -> Page[Patient]:
         ensure_permission(actor, Permission.PATIENTS_VIEW)
-        return self._uow.patients.search(query, paging)
+        return self._uow.patients.search(query, paging, filter)
 
 
 class PatientsNextVisits:
@@ -200,6 +208,59 @@ class PatientsNextVisits:
         ensure_permission(actor, Permission.PATIENTS_VIEW)
         now = clinic_now(self._uow, actor.tenant_id, self._clock)
         return self._uow.appointments.next_visits(patient_ids, now)
+
+
+class PatientsLastVisits:
+    """Latest completed appointment per patient — the list's "last visit" column."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self._uow = uow
+
+    def execute(
+        self, actor: ActorContext, patient_ids: list[PatientId]
+    ) -> dict[PatientId, datetime]:
+        ensure_permission(actor, Permission.PATIENTS_VIEW)
+        return self._uow.appointments.last_visits(patient_ids)
+
+
+NEW_PATIENTS_WINDOW = timedelta(days=30)
+
+
+@dataclass(frozen=True, slots=True)
+class PatientStats:
+    active: int
+    inactive: int
+    new_recent: int  # registered in the last NEW_PATIENTS_WINDOW
+    with_upcoming: int | None  # with an active appointment ahead (None: no permission)
+
+
+class GetPatientStats:
+    """Headline numbers for the patients page (independent of the table's filters)."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(self, actor: ActorContext) -> PatientStats:
+        ensure_permission(actor, Permission.PATIENTS_VIEW)
+
+        def count(status: str) -> int:
+            return self._uow.patients.list(PatientFilter(status=status), Paging(limit=1)).total
+
+        now = self._clock.now()
+        # Patient timestamps are UTC instants; a naive clock (tests) is taken as UTC.
+        utc_now = now if now.tzinfo is not None else now.replace(tzinfo=UTC)
+        with_upcoming = None
+        if has_permission(actor, Permission.APPOINTMENTS_VIEW):
+            with_upcoming = self._uow.appointments.count_patients_with_upcoming(
+                clinic_now(self._uow, actor.tenant_id, self._clock)
+            )
+        return PatientStats(
+            active=count("active"),
+            inactive=count("inactive"),
+            new_recent=self._uow.patients.count_created_since(utc_now - NEW_PATIENTS_WINDOW),
+            with_upcoming=with_upcoming,
+        )
 
 
 class GetPatientDetail:

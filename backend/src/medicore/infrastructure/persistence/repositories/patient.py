@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.patient import Patient
 from medicore.domain.repositories._support import Page, Paging, PatientFilter
 from medicore.domain.shared.identifiers import PatientId, TenantId
+from medicore.domain.shared.text import ACCENTED, PLAIN, fold
 from medicore.domain.value_objects.contact_info import ContactInfo
 from medicore.infrastructure.persistence.mappers.entities import to_patient
 from medicore.infrastructure.persistence.models.patient import PatientModel
@@ -24,6 +26,11 @@ def _contact_to_json(c: ContactInfo) -> dict:
     }
 
 
+def _fold_sql(expr):
+    """SQL twin of ``fold`` (same translate table)."""
+    return func.translate(func.lower(expr), ACCENTED, PLAIN)
+
+
 class SqlPatientRepository:
     def __init__(self, session: Session, tenant_id: TenantId) -> None:
         self._s = session
@@ -36,15 +43,19 @@ class SqlPatientRepository:
         row = self._q().filter(PatientModel.id == patient_id.value).first()
         return to_patient(row) if row else None
 
-    def list(
-        self, filter: PatientFilter | None = None, paging: Paging | None = None
-    ) -> Page[Patient]:
-        q = self._q().order_by(PatientModel.last_name, PatientModel.first_name)
+    def _filtered(self, filter: PatientFilter | None):
+        q = self._q()
         if filter and filter.status:
             q = q.filter(PatientModel.status == filter.status)
         if filter and filter.doctor_id:
             from uuid import UUID
             q = q.filter(PatientModel.primary_doctor_id == UUID(filter.doctor_id))
+        return q
+
+    def list(
+        self, filter: PatientFilter | None = None, paging: Paging | None = None
+    ) -> Page[Patient]:
+        q = self._filtered(filter).order_by(PatientModel.last_name, PatientModel.first_name)
         total = q.count()
         pg = paging or Paging()
         rows = q.offset(pg.offset).limit(pg.limit).all()
@@ -55,17 +66,27 @@ class SqlPatientRepository:
     def count_created_since(self, since: datetime) -> int:
         return self._q().filter(PatientModel.created_at >= since).count()
 
-    def search(self, query: str, paging: Paging | None = None) -> Page[Patient]:
-        term = f"%{query.strip().lower()}%"
-        q = (
-            self._q()
-            .filter(
-                (PatientModel.first_name.ilike(term))
-                | (PatientModel.last_name.ilike(term))
-                | (PatientModel.code.ilike(term))
-            )
-            .order_by(PatientModel.last_name, PatientModel.first_name)
+    def search(
+        self, query: str, paging: Paging | None = None, filter: PatientFilter | None = None
+    ) -> Page[Patient]:
+        name = _fold_sql(PatientModel.first_name + " " + PatientModel.last_name)
+        code = func.lower(PatientModel.code)
+        phone = func.regexp_replace(
+            func.coalesce(PatientModel.contact["phone"].astext, ""), "[^0-9]", "", "g"
         )
+        conditions = []
+        # Each word on its own: "rosa alvarez" and "alvarez rosa" both match.
+        for word in fold(query).split():
+            # autoescape neutralizes LIKE wildcards typed into the search box.
+            options = [name.contains(word, autoescape=True), code.contains(word, autoescape=True)]
+            digits = "".join(ch for ch in word if ch.isdigit())
+            if len(digits) >= 3:
+                options.append(phone.contains(digits, autoescape=True))
+            conditions.append(or_(*options))
+        q = self._filtered(filter)
+        if conditions:
+            q = q.filter(and_(*conditions))
+        q = q.order_by(PatientModel.last_name, PatientModel.first_name)
         total = q.count()
         pg = paging or Paging()
         rows = q.offset(pg.offset).limit(pg.limit).all()

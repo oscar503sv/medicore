@@ -36,7 +36,7 @@ only from `domain`; `infrastructure`/`presentation` from the inner layers.
 
 By the numbers: **17 entities** and **10 value objects** in the domain, **17 repositories
 (Protocols)**, **5 application ports** (Clock, CodeGenerator, PasswordHasher, TokenIssuer,
-UnitOfWork), **17 use-case groups** and **16 routers / 99 endpoints** under `/api/v1/`.
+UnitOfWork), **17 use-case groups** and **16 routers / 100 endpoints** under `/api/v1/`.
 
 ## Domain conventions
 
@@ -73,6 +73,10 @@ UnitOfWork), **17 use-case groups** and **16 routers / 99 endpoints** under `/ap
   resolves defaults vs. override and intersects with the current catalog; the presentation
   layer puts them in `ActorContext.permissions`, so every `ensure_permission(...)` honors the
   clinic's customization. The `role_permissions` router (`GET`/`PUT`/`DELETE`) manages them.
+- **Patients**: the list's filters (status, primary doctor) also apply to searches, and the
+  search matches every word against the full name, code or phone, ignoring accents. Each item
+  carries its last completed and next visit; `GET /patients/stats` gives the page's headline
+  numbers (active, inactive, new in 30 days, with an upcoming visit).
 - **Scheduling**: per-doctor availability, slot resolution, appointment lifecycle
   (scheduled → confirmed → in progress → completed).
 - **Consultation → record**: signing a consultation issues an immutable `MedicalRecord` plus
@@ -174,14 +178,15 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **496 tests** (89 domain · 205 application · 158 presentation · 44 infrastructure),
+A suite of **506 tests** (89 domain · 211 application · 161 presentation · 45 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
 The integration tests against real PostgreSQL (`tests/infrastructure/test_audit_repository_sql.py`,
 `test_diagnosis_catalog_sql.py` — ranking and trigram search for the diagnosis autocomplete —
 `test_login_throttle_sql.py` — atomic UPSERT of the login lockout — and
-`test_notification_repository_sql.py` — JSONB and bulk UPDATE/DELETE of the inbox) use
+`test_notification_repository_sql.py` — JSONB and bulk UPDATE/DELETE of the inbox —
+`test_patient_search_sql.py` — accent-insensitive search, phone digits, last visits) use
 `TEST_DATABASE_URL` (or the configured `DATABASE_URL`), run inside a transaction that is always
 rolled back — they leave no trace in the development database — and are **skipped
 automatically** when PostgreSQL isn't reachable.

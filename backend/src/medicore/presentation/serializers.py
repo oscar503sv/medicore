@@ -161,7 +161,9 @@ def ser_notification(n: Notification) -> dict:
     }
 
 
-def ser_patient(p: Patient, *, next_visit: datetime | None = None) -> dict:
+def ser_patient(
+    p: Patient, *, next_visit: datetime | None = None, last_visit: datetime | None = None
+) -> dict:
     return {
         "id": str(p.id),
         "tenant_id": str(p.tenant_id),
@@ -186,6 +188,7 @@ def ser_patient(p: Patient, *, next_visit: datetime | None = None) -> dict:
         "created_at": p.created_at,
         "updated_at": p.updated_at,
         "next_visit": next_visit,
+        "last_visit": last_visit,
     }
 
 

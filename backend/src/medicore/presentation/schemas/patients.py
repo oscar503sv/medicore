@@ -58,6 +58,14 @@ class PatientResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     next_visit: datetime | None = None
+    last_visit: datetime | None = None
+
+
+class PatientStatsResponse(BaseModel):
+    active: int
+    inactive: int
+    new_recent: int
+    with_upcoming: int | None
 
 
 class PatientListResponse(BaseModel):

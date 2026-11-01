@@ -27,10 +27,13 @@ export function NewAppointmentModal({
   open,
   onClose,
   date,
+  initialPatient,
 }: {
   open: boolean
   onClose: () => void
   date: string
+  /** Booking from a patient's row: skip the patient step (and suggest their doctor). */
+  initialPatient?: Patient | null
 }) {
   const t = useT()
   const qc = useQueryClient()
@@ -50,6 +53,14 @@ export function NewAppointmentModal({
   useEffect(() => {
     if (open) setDay(date)
   }, [open, date])
+
+  useEffect(() => {
+    if (!open || !initialPatient) return
+    setPatient(initialPatient)
+    setDoctorId(initialPatient.primary_doctor_id ?? '')
+    setSelectedSlot(null)
+    setStep(1)
+  }, [open, initialPatient])
 
   const { data: patients } = useQuery({
     queryKey: ['patients', { q: search }],

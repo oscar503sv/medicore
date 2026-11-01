@@ -78,7 +78,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException with a translatable code
     ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
     ├── schemas/         # Pydantic request + response models per resource
-    └── routers/         # 16 routers, 99 endpoints under /api/v1/
+    └── routers/         # 16 routers, 100 endpoints under /api/v1/
 ```
 
 ### Multi-tenancy
@@ -261,7 +261,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (496 tests)
+.venv/bin/pytest                          # full suite (506 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -305,7 +305,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-496 passing tests
+506 passing tests
     89  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
    205  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)

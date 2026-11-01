@@ -22,6 +22,14 @@ class AppointmentRepository(Protocol):
         """Earliest active appointment after ``now`` per patient (omits those without one)."""
         ...
 
+    def last_visits(self, patient_ids: list[PatientId]) -> dict[PatientId, datetime]:
+        """Start of the latest completed appointment per patient (omits those without one)."""
+        ...
+
+    def count_patients_with_upcoming(self, now: datetime) -> int:
+        """Distinct patients with an active appointment after ``now`` (clinic wall-clock)."""
+        ...
+
     def list_upcoming(
         self, after: datetime, limit: int, doctor_id: UserId | None = None
     ) -> list[Appointment]:
