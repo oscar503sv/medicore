@@ -4,6 +4,7 @@
 
 /* ─── Design tokens — light mode ────────────────────────────────────────── */
 :root {
+  color-scheme: light;
   --accent: #7c3aed;
   --accent-hover: #8b5cf6;
   --accent-10: rgb(124 58 237 / .10);
@@ -38,6 +39,8 @@
 
 /* ─── Dark mode ──────────────────────────────────────────────────────────── */
 [data-theme='dark'] {
+  /* Native widgets (select popups, scrollbars, date pickers) follow the theme too. */
+  color-scheme: dark;
   --accent: #8b5cf6;
   --accent-hover: #7c3aed;
   --accent-10: rgb(139 92 246 / .15);

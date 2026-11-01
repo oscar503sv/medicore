@@ -54,23 +54,5 @@ export const Textarea = forwardRef<
 ))
 Textarea.displayName = 'Textarea'
 
-export const Select = forwardRef<
-  HTMLSelectElement,
-  React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string }
->(({ label, className, children, ...props }, ref) => (
-  <label className="block">
-    {label && <span className="mb-1.5 block text-[13px] font-medium text-tx-2">{label}</span>}
-    <select
-      ref={ref}
-      className={cn(
-        'h-10 w-full rounded-lg border border-line bg-bg px-3 text-sm text-tx',
-        'focus:border-accent focus:outline-none',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </select>
-  </label>
-))
-Select.displayName = 'Select'
+// The app's own listbox (native <select> popups ignore the theme on some platforms).
+export { Select } from './Select'

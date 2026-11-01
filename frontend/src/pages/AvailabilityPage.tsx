@@ -139,17 +139,18 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function TimeSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <select
+    <Select
+      variant="bare"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-md bg-transparent font-mono text-[13px] text-tx focus:outline-none"
+      className="w-auto gap-1 font-mono text-[13px]"
     >
       {TIME_OPTIONS.map((opt) => (
         <option key={opt} value={opt}>
           {opt}
         </option>
       ))}
-    </select>
+    </Select>
   )
 }
 
