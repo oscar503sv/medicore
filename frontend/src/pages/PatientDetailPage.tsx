@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { differenceInMonths, parseISO } from 'date-fns'
 import { Archive, ArrowLeft, Lock, Pencil, RotateCcw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { errorMessage } from '@/api/client'
@@ -12,6 +13,7 @@ import { PrescriptionList } from '@/components/patients/PrescriptionList'
 import { PatientDocuments } from '@/components/patients/PatientDocuments'
 import { PatientSummary } from '@/components/patients/PatientSummary'
 import { VitalsHistory } from '@/components/patients/VitalsHistory'
+import { PatientVaccinations } from '@/components/vaccination/PatientVaccinations'
 import { RecordDrawer } from '@/components/records/RecordDrawer'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
@@ -25,7 +27,7 @@ import { cn } from '@/lib/cn'
 import { fmtDateTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 
-type Tab = 'summary' | 'history' | 'prescriptions' | 'vitals' | 'documents'
+type Tab = 'summary' | 'history' | 'prescriptions' | 'vitals' | 'documents' | 'vaccines'
 
 export function PatientDetailPage() {
   const t = useT()
@@ -41,6 +43,7 @@ export function PatientDetailPage() {
   // not a grantable capability); the clinical tabs follow records.view.
   const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
   const canClinical = useAuthStore((s) => s.can('records.view'))
+  const canVaccines = useAuthStore((s) => s.can('vaccinations.view'))
 
   // Deep links (e.g. from a notification): ?tab= selects a tab the user may open and
   // ?record= opens that record. Re-applied when the params change on a mounted page.
@@ -52,10 +55,11 @@ export function PatientDetailPage() {
       'summary',
       ...(isDoctor ? (['history'] as const) : []),
       ...(canClinical ? (['prescriptions', 'vitals', 'documents'] as const) : []),
+      ...(canVaccines ? (['vaccines'] as const) : []),
     ]
     if (tabParam && allowed.includes(tabParam as Tab)) setTab(tabParam as Tab)
     if (recordParam && isDoctor) setOpenRecordId(recordParam)
-  }, [id, tabParam, recordParam, isDoctor, canClinical])
+  }, [id, tabParam, recordParam, isDoctor, canClinical, canVaccines])
 
   const { data, isLoading } = useQuery({
     queryKey: ['patient', id],
@@ -106,6 +110,7 @@ export function PatientDetailPage() {
           { id: 'documents', label: t('patient.documents') },
         ] as const)
       : []),
+    ...(canVaccines ? [{ id: 'vaccines' as const, label: t('vax.tab') }] : []),
   ]
 
   return (
@@ -124,7 +129,14 @@ export function PatientDetailPage() {
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-tx-3">
             <span className="font-mono">{p.code}</span>
-            <span>{t('patient.age_years').replace('{n}', String(p.age))}</span>
+            <span>
+              {p.age < 2
+                ? t('vax.age.months').replace(
+                    '{n}',
+                    String(differenceInMonths(new Date(), parseISO(p.date_of_birth))),
+                  )
+                : t('patient.age_years').replace('{n}', String(p.age))}
+            </span>
             <span>{p.sex === 'male' ? 'Masculino' : p.sex === 'female' ? 'Femenino' : 'Otro'}</span>
             {p.blood_type && <span>Grupo {p.blood_type}</span>}
             {p.status === 'inactive' && <Badge tone="neutral">{t('patients.inactive')}</Badge>}
@@ -242,6 +254,8 @@ export function PatientDetailPage() {
       {tab === 'vitals' && <VitalsHistory records={records ?? []} />}
 
       {tab === 'documents' && <PatientDocuments patientId={id} />}
+
+      {tab === 'vaccines' && <PatientVaccinations patientId={id} birthDate={p.date_of_birth} active={p.status === 'active'} />}
 
       <EditPatientModal patient={editOpen ? p : null} onClose={() => setEditOpen(false)} />
       <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />

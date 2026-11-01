@@ -1,8 +1,9 @@
 """Seed rich, up-to-date demo data by replaying the clinic's history through the real use cases.
 
 Per tenant: 2 admins, 5 doctors (each with a specialty and working hours), 1 nurse,
-1 receptionist, 4 insurers and ~70 patients (some children for pediatrics, a few registered
-this week). Everything is relative to the day the script runs:
+1 receptionist, 5 Salvadoran insurers and ~70 patients (some children and babies for
+pediatrics, a few registered this week) with their vaccination histories (El Salvador's
+national scheme). Everything is relative to the day the script runs:
 
 * Past ~8 weeks: appointments booked by reception, confirmed, attended (consultation started,
   vitals + SOAP + CIE-11 diagnoses + prescriptions, then signed → medical record), plus
@@ -65,6 +66,12 @@ from medicore.application.use_cases.records import (
     UploadDocumentCommand,
 )
 from medicore.application.use_cases.users import InviteUser, InviteUserCommand, UpdateUserRole
+from medicore.application.use_cases.vaccinations import (
+    GetVaccinationCard,
+    RecordVaccination,
+    RecordVaccinationCommand,
+    VoidVaccination,
+)
 from medicore.domain.entities.availability import (
     AvailabilityException,
     BookingRules,
@@ -81,10 +88,21 @@ from medicore.domain.enums import (
     AppointmentType,
     AvailabilityExceptionKind,
     DocumentKind,
+    InjectionSite,
     PrescriptionStatus,
     Role,
     Sex,
     UserStatus,
+    VaccinationOutcome,
+    VaccinationSource,
+    VaccineRoute,
+)
+from medicore.domain.services.immunization import (
+    SCHEDULE,
+    VACCINES,
+    ScheduledDose,
+    add_months,
+    applies_to,
 )
 from medicore.domain.shared.errors import DomainError
 from medicore.domain.shared.identifiers import (
@@ -119,24 +137,30 @@ PAST_WEEKS = 8
 FUTURE_WEEKS = 4
 PATIENTS_PER_TENANT = 70
 CHILDREN_PER_TENANT = 12
+INFANTS_PER_TENANT = 5  # under 2: the busiest part of the vaccination scheme
 NEW_PATIENTS_THIS_WEEK = 5
 
 # ── reference data ────────────────────────────────────────────────────────────────────────
 LAST_NAMES = [
-    "García", "Fernández", "González", "Rodríguez", "López", "Martínez", "Sánchez", "Pérez",
-    "Gómez", "Ruiz", "Díaz", "Moreno", "Álvarez", "Romero", "Torres", "Navarro", "Ramos",
-    "Castro", "Ortega", "Rubio", "Molina", "Delgado", "Herrera", "Flores", "Vargas", "Rivas",
+    "Hernández", "López", "Martínez", "García", "Rodríguez", "Ramírez", "Flores", "Rivera",
+    "Cruz", "Mejía", "Portillo", "Alvarado", "Rivas", "Menjívar", "Ayala", "Guevara",
+    "Henríquez", "Cornejo", "Orellana", "Escobar", "Chávez", "Aguilar", "Bonilla", "Mendoza",
+    "Quintanilla", "Pineda", "Romero", "Castillo",
 ]
 FEMALE_NAMES = [
-    "María", "Carmen", "Ana", "Laura", "Lucía", "Sofía", "Marta", "Paula", "Rosa", "Isabel",
-    "Valeria", "Daniela", "Gabriela", "Andrea", "Claudia", "Patricia", "Teresa", "Julia",
+    "María", "Ana", "Rosa", "Carmen", "Karla", "Gabriela", "Daniela", "Claudia", "Patricia",
+    "Sandra", "Yesenia", "Wendy", "Roxana", "Marta", "Silvia", "Fátima", "Krissia", "Elena",
 ]
 MALE_NAMES = [
-    "Juan", "Carlos", "Miguel", "Antonio", "Javier", "David", "Pablo", "Sergio", "Hugo",
-    "Diego", "Alejandro", "Fernando", "Ricardo", "Andrés", "Manuel", "Raúl", "Óscar", "Luis",
+    "José", "Juan", "Carlos", "Mauricio", "Roberto", "Jorge", "Francisco", "Óscar", "Kevin",
+    "Edwin", "William", "Mario", "René", "Rafael", "Nelson", "Salvador", "Ricardo", "Luis",
 ]
-CHILD_FEMALE = ["Valentina", "Camila", "Emma", "Martina", "Lola", "Alba"]
-CHILD_MALE = ["Mateo", "Leo", "Lucas", "Daniel", "Thiago", "Bruno"]
+CHILD_FEMALE = ["Valentina", "Camila", "Ximena", "Sofía", "Isabella", "Fernanda"]
+CHILD_MALE = ["Mateo", "Santiago", "Gael", "Diego", "Thiago", "Emiliano"]
+COLONIAS = [
+    "Escalón", "San Benito", "Miramonte", "Flor Blanca", "Médica", "Layco", "Centroamérica",
+    "San Francisco", "Santa Elena", "Merliot",
+]
 BLOOD = ["O+", "O+", "A+", "A+", "B+", "O-", "A-", "AB+"]
 ADULT_TAGS = [
     [], [], ["Hipertensión"], ["Diabetes tipo 2"], ["Asma"], ["Hipotiroidismo"], ["Migraña"],
@@ -145,11 +169,18 @@ ADULT_TAGS = [
 CHILD_TAGS = [[], [], ["Asma"], ["Dermatitis atópica"], []]
 ALLERGIES = [[], [], [], ["Penicilina"], ["Polen"], ["Frutos secos"], ["AINE"], ["Látex"]]
 
+# Private health insurers operating in El Salvador (demo contact data is fictitious).
 INSURERS = [
-    ("Sanitas", "900100100", "atencion@sanitas.test", "Calle Ribera del Loira 52, Madrid"),
-    ("Adeslas", "900200200", "clientes@adeslas.test", "Paseo de la Castellana 259, Madrid"),
-    ("DKV Seguros", "900300300", "info@dkv.test", "Av. María Zambrano 31, Zaragoza"),
-    ("Mapfre Salud", "900400400", "salud@mapfre.test", "Ctra. de Pozuelo 52, Majadahonda"),
+    ("Seguros SISA", "2200-1001", "gastos.medicos@sisa.test",
+     "Alameda Dr. Manuel Enrique Araujo, San Salvador"),
+    ("ASSA Seguros", "2200-1002", "salud@assa.test",
+     "Calle Llama del Bosque Pte., Antiguo Cuscatlán"),
+    ("Seguros del Pacífico", "2200-1003", "reclamos@pacifico.test",
+     "Paseo General Escalón, San Salvador"),
+    ("Pan-American Life", "2200-1004", "servicio@palig.test",
+     "Boulevard del Hipódromo, Col. San Benito, San Salvador"),
+    ("MAPFRE El Salvador", "2200-1005", "salud@mapfre-sv.test",
+     "Alameda Roosevelt, San Salvador"),
 ]
 
 
@@ -245,20 +276,20 @@ STAFF = {
         ("Raúl Herrera", "raul.herrera", Role.ADMIN, None, True),
     ],
     "centro-norte": [
-        ("Dra. Núria Soler", "nuria.soler", Role.DOCTOR, "Pediatría", False),
-        ("Dr. Iván Costa", "ivan.costa", Role.DOCTOR, "Traumatología", True),
-        ("Dr. Pol Ferrer", "pol.ferrer", Role.DOCTOR, "Medicina General", True),
-        ("Dra. Aina Vidal", "aina.vidal", Role.DOCTOR, "Endocrinología", False),
-        ("Dr. Marc Roig", "marc.roig", Role.DOCTOR, "Cardiología", True),
-        ("Marta Roca", "marta.roca", Role.NURSE, None, True),
-        ("Jordi Pla", "jordi.pla", Role.RECEPTIONIST, None, True),
-        ("Clara Puig", "clara.puig", Role.ADMIN, None, True),
+        ("Dra. Karla Henríquez", "karla.henriquez", Role.DOCTOR, "Pediatría", False),
+        ("Dr. José Alfaro", "jose.alfaro", Role.DOCTOR, "Traumatología", True),
+        ("Dr. Mauricio Cruz", "mauricio.cruz", Role.DOCTOR, "Medicina General", True),
+        ("Dra. Ana Lucía Portillo", "analucia.portillo", Role.DOCTOR, "Endocrinología", False),
+        ("Dr. Roberto Menjívar", "roberto.menjivar", Role.DOCTOR, "Cardiología", True),
+        ("Marta Ayala", "marta.ayala", Role.NURSE, None, True),
+        ("Jorge Pleitez", "jorge.pleitez", Role.RECEPTIONIST, None, True),
+        ("Carolina Guevara", "carolina.guevara", Role.ADMIN, None, True),
     ],
 }
 # A user invited a few days ago by the second admin (as nurse, then corrected to reception).
 INVITED = {
     "clinica-demo": ("Andrea Molina", "andrea.molina"),
-    "centro-norte": ("Pau Serra", "pau.serra"),
+    "centro-norte": ("Gabriel Serrano", "gabriel.serrano"),
 }
 DOCUMENTS = [
     (DocumentKind.LAB, "Hemograma completo.pdf", "application/pdf"),
@@ -364,7 +395,9 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
     )
 
 
-def get_or_create_tenant(session, slug: str, legal_name: str, location: str) -> Tenant:
+def get_or_create_tenant(
+    session, slug: str, legal_name: str, tax_id: str, location: str
+) -> Tenant:
     row = session.query(TenantModel).filter(TenantModel.slug == slug).first()
     if row:
         print(f"  tenant '{slug}' ya existe")
@@ -372,7 +405,7 @@ def get_or_create_tenant(session, slug: str, legal_name: str, location: str) -> 
         return SqlAlchemyUnitOfWork(session, tid).tenants.get_by_id(tid)
     tid = TenantId.new()
     tenant = Tenant(
-        id=tid, legal_name=legal_name, tax_id="B00000000", slug=Slug(slug), timezone=TIMEZONE,
+        id=tid, legal_name=legal_name, tax_id=tax_id, slug=Slug(slug), timezone=TIMEZONE,
         locations=[Location(id=LocationId.new(), tenant_id=tid, name=location, is_primary=True)],
     )
     uow = SqlAlchemyUnitOfWork(session, tid)
@@ -447,8 +480,11 @@ def seed_patients(c: Clinic) -> None:
             if f"{first} {last}" not in used:
                 used.add(f"{first} {last}")
                 break
-        age = RNG.randint(1, 13) if child else RNG.randint(18, 84)
-        born = c.today - timedelta(days=age * 365 + RNG.randint(0, 364))
+        if child and i < INFANTS_PER_TENANT:
+            born = c.today - timedelta(days=RNG.randint(45, 700))
+        else:
+            age = RNG.randint(2, 13) if child else RNG.randint(18, 84)
+            born = c.today - timedelta(days=age * 365 + RNG.randint(0, 364))
         if child:
             doctor = pediatrician
         elif not female:
@@ -463,6 +499,8 @@ def seed_patients(c: Clinic) -> None:
         created = created.replace(hour=RNG.randint(8, 17), minute=RNG.choice([0, 15, 30, 45]))
         if created > c.now:
             created -= timedelta(days=1)
+        if created.date() <= born:  # a baby is registered after being born
+            created = datetime.combine(born + timedelta(days=RNG.randint(3, 15)), created.time())
         handle = f"{first}.{last.split()[0]}".lower().translate(str.maketrans("áéíóúñü", "aeiounu"))
         cmd = CreatePatientCommand(
             first_name=first, last_name=last, sex=Sex.FEMALE if female else Sex.MALE,
@@ -473,7 +511,8 @@ def seed_patients(c: Clinic) -> None:
             contact=ContactInfo(
                 phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
                 email=None if child else f"{handle}@example.com",
-                address=f"Calle {RNG.choice(LAST_NAMES)} {RNG.randint(1, 120)}, Col. Centro",
+                address=f"Calle {RNG.choice(LAST_NAMES)} #{RNG.randint(1, 120)}, "
+                        f"Col. {RNG.choice(COLONIAS)}",
                 emergency_contact_name=f"{RNG.choice(FEMALE_NAMES + MALE_NAMES)} "
                                        f"{last.split()[0]}",
                 emergency_contact_phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
@@ -484,6 +523,113 @@ def seed_patients(c: Clinic) -> None:
         c.patients.append(patient)
     print(f"    + {len(c.patients)} pacientes ({CHILDREN_PER_TENANT} niños, "
           f"{NEW_PATIENTS_THIS_WEEK} registrados esta semana)")
+
+
+# ── vaccination ───────────────────────────────────────────────────────────────────────────
+def _months(birth: date, on: date) -> int:
+    return (on.year - birth.year) * 12 + on.month - birth.month - (on.day < birth.day)
+
+
+def seed_vaccinations(c: Clinic) -> None:
+    """Vaccination histories recorded by the nurse through ``RecordVaccination``.
+
+    Doses before the patient registered here are copied from their card (external, no lot);
+    later ones are given at the clinic with a lot. Children are mostly up to date, some are
+    behind on their latest doses (overdue in the worklist); adults have a Td within 10 years
+    more often than not, and over-60s their yearly influenza (a few refused it). Finally, a
+    couple of doses given this morning and one entry voided and re-recorded.
+    """
+    nurse = actor(c, c.nurse)
+    lots = {code: f"{code[:3]}{RNG.randint(100, 999)}{RNG.choice('ABCDEFGH')}"
+            for code in VACCINES}
+    latest = c.now - timedelta(minutes=5)
+
+    def record(patient: Patient, dose: ScheduledDose, on: date, *, here: bool | None = None,
+               outcome=VaccinationOutcome.ADMINISTERED, notes=None, lot=None,
+               at: datetime | None = None):
+        since = patient.created_at.astimezone(c.clock.tz).replace(tzinfo=None)
+        if here is None:
+            here = on >= since.date()
+        if at is None:
+            at = (datetime.combine(on, time(RNG.randint(8, 15), RNG.choice([0, 15, 30, 45])))
+                  if here else since + timedelta(minutes=20))  # card copied when registering
+        at = min(at, latest)
+        given_here = here and outcome == VaccinationOutcome.ADMINISTERED
+        route = VACCINES[dose.vaccine].route
+        infant = (on - patient.date_of_birth).days < 3 * 365
+        site = (InjectionSite.MOUTH if route == VaccineRoute.ORAL
+                else RNG.choice([InjectionSite.LEFT_THIGH, InjectionSite.RIGHT_THIGH]) if infant
+                else RNG.choice([InjectionSite.LEFT_ARM, InjectionSite.RIGHT_ARM]))
+        cmd = RecordVaccinationCommand(
+            patient_id=patient.id, vaccine_code=dose.vaccine, dose_key=dose.key,
+            outcome=outcome, occurred_on=on,
+            source=VaccinationSource.CLINIC if here else VaccinationSource.EXTERNAL,
+            lot=(lot or lots[dose.vaccine]) if given_here else None,
+            site=site if given_here else None, notes=notes,
+        )
+        c.count("vacunas registradas")
+        return RecordVaccination(c.uow(), c.at(at)).execute(nurse, cmd)
+
+    by_key = {d.key: d for d in SCHEDULE}
+    for patient in c.patients:
+        birth, sex = patient.date_of_birth, patient.sex
+        age_m = _months(birth, c.today)
+        behind = RNG.random() < 0.3
+        for dose in SCHEDULE:
+            if not dose.routine or dose.repeat_months or not applies_to(dose, sex):
+                continue
+            due = add_months(birth, dose.age_months)
+            limit = add_months(birth, dose.max_age_months) if dose.max_age_months else None
+            if due > c.today or (dose.stage == "childhood" and age_m > 13 * 12):
+                continue  # not due yet / an adult's childhood card isn't on file
+            if limit and limit < c.today and dose.stage != "childhood":
+                continue  # e.g. HPV for a woman past the window: never given
+            if behind and (c.today - due).days < 240:
+                continue  # missed the latest doses → overdue in the worklist
+            if RNG.random() < (0.05 if dose.stage == "childhood" else 0.5):
+                continue
+            on = min(due + timedelta(days=RNG.randint(0, 21)), c.today)
+            if limit:
+                on = min(on, limit)
+            record(patient, dose, on)
+
+        # Periodic doses: the last one within its period (or none → due/overdue).
+        if age_m >= 10 * 12 and RNG.random() < 0.65:
+            start = add_months(birth, 10 * 12)
+            on = max(start, c.today - timedelta(days=RNG.randint(30, 9 * 365)))
+            record(patient, by_key["TD-1"], on)
+        if 18 <= age_m < 60 and RNG.random() < 0.7:
+            record(patient, by_key["INFLU_PED-Y"], c.today - timedelta(days=RNG.randint(20, 300)))
+        if age_m >= 60 * 12:
+            roll = RNG.random()
+            if roll < 0.6:
+                record(patient, by_key["INFLU-Y"], c.today - timedelta(days=RNG.randint(20, 300)))
+            elif roll < 0.68:
+                record(patient, by_key["INFLU-Y"], c.today - timedelta(days=RNG.randint(5, 60)),
+                       outcome=VaccinationOutcome.REFUSED, here=True,
+                       notes="Prefiere no vacunarse esta temporada.")
+
+    # This morning: the next pending doses of a couple of babies.
+    morning = c.now.replace(hour=8, minute=30) if c.now.hour >= 9 else c.now - timedelta(hours=1)
+    babies = [p for p in c.patients if _months(p.date_of_birth, c.today) < 24]
+    for k, baby in enumerate(babies[:2]):
+        card = GetVaccinationCard(c.uow(), c.at(c.now)).execute(nurse, baby.id)
+        for state in [s for s in card.states if s.status in ("due", "overdue")][:2]:
+            when = morning + timedelta(minutes=40 * k + RNG.randint(0, 10))
+            record(baby, state.dose, when.date(), here=True, at=when)
+
+    # A mistyped lot, voided and recorded again.
+    adult = next(p for p in c.patients if _months(p.date_of_birth, c.today) >= 30 * 12)
+    when = c.now - timedelta(days=3)
+    if when.hour < 8:
+        when = when.replace(hour=10)
+    key = "INFLU-Y" if _months(adult.date_of_birth, c.today) >= 60 * 12 else "TD-1"
+    wrong = record(adult, by_key[key], when.date(), here=True, at=when, lot="XXX000")
+    VoidVaccination(c.uow(), c.at(when + timedelta(minutes=12))).execute(
+        nurse, wrong.id, "Lote mal digitado")
+    record(adult, by_key[wrong.dose_key], when.date(), here=True,  # periodic: may repeat
+           at=when + timedelta(minutes=14))
+    c.count("vacunas anuladas")
 
 
 # ── availability exceptions ───────────────────────────────────────────────────────────────
@@ -851,9 +997,9 @@ def finish(c: Clinic) -> None:
 
 
 # ── orchestration ─────────────────────────────────────────────────────────────────────────
-def seed_tenant(session, slug: str, legal_name: str, location: str) -> None:
+def seed_tenant(session, slug: str, legal_name: str, tax_id: str, location: str) -> None:
     print(f"Tenant: {slug}")
-    tenant = get_or_create_tenant(session, slug, legal_name, location)
+    tenant = get_or_create_tenant(session, slug, legal_name, tax_id, location)
     staff = seed_staff(session, tenant)
     insurer_ids = seed_insurers(session, tenant.id)
     has_activity = session.query(AppointmentModel).filter(
@@ -870,6 +1016,7 @@ def seed_tenant(session, slug: str, legal_name: str, location: str) -> None:
         insurer_ids=insurer_ids,
     )
     seed_patients(c)
+    seed_vaccinations(c)
     seed_exceptions(c)
     seed_agenda(c)
     seed_amendments(c)
@@ -893,12 +1040,15 @@ def main() -> None:
     args = parser.parse_args()
 
     session = get_session()
-    demo = [("clinica-demo", "Clínica Demo SL", "San Salvador · Centro"),
-            ("centro-norte", "Centro Médico Norte SL", "Santa Tecla · Las Palmas")]
+    # Fictitious NITs in the Salvadoran format (municipality-birth-correlative-check).
+    demo = [("clinica-demo", "Clínica Demo, S.A. de C.V.", "0614-150318-101-4",
+             "San Salvador · Centro"),
+            ("centro-norte", "Centro Médico Norte, S.A. de C.V.", "0511-020719-102-7",
+             "Santa Tecla · Las Palmas")]
     if args.reset:
-        reset_demo(session, [s for s, _, _ in demo])
-    for slug, legal_name, location in demo:
-        seed_tenant(session, slug, legal_name, location)
+        reset_demo(session, [d[0] for d in demo])
+    for slug, legal_name, tax_id, location in demo:
+        seed_tenant(session, slug, legal_name, tax_id, location)
     session.close()
     print("\nListo. Contraseña de todos los usuarios demo:", PASSWORD)
 

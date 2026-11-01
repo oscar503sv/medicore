@@ -36,7 +36,7 @@ only from `domain`; `infrastructure`/`presentation` from the inner layers.
 
 By the numbers: **17 entities** and **10 value objects** in the domain, **17 repositories
 (Protocols)**, **5 application ports** (Clock, CodeGenerator, PasswordHasher, TokenIssuer,
-UnitOfWork), **17 use-case groups** and **16 routers / 100 endpoints** under `/api/v1/`.
+UnitOfWork), **18 use-case groups** and **17 routers / 106 endpoints** under `/api/v1/`.
 
 ## Domain conventions
 
@@ -67,7 +67,7 @@ UnitOfWork), **17 use-case groups** and **16 routers / 100 endpoints** under `/a
 - **Login lockout**: failed-attempt counter per `(organization, email)` with a temporary
   lock and exponential backoff (HTTP 429 + `Retry-After`); it also counts non-existent
   accounts so it doesn't reveal which ones exist.
-- **Granular permissions** (`application/common/permissions.py`): a catalog of **23
+- **Granular permissions** (`application/common/permissions.py`): a catalog of **25
   permissions** (`Permission`, `StrEnum`), a default set per role (`ROLE_PERMISSIONS`) and
   **per-tenant overrides** via `RolePermissionOverride`. `effective_permissions(role, stored)`
   resolves defaults vs. override and intersects with the current catalog; the presentation
@@ -77,6 +77,17 @@ UnitOfWork), **17 use-case groups** and **16 routers / 100 endpoints** under `/a
   search matches every word against the full name, code or phone, ignoring accents. Each item
   carries its last completed and next visit; `GET /patients/stats` gives the page's headline
   numbers (active, inactive, new in 30 days, with an upcoming visit).
+- **Vaccination** (`domain/services/immunization.py`): El Salvador's national scheme (MINSAL)
+  for childhood, adolescence and older adults, plus doses by indication (pregnancy, risk
+  groups). The scheme is national, so it lives in code as versioned data; only the doses
+  recorded are stored (`vaccination_records`). Each dose's status (given, refused,
+  contraindicated, due, overdue, due soon, upcoming, not applicable) is computed from the
+  patient's age, sex and records — periodic doses (yearly influenza, Td every 10 years) come
+  due again a period after the last one. A dose given at the clinic requires its lot; doses
+  copied from the patient's card are recorded as external. Records are never edited: a wrong
+  one is voided with a reason and stays in the history. `vaccinations` router: catalog,
+  patient card, record, void and a clinic-wide worklist (due/overdue, upcoming within a
+  horizon, given today). Permissions `vaccinations.view` / `vaccinations.record`.
 - **Scheduling**: per-doctor availability, slot resolution, appointment lifecycle
   (scheduled → confirmed → in progress → completed).
 - **Consultation → record**: signing a consultation issues an immutable `MedicalRecord` plus
@@ -178,7 +189,7 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **506 tests** (89 domain · 211 application · 161 presentation · 45 infrastructure),
+A suite of **532 tests** (99 domain · 222 application · 165 presentation · 46 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 

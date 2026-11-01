@@ -13,6 +13,7 @@ import {
   ScrollText,
   ShieldCheck,
   Stethoscope,
+  Syringe,
   UserCog,
   Users,
 } from 'lucide-react'
@@ -44,6 +45,7 @@ const GROUP_ICONS: Record<string, typeof Users> = {
   organization: Building2,
   audit: ScrollText,
   permissions: KeyRound,
+  vaccinations: Syringe,
 }
 
 interface Props {

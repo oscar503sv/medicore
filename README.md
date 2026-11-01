@@ -4,7 +4,7 @@
 
 A **multi-tenant** clinic management system built with **Clean Architecture**.
 
-It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (SOAP notes) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications** and organization settings. The interface is available in **Spanish and English**, including the backend's error messages.
+It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (SOAP notes) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications**, **vaccination following El Salvador's national scheme** and organization settings. The interface is available in **Spanish and English**, including the backend's error messages.
 
 It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, global stats and audit, account support (password reset, unlock, suspension) and **audited impersonation** of a clinic for support.
 
@@ -53,10 +53,10 @@ src/medicore/
 │   │                   # TokenIssuer, UnitOfWork
 │   ├── common/         # ActorContext, app errors, permission catalog, auditing,
 │   │                   # login lockout, notification emission, timezone
-│   └── use_cases/      # 17 groups: auth, sessions, patients, appointments,
+│   └── use_cases/      # 18 groups: auth, sessions, patients, appointments,
 │                       # consultations, records, prescriptions, availability, users,
 │                       # organization, insurers, diagnoses, audit, role_permissions,
-│                       # notifications, dashboard, platform
+│                       # notifications, dashboard, vaccinations, platform
 │
 ├── infrastructure/   # Concrete implementations
 │   ├── config.py       # Settings from .env (pydantic-settings) — dev-safe defaults
@@ -78,7 +78,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException with a translatable code
     ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
     ├── schemas/         # Pydantic request + response models per resource
-    └── routers/         # 16 routers, 100 endpoints under /api/v1/
+    └── routers/         # 17 routers, 106 endpoints under /api/v1/
 ```
 
 ### Multi-tenancy
@@ -92,6 +92,7 @@ A separate session (`platform`-scoped token) that operates above the multi-tenan
 - A signed `MedicalRecord` is **immutable**; corrections are **versioned amendments** (`status=amended` referencing the original).
 - `SignConsultation` is **atomic**: record + prescriptions + appointment `completed` in a single transaction.
 - Consultation diagnoses are limited to the catalog of the **ICD version configured per clinic** (ICD-10 / ICD-11), with autocomplete.
+- **Vaccination** following El Salvador's national scheme (MINSAL), for children, adolescents and adults: each patient's card computes every dose's status (given, due, overdue, upcoming…) from their age and records; records are never edited, a wrong one is voided with a reason. A worklist shows overdue and upcoming doses across the clinic.
 - **Granular permissions** enforced in the application layer (not just the UI) — see the next section.
 - Temporary password with a forced change on first sign-in.
 - Auditing of access and sensitive changes (HIPAA/GDPR), per tenant and global.
@@ -102,7 +103,7 @@ A separate session (`platform`-scoped token) that operates above the multi-tenan
 
 Access control is **granular and customizable per clinic** (`application/common/permissions.py`):
 
-- **Catalog of 23 permissions** (`Permission`, `StrEnum`) grouped by resource: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (including `sign` and `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`.
+- **Catalog of 25 permissions** (`Permission`, `StrEnum`) grouped by resource: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (including `sign` and `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`, `vaccinations.*`.
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — each with a default permission set in `ROLE_PERMISSIONS`.
 - **Per-tenant overrides**: each clinic can customize a role's set through a `RolePermissionOverride` row. `effective_permissions(role, stored)` resolves defaults vs. override (and intersects with the current catalog to tolerate retired permissions).
 - On every request, the presentation layer puts the effective permissions in `ActorContext.permissions`, so every `ensure_permission(...)` check honors the clinic's customization.
@@ -204,8 +205,10 @@ medicore/
 | **9** | Security: cookie sessions + CSRF, revocable sessions, login lockout, anti-enumeration | ✅ Done |
 | **10** | In-app notifications (backend, bell and inbox) | ✅ Done |
 | **11** | Real dashboard metrics, fully ES/EN interface and translatable API errors | ✅ Done |
+| **12** | Vaccination module (El Salvador national scheme, patient card, worklist) | ✅ Done |
 | — | Password policy | ⏳ Pending |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
+| — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 
 ---
 
@@ -261,7 +264,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (506 tests)
+.venv/bin/pytest                          # full suite (532 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -305,13 +308,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-506 passing tests
-    89  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
-   205  — application (auth, sessions, appointments, consultations, records, notifications,
+532 passing tests
+    99  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+            immunization schedule)
+   222  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   158  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   165  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    44  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    46  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

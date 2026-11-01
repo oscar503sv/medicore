@@ -59,7 +59,7 @@ class CreateTenantRequest(BaseModel):
     legal_name: str
     tax_id: str
     slug: str
-    timezone: str = "Europe/Madrid"
+    timezone: str = "America/El_Salvador"
     icd_version: IcdVersion = IcdVersion.CIE11
     location_name: str
     admin_name: str

@@ -172,7 +172,7 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
             label={t('platform.f_location')}
             value={form.location_name}
             onChange={(e) => set({ location_name: e.target.value })}
-            placeholder="Madrid · Atocha"
+            placeholder="San Salvador · Escalón"
             required
           />
           <Select

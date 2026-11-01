@@ -20,7 +20,7 @@ External channels and reminders are planned as a future evolution (see [Future](
   attaching documents to a consultation in progress isn't reachable through the API.
 - The `Money` value object (`domain/value_objects/money.py`) is unused — presumably reserved
   for billing.
-- The frontend routes `/applications`, `/procedures` and `/vaccination` intentionally point to
+- The frontend routes `/applications` and `/procedures` intentionally point to
   `ComingSoonPage` ("Coming soon" badge in the sidebar).
 - Medical document storage keeps **metadata only** (name, mime type, size, `storage_key`);
   there is no file backend (S3/disk). The UI says so explicitly.
@@ -48,6 +48,19 @@ details from the patient's file. Depends on the external channels: patients don'
 
 Suggested order: (1) email, the simplest and cheapest channel; (2) appointment reminders to
 patients by email; (3) SMS/WhatsApp, with a per-message cost and an external provider.
+
+### Vaccination — next phases
+Phase 1 (national scheme, patient card, recording/voiding and the worklist) is done. Next:
+
+- **Phase 2 — clinical depth:** an official printable vaccination card (PDF); catch-up schemes
+  with minimum intervals between doses (today only the recommended age and catch-up limit
+  are modelled); risk-group indications driven by the patient's conditions/tags; a doctor's
+  order ("indicate this vaccine") that the nurse then administers; and a periodic review of
+  the scheme data against the MINSAL guidelines in force.
+- **Phase 3 — inventory and reminders:** vaccine **lot inventory** (stock in, expiry dates,
+  automatic decrement when a dose is recorded, low-stock and expiry alerts, cold-chain log)
+  and **reminders** to families for upcoming/overdue doses. Reminders depend on the external
+  channels above.
 
 ## Security — consciously deferred
 

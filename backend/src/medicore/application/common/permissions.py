@@ -42,6 +42,8 @@ class Permission(StrEnum):
     RECORDS_SIGN = "records.sign"
     RECORDS_AMEND = "records.amend"
     PRESCRIPTIONS_MANAGE = "prescriptions.manage"
+    VACCINATIONS_VIEW = "vaccinations.view"
+    VACCINATIONS_RECORD = "vaccinations.record"
     DIAGNOSES_VIEW = "diagnoses.view"
     INSURERS_VIEW = "insurers.view"
     INSURERS_MANAGE = "insurers.manage"
@@ -66,6 +68,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.CONSULTATIONS_EDIT,
         Permission.RECORDS_VIEW,
         Permission.RECORDS_UPLOAD,
+        Permission.VACCINATIONS_VIEW,
+        Permission.VACCINATIONS_RECORD,
         Permission.DIAGNOSES_VIEW,
         Permission.INSURERS_VIEW,
         Permission.INSURERS_MANAGE,
@@ -91,6 +95,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.RECORDS_SIGN,
         Permission.RECORDS_AMEND,
         Permission.PRESCRIPTIONS_MANAGE,
+        Permission.VACCINATIONS_VIEW,
+        Permission.VACCINATIONS_RECORD,
         Permission.DIAGNOSES_VIEW,
         Permission.INSURERS_VIEW,
     }),
@@ -101,6 +107,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.CONSULTATIONS_EDIT,
         Permission.RECORDS_VIEW,
         Permission.RECORDS_UPLOAD,
+        Permission.VACCINATIONS_VIEW,
+        Permission.VACCINATIONS_RECORD,
         Permission.DIAGNOSES_VIEW,
         Permission.INSURERS_VIEW,
     }),
@@ -111,6 +119,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.PATIENTS_ARCHIVE,
         Permission.APPOINTMENTS_VIEW,
         Permission.APPOINTMENTS_MANAGE,
+        Permission.VACCINATIONS_VIEW,
         Permission.DIAGNOSES_VIEW,
         Permission.INSURERS_VIEW,
     }),

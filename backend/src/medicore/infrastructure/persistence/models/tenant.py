@@ -19,7 +19,9 @@ class TenantModel(Base):
     legal_name: Mapped[str] = mapped_column(String(255), nullable=False)
     tax_id: Mapped[str] = mapped_column(String(50), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
-    timezone: Mapped[str] = mapped_column(String(100), nullable=False, default="Europe/Madrid")
+    timezone: Mapped[str] = mapped_column(
+        String(100), nullable=False, default="America/El_Salvador"
+    )
     plan: Mapped[str] = mapped_column(String(50), nullable=False, default="pro")
     seat_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
     status: Mapped[str] = mapped_column(

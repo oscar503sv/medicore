@@ -1,8 +1,10 @@
 import { useUIStore } from '@/stores/ui'
+import { vaxEn, vaxEs } from './i18n-vaccination'
 
 type Dict = Record<string, string>
 
 const es: Dict = {
+  ...vaxEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -528,6 +530,15 @@ const es: Dict = {
   'err.support.clinic_archived': 'No se puede dar soporte a una clínica archivada.',
   'err.support.no_active_admin': 'La clínica no tiene ningún administrador activo.',
   'err.support.not_a_support_session': 'Esta no es una sesión de soporte.',
+  'err.vaccination.lot_required': 'Indica el lote de la vacuna aplicada en la clínica.',
+  'err.vaccination.already_voided': 'Este registro de vacunación ya está anulado.',
+  'err.vaccination.void_reason_required': 'Indica el motivo de la anulación.',
+  'err.vaccination.patient_inactive': 'El paciente está archivado; reactívalo para registrar vacunas.',
+  'err.vaccination.unknown_vaccine': 'Vacuna desconocida.',
+  'err.vaccination.dose_mismatch': 'La dosis elegida no corresponde a esa vacuna.',
+  'err.vaccination.future_date': 'La fecha de aplicación no puede ser futura.',
+  'err.vaccination.before_birth': 'La fecha de aplicación es anterior al nacimiento.',
+  'err.vaccination.dose_already_recorded': 'Esa dosis ya está registrada como aplicada.',
   // misc UI strings
   'app.error_generic': 'Algo salió mal',
   'app.show_password': 'Mostrar contraseña',
@@ -715,6 +726,7 @@ const es: Dict = {
   'audit.cat_consultation': 'Consultas',
   'audit.cat_record': 'Historiales',
   'audit.cat_document': 'Documentos',
+  'audit.cat_vaccination': 'Vacunación',
   'audit.cat_user': 'Usuarios',
   'audit.cat_insurer': 'Seguros',
   'audit.cat_availability': 'Disponibilidad',
@@ -741,6 +753,8 @@ const es: Dict = {
   'audit.action.record.viewed': 'Expediente consultado',
   'audit.action.record.amended': 'Expediente enmendado',
   'audit.action.document.uploaded': 'Documento subido',
+  'audit.action.vaccination.recorded': 'Vacuna registrada',
+  'audit.action.vaccination.voided': 'Registro de vacuna anulado',
   'audit.action.user.invited': 'Usuario invitado',
   'audit.action.user.updated': 'Usuario actualizado',
   'audit.action.user.profile_updated': 'Perfil actualizado',
@@ -771,6 +785,7 @@ const es: Dict = {
   'audit.entity.Consultation': 'Consulta',
   'audit.entity.MedicalRecord': 'Expediente',
   'audit.entity.MedicalDocument': 'Documento',
+  'audit.entity.VaccinationRecord': 'Registro de vacuna',
   'audit.entity.User': 'Usuario',
   'audit.entity.Insurer': 'Seguro',
   'audit.entity.DoctorAvailability': 'Disponibilidad',
@@ -806,6 +821,7 @@ const es: Dict = {
   'permgroup.organization': 'Organización',
   'permgroup.audit': 'Auditoría',
   'permgroup.permissions': 'Permisos',
+  'permgroup.vaccinations': 'Vacunación',
   'permission.patients_view': 'Ver pacientes',
   'permission.patients_create': 'Registrar pacientes',
   'permission.patients_edit': 'Editar pacientes',
@@ -829,6 +845,8 @@ const es: Dict = {
   'permission.organization_manage': 'Gestionar organización',
   'permission.audit_view': 'Ver auditoría',
   'permission.permissions_manage': 'Gestionar roles y permisos',
+  'permission.vaccinations_view': 'Ver vacunación',
+  'permission.vaccinations_record': 'Registrar y anular vacunas',
   // statuses
   'status.scheduled': 'Agendada',
   'status.confirmed': 'Confirmada',
@@ -842,6 +860,7 @@ const es: Dict = {
 }
 
 const en: Dict = {
+  ...vaxEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.cancel': 'Cancel',
@@ -1352,6 +1371,15 @@ const en: Dict = {
   'err.support.clinic_archived': 'An archived clinic cannot be supported.',
   'err.support.no_active_admin': 'The clinic has no active administrator.',
   'err.support.not_a_support_session': 'This is not a support session.',
+  'err.vaccination.lot_required': 'Enter the lot number of the dose given at the clinic.',
+  'err.vaccination.already_voided': 'This vaccination record is already voided.',
+  'err.vaccination.void_reason_required': 'Enter a reason for voiding.',
+  'err.vaccination.patient_inactive': 'The patient is archived; reactivate them to record vaccines.',
+  'err.vaccination.unknown_vaccine': 'Unknown vaccine.',
+  'err.vaccination.dose_mismatch': 'The selected dose does not belong to that vaccine.',
+  'err.vaccination.future_date': 'The date given cannot be in the future.',
+  'err.vaccination.before_birth': 'The date given is before the date of birth.',
+  'err.vaccination.dose_already_recorded': 'That dose is already recorded as given.',
   // misc UI strings
   'app.error_generic': 'Something went wrong',
   'app.show_password': 'Show password',
@@ -1539,6 +1567,7 @@ const en: Dict = {
   'audit.cat_consultation': 'Consultations',
   'audit.cat_record': 'Records',
   'audit.cat_document': 'Documents',
+  'audit.cat_vaccination': 'Vaccination',
   'audit.cat_user': 'Users',
   'audit.cat_insurer': 'Insurers',
   'audit.cat_availability': 'Availability',
@@ -1565,6 +1594,8 @@ const en: Dict = {
   'audit.action.record.viewed': 'Record viewed',
   'audit.action.record.amended': 'Record amended',
   'audit.action.document.uploaded': 'Document uploaded',
+  'audit.action.vaccination.recorded': 'Vaccine recorded',
+  'audit.action.vaccination.voided': 'Vaccine record voided',
   'audit.action.user.invited': 'User invited',
   'audit.action.user.updated': 'User updated',
   'audit.action.user.profile_updated': 'Profile updated',
@@ -1595,6 +1626,7 @@ const en: Dict = {
   'audit.entity.Consultation': 'Consultation',
   'audit.entity.MedicalRecord': 'Record',
   'audit.entity.MedicalDocument': 'Document',
+  'audit.entity.VaccinationRecord': 'Vaccination record',
   'audit.entity.User': 'User',
   'audit.entity.Insurer': 'Insurer',
   'audit.entity.DoctorAvailability': 'Availability',
@@ -1625,6 +1657,7 @@ const en: Dict = {
   'permgroup.organization': 'Organization',
   'permgroup.audit': 'Audit',
   'permgroup.permissions': 'Permissions',
+  'permgroup.vaccinations': 'Vaccination',
   'permission.patients_view': 'View patients',
   'permission.patients_create': 'Register patients',
   'permission.patients_edit': 'Edit patients',
@@ -1648,6 +1681,8 @@ const en: Dict = {
   'permission.organization_manage': 'Manage organization',
   'permission.audit_view': 'View audit trail',
   'permission.permissions_manage': 'Manage roles & permissions',
+  'permission.vaccinations_view': 'View vaccinations',
+  'permission.vaccinations_record': 'Record and void vaccines',
   'role.admin': 'Admin',
   'role.doctor': 'Doctor',
   'role.nurse': 'Nurse',

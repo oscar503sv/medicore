@@ -45,6 +45,9 @@ from medicore.infrastructure.persistence.repositories.user import (
     SqlDoctorProfileRepository,
     SqlUserRepository,
 )
+from medicore.infrastructure.persistence.repositories.vaccination import (
+    SqlVaccinationRecordRepository,
+)
 
 
 class SqlAlchemyUnitOfWork:
@@ -69,6 +72,7 @@ class SqlAlchemyUnitOfWork:
         self.notifications = SqlNotificationRepository(session, tenant_id)
         self.audit = SqlAuditLogRepository(session, tenant_id)
         self.role_permissions = SqlRolePermissionOverrideRepository(session, tenant_id)
+        self.vaccinations = SqlVaccinationRecordRepository(session, tenant_id)
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
         self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
         self.sessions = SqlAuthSessionRepository(session)  # global (non-scoped)

@@ -46,7 +46,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/records', labelKey: 'nav.records', icon: FileText, permission: 'records.view', group: 'clinical' },
   { to: '/applications', labelKey: 'nav.applications', icon: Pill, roles: ['doctor', 'nurse'], group: 'clinical', comingSoon: true },
   { to: '/procedures', labelKey: 'nav.procedures', icon: Activity, roles: ['doctor', 'nurse'], group: 'clinical', comingSoon: true },
-  { to: '/vaccination', labelKey: 'nav.vaccination', icon: Syringe, roles: ['doctor', 'nurse'], group: 'clinical', comingSoon: true },
+  { to: '/vaccination', labelKey: 'nav.vaccination', icon: Syringe, permission: 'vaccinations.view', group: 'clinical' },
   // Gestión
   // "Mi disponibilidad" is the doctor's own agenda; admins hold availability.manage but
   // have no doctor schedule of their own, so this stays role-gated.

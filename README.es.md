@@ -4,7 +4,7 @@
 
 Sistema de gestión clínica **multi-tenant** construido con **Clean Architecture**.
 
-Cubre el ciclo completo de atención: autenticación por organización, dashboard con métricas reales, gestión de pacientes, agenda y citas, consulta en curso (bitácora SOAP) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app** y ajustes de organización. La interfaz está disponible en **español e inglés**, incluidos los mensajes de error del backend.
+Cubre el ciclo completo de atención: autenticación por organización, dashboard con métricas reales, gestión de pacientes, agenda y citas, consulta en curso (bitácora SOAP) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app**, **vacunación según el esquema nacional de El Salvador** y ajustes de organización. La interfaz está disponible en **español e inglés**, incluidos los mensajes de error del backend.
 
 Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión) e **impersonación auditada** de una clínica para dar soporte.
 
@@ -53,10 +53,10 @@ src/medicore/
 │   │                   # TokenIssuer, UnitOfWork
 │   ├── common/         # ActorContext, errores de app, catálogo de permisos,
 │   │                   # auditoría, lockout de login, emisión de notificaciones, timezone
-│   └── use_cases/      # 17 grupos: auth, sessions, patients, appointments,
+│   └── use_cases/      # 18 grupos: auth, sessions, patients, appointments,
 │                       # consultations, records, prescriptions, availability, users,
 │                       # organization, insurers, diagnoses, audit, role_permissions,
-│                       # notifications, dashboard, platform
+│                       # notifications, dashboard, vaccinations, platform
 │
 ├── infrastructure/   # Implementaciones concretas
 │   ├── config.py       # Settings desde .env (pydantic-settings) — dev-safe por defecto
@@ -78,7 +78,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 16 routers, 100 endpoints bajo /api/v1/
+    └── routers/         # 17 routers, 106 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -92,6 +92,7 @@ Sesión separada (token de scope `platform`) que opera por encima del límite mu
 - `MedicalRecord` firmado es **inmutable**; las correcciones son **enmiendas versionadas** (`status=amended` que referencia al original).
 - `SignConsultation` es **atómico**: record + recetas + cita `completed` en una sola transacción.
 - Diagnósticos en consulta limitados al catálogo de la **versión CIE configurada por cada clínica** (CIE-10 / CIE-11), con autocompletado.
+- **Vacunación** según el esquema nacional de El Salvador (MINSAL), para niños, adolescentes y adultos: el carné de cada paciente calcula el estado de cada dosis (aplicada, toca, atrasada, próxima…) a partir de su edad y sus registros; los registros no se editan, uno erróneo se anula con motivo. Una lista de trabajo muestra las dosis atrasadas y próximas de toda la clínica.
 - **Permisos granulares** validados en la capa de aplicación (no solo en UI) — ver sección siguiente.
 - Contraseña temporal con cambio forzado en el primer ingreso.
 - Auditoría de accesos y cambios sensibles (HIPAA/GDPR), por tenant y global.
@@ -102,7 +103,7 @@ Sesión separada (token de scope `platform`) que opera por encima del límite mu
 
 El control de acceso es **granular y personalizable por clínica** (`application/common/permissions.py`):
 
-- **Catálogo de 23 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (incluye `sign` y `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`.
+- **Catálogo de 25 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (incluye `sign` y `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`, `vaccinations.*`.
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — con un conjunto de permisos por defecto en `ROLE_PERMISSIONS`.
 - **Overrides por tenant**: cada clínica puede personalizar el set de un rol mediante una fila `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults vs. override (e intersecta con el catálogo vigente para tolerar permisos retirados).
 - En cada request, la capa de presentación coloca los permisos efectivos en `ActorContext.permissions`, de modo que toda comprobación `ensure_permission(...)` honra la personalización de la clínica.
@@ -204,8 +205,10 @@ medicore/
 | **9** | Seguridad: sesiones en cookie + CSRF, sesiones revocables, lockout de login, anti-enumeración | ✅ Completada |
 | **10** | Notificaciones in-app (backend, campana y buzón) | ✅ Completada |
 | **11** | Dashboard con métricas reales, interfaz 100 % ES/EN y errores de la API traducibles | ✅ Completada |
+| **12** | Módulo de vacunación (esquema nacional de El Salvador, carné del paciente, lista de trabajo) | ✅ Completada |
 | — | Política de contraseñas | ⏳ Pendiente |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
+| — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 
 ---
 
@@ -261,7 +264,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (506 tests)
+.venv/bin/pytest                          # suite completa (532 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -305,13 +308,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-506 tests en verde
-    89  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
-   205  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+532 tests en verde
+    99  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+            esquema de vacunación)
+   222  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   158  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   165  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    44  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    46  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

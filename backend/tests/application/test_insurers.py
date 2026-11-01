@@ -24,7 +24,7 @@ from tests.support.builders import seed_clinic
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
 
-def _make_insurer(seed, uow, name="Sanitas"):
+def _make_insurer(seed, uow, name="Seguros SISA"):
     return CreateInsurer(uow, FixedClock()).execute(
         seed.actor(seed.admin),
         CreateInsurerCommand(name=name, phone="900100100", address="Calle 1"),
@@ -37,16 +37,17 @@ class TestInsurerManagement:
         uow = seed.factory.for_tenant(seed.tenant.id)
         insurer = _make_insurer(seed, uow)
         assert insurer.active is True
-        assert insurer.name == "Sanitas"
+        assert insurer.name == "Seguros SISA"
         assert uow.audit.query(action="insurer.created")
-        assert [i.name for i in ListInsurers(uow).execute(seed.actor(seed.admin))] == ["Sanitas"]
+        listed = ListInsurers(uow).execute(seed.actor(seed.admin))
+        assert [i.name for i in listed] == ["Seguros SISA"]
 
     def test_non_admin_cannot_create(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
         with pytest.raises(PermissionDenied):
             CreateInsurer(uow, FixedClock()).execute(
-                seed.receptionist_actor, CreateInsurerCommand(name="Adeslas")
+                seed.receptionist_actor, CreateInsurerCommand(name="ASSA Seguros")
             )
 
     def test_anyone_may_list(self):
@@ -55,7 +56,7 @@ class TestInsurerManagement:
         _make_insurer(seed, uow)
         # Receptionist (registers patients) must be able to read the catalog.
         names = [i.name for i in ListInsurers(uow).execute(seed.receptionist_actor)]
-        assert names == ["Sanitas"]
+        assert names == ["Seguros SISA"]
 
     def test_update_insurer(self):
         seed = seed_clinic()
@@ -85,7 +86,7 @@ class TestInsurerManagement:
         )
         assert restored.active is True
         active = ListInsurers(uow).execute(seed.actor(seed.admin), active_only=True)
-        assert [i.name for i in active] == ["Sanitas"]
+        assert [i.name for i in active] == ["Seguros SISA"]
         assert uow.audit.query(action="insurer.reactivated")
 
     def test_non_admin_cannot_reactivate(self):

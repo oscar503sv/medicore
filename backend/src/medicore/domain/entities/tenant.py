@@ -17,7 +17,7 @@ class Location:
 
     id: LocationId
     tenant_id: TenantId
-    name: str  # e.g. "Madrid · Atocha"
+    name: str  # e.g. "San Salvador · Escalón"
     address: str | None = None
     is_primary: bool = False
 
@@ -30,7 +30,7 @@ class Tenant:
     legal_name: str
     tax_id: str
     slug: Slug
-    timezone: str  # IANA, e.g. "Europe/Madrid"
+    timezone: str  # IANA, e.g. "America/El_Salvador"
     plan: str = "pro"
     seat_limit: int = 10
     status: TenantStatus = TenantStatus.ACTIVE

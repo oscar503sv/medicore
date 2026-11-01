@@ -124,3 +124,33 @@ class LangPref(StrEnum):
 class ConsultationStatus(StrEnum):
     DRAFT = "draft"
     SIGNED = "signed"
+
+
+class VaccinationOutcome(StrEnum):
+    """What happened with a dose: given, declined by the patient, or medically not given."""
+
+    ADMINISTERED = "administered"
+    REFUSED = "refused"
+    CONTRAINDICATED = "contraindicated"
+
+
+class VaccinationSource(StrEnum):
+    """Where the dose was given: here (lot/route traceable) or elsewhere (from the carnet)."""
+
+    CLINIC = "clinic"
+    EXTERNAL = "external"
+
+
+class VaccineRoute(StrEnum):
+    INTRAMUSCULAR = "im"
+    SUBCUTANEOUS = "sc"
+    INTRADERMAL = "id"
+    ORAL = "oral"
+
+
+class InjectionSite(StrEnum):
+    LEFT_ARM = "left_arm"
+    RIGHT_ARM = "right_arm"
+    LEFT_THIGH = "left_thigh"
+    RIGHT_THIGH = "right_thigh"
+    MOUTH = "mouth"

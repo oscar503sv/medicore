@@ -21,7 +21,7 @@ Canales externos y recordatorios quedan planificados como evolución futura (ver
   adjuntar documentos a una consulta en curso no es alcanzable vía API.
 - Value object `Money` (`domain/value_objects/money.py`) sin uso — presumiblemente
   reservado para facturación.
-- Rutas del frontend `/applications`, `/procedures`, `/vaccination` apuntan a
+- Rutas del frontend `/applications` y `/procedures` apuntan a
   `ComingSoonPage` de forma intencional (badge "Próximamente" en el sidebar).
 - El almacenamiento de documentos médicos guarda **solo metadata** (nombre, mime, tamaño,
   `storage_key`); no hay backend de archivos (S3/disco). La UI lo comunica explícitamente.
@@ -50,6 +50,20 @@ externos: el paciente no usa la app.
 
 Orden sugerido: (1) email, el canal más simple y barato; (2) recordatorios de cita a
 pacientes por email; (3) SMS/WhatsApp, con coste por mensaje y proveedor externo.
+
+### Vacunación — siguientes fases
+La fase 1 (esquema nacional, carné del paciente, registro/anulación y lista de trabajo) está
+hecha. Siguiente:
+
+- **Fase 2 — profundidad clínica:** carné de vacunación imprimible oficial (PDF); esquemas de
+  recuperación con intervalos mínimos entre dosis (hoy solo se modelan la edad recomendada y
+  el límite de recuperación); indicaciones por grupo de riesgo a partir de las condiciones o
+  etiquetas del paciente; orden médica ("indicar esta vacuna") que luego aplica enfermería; y
+  revisión periódica de los datos del esquema contra los lineamientos vigentes del MINSAL.
+- **Fase 3 — inventario y recordatorios:** **inventario de lotes** (entradas, fechas de
+  vencimiento, descuento automático al registrar una dosis, alertas de stock bajo y de
+  vencimiento, bitácora de cadena de frío) y **recordatorios** a las familias por dosis
+  próximas o atrasadas. Los recordatorios dependen de los canales externos de arriba.
 
 ## Seguridad — diferido conscientemente
 

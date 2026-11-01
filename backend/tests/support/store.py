@@ -23,6 +23,7 @@ from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.role_permission_override import RolePermissionOverride
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
+from medicore.domain.entities.vaccination_record import VaccinationRecord
 
 
 @dataclass
@@ -47,6 +48,7 @@ class InMemoryStore:
     notifications: dict[UUID, Notification] = field(default_factory=dict)
     audit: dict[UUID, AuditLog] = field(default_factory=dict)
     role_permission_overrides: dict[UUID, RolePermissionOverride] = field(default_factory=dict)
+    vaccinations: dict[UUID, VaccinationRecord] = field(default_factory=dict)
     platform_admins: dict[UUID, PlatformAdmin] = field(default_factory=dict)
     platform_audit: dict[UUID, PlatformAuditLog] = field(default_factory=dict)
     # Global catalog keyed by "version:code" (reference data, not tenant-scoped).

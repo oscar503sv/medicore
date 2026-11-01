@@ -27,6 +27,7 @@ import { SchedulePage } from '@/pages/SchedulePage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { PermissionsPage } from '@/pages/PermissionsPage'
 import { UsersPage } from '@/pages/UsersPage'
+import { VaccinationPage } from '@/pages/VaccinationPage'
 import { applyTheme, useUIStore } from '@/stores/ui'
 
 export function App() {
@@ -100,7 +101,7 @@ export function App() {
           <Route path="/records" element={<RecordsPage />} />
           <Route path="/applications" element={<ComingSoonPage />} />
           <Route path="/procedures" element={<ComingSoonPage />} />
-          <Route path="/vaccination" element={<ComingSoonPage />} />
+          <Route path="/vaccination" element={<VaccinationPage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/permissions" element={<PermissionsPage />} />

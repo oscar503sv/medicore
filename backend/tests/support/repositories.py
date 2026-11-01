@@ -481,6 +481,36 @@ class InMemoryAppointmentRepository(_Scoped):
         self._store.appointments[appointment.id.value] = appointment
 
 
+class InMemoryVaccinationRecordRepository(_Scoped):
+    def get_by_id(self, record_id):
+        r = self._store.vaccinations.get(record_id.value)
+        return r if r and r.tenant_id == self._tenant else None
+
+    def list_by_patient(self, patient_id) -> list:
+        result = [r for r in self._mine(self._store.vaccinations.values())
+                  if r.patient_id == patient_id]
+        result.sort(key=lambda r: (r.occurred_on, r.created_at), reverse=True)
+        return result
+
+    def list_active_by_patients(self, patient_ids) -> list:
+        wanted = set(patient_ids)
+        return [r for r in self._mine(self._store.vaccinations.values())
+                if r.patient_id in wanted and not r.is_voided]
+
+    def list_administered_on(self, day) -> list:
+        from medicore.domain.enums import VaccinationOutcome, VaccinationSource
+
+        return [
+            r for r in self._mine(self._store.vaccinations.values())
+            if r.occurred_on == day and not r.is_voided
+            and r.outcome == VaccinationOutcome.ADMINISTERED
+            and r.source == VaccinationSource.CLINIC
+        ]
+
+    def save(self, record) -> None:
+        self._store.vaccinations[record.id.value] = record
+
+
 class InMemoryInsurerRepository(_Scoped):
     def get_by_id(self, insurer_id) -> object | None:
         ins = self._store.insurers.get(insurer_id.value)

@@ -31,6 +31,7 @@ from medicore.domain.repositories import (
     RolePermissionOverrideRepository,
     TenantRepository,
     UserRepository,
+    VaccinationRecordRepository,
 )
 from medicore.domain.shared.identifiers import TenantId
 
@@ -52,6 +53,7 @@ class UnitOfWork(Protocol):
     notifications: NotificationRepository
     audit: AuditLogRepository
     role_permissions: RolePermissionOverrideRepository
+    vaccinations: VaccinationRecordRepository
     tenants: TenantRepository  # global (not tenant-filtered)
     platform_audit: PlatformAuditLogRepository  # global (not tenant-filtered)
     sessions: AuthSessionRepository  # global (not tenant-filtered)

@@ -39,6 +39,9 @@ from medicore.domain.repositories.user_repository import (
     DoctorProfileRepository,
     UserRepository,
 )
+from medicore.domain.repositories.vaccination_record_repository import (
+    VaccinationRecordRepository,
+)
 
 __all__ = [
     "Page",
@@ -64,4 +67,5 @@ __all__ = [
     "TenantRepository",
     "DoctorProfileRepository",
     "UserRepository",
+    "VaccinationRecordRepository",
 ]

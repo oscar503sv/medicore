@@ -82,6 +82,11 @@ class AppointmentId(Identifier):
 
 
 @dataclass(frozen=True, slots=True)
+class VaccinationRecordId(Identifier):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class ConsultationId(Identifier):
     pass
 

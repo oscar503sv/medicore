@@ -36,7 +36,7 @@ La **regla de dependencia** apunta hacia adentro: `domain` no importa de ninguna
 
 En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios (Protocols)**,
 **5 puertos de aplicación** (Clock, CodeGenerator, PasswordHasher, TokenIssuer, UnitOfWork),
-**17 grupos de casos de uso** y **16 routers / 100 endpoints** bajo `/api/v1/`.
+**18 grupos de casos de uso** y **17 routers / 106 endpoints** bajo `/api/v1/`.
 
 ## Convenciones del dominio
 
@@ -68,7 +68,7 @@ En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios
 - **Lockout de login**: contador de intentos fallidos por `(organización, email)` con
   bloqueo temporal y backoff exponencial (HTTP 429 + `Retry-After`); cuenta también
   cuentas inexistentes para no revelar cuáles existen.
-- **Permisos granulares** (`application/common/permissions.py`): catálogo de **23 permisos**
+- **Permisos granulares** (`application/common/permissions.py`): catálogo de **25 permisos**
   (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
   tenant** vía `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults
   vs. override e intersecta con el catálogo vigente; la capa de presentación los coloca en
@@ -78,6 +78,18 @@ En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios
   búsqueda, que exige cada palabra en el nombre completo, el código o el teléfono, sin importar
   los acentos. Cada paciente trae su última visita completada y la próxima; `GET /patients/stats`
   da las cifras de la página (activos, inactivos, nuevos en 30 días, con cita próxima).
+- **Vacunación** (`domain/services/immunization.py`): esquema nacional de El Salvador (MINSAL)
+  para infancia, adolescencia y adultos mayores, más las dosis según indicación (embarazo,
+  grupos de riesgo). El esquema es nacional, así que vive en código como datos versionados;
+  solo se guardan las dosis registradas (`vaccination_records`). El estado de cada dosis
+  (aplicada, rechazada, contraindicada, toca, atrasada, próxima, programada, no aplica) se
+  calcula a partir de la edad, el sexo y los registros del paciente — las periódicas
+  (influenza anual, Td cada 10 años) vuelven a tocar un periodo después de la última. Una
+  dosis aplicada en la clínica exige su lote; las copiadas del carné se registran como
+  externas. Los registros no se editan: uno erróneo se anula con motivo y queda en el
+  historial. Router `vaccinations`: catálogo, carné del paciente, registrar, anular y una lista
+  de trabajo de la clínica (tocan/atrasadas, próximas en un horizonte, aplicadas hoy).
+  Permisos `vaccinations.view` / `vaccinations.record`.
 - **Agenda**: disponibilidad por médico, resolución de slots, ciclo de vida de la cita
   (agendada → confirmada → en curso → completada).
 - **Consulta → historial**: al firmar una consulta se emite un `MedicalRecord` inmutable + las
@@ -178,7 +190,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **506 tests** (89 dominio · 211 aplicación · 161 presentación · 45 infraestructura), casi
+Suite de **532 tests** (99 dominio · 222 aplicación · 165 presentación · 46 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 

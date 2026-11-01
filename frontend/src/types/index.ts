@@ -24,6 +24,8 @@ export type Permission =
   | 'organization.manage'
   | 'audit.view'
   | 'permissions.manage'
+  | 'vaccinations.view'
+  | 'vaccinations.record'
 
 export interface RolePermissionsEntry {
   defaults: Permission[]

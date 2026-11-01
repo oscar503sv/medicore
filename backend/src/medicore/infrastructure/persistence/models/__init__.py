@@ -26,6 +26,7 @@ from medicore.infrastructure.persistence.models.role_permission_override import 
 )
 from medicore.infrastructure.persistence.models.tenant import LocationModel, TenantModel
 from medicore.infrastructure.persistence.models.user import DoctorProfileModel, UserModel
+from medicore.infrastructure.persistence.models.vaccination_record import VaccinationRecordModel
 
 __all__ = [
     "AppointmentModel",
@@ -50,4 +51,5 @@ __all__ = [
     "TenantCounterModel",
     "TenantModel",
     "UserModel",
+    "VaccinationRecordModel",
 ]

@@ -15,9 +15,10 @@ export function Segmented<T extends string>({
       {options.map((opt) => (
         <button
           key={opt.value}
+          type="button"
           onClick={() => onChange(opt.value)}
           className={cn(
-            'rounded-lg px-3 py-1.5 text-[13px] font-medium leading-none transition-colors',
+            'whitespace-nowrap rounded-lg px-3 py-1.5 text-[13px] font-medium leading-none transition-colors',
             value === opt.value ? 'bg-accent text-white shadow-sm' : 'text-tx-2 hover:text-tx',
           )}
         >
