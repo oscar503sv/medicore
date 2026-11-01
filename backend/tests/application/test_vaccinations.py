@@ -135,12 +135,14 @@ def test_inactive_patients_cannot_get_new_records():
     assert exc.value.code == "vaccination.patient_inactive"
 
 
-def test_receptionist_sees_but_cannot_record():
+def test_receptionist_and_admin_see_but_cannot_record():
     seed = seed_clinic()
     baby = _infant(seed)
-    GetVaccinationCard(_uow(seed), FixedClock()).execute(seed.receptionist_actor, baby.id)
-    with pytest.raises(PermissionDenied):
-        _record(seed, seed.receptionist_actor, baby)
+    # Recording a dose is a clinical act: neither reception nor the admin does it by default.
+    for actor in (seed.receptionist_actor, seed.actor(seed.admin)):
+        GetVaccinationCard(_uow(seed), FixedClock()).execute(actor, baby.id)
+        with pytest.raises(PermissionDenied):
+            _record(seed, actor, baby)
 
 
 def test_worklist_lists_pending_upcoming_and_given_today():

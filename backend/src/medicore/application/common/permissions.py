@@ -71,7 +71,6 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.RECORDS_VIEW,
         Permission.RECORDS_UPLOAD,
         Permission.VACCINATIONS_VIEW,
-        Permission.VACCINATIONS_RECORD,
         Permission.APPLICATIONS_VIEW,
         Permission.DIAGNOSES_VIEW,
         Permission.INSURERS_VIEW,
