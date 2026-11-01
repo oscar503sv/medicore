@@ -5,10 +5,11 @@ from __future__ import annotations
 from datetime import time
 from decimal import Decimal
 
+from medicore.domain.entities.application import ApplicationDraft
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import VaccineAdministration
 from medicore.domain.entities.prescription import PrescriptionDraft, PrescriptionSnapshot
-from medicore.domain.enums import DocumentKind
+from medicore.domain.enums import ApplicationRoute, DocumentKind
 from medicore.domain.shared.identifiers import DocumentId
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.soap_note import SoapNote
@@ -109,6 +110,31 @@ def dict_to_draft(d: dict) -> PrescriptionDraft:
         duration_days=d.get("duration_days"),
         start_date=date.fromisoformat(d["start_date"]) if d.get("start_date") else None,
         end_date=date.fromisoformat(d["end_date"]) if d.get("end_date") else None,
+    )
+
+
+# ── ApplicationDraft ──────────────────────────────────────────────────────────
+def application_draft_to_dict(draft: ApplicationDraft) -> dict:
+    return {
+        "drug": draft.drug,
+        "dose": draft.dose,
+        "route": str(draft.route),
+        "doses_total": draft.doses_total,
+        "interval_hours": draft.interval_hours,
+        "observation_minutes": draft.observation_minutes,
+        "instructions": draft.instructions,
+    }
+
+
+def dict_to_application_draft(d: dict) -> ApplicationDraft:
+    return ApplicationDraft(
+        drug=d["drug"],
+        dose=d["dose"],
+        route=ApplicationRoute(d["route"]),
+        doses_total=d.get("doses_total", 1),
+        interval_hours=d.get("interval_hours"),
+        observation_minutes=d.get("observation_minutes", 30),
+        instructions=d.get("instructions"),
     )
 
 

@@ -20,7 +20,7 @@ External channels and reminders are planned as a future evolution (see [Future](
   attaching documents to a consultation in progress isn't reachable through the API.
 - The `Money` value object (`domain/value_objects/money.py`) is unused — presumably reserved
   for billing.
-- The frontend routes `/applications` and `/procedures` intentionally point to
+- The frontend route `/procedures` intentionally points to
   `ComingSoonPage` ("Coming soon" badge in the sidebar).
 - Medical document storage keeps **metadata only** (name, mime type, size, `storage_key`);
   there is no file backend (S3/disk). The UI says so explicitly.
@@ -61,6 +61,17 @@ Phase 1 (national scheme, patient card, recording/voiding and the worklist) is d
   automatic decrement when a dose is recorded, low-stock and expiry alerts, cold-chain log)
   and **reminders** to families for upcoming/overdue doses. Reminders depend on the external
   channels above.
+
+### Applications — next phases
+Phase 1 (orders from the consultation or an outside prescription, dose recording and voiding,
+observation window, allergy alert, nursing worklist) is done. Next:
+
+- **Phase 2 — speed and documents:** a catalog of the clinic's frequent drugs (drug, dose and
+  route prefilled); duration tracking for IV fluids and nebulizations (start/end, rate); and a
+  printable application record for the patient.
+- **Phase 3 — inventory and billing:** stock of medicines and supplies shared with the vaccine
+  lot inventory (automatic decrement when a dose is recorded, expiry alerts) and charging
+  each application, which depends on billing.
 
 ## Security — consciously deferred
 

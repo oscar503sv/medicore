@@ -5,6 +5,7 @@ import { AlertTriangle, Clock, Plus, Save, Search, Trash2, X } from 'lucide-reac
 import { errorMessage } from '@/api/client'
 import { consultationsApi } from '@/api/consultations'
 import { diagnosesApi } from '@/api/diagnoses'
+import { ConsultationApplications } from '@/components/applications/ConsultationApplications'
 import { Badge } from '@/components/ui/Badge'
 import { typeTone } from '@/components/ui/badgeTone'
 import { Button } from '@/components/ui/Button'
@@ -237,6 +238,7 @@ export function ConsultationPage() {
 
           <DiagnosesSection consultationId={id} consultation={data} />
           <PrescriptionsSection consultationId={id} consultation={data} />
+          <ConsultationApplications consultationId={id} consultation={data} />
         </div>
 
         {/* Right rail: completion ring */}

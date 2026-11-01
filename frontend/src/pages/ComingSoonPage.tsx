@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { useT } from '@/lib/i18n'
 
-/** Placeholder for clinical modules not yet implemented (applications, procedures). */
+/** Placeholder for clinical modules not yet implemented (procedures). */
 export function ComingSoonPage() {
   const t = useT()
   return (

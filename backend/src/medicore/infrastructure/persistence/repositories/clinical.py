@@ -20,6 +20,7 @@ from medicore.domain.shared.identifiers import (
     TenantId,
 )
 from medicore.infrastructure.persistence.mappers._json import (
+    application_draft_to_dict,
     attachment_to_dict,
     diagnoses_to_list,
     draft_to_dict,
@@ -72,6 +73,7 @@ class SqlConsultationRepository:
         row.soap = soap_to_dict(c.soap)
         row.diagnoses = diagnoses_to_list(c.diagnoses)
         row.draft_prescriptions = [draft_to_dict(d) for d in c.draft_prescriptions]
+        row.draft_applications = [application_draft_to_dict(d) for d in c.draft_applications]
         row.attachments = [attachment_to_dict(a) for a in c.attachments]
         row.last_saved_at = c.last_saved_at
 

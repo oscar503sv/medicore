@@ -105,6 +105,7 @@ export function NotificationsPage() {
             { value: 'appointment', label: t('notif.cat.appointment') },
             { value: 'record', label: t('notif.cat.record') },
             { value: 'document', label: t('notif.cat.document') },
+            { value: 'application', label: t('notif.cat.application') },
             { value: 'user', label: t('notif.cat.user') },
           ]}
         />

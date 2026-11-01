@@ -5,7 +5,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from medicore.domain.enums import ApplicationRoute
 
 
 class VitalsSchema(BaseModel):
@@ -43,6 +45,16 @@ class PrescriptionDraftRequest(BaseModel):
     duration_days: int | None = None
 
 
+class ApplicationDraftRequest(BaseModel):
+    drug: str = Field(min_length=1, max_length=120)
+    dose: str = Field(min_length=1, max_length=60)
+    route: ApplicationRoute
+    doses_total: int = Field(1, ge=1, le=30)
+    interval_hours: int | None = Field(None, ge=1, le=168)
+    observation_minutes: int = Field(30, ge=0, le=240)
+    instructions: str | None = Field(None, max_length=500)
+
+
 class SignRequest(BaseModel):
     chief_complaint: str = ""
 
@@ -60,6 +72,7 @@ class ConsultationResponse(BaseModel):
     soap: dict[str, Any]
     diagnoses: list[dict[str, Any]]
     draft_prescriptions: list[dict[str, Any]]
+    draft_applications: list[dict[str, Any]] = []
     attachments: list[dict[str, Any]]
     completion_percent: int
     last_saved_at: datetime | None

@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { Consultation, MedicalRecord, Soap, Vitals } from '@/types'
+import type { ApplicationDraft, Consultation, MedicalRecord, Soap, Vitals } from '@/types'
 
 export const consultationsApi = {
   get: (id: string) =>
@@ -33,6 +33,14 @@ export const consultationsApi = {
     api
       .delete<Consultation>(`/consultations/${id}/prescriptions/${index}`)
       .then((r) => r.data),
+
+  addApplication: (id: string, payload: Omit<ApplicationDraft, 'instructions'> & {
+    instructions?: string | null
+  }) =>
+    api.post<Consultation>(`/consultations/${id}/applications`, payload).then((r) => r.data),
+
+  removeApplication: (id: string, index: number) =>
+    api.delete<Consultation>(`/consultations/${id}/applications/${index}`).then((r) => r.data),
 
   sign: (id: string) =>
     api.post<MedicalRecord>(`/consultations/${id}/sign`, {}).then((r) => r.data),

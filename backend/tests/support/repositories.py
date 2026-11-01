@@ -511,6 +511,52 @@ class InMemoryVaccinationRecordRepository(_Scoped):
         self._store.vaccinations[record.id.value] = record
 
 
+class InMemoryApplicationRepository(_Scoped):
+    def get_order(self, order_id):
+        o = self._store.application_orders.get(order_id.value)
+        return o if o and o.tenant_id == self._tenant else None
+
+    def list_orders_by_patient(self, patient_id) -> list:
+        result = [o for o in self._mine(self._store.application_orders.values())
+                  if o.patient_id == patient_id]
+        result.sort(key=lambda o: o.created_at, reverse=True)
+        return result
+
+    def list_open_orders(self) -> list:
+        result = [o for o in self._mine(self._store.application_orders.values()) if o.is_open]
+        result.sort(key=lambda o: o.starts_at)
+        return result
+
+    def save_order(self, order) -> None:
+        self._store.application_orders[order.id.value] = order
+
+    def get_record(self, record_id):
+        r = self._store.application_records.get(record_id.value)
+        return r if r and r.tenant_id == self._tenant else None
+
+    def list_records_by_orders(self, order_ids) -> list:
+        wanted = set(order_ids)
+        result = [r for r in self._mine(self._store.application_records.values())
+                  if r.order_id in wanted]
+        result.sort(key=lambda r: r.recorded_at)
+        return result
+
+    def list_records_between(self, start, end) -> list:
+        result = [r for r in self._mine(self._store.application_records.values())
+                  if start <= r.recorded_at < end and not r.is_voided]
+        result.sort(key=lambda r: r.recorded_at, reverse=True)
+        return result
+
+    def list_observing(self) -> list:
+        result = [r for r in self._mine(self._store.application_records.values())
+                  if r.observing]
+        result.sort(key=lambda r: r.observe_until)
+        return result
+
+    def save_record(self, record) -> None:
+        self._store.application_records[record.id.value] = record
+
+
 class InMemoryInsurerRepository(_Scoped):
     def get_by_id(self, insurer_id) -> object | None:
         ins = self._store.insurers.get(insurer_id.value)

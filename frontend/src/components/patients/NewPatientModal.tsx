@@ -13,16 +13,27 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
+import type { Patient } from '@/types'
 
-export function NewPatientModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NewPatientModal({
+  open,
+  onClose,
+  onCreated,
+}: {
+  open: boolean
+  onClose: () => void
+  /** Called with the new patient (e.g. to select it in the form that opened this modal). */
+  onCreated?: (patient: Patient) => void
+}) {
   const t = useT()
   const qc = useQueryClient()
   const [form, setForm] = useState<PatientFormState>(emptyPatientForm)
 
   const mutation = useMutation({
     mutationFn: () => patientsApi.create(formToPayload(form)),
-    onSuccess: () => {
+    onSuccess: (patient) => {
       qc.invalidateQueries({ queryKey: ['patients'] })
+      onCreated?.(patient)
       toast(t('patients.created_ok'))
       setForm(emptyPatientForm())
       onClose()

@@ -154,3 +154,49 @@ class InjectionSite(StrEnum):
     LEFT_THIGH = "left_thigh"
     RIGHT_THIGH = "right_thigh"
     MOUTH = "mouth"
+
+
+class ApplicationRoute(StrEnum):
+    """How a medication is given in the clinic (injections, IV, nebulization…)."""
+
+    INTRAMUSCULAR = "im"
+    INTRAVENOUS = "iv"
+    SUBCUTANEOUS = "sc"
+    INTRADERMAL = "id"
+    NEBULIZED = "nebulized"
+    ORAL = "oral"
+    TOPICAL = "topical"
+
+
+class ApplicationOrderSource(StrEnum):
+    """Who ordered it: a doctor of this clinic (from a consultation) or an outside one."""
+
+    INTERNAL = "internal"
+    EXTERNAL = "external"
+
+
+class ApplicationOrderStatus(StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class ApplicationOutcome(StrEnum):
+    APPLIED = "applied"
+    REFUSED = "refused"
+    CONTRAINDICATED = "contraindicated"
+
+
+class ApplicationSite(StrEnum):
+    LEFT_ARM = "left_arm"
+    RIGHT_ARM = "right_arm"
+    LEFT_GLUTEUS = "left_gluteus"
+    RIGHT_GLUTEUS = "right_gluteus"
+    LEFT_THIGH = "left_thigh"
+    RIGHT_THIGH = "right_thigh"
+    LEFT_HAND = "left_hand"
+    RIGHT_HAND = "right_hand"
+    LEFT_FOREARM = "left_forearm"
+    RIGHT_FOREARM = "right_forearm"
+    ABDOMEN = "abdomen"

@@ -3,7 +3,8 @@
 Per tenant: 2 admins, 5 doctors (each with a specialty and working hours), 1 nurse,
 1 receptionist, 5 Salvadoran insurers and ~70 patients (some children and babies for
 pediatrics, a few registered this week) with their vaccination histories (El Salvador's
-national scheme). Everything is relative to the day the script runs:
+national scheme) and in-clinic applications (ordered at consultations or walk-ins with an
+outside prescription). Everything is relative to the day the script runs:
 
 * Past ~8 weeks: appointments booked by reception, confirmed, attended (consultation started,
   vitals + SOAP + CIE-11 diagnoses + prescriptions, then signed → medical record), plus
@@ -40,6 +41,15 @@ from sqlalchemy import delete, select, update
 from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import ApplicationError
+from medicore.application.use_cases.applications import (
+    CancelApplicationOrder,
+    CloseObservation,
+    CreateExternalOrder,
+    CreateExternalOrderCommand,
+    RecordApplication,
+    RecordApplicationCommand,
+    VoidApplication,
+)
 from medicore.application.use_cases.appointments import (
     CancelAppointment,
     ConfirmAppointment,
@@ -50,6 +60,7 @@ from medicore.application.use_cases.appointments import (
 )
 from medicore.application.use_cases.availability import AddAvailabilityException
 from medicore.application.use_cases.consultations import (
+    AddApplicationDraft,
     AddDiagnosis,
     AddPrescriptionDraft,
     AutosaveConsultation,
@@ -72,6 +83,7 @@ from medicore.application.use_cases.vaccinations import (
     RecordVaccinationCommand,
     VoidVaccination,
 )
+from medicore.domain.entities.application import ApplicationDraft, ApplicationOrder
 from medicore.domain.entities.availability import (
     AvailabilityException,
     BookingRules,
@@ -85,6 +97,10 @@ from medicore.domain.entities.prescription import PrescriptionDraft
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import (
+    ApplicationOrderSource,
+    ApplicationOutcome,
+    ApplicationRoute,
+    ApplicationSite,
     AppointmentType,
     AvailabilityExceptionKind,
     DocumentKind,
@@ -97,6 +113,7 @@ from medicore.domain.enums import (
     VaccinationSource,
     VaccineRoute,
 )
+from medicore.domain.services.allergies import allergy_conflicts
 from medicore.domain.services.immunization import (
     SCHEDULE,
     VACCINES,
@@ -302,6 +319,28 @@ DOCUMENTS = [
     (DocumentKind.CONSENT, "Consentimiento informado.pdf", "application/pdf"),
     (DocumentKind.OTHER, "Referencia de especialista.pdf", "application/pdf"),
     (DocumentKind.RX, "Receta externa.jpg", "image/jpeg"),
+]
+
+
+# In-clinic applications: (drug, dose, route, doses, interval h, observation min, instructions).
+IM, IV = ApplicationRoute.INTRAMUSCULAR, ApplicationRoute.INTRAVENOUS
+NEB = ApplicationRoute.NEBULIZED
+APPLICATIONS = [
+    ("Diclofenaco sódico", "75 mg", IM, 1, None, 30, None),
+    ("Ketorolaco", "30 mg", IM, 1, None, 30, None),
+    ("Dexametasona", "8 mg", IM, 1, None, 30, None),
+    ("Metoclopramida", "10 mg", IM, 1, None, 30, "Si persiste el vómito, avisar al médico."),
+    ("Ceftriaxona", "1 g", IM, 3, 24, 30, "Diluir en lidocaína 1 %. Una dosis diaria."),
+    ("Penicilina benzatínica", "1 200 000 UI", IM, 1, None, 60, None),
+    ("Salbutamol", "2.5 mg", NEB, 3, 1, 15, "Con 3 ml de solución salina, cada 20–60 min."),
+    ("Complejo B", "3 ml", IM, 3, 48, 15, None),
+    ("Hidratación: solución Hartmann", "1 000 ml", IV, 1, None, 30, "Pasar en 2 horas."),
+]
+EXTERNAL_PRESCRIBERS = [
+    ("Dr. Ernesto Alfaro Mejía", "8412"),
+    ("Dra. Gabriela Rivas de Henríquez", "11235"),
+    ("Dr. Mauricio Cañas Flores", "6027"),
+    ("Dra. Karla Portillo Ayala", "15390"),
 ]
 
 
@@ -797,6 +836,16 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
             PrescriptionDraft(drug=drug, dose=dose, schedule=schedule, duration_days=days,
                               start_date=start.date()),
         )
+    item = RNG.choice(APPLICATIONS)
+    # A doctor rarely orders what the patient is allergic to (one case shows the override).
+    clash = allergy_conflicts(item[0], patient.allergies) and RNG.random() < 0.85
+    if RNG.random() < 0.09 and not clash:
+        drug, dose, route, n, every, obs, notes = item
+        AddApplicationDraft(c.uow(), c.at(start + timedelta(minutes=15))).execute(
+            me, consultation.id,
+            ApplicationDraft(drug=drug, dose=dose, route=route, doses_total=n,
+                             interval_hours=every, observation_minutes=obs, instructions=notes),
+        )
     record = SignConsultation(c.uow(), c.codes(),
                               c.at(start + timedelta(minutes=RNG.randint(18, 27)))).execute(
         me, SignConsultationCommand(consultation_id=consultation.id))
@@ -882,6 +931,123 @@ def play_out(c: Clinic, doctor: User, appt, patient: Patient, booked_at: datetim
         c.count("no-show")
         return
     attend(c, doctor, appt, patient)
+
+
+# ── in-clinic applications ────────────────────────────────────────────────────────────────
+def _site(route: ApplicationRoute) -> ApplicationSite | None:
+    if route == ApplicationRoute.INTRAMUSCULAR:
+        return RNG.choice([ApplicationSite.LEFT_GLUTEUS, ApplicationSite.RIGHT_GLUTEUS,
+                           ApplicationSite.LEFT_ARM, ApplicationSite.RIGHT_ARM])
+    if route == ApplicationRoute.INTRAVENOUS:
+        return RNG.choice([ApplicationSite.LEFT_HAND, ApplicationSite.RIGHT_HAND,
+                           ApplicationSite.LEFT_FOREARM])
+    return None
+
+
+def seed_applications(c: Clinic) -> None:
+    """Orders issued at signing (drafted in ``attend``) plus walk-ins with an outside
+    prescription, then the nurse applying every dose already due: observation closed without
+    reaction, except a mild reaction, a refused dose, an allergy override and a voided entry.
+    Today some doses are still to apply and one patient is under observation right now."""
+    nurse = actor(c, c.nurse)
+    latest = c.now - timedelta(minutes=2)
+
+    def external(patient: Patient, when: datetime, item, prescriber=None):
+        drug, dose, route, n, every, obs, notes = item
+        name, jvpm = prescriber or RNG.choice(EXTERNAL_PRESCRIBERS)
+        c.count("aplicaciones: órdenes externas")
+        return CreateExternalOrder(c.uow(), c.at(when)).execute(nurse, CreateExternalOrderCommand(
+            patient_id=patient.id, drug=drug, dose=dose, route=route, prescriber=name,
+            jvpm=jvpm, doses_total=n, interval_hours=every, observation_minutes=obs,
+            instructions=notes))
+
+    def apply(order: ApplicationOrder, patient: Patient, at: datetime, *,
+              outcome=ApplicationOutcome.APPLIED, notes=None, override=None, close=True,
+              reaction=None):
+        applied = outcome == ApplicationOutcome.APPLIED
+        rec = RecordApplication(c.uow(), c.at(at)).execute(nurse, RecordApplicationCommand(
+            order_id=order.id, outcome=outcome,
+            lot=f"L{RNG.randint(10000, 99999)}" if applied else None,
+            lot_expiry=date(c.today.year + 1, RNG.randint(1, 12), 1) if applied else None,
+            site=_site(order.route) if applied else None,
+            blood_pressure=f"{RNG.randint(105, 135)}/{RNG.randint(65, 85)}" if applied else None,
+            temperature=round(RNG.uniform(36.2, 37.4), 1) if applied else None,
+            allergy_override=override, notes=notes))
+        c.count("aplicaciones registradas")
+        if applied and close and order.observation_minutes:
+            end = at + timedelta(minutes=order.observation_minutes + RNG.randint(0, 6))
+            if end <= latest:
+                CloseObservation(c.uow(), c.at(end)).execute(
+                    nurse, rec.id, reaction is not None, reaction)
+        return rec
+
+    # Walk-ins with an outside prescription over the last weeks.
+    adults = [p for p in c.patients if _months(p.date_of_birth, c.today) >= 18 * 12]
+    for _ in range(6):
+        day = c.today - timedelta(days=RNG.randint(1, 20))
+        when = datetime.combine(day, time(RNG.randint(8, 15), RNG.choice([0, 20, 40])))
+        external(RNG.choice(adults), when, RNG.choice(APPLICATIONS))
+
+    # A 3-day ceftriaxone that started yesterday: today's dose is due, tomorrow's pending.
+    ceftriaxone = next(a for a in APPLICATIONS if a[0] == "Ceftriaxona")
+    morning = c.now.replace(hour=8, minute=0)
+    if morning > latest:
+        morning = c.now - timedelta(hours=1)
+    cef = RNG.choice([p for p in adults if not allergy_conflicts("Ceftriaxona", p.allergies)])
+    external(cef, morning - timedelta(days=1), ceftriaxone)
+
+    # Play out every open order: each dose due long enough ago was applied.
+    by_id = {p.id: p for p in c.patients}
+    uow = c.uow()
+    with uow:
+        orders = uow.applications.list_open_orders()
+    orders.sort(key=lambda o: o.starts_at)
+    reacted = refused = overridden = voided = False
+    for order in orders:
+        patient = by_id[order.patient_id]
+        clash = allergy_conflicts(order.drug, patient.allergies)
+        for n in range(1, order.doses_total + 1):
+            due = order.due_at(n)
+            at = due + timedelta(minutes=RNG.randint(4, 25))
+            if due >= morning.replace(hour=0) + timedelta(days=1) or at > latest:
+                break  # still due (today's are on the worklist)
+            if clash:
+                if overridden:
+                    CancelApplicationOrder(c.uow(), c.at(at)).execute(
+                        nurse, order.id, f"Alergia a {', '.join(clash)}: se consultó al médico")
+                    c.count("aplicaciones: órdenes canceladas")
+                    break
+                apply(order, patient, at, override="Indicación confirmada por el médico tratante"
+                      "; reacción previa leve, se aplica con observación prolongada.")
+                overridden = True
+                continue
+            if not refused and n == 1 and order.doses_total == 1 and RNG.random() < 0.15:
+                apply(order, patient, at, outcome=ApplicationOutcome.REFUSED,
+                      notes="El paciente prefiere tomar el medicamento por vía oral.")
+                refused = True
+                break
+            recent = due.date() >= c.today - timedelta(days=10)
+            if not reacted and recent and order.source == ApplicationOrderSource.INTERNAL:
+                apply(order, patient, at, reaction="Eritema y prurito en el sitio de aplicación; "
+                      "cedió con compresas frías. Se indicó vigilancia en casa.")
+                reacted = True
+                continue
+            if not voided and order.route == IM and n == 1 and RNG.random() < 0.2:
+                wrong = apply(order, patient, at, close=False)
+                VoidApplication(c.uow(), c.at(at + timedelta(minutes=3))).execute(
+                    nurse, wrong.id, "Lote mal digitado")
+                c.count("aplicaciones anuladas")
+                voided = True
+                at += timedelta(minutes=5)
+            apply(order, patient, at)
+
+    # Right now: one patient under observation, another one waiting.
+    rest = [p for p in adults if p.id != cef.id and not p.allergies]
+    ketorolaco = next(a for a in APPLICATIONS if a[0] == "Ketorolaco")
+    watching = external(rest[0], c.now - timedelta(minutes=14), ketorolaco)
+    apply(watching, rest[0], c.now - timedelta(minutes=10))
+    dexa = next(a for a in APPLICATIONS if a[0] == "Dexametasona")
+    external(rest[1], c.now - timedelta(minutes=6), dexa)
 
 
 # ── amendments, documents, users, logins ──────────────────────────────────────────────────
@@ -1019,6 +1185,7 @@ def seed_tenant(session, slug: str, legal_name: str, tax_id: str, location: str)
     seed_vaccinations(c)
     seed_exceptions(c)
     seed_agenda(c)
+    seed_applications(c)
     seed_amendments(c)
     seed_documents(c)
     seed_users(c)

@@ -12,6 +12,7 @@ from medicore.domain.repositories._support import (
     TenantFilter,
     UserFilter,
 )
+from medicore.domain.repositories.application_repository import ApplicationRepository
 from medicore.domain.repositories.appointment_repository import AppointmentRepository
 from medicore.domain.repositories.audit_log_repository import AuditLogRepository
 from medicore.domain.repositories.auth_session_repository import AuthSessionRepository
@@ -68,4 +69,5 @@ __all__ = [
     "DoctorProfileRepository",
     "UserRepository",
     "VaccinationRecordRepository",
+    "ApplicationRepository",
 ]

@@ -284,6 +284,12 @@ def ser_consultation(c: Consultation, uow=None) -> dict:
              "duration_days": d.duration_days}
             for d in c.draft_prescriptions
         ],
+        "draft_applications": [
+            {"drug": d.drug, "dose": d.dose, "route": str(d.route), "doses_total": d.doses_total,
+             "interval_hours": d.interval_hours, "observation_minutes": d.observation_minutes,
+             "instructions": d.instructions}
+            for d in c.draft_applications
+        ],
         "attachments": [attachment_to_dict(a) for a in c.attachments],
         "completion_percent": c.compute_completion(),
         "last_saved_at": c.last_saved_at,

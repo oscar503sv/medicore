@@ -14,12 +14,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from medicore.domain.entities.application import ApplicationDraft, ApplicationOrder
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import MedicalRecord, VaccineAdministration
 from medicore.domain.entities.prescription import Prescription, PrescriptionDraft
-from medicore.domain.enums import ClinicalRecordType, ConsultationStatus
+from medicore.domain.enums import (
+    ApplicationOrderSource,
+    ClinicalRecordType,
+    ConsultationStatus,
+)
 from medicore.domain.shared.errors import ConsultationNotSignable
 from medicore.domain.shared.identifiers import (
+    ApplicationOrderId,
     AppointmentId,
     ConsultationId,
     PatientId,
@@ -43,6 +49,7 @@ class SignResult:
 
     record: MedicalRecord
     prescriptions: list[Prescription]
+    applications: list[ApplicationOrder] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -60,6 +67,7 @@ class Consultation:
     soap: SoapNote = field(default_factory=SoapNote)
     diagnoses: list[IcdCode] = field(default_factory=list)
     draft_prescriptions: list[PrescriptionDraft] = field(default_factory=list)
+    draft_applications: list[ApplicationDraft] = field(default_factory=list)
     attachments: list[AttachmentRef] = field(default_factory=list)
     status: ConsultationStatus = ConsultationStatus.DRAFT
     last_saved_at: datetime | None = None
@@ -97,6 +105,14 @@ class Consultation:
         self._assert_draft()
         del self.draft_prescriptions[index]
 
+    def add_application_draft(self, draft: ApplicationDraft) -> None:
+        self._assert_draft()
+        self.draft_applications.append(draft)
+
+    def remove_application_draft(self, index: int) -> None:
+        self._assert_draft()
+        del self.draft_applications[index]
+
     def attach_document(self, ref: AttachmentRef) -> None:
         self._assert_draft()
         self.attachments.append(ref)
@@ -126,12 +142,16 @@ class Consultation:
         vaccines: tuple[VaccineAdministration, ...] = (),
         prescription_ids: list[PrescriptionId] | None = None,
         signed_at: datetime | None = None,
+        applications_start: datetime | None = None,
     ) -> SignResult:
         """Validate minimum completeness, emit an immutable record + prescriptions, and
         mark this consultation as signed.
 
         ``prescription_ids`` must supply one id per draft prescription (so the app layer can
         use coordinated ids); if omitted, fresh UUIDs are generated.
+
+        Indicated applications become internal orders for the nursing team, due from
+        ``applications_start`` (the clinic wall-clock at signing).
         """
         self._assert_draft()
         completion = self.compute_completion()
@@ -189,9 +209,32 @@ class Consultation:
             attachments=tuple(self.attachments),
         )
 
+        start = applications_start or now.replace(tzinfo=None)
+        orders = [
+            ApplicationOrder(
+                id=ApplicationOrderId.new(),
+                tenant_id=self.tenant_id,
+                patient_id=self.patient_id,
+                drug=d.drug,
+                dose=d.dose,
+                route=d.route,
+                source=ApplicationOrderSource.INTERNAL,
+                starts_at=start,
+                created_by_id=signed_by_id,
+                doses_total=d.doses_total,
+                interval_hours=d.interval_hours,
+                observation_minutes=d.observation_minutes,
+                instructions=d.instructions,
+                ordered_by_id=signed_by_id,
+                consultation_id=self.id,
+                created_at=now,
+            )
+            for d in self.draft_applications
+        ]
+
         self.status = ConsultationStatus.SIGNED
         self.ended_at = now
-        return SignResult(record=record, prescriptions=issued)
+        return SignResult(record=record, prescriptions=issued, applications=orders)
 
     def _assert_draft(self) -> None:
         if self.status != ConsultationStatus.DRAFT:

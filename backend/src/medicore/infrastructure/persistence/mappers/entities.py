@@ -56,6 +56,7 @@ from medicore.domain.value_objects.user_preferences import (
     UserPreferences,
 )
 from medicore.infrastructure.persistence.mappers._json import (
+    dict_to_application_draft,
     dict_to_attachment,
     dict_to_diagnoses,
     dict_to_draft,
@@ -245,6 +246,9 @@ def to_consultation(row: ConsultationModel) -> Consultation:
         soap=dict_to_soap(row.soap or {}),
         diagnoses=[d for d in dict_to_diagnoses(row.diagnoses or [])],  # list for mutability
         draft_prescriptions=[dict_to_draft(d) for d in (row.draft_prescriptions or [])],
+        draft_applications=[
+            dict_to_application_draft(d) for d in (row.draft_applications or [])
+        ],
         attachments=[dict_to_attachment(a) for a in (row.attachments or [])],
         last_saved_at=row.last_saved_at,
     )

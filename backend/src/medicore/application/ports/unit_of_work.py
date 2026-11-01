@@ -14,6 +14,7 @@ from types import TracebackType
 from typing import Protocol, runtime_checkable
 
 from medicore.domain.repositories import (
+    ApplicationRepository,
     AppointmentRepository,
     AuditLogRepository,
     AuthSessionRepository,
@@ -54,6 +55,7 @@ class UnitOfWork(Protocol):
     audit: AuditLogRepository
     role_permissions: RolePermissionOverrideRepository
     vaccinations: VaccinationRecordRepository
+    applications: ApplicationRepository
     tenants: TenantRepository  # global (not tenant-filtered)
     platform_audit: PlatformAuditLogRepository  # global (not tenant-filtered)
     sessions: AuthSessionRepository  # global (not tenant-filtered)

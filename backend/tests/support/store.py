@@ -6,6 +6,7 @@ import copy
 from dataclasses import dataclass, field, fields
 from uuid import UUID
 
+from medicore.domain.entities.application import ApplicationOrder, ApplicationRecord
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.auth_session import AuthSession
@@ -49,6 +50,8 @@ class InMemoryStore:
     audit: dict[UUID, AuditLog] = field(default_factory=dict)
     role_permission_overrides: dict[UUID, RolePermissionOverride] = field(default_factory=dict)
     vaccinations: dict[UUID, VaccinationRecord] = field(default_factory=dict)
+    application_orders: dict[UUID, ApplicationOrder] = field(default_factory=dict)
+    application_records: dict[UUID, ApplicationRecord] = field(default_factory=dict)
     platform_admins: dict[UUID, PlatformAdmin] = field(default_factory=dict)
     platform_audit: dict[UUID, PlatformAuditLog] = field(default_factory=dict)
     # Global catalog keyed by "version:code" (reference data, not tenant-scoped).

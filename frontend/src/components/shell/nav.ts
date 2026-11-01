@@ -44,7 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/appointments', labelKey: 'nav.appointments', icon: Calendar, permission: 'appointments.view', group: 'clinical' },
   { to: '/schedule', labelKey: 'nav.schedule', icon: CalendarDays, permission: 'appointments.view', group: 'clinical' },
   { to: '/records', labelKey: 'nav.records', icon: FileText, permission: 'records.view', group: 'clinical' },
-  { to: '/applications', labelKey: 'nav.applications', icon: Pill, roles: ['doctor', 'nurse'], group: 'clinical', comingSoon: true },
+  { to: '/applications', labelKey: 'nav.applications', icon: Pill, permission: 'applications.view', group: 'clinical' },
   { to: '/procedures', labelKey: 'nav.procedures', icon: Activity, roles: ['doctor', 'nurse'], group: 'clinical', comingSoon: true },
   { to: '/vaccination', labelKey: 'nav.vaccination', icon: Syringe, permission: 'vaccinations.view', group: 'clinical' },
   // Gestión

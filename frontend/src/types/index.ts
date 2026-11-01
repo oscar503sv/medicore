@@ -26,6 +26,8 @@ export type Permission =
   | 'permissions.manage'
   | 'vaccinations.view'
   | 'vaccinations.record'
+  | 'applications.view'
+  | 'applications.administer'
 
 export interface RolePermissionsEntry {
   defaults: Permission[]
@@ -387,6 +389,7 @@ export interface Consultation {
   soap: Soap
   diagnoses: Diagnosis[]
   draft_prescriptions: PrescriptionDraft[]
+  draft_applications: ApplicationDraft[]
   attachments: unknown[]
   completion_percent: number
   last_saved_at: string | null
@@ -488,4 +491,15 @@ export interface Organization {
   plan: string
   seat_limit: number
   locations: Location[]
+}
+
+/** An in-clinic application indicated during a consultation (issued as an order on signing). */
+export interface ApplicationDraft {
+  drug: string
+  dose: string
+  route: string
+  doses_total: number
+  interval_hours: number | null
+  observation_minutes: number
+  instructions: string | null
 }

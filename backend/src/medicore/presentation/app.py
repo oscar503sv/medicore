@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from medicore.infrastructure.config import get_settings
 from medicore.presentation.error_handlers import register_error_handlers
 from medicore.presentation.routers import (
+    applications,
     appointments,
     audit,
     auth,
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.include_router(audit.router, prefix=API_PREFIX)
     app.include_router(role_permissions.router, prefix=API_PREFIX)
     app.include_router(vaccinations.router, prefix=API_PREFIX)
+    app.include_router(applications.router, prefix=API_PREFIX)
     app.include_router(platform.router, prefix=API_PREFIX)
 
     @app.get("/health", tags=["health"])

@@ -7,17 +7,20 @@ from decimal import Decimal
 from fastapi import APIRouter
 
 from medicore.application.use_cases.consultations import (
+    AddApplicationDraft,
     AddDiagnosis,
     AddPrescriptionDraft,
     AutosaveConsultation,
     ConsultationPatch,
     GetConsultation,
+    RemoveApplicationDraft,
     RemoveDiagnosis,
     RemovePrescriptionDraft,
     SignConsultation,
     SignConsultationCommand,
     StartConsultation,
 )
+from medicore.domain.entities.application import ApplicationDraft
 from medicore.domain.entities.prescription import PrescriptionDraft
 from medicore.domain.shared.identifiers import AppointmentId, ConsultationId
 from medicore.domain.value_objects.icd_code import IcdCode
@@ -25,6 +28,7 @@ from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
 from medicore.presentation.dependencies import Actor, Clock, Codes, UoW
 from medicore.presentation.schemas.consultations import (
+    ApplicationDraftRequest,
     AutosaveRequest,
     ConsultationResponse,
     DiagnosisRequest,
@@ -112,6 +116,31 @@ def remove_prescription(
     consultation_id: str, index: int, actor: Actor, uow: UoW, clock: Clock
 ):
     c = RemovePrescriptionDraft(uow, clock).execute(
+        actor, ConsultationId.parse(consultation_id), index
+    )
+    return ser_consultation(c, uow)
+
+
+@router.post("/{consultation_id}/applications", response_model=ConsultationResponse)
+def add_application(
+    consultation_id: str, body: ApplicationDraftRequest, actor: Actor, uow: UoW, clock: Clock
+):
+    draft = ApplicationDraft(
+        drug=body.drug, dose=body.dose, route=body.route, doses_total=body.doses_total,
+        interval_hours=body.interval_hours, observation_minutes=body.observation_minutes,
+        instructions=body.instructions,
+    )
+    c = AddApplicationDraft(uow, clock).execute(
+        actor, ConsultationId.parse(consultation_id), draft
+    )
+    return ser_consultation(c, uow)
+
+
+@router.delete("/{consultation_id}/applications/{index}", response_model=ConsultationResponse)
+def remove_application(
+    consultation_id: str, index: int, actor: Actor, uow: UoW, clock: Clock
+):
+    c = RemoveApplicationDraft(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id), index
     )
     return ser_consultation(c, uow)

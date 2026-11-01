@@ -143,3 +143,13 @@ class SessionId(Identifier):
 @dataclass(frozen=True, slots=True)
 class RolePermissionOverrideId(Identifier):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationOrderId(Identifier):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationRecordId(Identifier):
+    pass

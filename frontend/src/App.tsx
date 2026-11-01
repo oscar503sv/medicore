@@ -9,6 +9,7 @@ import { AppointmentsPage } from '@/pages/AppointmentsPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { AvailabilityPage } from '@/pages/AvailabilityPage'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
+import { ApplicationsPage } from '@/pages/ApplicationsPage'
 import { ComingSoonPage } from '@/pages/ComingSoonPage'
 import { ConsultationPage } from '@/pages/ConsultationPage'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -99,7 +100,7 @@ export function App() {
           <Route path="/appointments" element={<AppointmentsPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/records" element={<RecordsPage />} />
-          <Route path="/applications" element={<ComingSoonPage />} />
+          <Route path="/applications" element={<ApplicationsPage />} />
           <Route path="/procedures" element={<ComingSoonPage />} />
           <Route path="/vaccination" element={<VaccinationPage />} />
           <Route path="/availability" element={<AvailabilityPage />} />

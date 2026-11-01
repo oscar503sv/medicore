@@ -1,5 +1,9 @@
 """ORM models — import all so Alembic autogenerate picks them up."""
 
+from medicore.infrastructure.persistence.models.application import (
+    ApplicationOrderModel,
+    ApplicationRecordModel,
+)
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.audit_log import AuditLogModel
 from medicore.infrastructure.persistence.models.auth_session import AuthSessionModel
@@ -29,6 +33,8 @@ from medicore.infrastructure.persistence.models.user import DoctorProfileModel, 
 from medicore.infrastructure.persistence.models.vaccination_record import VaccinationRecordModel
 
 __all__ = [
+    "ApplicationOrderModel",
+    "ApplicationRecordModel",
     "AppointmentModel",
     "AuditLogModel",
     "AuthSessionModel",

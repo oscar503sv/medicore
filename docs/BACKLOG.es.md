@@ -21,7 +21,7 @@ Canales externos y recordatorios quedan planificados como evolución futura (ver
   adjuntar documentos a una consulta en curso no es alcanzable vía API.
 - Value object `Money` (`domain/value_objects/money.py`) sin uso — presumiblemente
   reservado para facturación.
-- Rutas del frontend `/applications` y `/procedures` apuntan a
+- La ruta del frontend `/procedures` apunta a
   `ComingSoonPage` de forma intencional (badge "Próximamente" en el sidebar).
 - El almacenamiento de documentos médicos guarda **solo metadata** (nombre, mime, tamaño,
   `storage_key`); no hay backend de archivos (S3/disco). La UI lo comunica explícitamente.
@@ -64,6 +64,17 @@ hecha. Siguiente:
   vencimiento, descuento automático al registrar una dosis, alertas de stock bajo y de
   vencimiento, bitácora de cadena de frío) y **recordatorios** a las familias por dosis
   próximas o atrasadas. Los recordatorios dependen de los canales externos de arriba.
+
+### Aplicaciones — siguientes fases
+La fase 1 (órdenes desde la consulta o con receta externa, registro y anulación de dosis,
+observación, alerta de alergias, lista de trabajo de enfermería) está hecha. Siguiente:
+
+- **Fase 2 — rapidez y documentos:** catálogo de medicamentos frecuentes de la clínica
+  (medicamento, dosis y vía precargados); control de duración de sueros y nebulizaciones
+  (inicio/fin, goteo); y constancia de aplicación imprimible para el paciente.
+- **Fase 3 — inventario y cobro:** existencias de medicamentos e insumos, compartidas con el
+  inventario de lotes de vacunas (descuento automático al registrar una dosis, alertas de
+  vencimiento) y cobro de cada aplicación, que depende de la facturación.
 
 ## Seguridad — diferido conscientemente
 

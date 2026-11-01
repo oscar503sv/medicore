@@ -9,6 +9,9 @@ from types import TracebackType
 from sqlalchemy.orm import Session
 
 from medicore.domain.shared.identifiers import TenantId
+from medicore.infrastructure.persistence.repositories.application import (
+    SqlApplicationRepository,
+)
 from medicore.infrastructure.persistence.repositories.appointment import SqlAppointmentRepository
 from medicore.infrastructure.persistence.repositories.auth_session import (
     SqlAuthSessionRepository,
@@ -73,6 +76,7 @@ class SqlAlchemyUnitOfWork:
         self.audit = SqlAuditLogRepository(session, tenant_id)
         self.role_permissions = SqlRolePermissionOverrideRepository(session, tenant_id)
         self.vaccinations = SqlVaccinationRecordRepository(session, tenant_id)
+        self.applications = SqlApplicationRepository(session, tenant_id)
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
         self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
         self.sessions = SqlAuthSessionRepository(session)  # global (non-scoped)

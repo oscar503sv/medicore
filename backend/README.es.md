@@ -34,9 +34,9 @@ src/medicore/
 La **regla de dependencia** apunta hacia adentro: `domain` no importa de ninguna otra capa;
 `application` solo de `domain`; `infrastructure`/`presentation` de las internas.
 
-En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios (Protocols)**,
+En cifras: **20 entidades** y **10 value objects** de dominio, **19 repositorios (Protocols)**,
 **5 puertos de aplicación** (Clock, CodeGenerator, PasswordHasher, TokenIssuer, UnitOfWork),
-**18 grupos de casos de uso** y **17 routers / 106 endpoints** bajo `/api/v1/`.
+**19 grupos de casos de uso** y **18 routers / 115 endpoints** bajo `/api/v1/`.
 
 ## Convenciones del dominio
 
@@ -68,7 +68,7 @@ En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios
 - **Lockout de login**: contador de intentos fallidos por `(organización, email)` con
   bloqueo temporal y backoff exponencial (HTTP 429 + `Retry-After`); cuenta también
   cuentas inexistentes para no revelar cuáles existen.
-- **Permisos granulares** (`application/common/permissions.py`): catálogo de **25 permisos**
+- **Permisos granulares** (`application/common/permissions.py`): catálogo de **27 permisos**
   (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
   tenant** vía `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults
   vs. override e intersecta con el catálogo vigente; la capa de presentación los coloca en
@@ -90,6 +90,20 @@ En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios
   historial. Router `vaccinations`: catálogo, carné del paciente, registrar, anular y una lista
   de trabajo de la clínica (tocan/atrasadas, próximas en un horizonte, aplicadas hoy).
   Permisos `vaccinations.view` / `vaccinations.record`.
+- **Aplicaciones en la clínica** (`domain/entities/application.py`): una `ApplicationOrder`
+  dice qué aplicar (medicamento, dosis, vía, número de dosis e intervalo, minutos de
+  observación — 30 por defecto). Las internas se indican en la consulta y se emiten de forma
+  atómica al firmarla; las externas (sin cita) registran al médico que receta y su número de
+  JVPM. Cada dosis es un `ApplicationRecord` (aplicada, rechazada o contraindicada; lote,
+  vencimiento, sitio, presión arterial, temperatura) que no se edita: uno erróneo se anula
+  con motivo y su dosis vuelve a tocar. Una dosis aplicada abre una observación que se cierra
+  "sin reacción" o como reacción adversa (lo que notifica al médico que la indicó, sin
+  contenido clínico). `domain/services/allergies.py` cruza el medicamento con las alergias
+  del paciente (nombres directos y familias: penicilinas, cefalosporinas, AINE, sulfonamidas,
+  metamizol); aplicarlo de todos modos exige una justificación auditada. Router
+  `applications`: lista de trabajo (por aplicar hoy, en observación, registradas hoy),
+  historial del paciente, orden externa, cancelar, registrar, cerrar observación y anular.
+  Permisos `applications.view` / `applications.administer`.
 - **Agenda**: disponibilidad por médico, resolución de slots, ciclo de vida de la cita
   (agendada → confirmada → en curso → completada).
 - **Consulta → historial**: al firmar una consulta se emite un `MedicalRecord` inmutable + las
@@ -190,7 +204,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **532 tests** (99 dominio · 222 aplicación · 165 presentación · 46 infraestructura), casi
+Suite de **563 tests** (114 dominio · 233 aplicación · 168 presentación · 48 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 

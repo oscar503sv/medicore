@@ -4,7 +4,7 @@
 
 Sistema de gestión clínica **multi-tenant** construido con **Clean Architecture**.
 
-Cubre el ciclo completo de atención: autenticación por organización, dashboard con métricas reales, gestión de pacientes, agenda y citas, consulta en curso (bitácora SOAP) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app**, **vacunación según el esquema nacional de El Salvador** y ajustes de organización. La interfaz está disponible en **español e inglés**, incluidos los mensajes de error del backend.
+Cubre el ciclo completo de atención: autenticación por organización, dashboard con métricas reales, gestión de pacientes, agenda y citas, consulta en curso (bitácora SOAP) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app**, **vacunación según el esquema nacional de El Salvador**, **aplicaciones de medicamentos en la clínica** y ajustes de organización. La interfaz está disponible en **español e inglés**, incluidos los mensajes de error del backend.
 
 Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión) e **impersonación auditada** de una clínica para dar soporte.
 
@@ -40,29 +40,31 @@ src/medicore/
 │   ├── shared/         # Errores de dominio (con código traducible) + identificadores UUID tipados
 │   ├── value_objects/  # 10 VOs: TimeRange, DateRange, Vitals, IcdCode, Slug,
 │   │                   # SoapNote, ContactInfo, BloodType, Money, UserPreferences
-│   ├── entities/       # 17 agregados: Appointment (FSM), Consultation, MedicalRecord,
+│   ├── entities/       # 20 agregados: Appointment (FSM), Consultation, MedicalRecord,
 │   │                   # Prescription, Patient, User, Tenant, Insurer, MedicalDocument,
 │   │                   # Availability, Notification, AuditLog, AuthSession,
 │   │                   # CatalogDiagnosis, RolePermissionOverride, PlatformAdmin,
-│   │                   # PlatformAuditLog
-│   ├── services/       # slot_resolver — lógica de disponibilidad pura
-│   └── repositories/   # Interfaces (puertos): 17 Protocols de repositorio
+│   │                   # PlatformAuditLog, VaccinationRecord, ApplicationOrder,
+│   │                   # ApplicationRecord
+│   ├── services/       # slot_resolver (disponibilidad), immunization (esquema), allergies
+│   └── repositories/   # Interfaces (puertos): 19 Protocols de repositorio
 │
 ├── application/      # Casos de uso (interactors) + puertos de infra
 │   ├── ports/          # 5 puertos: Clock, CodeGenerator, PasswordHasher,
 │   │                   # TokenIssuer, UnitOfWork
 │   ├── common/         # ActorContext, errores de app, catálogo de permisos,
 │   │                   # auditoría, lockout de login, emisión de notificaciones, timezone
-│   └── use_cases/      # 18 grupos: auth, sessions, patients, appointments,
+│   └── use_cases/      # 19 grupos: auth, sessions, patients, appointments,
 │                       # consultations, records, prescriptions, availability, users,
 │                       # organization, insurers, diagnoses, audit, role_permissions,
-│                       # notifications, dashboard, vaccinations, platform
+│                       # notifications, dashboard, vaccinations, applications,
+│                       # platform
 │
 ├── infrastructure/   # Implementaciones concretas
 │   ├── config.py       # Settings desde .env (pydantic-settings) — dev-safe por defecto
 │   ├── database/       # Engine SQLAlchemy + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (22 tablas; VOs complejos como JSONB)
+│   │   ├── models/     # ORM models (25 tablas; VOs complejos como JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (sin contaminar el dominio)
 │   │   └── repositories/  # Implementaciones SQLAlchemy de los puertos
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, generador de códigos, SystemClock
@@ -78,7 +80,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 17 routers, 106 endpoints bajo /api/v1/
+    └── routers/         # 18 routers, 115 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -93,6 +95,7 @@ Sesión separada (token de scope `platform`) que opera por encima del límite mu
 - `SignConsultation` es **atómico**: record + recetas + cita `completed` en una sola transacción.
 - Diagnósticos en consulta limitados al catálogo de la **versión CIE configurada por cada clínica** (CIE-10 / CIE-11), con autocompletado.
 - **Vacunación** según el esquema nacional de El Salvador (MINSAL), para niños, adolescentes y adultos: el carné de cada paciente calcula el estado de cada dosis (aplicada, toca, atrasada, próxima…) a partir de su edad y sus registros; los registros no se editan, uno erróneo se anula con motivo. Una lista de trabajo muestra las dosis atrasadas y próximas de toda la clínica.
+- **Aplicaciones en la clínica** (inyecciones, sueros, nebulizaciones…): el médico las indica en la consulta y se vuelven órdenes para enfermería al firmarla; las que llegan sin cita con receta externa registran al médico que receta y su número de JVPM. Cada dosis se registra con lote, sitio y signos vitales, no se edita (una errónea se anula con motivo) y abre una observación (30 min por defecto, configurable por orden) que se cierra "sin reacción" o como reacción adversa, lo que notifica al médico que la indicó. Aplicar un medicamento que choca con las alergias del paciente exige una justificación escrita y auditada.
 - **Permisos granulares** validados en la capa de aplicación (no solo en UI) — ver sección siguiente.
 - Contraseña temporal con cambio forzado en el primer ingreso.
 - Auditoría de accesos y cambios sensibles (HIPAA/GDPR), por tenant y global.
@@ -103,7 +106,7 @@ Sesión separada (token de scope `platform`) que opera por encima del límite mu
 
 El control de acceso es **granular y personalizable por clínica** (`application/common/permissions.py`):
 
-- **Catálogo de 25 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (incluye `sign` y `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`, `vaccinations.*`.
+- **Catálogo de 27 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (incluye `sign` y `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`.
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — con un conjunto de permisos por defecto en `ROLE_PERMISSIONS`.
 - **Overrides por tenant**: cada clínica puede personalizar el set de un rol mediante una fila `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults vs. override (e intersecta con el catálogo vigente para tolerar permisos retirados).
 - En cada request, la capa de presentación coloca los permisos efectivos en `ActorContext.permissions`, de modo que toda comprobación `ensure_permission(...)` honra la personalización de la clínica.
@@ -173,18 +176,19 @@ medicore/
 └── frontend/                 # SPA React + TS + Vite
     └── src/
         ├── api/              # Cliente Axios (cookies, CSRF, traducción de errores)
-        │                     # + 16 módulos por recurso
+        │                     # + 18 módulos por recurso
         ├── stores/           # Zustand: auth + platformAuth + ui (tema/idioma/sidebar)
         ├── lib/              # i18n ES/EN, formato, QueryClient, notificaciones, timezones…
         ├── types/            # Tipos TS espejo del dominio backend
         ├── components/       # ui/ + shell/ (topbar, campana de notificaciones…)
         │                     # + appointments/ + audit/ + patients/ + permissions/
-        │                     # + records/ + settings/ + guards (RequireAuth…)
-        └── pages/            # 17 pantallas de clínica (Login, Dashboard, Patients,
+        │                     # + records/ + settings/ + vaccination/ + applications/
+        │                     # + guards (RequireAuth…)
+        └── pages/            # 19 pantallas de clínica (Login, Dashboard, Patients,
                               # PatientDetail, Appointments, Schedule, Consultation,
                               # Records, Availability, Insurers, Users, Settings,
                               # Audit, Permissions, Notifications, ChangePassword,
-                              # ComingSoon)
+                              # Vaccination, Applications, ComingSoon)
                               # + platform/ (5 pantallas de superadmin)
 ```
 
@@ -206,9 +210,11 @@ medicore/
 | **10** | Notificaciones in-app (backend, campana y buzón) | ✅ Completada |
 | **11** | Dashboard con métricas reales, interfaz 100 % ES/EN y errores de la API traducibles | ✅ Completada |
 | **12** | Módulo de vacunación (esquema nacional de El Salvador, carné del paciente, lista de trabajo) | ✅ Completada |
+| **13** | Aplicaciones en la clínica (órdenes desde la consulta o receta externa, observación, alerta de alergias) | ✅ Completada |
 | — | Política de contraseñas | ⏳ Pendiente |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
+| — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible, inventario y facturación | 🗓️ A futuro |
 
 ---
 
@@ -264,7 +270,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (532 tests)
+.venv/bin/pytest                          # suite completa (563 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -277,7 +283,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ## Base de datos
 
-**22 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
+**25 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
 
 | Tabla | Descripción |
 |---|---|
@@ -296,6 +302,8 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `notifications` | Notificaciones in-app (payload JSONB) |
 | `audit_logs` | Trazabilidad HIPAA/GDPR por tenant |
 | `tenant_counters` | Contadores para códigos legibles (`P-00142`, `A-2401`…) |
+| `vaccination_records` | Dosis de vacunas registradas (esquema nacional) |
+| `application_orders` + `application_records` | Órdenes de aplicación en la clínica y las dosis aplicadas |
 | `role_permission_overrides` | Personalización de permisos por rol y tenant |
 | `diagnosis_codes` | Catálogo CIE-10/CIE-11 (global, para autocompletado) |
 | `platform_admins` | Superadmins de la plataforma |
@@ -308,14 +316,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-532 tests en verde
-    99  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
-            esquema de vacunación)
-   222  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+563 tests en verde
+   114  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+            esquema de vacunación, aplicaciones, cruce de alergias)
+   233  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   165  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   168  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    46  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    48  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

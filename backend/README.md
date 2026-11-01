@@ -34,9 +34,9 @@ src/medicore/
 The **dependency rule** points inward: `domain` imports from no other layer; `application`
 only from `domain`; `infrastructure`/`presentation` from the inner layers.
 
-By the numbers: **17 entities** and **10 value objects** in the domain, **17 repositories
+By the numbers: **20 entities** and **10 value objects** in the domain, **19 repositories
 (Protocols)**, **5 application ports** (Clock, CodeGenerator, PasswordHasher, TokenIssuer,
-UnitOfWork), **18 use-case groups** and **17 routers / 106 endpoints** under `/api/v1/`.
+UnitOfWork), **19 use-case groups** and **18 routers / 115 endpoints** under `/api/v1/`.
 
 ## Domain conventions
 
@@ -67,7 +67,7 @@ UnitOfWork), **18 use-case groups** and **17 routers / 106 endpoints** under `/a
 - **Login lockout**: failed-attempt counter per `(organization, email)` with a temporary
   lock and exponential backoff (HTTP 429 + `Retry-After`); it also counts non-existent
   accounts so it doesn't reveal which ones exist.
-- **Granular permissions** (`application/common/permissions.py`): a catalog of **25
+- **Granular permissions** (`application/common/permissions.py`): a catalog of **27
   permissions** (`Permission`, `StrEnum`), a default set per role (`ROLE_PERMISSIONS`) and
   **per-tenant overrides** via `RolePermissionOverride`. `effective_permissions(role, stored)`
   resolves defaults vs. override and intersects with the current catalog; the presentation
@@ -88,6 +88,20 @@ UnitOfWork), **18 use-case groups** and **17 routers / 106 endpoints** under `/a
   one is voided with a reason and stays in the history. `vaccinations` router: catalog,
   patient card, record, void and a clinic-wide worklist (due/overdue, upcoming within a
   horizon, given today). Permissions `vaccinations.view` / `vaccinations.record`.
+- **In-clinic applications** (`domain/entities/application.py`): an `ApplicationOrder` says
+  what to apply (drug, dose, route, number of doses and interval, observation minutes —
+  30 by default). Internal orders are drafted in the consultation and issued atomically when
+  it is signed; external ones (walk-ins) record the outside prescriber and their JVPM number.
+  Each dose is an `ApplicationRecord` (applied, refused or contraindicated; lot, expiry, site,
+  blood pressure, temperature) that is never edited — a wrong one is voided with a reason and
+  its dose is due again. An applied dose opens an observation window, closed as "no
+  reaction" or as an adverse reaction (which notifies the ordering doctor, without clinical
+  content). `domain/services/allergies.py` matches the drug against the patient's allergies
+  (direct names and drug families: penicillins, cephalosporins, NSAIDs, sulfonamides,
+  dipyrone); applying anyway requires an audited justification. `applications` router:
+  worklist (due today, under observation, recorded today), patient history, external order,
+  cancel, record, close observation and void. Permissions `applications.view` /
+  `applications.administer`.
 - **Scheduling**: per-doctor availability, slot resolution, appointment lifecycle
   (scheduled → confirmed → in progress → completed).
 - **Consultation → record**: signing a consultation issues an immutable `MedicalRecord` plus
@@ -189,7 +203,7 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **532 tests** (99 domain · 222 application · 165 presentation · 46 infrastructure),
+A suite of **563 tests** (114 domain · 233 application · 168 presentation · 48 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 

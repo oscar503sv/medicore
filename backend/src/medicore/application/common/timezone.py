@@ -33,3 +33,15 @@ def clinic_now(uow: UnitOfWork, tenant_id: TenantId, clock: Clock) -> datetime:
     tenant = uow.tenants.get_by_id(tenant_id)
     tz = ZoneInfo(tenant.timezone) if tenant and tenant.timezone else UTC
     return now.astimezone(tz).replace(tzinfo=None)
+
+
+def clinic_instant(uow: UnitOfWork, tenant_id: TenantId, clock: Clock, wall: datetime) -> datetime:
+    """The instant (UTC) of a clinic wall-clock time, comparable with stored ``timestamptz``.
+
+    The inverse of :func:`clinic_now`; with a naive clock (tests) it passes through.
+    """
+    if clock.now().tzinfo is None:
+        return wall
+    tenant = uow.tenants.get_by_id(tenant_id)
+    tz = ZoneInfo(tenant.timezone) if tenant and tenant.timezone else UTC
+    return wall.replace(tzinfo=tz).astimezone(UTC)

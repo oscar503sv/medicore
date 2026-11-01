@@ -8,9 +8,11 @@ from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
+from medicore.domain.entities.application import ApplicationDraft
 from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import MedicalRecord, VaccineAdministration
@@ -186,6 +188,28 @@ class RemovePrescriptionDraft(_ConsultationEditor):
         return consultation
 
 
+class AddApplicationDraft(_ConsultationEditor):
+    """Indicate an in-clinic application; it reaches the nursing team when signing."""
+
+    def execute(
+        self, actor: ActorContext, consultation_id: ConsultationId, draft: ApplicationDraft
+    ) -> Consultation:
+        consultation = self._load(actor, consultation_id)
+        consultation.add_application_draft(draft)
+        self._save(consultation)
+        return consultation
+
+
+class RemoveApplicationDraft(_ConsultationEditor):
+    def execute(
+        self, actor: ActorContext, consultation_id: ConsultationId, index: int
+    ) -> Consultation:
+        consultation = self._load(actor, consultation_id)
+        consultation.remove_application_draft(index)
+        self._save(consultation)
+        return consultation
+
+
 class AttachDocument(_ConsultationEditor):
     def execute(
         self, actor: ActorContext, consultation_id: ConsultationId, ref: AttachmentRef
@@ -237,18 +261,24 @@ class SignConsultation:
                 insurer_name=self._insurer_name(appointment.insurance_id),
                 vaccines=cmd.vaccines,
                 signed_at=now,
+                applications_start=clinic_now(self._uow, actor.tenant_id, self._clock).replace(
+                    second=0, microsecond=0
+                ),
             )
             appointment.complete()
             self._uow.consultations.save(consultation)
             self._uow.medical_records.save(result.record)
             for prescription in result.prescriptions:
                 self._uow.prescriptions.save(prescription)
+            for order in result.applications:
+                self._uow.applications.save_order(order)
             self._uow.appointments.save(appointment)
             self._uow.audit.append(
                 audit_entry(
                     actor, now, "consultation.signed", "MedicalRecord", str(result.record.id),
                     appointment_id=str(appointment.id),
                     prescriptions=len(result.prescriptions),
+                    applications=len(result.applications),
                     subject=subject(
                         result.record.code, patient.full_name if patient else None
                     ),

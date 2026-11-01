@@ -32,6 +32,7 @@ RECORD_AMENDED = "record.amended"
 DOCUMENT_UPLOADED = "document.uploaded"
 USER_CREATED = "user.created"
 USER_ROLE_CHANGED = "user.role_changed"
+APPLICATION_REACTION = "application.reaction"
 
 
 def notify(
