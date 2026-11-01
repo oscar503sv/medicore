@@ -11,6 +11,7 @@ import { AvailabilityPage } from '@/pages/AvailabilityPage'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { ApplicationsPage } from '@/pages/ApplicationsPage'
 import { ProcedureDetailPage } from '@/pages/ProcedureDetailPage'
+import { ProcedureCatalogPage } from '@/pages/ProcedureCatalogPage'
 import { ProceduresPage } from '@/pages/ProceduresPage'
 import { ConsultationPage } from '@/pages/ConsultationPage'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -103,6 +104,7 @@ export function App() {
           <Route path="/records" element={<RecordsPage />} />
           <Route path="/applications" element={<ApplicationsPage />} />
           <Route path="/procedures" element={<ProceduresPage />} />
+          <Route path="/procedures/catalog" element={<ProcedureCatalogPage />} />
           <Route path="/procedures/:id" element={<ProcedureDetailPage />} />
           <Route path="/vaccination" element={<VaccinationPage />} />
           <Route path="/availability" element={<AvailabilityPage />} />

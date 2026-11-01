@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { Building2, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
@@ -19,6 +19,13 @@ export function Sidebar() {
       (item.permission ? can(item.permission) : true) &&
       (item.roles ? !!role && item.roles.includes(role) : true),
   )
+  // The most specific item wins, so /procedures/catalog doesn't also light up /procedures.
+  const { pathname } = useLocation()
+  const matches = (to: string) =>
+    to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`)
+  const activeTo = visible
+    .filter((item) => matches(item.to))
+    .sort((a, b) => b.to.length - a.to.length)[0]?.to
 
   return (
     <aside
@@ -85,10 +92,10 @@ export function Sidebar() {
                   key={item.to}
                   to={item.to}
                   end={item.to === '/'}
-                  className={({ isActive }) =>
+                  className={() =>
                     cn(
                       'flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors',
-                      isActive
+                      item.to === activeTo
                         ? 'bg-[var(--accent-10)] text-accent'
                         : 'text-tx-2 hover:bg-surface-2 hover:text-tx',
                       collapsed && 'justify-center px-0',
