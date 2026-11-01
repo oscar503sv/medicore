@@ -24,6 +24,7 @@ from medicore.infrastructure.persistence.mappers._json import (
     attachment_to_dict,
     diagnoses_to_list,
     draft_to_dict,
+    procedure_draft_to_dict,
     snapshot_to_dict,
     soap_to_dict,
     vaccine_to_dict,
@@ -74,6 +75,7 @@ class SqlConsultationRepository:
         row.diagnoses = diagnoses_to_list(c.diagnoses)
         row.draft_prescriptions = [draft_to_dict(d) for d in c.draft_prescriptions]
         row.draft_applications = [application_draft_to_dict(d) for d in c.draft_applications]
+        row.draft_procedures = [procedure_draft_to_dict(d) for d in c.draft_procedures]
         row.attachments = [attachment_to_dict(a) for a in c.attachments]
         row.last_saved_at = c.last_saved_at
 

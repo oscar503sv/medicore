@@ -10,19 +10,21 @@ from medicore.application.use_cases.consultations import (
     AddApplicationDraft,
     AddDiagnosis,
     AddPrescriptionDraft,
+    AddProcedureDraft,
     AutosaveConsultation,
     ConsultationPatch,
     GetConsultation,
     RemoveApplicationDraft,
     RemoveDiagnosis,
     RemovePrescriptionDraft,
+    RemoveProcedureDraft,
     SignConsultation,
     SignConsultationCommand,
     StartConsultation,
 )
 from medicore.domain.entities.application import ApplicationDraft
 from medicore.domain.entities.prescription import PrescriptionDraft
-from medicore.domain.shared.identifiers import AppointmentId, ConsultationId
+from medicore.domain.shared.identifiers import AppointmentId, ConsultationId, ProcedureTypeId
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
@@ -33,6 +35,7 @@ from medicore.presentation.schemas.consultations import (
     ConsultationResponse,
     DiagnosisRequest,
     PrescriptionDraftRequest,
+    ProcedureDraftRequest,
     SignRequest,
 )
 from medicore.presentation.serializers import ser_consultation, ser_record
@@ -141,6 +144,27 @@ def remove_application(
     consultation_id: str, index: int, actor: Actor, uow: UoW, clock: Clock
 ):
     c = RemoveApplicationDraft(uow, clock).execute(
+        actor, ConsultationId.parse(consultation_id), index
+    )
+    return ser_consultation(c, uow)
+
+
+@router.post("/{consultation_id}/procedures", response_model=ConsultationResponse)
+def add_procedure(
+    consultation_id: str, body: ProcedureDraftRequest, actor: Actor, uow: UoW, clock: Clock
+):
+    c = AddProcedureDraft(uow, clock).execute(
+        actor, ConsultationId.parse(consultation_id), ProcedureTypeId.parse(body.type_id),
+        body.indication,
+    )
+    return ser_consultation(c, uow)
+
+
+@router.delete("/{consultation_id}/procedures/{index}", response_model=ConsultationResponse)
+def remove_procedure(
+    consultation_id: str, index: int, actor: Actor, uow: UoW, clock: Clock
+):
+    c = RemoveProcedureDraft(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id), index
     )
     return ser_consultation(c, uow)

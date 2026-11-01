@@ -1,7 +1,7 @@
 import { api } from './client'
 import type { AppNotification } from '@/types'
 
-export type NotificationCategory = 'appointment' | 'record' | 'document' | 'user' | 'application'
+export type NotificationCategory = 'appointment' | 'record' | 'document' | 'user' | 'application' | 'procedure'
 
 export interface NotificationList {
   items: AppNotification[]

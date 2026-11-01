@@ -25,6 +25,7 @@ from medicore.infrastructure.persistence.models.platform import (
     PlatformAuditLogModel,
 )
 from medicore.infrastructure.persistence.models.prescription import PrescriptionModel
+from medicore.infrastructure.persistence.models.procedure import ProcedureModel, ProcedureTypeModel
 from medicore.infrastructure.persistence.models.role_permission_override import (
     RolePermissionOverrideModel,
 )
@@ -53,6 +54,8 @@ __all__ = [
     "PlatformAdminModel",
     "PlatformAuditLogModel",
     "PrescriptionModel",
+    "ProcedureModel",
+    "ProcedureTypeModel",
     "RolePermissionOverrideModel",
     "TenantCounterModel",
     "TenantModel",

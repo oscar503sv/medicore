@@ -24,7 +24,7 @@ from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
-from medicore.domain.enums import AppointmentStatus
+from medicore.domain.enums import AppointmentStatus, ProcedureStatus
 from medicore.domain.repositories._support import (
     AuditFilter,
     GlobalAuditRow,
@@ -555,6 +555,47 @@ class InMemoryApplicationRepository(_Scoped):
 
     def save_record(self, record) -> None:
         self._store.application_records[record.id.value] = record
+
+
+class InMemoryProcedureRepository(_Scoped):
+    def get_type(self, type_id):
+        t = self._store.procedure_types.get(type_id.value)
+        return t if t and t.tenant_id == self._tenant else None
+
+    def list_types(self) -> list:
+        return sorted(self._mine(self._store.procedure_types.values()), key=lambda t: t.name)
+
+    def save_type(self, kind) -> None:
+        self._store.procedure_types[kind.id.value] = kind
+
+    def get(self, procedure_id):
+        p = self._store.procedures.get(procedure_id.value)
+        return p if p and p.tenant_id == self._tenant else None
+
+    def list_by_patient(self, patient_id) -> list:
+        result = [p for p in self._mine(self._store.procedures.values())
+                  if p.patient_id == patient_id]
+        result.sort(key=lambda p: p.created_at, reverse=True)
+        return result
+
+    def list_open(self) -> list:
+        result = [p for p in self._mine(self._store.procedures.values()) if p.is_open]
+        result.sort(key=lambda p: p.created_at)
+        return result
+
+    def list_by_appointments(self, appointment_ids) -> list:
+        wanted = set(appointment_ids)
+        return [p for p in self._mine(self._store.procedures.values())
+                if p.appointment_id in wanted]
+
+    def list_completed_between(self, start, end) -> list:
+        result = [p for p in self._mine(self._store.procedures.values())
+                  if p.status == ProcedureStatus.COMPLETED and start <= p.performed_at < end]
+        result.sort(key=lambda p: p.performed_at, reverse=True)
+        return result
+
+    def save(self, procedure) -> None:
+        self._store.procedures[procedure.id.value] = procedure
 
 
 class InMemoryInsurerRepository(_Scoped):

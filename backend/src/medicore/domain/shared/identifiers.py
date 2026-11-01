@@ -153,3 +153,13 @@ class ApplicationOrderId(Identifier):
 @dataclass(frozen=True, slots=True)
 class ApplicationRecordId(Identifier):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class ProcedureTypeId(Identifier):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ProcedureId(Identifier):
+    pass

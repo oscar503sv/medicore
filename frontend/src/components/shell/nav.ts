@@ -27,7 +27,6 @@ export interface NavItem {
   permission?: Permission // capability-based gate, matches the backend catalog
   roles?: Role[] // role-based gate, for pages tied to an identity rather than a capability
   group: NavGroup
-  comingSoon?: boolean // future module: shown with a "Próximamente" badge, placeholder page
 }
 
 export const NAV_GROUPS: { id: NavGroup; labelKey: string }[] = [
@@ -45,7 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/schedule', labelKey: 'nav.schedule', icon: CalendarDays, permission: 'appointments.view', group: 'clinical' },
   { to: '/records', labelKey: 'nav.records', icon: FileText, permission: 'records.view', group: 'clinical' },
   { to: '/applications', labelKey: 'nav.applications', icon: Pill, permission: 'applications.view', group: 'clinical' },
-  { to: '/procedures', labelKey: 'nav.procedures', icon: Activity, roles: ['doctor', 'nurse'], group: 'clinical', comingSoon: true },
+  { to: '/procedures', labelKey: 'nav.procedures', icon: Activity, permission: 'procedures.view', group: 'clinical' },
   { to: '/vaccination', labelKey: 'nav.vaccination', icon: Syringe, permission: 'vaccinations.view', group: 'clinical' },
   // Gestión
   // "Mi disponibilidad" is the doctor's own agenda; admins hold availability.manage but

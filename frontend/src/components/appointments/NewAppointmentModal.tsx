@@ -28,12 +28,17 @@ export function NewAppointmentModal({
   onClose,
   date,
   initialPatient,
+  initialType,
+  initialReason,
 }: {
   open: boolean
   onClose: () => void
   date: string
   /** Booking from a patient's row: skip the patient step (and suggest their doctor). */
   initialPatient?: Patient | null
+  /** Prefilled type and reason, e.g. a procedure's suggested follow-up. */
+  initialType?: string
+  initialReason?: string
 }) {
   const t = useT()
   const qc = useQueryClient()
@@ -58,9 +63,11 @@ export function NewAppointmentModal({
     if (!open || !initialPatient) return
     setPatient(initialPatient)
     setDoctorId(initialPatient.primary_doctor_id ?? '')
+    if (initialType) setType(initialType)
+    if (initialReason) setReason(initialReason)
     setSelectedSlot(null)
     setStep(1)
-  }, [open, initialPatient])
+  }, [open, initialPatient, initialType, initialReason])
 
   const { data: patients } = useQuery({
     queryKey: ['patients', { q: search }],

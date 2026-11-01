@@ -26,7 +26,7 @@ from medicore.presentation.serializers import ser_notification
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 # Inbox filter: the prefix of the notification types (appointment.*, record.*, …).
-Category = Literal["appointment", "record", "document", "user", "application"]
+Category = Literal["appointment", "record", "document", "user", "application", "procedure"]
 
 
 @router.get("", response_model=NotificationListResponse)

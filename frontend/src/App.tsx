@@ -10,7 +10,8 @@ import { AuditPage } from '@/pages/AuditPage'
 import { AvailabilityPage } from '@/pages/AvailabilityPage'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { ApplicationsPage } from '@/pages/ApplicationsPage'
-import { ComingSoonPage } from '@/pages/ComingSoonPage'
+import { ProcedureDetailPage } from '@/pages/ProcedureDetailPage'
+import { ProceduresPage } from '@/pages/ProceduresPage'
 import { ConsultationPage } from '@/pages/ConsultationPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { InsurersPage } from '@/pages/InsurersPage'
@@ -101,7 +102,8 @@ export function App() {
           <Route path="/schedule" element={<SchedulePage />} />
           <Route path="/records" element={<RecordsPage />} />
           <Route path="/applications" element={<ApplicationsPage />} />
-          <Route path="/procedures" element={<ComingSoonPage />} />
+          <Route path="/procedures" element={<ProceduresPage />} />
+          <Route path="/procedures/:id" element={<ProcedureDetailPage />} />
           <Route path="/vaccination" element={<VaccinationPage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/users" element={<UsersPage />} />

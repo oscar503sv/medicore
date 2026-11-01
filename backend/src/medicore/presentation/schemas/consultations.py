@@ -55,6 +55,11 @@ class ApplicationDraftRequest(BaseModel):
     instructions: str | None = Field(None, max_length=500)
 
 
+class ProcedureDraftRequest(BaseModel):
+    type_id: str
+    indication: str = Field(min_length=1, max_length=500)
+
+
 class SignRequest(BaseModel):
     chief_complaint: str = ""
 
@@ -73,6 +78,7 @@ class ConsultationResponse(BaseModel):
     diagnoses: list[dict[str, Any]]
     draft_prescriptions: list[dict[str, Any]]
     draft_applications: list[dict[str, Any]] = []
+    draft_procedures: list[dict[str, Any]] = []
     attachments: list[dict[str, Any]]
     completion_percent: int
     last_saved_at: datetime | None

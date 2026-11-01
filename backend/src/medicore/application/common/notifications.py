@@ -33,6 +33,7 @@ DOCUMENT_UPLOADED = "document.uploaded"
 USER_CREATED = "user.created"
 USER_ROLE_CHANGED = "user.role_changed"
 APPLICATION_REACTION = "application.reaction"
+PROCEDURE_PERFORMED = "procedure.performed"
 
 
 def notify(

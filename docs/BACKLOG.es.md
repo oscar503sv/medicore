@@ -21,8 +21,6 @@ Canales externos y recordatorios quedan planificados como evolución futura (ver
   adjuntar documentos a una consulta en curso no es alcanzable vía API.
 - Value object `Money` (`domain/value_objects/money.py`) sin uso — presumiblemente
   reservado para facturación.
-- La ruta del frontend `/procedures` apunta a
-  `ComingSoonPage` de forma intencional (badge "Próximamente" en el sidebar).
 - El almacenamiento de documentos médicos guarda **solo metadata** (nombre, mime, tamaño,
   `storage_key`); no hay backend de archivos (S3/disco). La UI lo comunica explícitamente.
 
@@ -75,6 +73,18 @@ observación, alerta de alergias, lista de trabajo de enfermería) está hecha. 
 - **Fase 3 — inventario y cobro:** existencias de medicamentos e insumos, compartidas con el
   inventario de lotes de vacunas (descuento automático al registrar una dosis, alertas de
   vencimiento) y cobro de cada aplicación, que depende de la facturación.
+
+### Procedimientos — siguientes fases
+La fase 1 (catálogo por clínica, indicación desde la consulta o directa, checklist y signos
+vitales, consentimiento en papel, nota firmada con enmiendas, marca de muestra a patología,
+control sugerido) está hecha. Siguiente:
+
+- **Fase 2 — resultados y documentos:** seguimiento del resultado de patología (recibido,
+  comunicado al paciente) con recordatorio de resultados atrasados; nota de procedimiento y
+  formato de consentimiento imprimibles; salas y equipo para las citas de procedimiento.
+- **Fase 3 — inventario y cobro:** insumos usados por procedimiento (suturas, anestésicos,
+  DIU) descontados del inventario compartido, y cobro de cada procedimiento, que depende de
+  la facturación.
 
 ## Seguridad — diferido conscientemente
 

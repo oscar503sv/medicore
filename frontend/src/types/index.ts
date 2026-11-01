@@ -28,6 +28,9 @@ export type Permission =
   | 'vaccinations.record'
   | 'applications.view'
   | 'applications.administer'
+  | 'procedures.view'
+  | 'procedures.perform'
+  | 'procedures.catalog'
 
 export interface RolePermissionsEntry {
   defaults: Permission[]
@@ -390,6 +393,7 @@ export interface Consultation {
   diagnoses: Diagnosis[]
   draft_prescriptions: PrescriptionDraft[]
   draft_applications: ApplicationDraft[]
+  draft_procedures: ProcedureDraft[]
   attachments: unknown[]
   completion_percent: number
   last_saved_at: string | null
@@ -502,4 +506,14 @@ export interface ApplicationDraft {
   interval_hours: number | null
   observation_minutes: number
   instructions: string | null
+}
+
+/** A procedure indicated during a consultation (a pending procedure once it is signed). */
+export interface ProcedureDraft {
+  type_id: string
+  type_name: string
+  performer: 'doctor' | 'doctor_or_nurse'
+  requires_consent: boolean
+  indication: string
+  follow_up_days: number | null
 }

@@ -200,3 +200,25 @@ class ApplicationSite(StrEnum):
     LEFT_FOREARM = "left_forearm"
     RIGHT_FOREARM = "right_forearm"
     ABDOMEN = "abdomen"
+
+
+class ProcedurePerformer(StrEnum):
+    """Who may perform a procedure type (configured per clinic in the catalog)."""
+
+    DOCTOR = "doctor"
+    DOCTOR_OR_NURSE = "doctor_or_nurse"
+
+
+class ProcedureStatus(StrEnum):
+    PENDING = "pending"  # ordered, nothing recorded yet
+    IN_PROGRESS = "in_progress"  # checklist / consent / note being filled
+    COMPLETED = "completed"  # note signed: immutable, corrected only by amendments
+    CANCELLED = "cancelled"
+
+
+class ProcedureSource(StrEnum):
+    """Where the order came from: a signed consultation, or registered directly (walk-in or
+    a procedure appointment)."""
+
+    CONSULTATION = "consultation"
+    DIRECT = "direct"

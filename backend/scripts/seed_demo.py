@@ -3,8 +3,10 @@
 Per tenant: 2 admins, 5 doctors (each with a specialty and working hours), 1 nurse,
 1 receptionist, 5 Salvadoran insurers and ~70 patients (some children and babies for
 pediatrics, a few registered this week) with their vaccination histories (El Salvador's
-national scheme) and in-clinic applications (ordered at consultations or walk-ins with an
-outside prescription). Everything is relative to the day the script runs:
+national scheme), in-clinic applications (ordered at consultations or walk-ins with an
+outside prescription) and minor procedures (catalog, orders from consultations, nursing
+walk-ins, today's procedure appointments, consent, notes, specimens). Everything is
+relative to the day the script runs:
 
 * Past ~8 weeks: appointments booked by reception, confirmed, attended (consultation started,
   vitals + SOAP + CIE-11 diagnoses + prescriptions, then signed → medical record), plus
@@ -63,6 +65,7 @@ from medicore.application.use_cases.consultations import (
     AddApplicationDraft,
     AddDiagnosis,
     AddPrescriptionDraft,
+    AddProcedureDraft,
     AutosaveConsultation,
     ConsultationPatch,
     SignConsultation,
@@ -70,6 +73,19 @@ from medicore.application.use_cases.consultations import (
     StartConsultation,
 )
 from medicore.application.use_cases.patients import CreatePatient, CreatePatientCommand
+from medicore.application.use_cases.procedures import (
+    AmendProcedure,
+    CancelProcedure,
+    CreateProcedure,
+    CreateProcedureCommand,
+    CreateProcedureType,
+    GetProcedureCatalog,
+    ProcedureTypeCommand,
+    RecordProcedureConsent,
+    SaveProcedureProgress,
+    SetProcedureTypeActive,
+    SignProcedure,
+)
 from medicore.application.use_cases.records import (
     AmendMedicalRecord,
     GetMedicalRecord,
@@ -94,6 +110,7 @@ from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.prescription import PrescriptionDraft
+from medicore.domain.entities.procedure import Procedure, ProcedureProgress, ProcedureType
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import (
@@ -106,6 +123,7 @@ from medicore.domain.enums import (
     DocumentKind,
     InjectionSite,
     PrescriptionStatus,
+    ProcedurePerformer,
     Role,
     Sex,
     UserStatus,
@@ -344,6 +362,70 @@ EXTERNAL_PRESCRIBERS = [
 ]
 
 
+# Procedures ordered at the consultation, by specialty: (catalog name, indication).
+PROCEDURE_ORDERS = {
+    "Medicina General": [
+        ("Sutura de herida", "Herida cortante de 3 cm en antebrazo izquierdo"),
+        ("Curación de herida", "Herida en pierna derecha en proceso de cicatrización"),
+        ("Drenaje de absceso", "Absceso fluctuante en región axilar derecha"),
+        ("Lavado de oído", "Tapón de cerumen en oído derecho"),
+        ("Retiro de cuerpo extraño", "Astilla en palma de mano derecha"),
+        ("Extracción de uña (onicectomía)", "Uña encarnada recurrente en primer dedo del pie"),
+    ],
+    "Dermatología": [
+        ("Biopsia de piel", "Lesión pigmentada de bordes irregulares en espalda"),
+        ("Crioterapia de lesión cutánea", "Verruga vulgar en dorso de mano"),
+    ],
+    "Ginecología": [
+        ("Colocación de DIU", "Planificación familiar: desea un método de larga duración"),
+        ("Citología cervicovaginal (Papanicolaou)", "Tamizaje de rutina"),
+    ],
+    "Cardiología": [("Electrocardiograma", "Palpitaciones; control del ritmo")],
+    "Traumatología": [("Infiltración articular", "Gonalgia crónica por artrosis de rodilla")],
+    "Pediatría": [("Lavado de oído", "Tapón de cerumen bilateral")],
+}
+# What the note says per procedure: (anesthesia, findings, materials, specimen).
+PROCEDURE_NOTES = {
+    "Sutura de herida": ("Lidocaína 2 %, 4 ml, infiltración local",
+                         "Herida limpia de bordes regulares, sin compromiso tendinoso",
+                         "Nylon 4-0, gasas, apósito", None),
+    "Curación de herida": (None, "Tejido de granulación sano, sin signos de infección",
+                           "Solución salina, gasas, apósito", None),
+    "Drenaje de absceso": ("Lidocaína 2 %, 5 ml, infiltración local",
+                           "Salida de material purulento de 8 ml aprox.",
+                           "Hoja de bisturí n.º 11, gasa yodoformada", None),
+    "Lavado de oído": (None, "Tapón de cerumen extraído completo; membrana timpánica íntegra",
+                       "Jeringa de irrigación, agua tibia", None),
+    "Retiro de cuerpo extraño": ("Lidocaína 2 %, 1 ml", "Astilla de madera de 6 mm extraída",
+                                 "Pinza, aguja hipodérmica, apósito", None),
+    "Extracción de uña (onicectomía)": ("Lidocaína 2 %, bloqueo digital",
+                                        "Lámina ungueal encarnada en borde lateral",
+                                        "Torniquete digital, pinza, apósito", None),
+    "Biopsia de piel": ("Lidocaína 2 %, 2 ml, infiltración local",
+                        "Lesión de 6 mm, pigmentación irregular",
+                        "Sacabocado de 4 mm, nylon 4-0, frasco con formol",
+                        "Piel de espalda, sacabocado de 4 mm, en formol al 10 %"),
+    "Crioterapia de lesión cutánea": (None, "Verruga de 5 mm, dos ciclos de congelación",
+                                      "Nitrógeno líquido", None),
+    "Colocación de DIU": (None, "Histerometría de 7 cm; cuello sin lesiones",
+                          "DIU T de cobre 380A, espéculo, histerómetro", None),
+    "Citología cervicovaginal (Papanicolaou)": (
+        None, "Cuello de aspecto sano", "Espéculo, espátula de Ayre, citocepillo",
+        "Extendido cervicovaginal fijado, 2 láminas"),
+    "Electrocardiograma": (None, "Ritmo sinusal, FC 74 lpm, sin alteraciones agudas",
+                           "Electrodos desechables", None),
+    "Infiltración articular": ("Lidocaína 1 %, 2 ml", "Rodilla sin derrame significativo",
+                               "Metilprednisolona 40 mg, aguja 21G", None),
+    "Retiro de puntos": (None, "Herida bien afrontada, sin signos de infección",
+                         "Tijera de retiro, gasas", None),
+}
+WALK_IN_PROCEDURES = [
+    ("Curación de herida", "Raspón en rodilla izquierda por caída en bicicleta"),
+    ("Retiro de puntos", "Sutura en mano hecha hace 8 días en otro centro"),
+    ("Lavado de oído", "Sensación de oído tapado desde hace una semana"),
+]
+
+
 # ── simulated clock ───────────────────────────────────────────────────────────────────────
 class SimClock:
     """A settable clock. Times are given as clinic wall-clock and returned as UTC instants,
@@ -379,6 +461,7 @@ class Clinic:
     patients: list[Patient] = field(default_factory=list)
     signed: list[MedicalRecord] = field(default_factory=list)
     taken: set[tuple[UserId, datetime]] = field(default_factory=set)
+    procedure_types: dict[str, ProcedureType] = field(default_factory=dict)
     stats: dict[str, int] = field(default_factory=dict)
 
     @property
@@ -846,6 +929,11 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
             ApplicationDraft(drug=drug, dose=dose, route=route, doses_total=n,
                              interval_hours=every, observation_minutes=obs, instructions=notes),
         )
+    orders = PROCEDURE_ORDERS.get(c.specialty[doctor.id])
+    if orders and RNG.random() < 0.12:
+        name, indication = RNG.choice(orders)
+        AddProcedureDraft(c.uow(), c.at(start + timedelta(minutes=16))).execute(
+            me, consultation.id, c.procedure_types[name].id, indication)
     record = SignConsultation(c.uow(), c.codes(),
                               c.at(start + timedelta(minutes=RNG.randint(18, 27)))).execute(
         me, SignConsultationCommand(consultation_id=consultation.id))
@@ -1050,6 +1138,167 @@ def seed_applications(c: Clinic) -> None:
     external(rest[1], c.now - timedelta(minutes=6), dexa)
 
 
+# ── procedures ────────────────────────────────────────────────────────────────────────────
+def seed_procedure_catalog(c: Clinic) -> None:
+    """The preloaded catalog, plus one procedure the clinic added and one it archived."""
+    admin = actor(c, c.admin)
+    start = datetime.combine(c.today - timedelta(weeks=PAST_WEEKS, days=3), time(9, 0))
+    types = GetProcedureCatalog(c.uow(), c.at(start)).execute(admin)
+    CreateProcedureType(c.uow(), c.at(start + timedelta(minutes=20))).execute(
+        admin, ProcedureTypeCommand(
+            name="Taponamiento nasal anterior", performer=ProcedurePerformer.DOCTOR,
+            follow_up_days=2,
+            technique_template="Compresión digital previa. Colocación de tapón anterior con "
+                               "gasa vaselinada en la fosa nasal sangrante.",
+            instructions_template="No sonarse la nariz. Retiro del tapón en 48 horas.",
+        ))
+    retiro_diu = next(t for t in types if t.name == "Retiro de DIU")
+    SetProcedureTypeActive(c.uow(), c.at(start + timedelta(minutes=25))).execute(
+        admin, retiro_diu.id, False)
+    c.procedure_types = {t.name: t for t in GetProcedureCatalog(
+        c.uow(), c.at(start + timedelta(minutes=30))).execute(admin)}
+
+
+def _perform(c: Clinic, p: Procedure, patient: Patient, user: User, at: datetime,
+             *, override: str | None = None) -> Procedure:
+    """Consent (if needed), checklist, vitals and note, then sign — like in the app."""
+    me = actor(c, user)
+    kind = next(t for t in c.procedure_types.values() if t.id == p.type_id)
+    anesthesia, findings, materials, specimen = PROCEDURE_NOTES.get(
+        p.type_name, (None, None, None, None))
+    adult = patient.age(at.date()) >= 14
+    if p.requires_consent:
+        signer, relationship = (patient.full_name, None) if adult else (
+            f"{RNG.choice(['María', 'Ana', 'Rosa', 'Carmen'])} {patient.last_name}", "Madre")
+        witness = c.nurse if user.id != c.nurse.id else c.reception
+        RecordProcedureConsent(c.uow(), c.at(at)).execute(
+            me, p.id, signer, relationship, witness.name)
+    bp = (lambda: f"{RNG.randint(108, 138)}/{RNG.randint(66, 88)}") if adult else (lambda: None)
+    progress = ProcedureProgress(
+        allergies_reviewed=True, anticoagulants=False if adult else None, fasting=None,
+        allergy_override=override,
+        bp_before=bp(), hr_before=RNG.randint(64, 96), spo2_before=RNG.randint(96, 99),
+        temp_before=round(RNG.uniform(36.2, 37.1), 1),
+        bp_after=bp(), hr_after=RNG.randint(62, 92), spo2_after=RNG.randint(96, 99),
+        anesthesia=anesthesia, technique=kind.technique_template or p.type_name,
+        findings=findings, materials=materials, complications="Ninguna",
+        instructions=kind.instructions_template,
+        specimen_sent=specimen is not None and p.takes_specimen,
+        specimen_description=specimen if p.takes_specimen else None,
+    )
+    SaveProcedureProgress(c.uow(), c.at(at + timedelta(minutes=4))).execute(me, p.id, progress)
+    done = SignProcedure(c.uow(), c.at(at + timedelta(minutes=RNG.randint(15, 30)))).execute(
+        me, p.id)
+    c.count("procedimientos realizados")
+    return done
+
+
+def seed_procedures(c: Clinic) -> None:
+    """Play out what was ordered at consultations (by the doctor, or by nursing when the
+    catalog allows), a few walk-ins registered by nursing, one cancellation and one
+    amendment. Orders from the last two days stay pending on the worklist."""
+    tz = c.clock.tz
+    latest = c.now - timedelta(minutes=40)
+    by_id = {p.id: p for p in c.patients}
+    doctors = {d.id: d for d in c.doctors}
+    nurse = actor(c, c.nurse)
+
+    adults = [p for p in c.patients if p.age(c.today) >= 14]
+    for name, indication in WALK_IN_PROCEDURES * 2:
+        day = c.today - timedelta(days=RNG.randint(2, 30))
+        when = datetime.combine(day, time(RNG.randint(8, 15), RNG.choice([0, 20, 40])))
+        patient = RNG.choice(adults)
+        p = CreateProcedure(c.uow(), c.at(when)).execute(nurse, CreateProcedureCommand(
+            patient_id=patient.id, type_id=c.procedure_types[name].id, indication=indication))
+        c.count("procedimientos directos")
+        _perform(c, p, patient, c.nurse, when + timedelta(minutes=5))
+
+    uow = c.uow()
+    with uow:
+        ordered = [p for p in uow.procedures.list_open()
+                   if p.source.value == "consultation"]
+    ordered.sort(key=lambda p: p.created_at)
+    cancelled = overridden = False
+    performed: list[tuple[Procedure, User]] = []
+    for p in ordered:
+        created = p.created_at.astimezone(tz).replace(tzinfo=None)
+        if created.date() >= c.today - timedelta(days=2):
+            continue  # recent orders: still pending
+        doctor = doctors[p.ordered_by_id]
+        patient = by_id[p.patient_id]
+        if not cancelled and RNG.random() < 0.15:
+            CancelProcedure(c.uow(), c.at(created + timedelta(hours=RNG.randint(1, 30)))).execute(
+                actor(c, doctor), p.id, "El paciente prefiere realizarlo más adelante.")
+            c.count("procedimientos cancelados")
+            cancelled = True
+            continue
+        if RNG.random() < 0.6:
+            at = created + timedelta(minutes=RNG.randint(10, 40))
+        else:
+            day = created.date() + timedelta(days=RNG.randint(1, 3))
+            at = datetime.combine(day, time(RNG.randint(8, 15), RNG.choice([0, 30])))
+        if at > latest:
+            continue
+        nursing = p.performer == ProcedurePerformer.DOCTOR_OR_NURSE and RNG.random() < 0.7
+        user = c.nurse if nursing else doctor
+        override = None
+        anesthesia = PROCEDURE_NOTES.get(p.type_name, (None,))[0]
+        if anesthesia and allergy_conflicts(anesthesia, patient.allergies):
+            if overridden:
+                continue
+            override = "Alergia referida a otro anestésico; prueba intradérmica previa negativa."
+            overridden = True
+        performed.append((_perform(c, p, patient, user, at, override=override), user))
+
+    # A doctor corrects a signed note.
+    for p, user in reversed(performed):
+        if user.role == Role.DOCTOR and p.performed_at is not None:
+            when = p.performed_at.astimezone(tz).replace(tzinfo=None) + timedelta(hours=3)
+            if when < latest:
+                AmendProcedure(c.uow(), c.at(when)).execute(
+                    actor(c, user), p.id, "Se aplicaron 4 ml de anestesia, no 2 ml.",
+                    "Dato de anestesia corregido")
+                c.count("procedimientos enmendados")
+                break
+
+
+def seed_procedure_appointments(c: Clinic) -> None:
+    """Today's procedure appointments: two already done (one by nursing) and one later."""
+    rec = actor(c, c.reception)
+    general = next((d for d in c.doctors if c.specialty[d.id] == "Medicina General"), None)
+    derma = next((d for d in c.doctors if c.specialty[d.id] == "Dermatología"), None)
+    plan = [(general, "Retiro de puntos", "Retiro de puntos de sutura en antebrazo", c.nurse, True),
+            (derma, "Crioterapia de lesión cutánea", "Crioterapia de verruga", None, True),
+            (general, "Curación de herida", "Curación de herida en pie", None, False)]
+    adults = [p for p in c.patients if p.age(c.today) >= 14 and not p.allergies]
+    RNG.shuffle(adults)
+    for doctor, name, reason, performer, done in plan:
+        if doctor is None:
+            continue
+        free = [s for s in day_slots(c, doctor, c.today) if (doctor.id, s) not in c.taken
+                and ((s + timedelta(minutes=45) <= c.now) if done else s > c.now)]
+        if not free:
+            continue
+        start = free[-1] if done else free[0]
+        patient = adults.pop()
+        booked = datetime.combine(c.today - timedelta(days=RNG.randint(1, 4)), time(10, 15))
+        appt = CreateAppointment(c.uow(), c.codes(), c.at(booked)).execute(
+            rec, CreateAppointmentCommand(
+                patient_id=patient.id, doctor_id=doctor.id,
+                location_id=c.tenant.primary_location.id, type=AppointmentType.PROCEDURE,
+                scheduled_start=start, reason=reason, insurance_id=insurer_for(c, patient)))
+        c.taken.add((doctor.id, start))
+        c.count("citas de procedimiento")
+        if not done:
+            continue
+        user = performer or doctor
+        p = CreateProcedure(c.uow(), c.at(start + timedelta(minutes=2))).execute(
+            actor(c, user), CreateProcedureCommand(
+                patient_id=patient.id, type_id=c.procedure_types[name].id, indication=reason,
+                appointment_id=appt.id))
+        _perform(c, p, patient, user, start + timedelta(minutes=5))
+
+
 # ── amendments, documents, users, logins ──────────────────────────────────────────────────
 def seed_amendments(c: Clinic) -> None:
     recent = [r for r in c.signed if r.signed_at.date() >= c.today - timedelta(days=21)
@@ -1184,8 +1433,11 @@ def seed_tenant(session, slug: str, legal_name: str, tax_id: str, location: str)
     seed_patients(c)
     seed_vaccinations(c)
     seed_exceptions(c)
+    seed_procedure_catalog(c)
     seed_agenda(c)
+    seed_procedure_appointments(c)
     seed_applications(c)
+    seed_procedures(c)
     seed_amendments(c)
     seed_documents(c)
     seed_users(c)

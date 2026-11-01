@@ -290,6 +290,12 @@ def ser_consultation(c: Consultation, uow=None) -> dict:
              "instructions": d.instructions}
             for d in c.draft_applications
         ],
+        "draft_procedures": [
+            {"type_id": str(d.type_id), "type_name": d.type_name, "performer": str(d.performer),
+             "requires_consent": d.requires_consent, "indication": d.indication,
+             "follow_up_days": d.follow_up_days}
+            for d in c.draft_procedures
+        ],
         "attachments": [attachment_to_dict(a) for a in c.attachments],
         "completion_percent": c.compute_completion(),
         "last_saved_at": c.last_saved_at,

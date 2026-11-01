@@ -1,4 +1,5 @@
 import {
+  Activity,
   AlertTriangle,
   CalendarClock,
   CalendarPlus,
@@ -35,6 +36,7 @@ const META: Record<string, { icon: LucideIcon; tone: Tone }> = {
   'user.created': { icon: UserPlus, tone: 'ok' },
   'user.role_changed': { icon: UserCheck, tone: 'warn' },
   'application.reaction': { icon: AlertTriangle, tone: 'danger' },
+  'procedure.performed': { icon: Activity, tone: 'ok' },
 }
 
 /** Translate `key`, falling back to `fallback` when the key is missing. */
@@ -64,6 +66,9 @@ function hrefFor(n: AppNotification): string | null {
   }
   if (n.type === 'application.reaction' && d.patient_id) {
     return `/patients/${d.patient_id}?tab=applications`
+  }
+  if (n.type === 'procedure.performed' && d.procedure_id) {
+    return `/procedures/${d.procedure_id}`
   }
   if (n.type.startsWith('user.')) return '/users'
   return null

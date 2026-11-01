@@ -15,6 +15,7 @@ import { PatientSummary } from '@/components/patients/PatientSummary'
 import { VitalsHistory } from '@/components/patients/VitalsHistory'
 import { PatientVaccinations } from '@/components/vaccination/PatientVaccinations'
 import { PatientApplications } from '@/components/applications/PatientApplications'
+import { PatientProcedures } from '@/components/procedures/PatientProcedures'
 import { RecordDrawer } from '@/components/records/RecordDrawer'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
@@ -36,6 +37,7 @@ type Tab =
   | 'documents'
   | 'vaccines'
   | 'applications'
+  | 'procedures'
 
 export function PatientDetailPage() {
   const t = useT()
@@ -53,6 +55,7 @@ export function PatientDetailPage() {
   const canClinical = useAuthStore((s) => s.can('records.view'))
   const canVaccines = useAuthStore((s) => s.can('vaccinations.view'))
   const canApplications = useAuthStore((s) => s.can('applications.view'))
+  const canProcedures = useAuthStore((s) => s.can('procedures.view'))
 
   // Deep links (e.g. from a notification): ?tab= selects a tab the user may open and
   // ?record= opens that record. Re-applied when the params change on a mounted page.
@@ -66,10 +69,11 @@ export function PatientDetailPage() {
       ...(canClinical ? (['prescriptions', 'vitals', 'documents'] as const) : []),
       ...(canVaccines ? (['vaccines'] as const) : []),
       ...(canApplications ? (['applications'] as const) : []),
+      ...(canProcedures ? (['procedures'] as const) : []),
     ]
     if (tabParam && allowed.includes(tabParam as Tab)) setTab(tabParam as Tab)
     if (recordParam && isDoctor) setOpenRecordId(recordParam)
-  }, [id, tabParam, recordParam, isDoctor, canClinical, canVaccines, canApplications])
+  }, [id, tabParam, recordParam, isDoctor, canClinical, canVaccines, canApplications, canProcedures])
 
   const { data, isLoading } = useQuery({
     queryKey: ['patient', id],
@@ -122,6 +126,7 @@ export function PatientDetailPage() {
       : []),
     ...(canVaccines ? [{ id: 'vaccines' as const, label: t('vax.tab') }] : []),
     ...(canApplications ? [{ id: 'applications' as const, label: t('apl.tab') }] : []),
+    ...(canProcedures ? [{ id: 'procedures' as const, label: t('prc.tab') }] : []),
   ]
 
   return (
@@ -272,6 +277,18 @@ export function PatientDetailPage() {
         <PatientApplications
           patientId={id}
           patientName={`${p.first_name} ${p.last_name}`}
+          active={p.status === 'active'}
+        />
+      )}
+
+      {tab === 'procedures' && (
+        <PatientProcedures
+          patient={{
+            id,
+            name: `${p.first_name} ${p.last_name}`,
+            code: p.code,
+            allergies: p.allergies,
+          }}
           active={p.status === 'active'}
         />
       )}

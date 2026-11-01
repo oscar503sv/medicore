@@ -18,6 +18,7 @@ from medicore.domain.entities.application import ApplicationDraft, ApplicationOr
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import MedicalRecord, VaccineAdministration
 from medicore.domain.entities.prescription import Prescription, PrescriptionDraft
+from medicore.domain.entities.procedure import Procedure, ProcedureDraft
 from medicore.domain.enums import (
     ApplicationOrderSource,
     ClinicalRecordType,
@@ -50,6 +51,7 @@ class SignResult:
     record: MedicalRecord
     prescriptions: list[Prescription]
     applications: list[ApplicationOrder] = field(default_factory=list)
+    procedures: list[Procedure] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -68,6 +70,7 @@ class Consultation:
     diagnoses: list[IcdCode] = field(default_factory=list)
     draft_prescriptions: list[PrescriptionDraft] = field(default_factory=list)
     draft_applications: list[ApplicationDraft] = field(default_factory=list)
+    draft_procedures: list[ProcedureDraft] = field(default_factory=list)
     attachments: list[AttachmentRef] = field(default_factory=list)
     status: ConsultationStatus = ConsultationStatus.DRAFT
     last_saved_at: datetime | None = None
@@ -113,6 +116,14 @@ class Consultation:
         self._assert_draft()
         del self.draft_applications[index]
 
+    def add_procedure_draft(self, draft: ProcedureDraft) -> None:
+        self._assert_draft()
+        self.draft_procedures.append(draft)
+
+    def remove_procedure_draft(self, index: int) -> None:
+        self._assert_draft()
+        del self.draft_procedures[index]
+
     def attach_document(self, ref: AttachmentRef) -> None:
         self._assert_draft()
         self.attachments.append(ref)
@@ -151,7 +162,8 @@ class Consultation:
         use coordinated ids); if omitted, fresh UUIDs are generated.
 
         Indicated applications become internal orders for the nursing team, due from
-        ``applications_start`` (the clinic wall-clock at signing).
+        ``applications_start`` (the clinic wall-clock at signing); indicated procedures
+        become pending procedures.
         """
         self._assert_draft()
         completion = self.compute_completion()
@@ -232,9 +244,18 @@ class Consultation:
             for d in self.draft_applications
         ]
 
+        procedures = [
+            Procedure.from_draft(
+                d, tenant_id=self.tenant_id, patient_id=self.patient_id,
+                ordered_by_id=signed_by_id, consultation_id=self.id, now=now,
+            )
+            for d in self.draft_procedures
+        ]
+
         self.status = ConsultationStatus.SIGNED
         self.ended_at = now
-        return SignResult(record=record, prescriptions=issued, applications=orders)
+        return SignResult(record=record, prescriptions=issued, applications=orders,
+                          procedures=procedures)
 
     def _assert_draft(self) -> None:
         if self.status != ConsultationStatus.DRAFT:

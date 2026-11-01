@@ -34,9 +34,9 @@ src/medicore/
 The **dependency rule** points inward: `domain` imports from no other layer; `application`
 only from `domain`; `infrastructure`/`presentation` from the inner layers.
 
-By the numbers: **20 entities** and **10 value objects** in the domain, **19 repositories
+By the numbers: **22 entities** and **10 value objects** in the domain, **20 repositories
 (Protocols)**, **5 application ports** (Clock, CodeGenerator, PasswordHasher, TokenIssuer,
-UnitOfWork), **19 use-case groups** and **18 routers / 115 endpoints** under `/api/v1/`.
+UnitOfWork), **20 use-case groups** and **19 routers / 130 endpoints** under `/api/v1/`.
 
 ## Domain conventions
 
@@ -67,7 +67,7 @@ UnitOfWork), **19 use-case groups** and **18 routers / 115 endpoints** under `/a
 - **Login lockout**: failed-attempt counter per `(organization, email)` with a temporary
   lock and exponential backoff (HTTP 429 + `Retry-After`); it also counts non-existent
   accounts so it doesn't reveal which ones exist.
-- **Granular permissions** (`application/common/permissions.py`): a catalog of **27
+- **Granular permissions** (`application/common/permissions.py`): a catalog of **30
   permissions** (`Permission`, `StrEnum`), a default set per role (`ROLE_PERMISSIONS`) and
   **per-tenant overrides** via `RolePermissionOverride`. `effective_permissions(role, stored)`
   resolves defaults vs. override and intersects with the current catalog; the presentation
@@ -102,6 +102,22 @@ UnitOfWork), **19 use-case groups** and **18 routers / 115 endpoints** under `/a
   worklist (due today, under observation, recorded today), patient history, external order,
   cancel, record, close observation and void. Permissions `applications.view` /
   `applications.administer`.
+- **Minor procedures** (`domain/entities/procedure.py`): each clinic has a catalog of
+  `ProcedureType`s, preloaded on first read from `domain/services/procedure_catalog.py` (14
+  common procedures with technique and instruction templates) and editable by the admin:
+  who may perform it (`doctor` or `doctor_or_nurse`), informed consent, usual pathology
+  specimen and suggested follow-up days. A `Procedure` freezes those rules when it is
+  ordered — drafted in the consultation and issued atomically when it is signed, or
+  registered directly — and can be tied to a `procedure` appointment, which is completed when
+  the procedure is signed. Consent signed on paper is recorded as signer, relationship and
+  witness (no file). Signing requires the consent (if needed), the allergy review, the
+  technique and, when a specimen was sent, its description; an anesthesia that clashes with
+  the patient's allergies needs an audited justification. Once signed the note is immutable:
+  corrections are amendments (performer or a doctor). The ordering doctor is notified when
+  someone else performs it, without clinical content. `procedures` router: catalog, worklist
+  (pending, today's procedure appointments, done in the last 30 days), patient history,
+  create, progress, consent, sign, cancel and amend. Permissions `procedures.view` /
+  `procedures.perform` / `procedures.catalog`.
 - **Scheduling**: per-doctor availability, slot resolution, appointment lifecycle
   (scheduled → confirmed → in progress → completed).
 - **Consultation → record**: signing a consultation issues an immutable `MedicalRecord` plus
@@ -203,7 +219,7 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **563 tests** (114 domain · 233 application · 168 presentation · 48 infrastructure),
+A suite of **581 tests** (120 domain · 240 application · 171 presentation · 50 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 

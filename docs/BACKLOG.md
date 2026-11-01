@@ -20,8 +20,6 @@ External channels and reminders are planned as a future evolution (see [Future](
   attaching documents to a consultation in progress isn't reachable through the API.
 - The `Money` value object (`domain/value_objects/money.py`) is unused — presumably reserved
   for billing.
-- The frontend route `/procedures` intentionally points to
-  `ComingSoonPage` ("Coming soon" badge in the sidebar).
 - Medical document storage keeps **metadata only** (name, mime type, size, `storage_key`);
   there is no file backend (S3/disk). The UI says so explicitly.
 
@@ -72,6 +70,18 @@ observation window, allergy alert, nursing worklist) is done. Next:
 - **Phase 3 — inventory and billing:** stock of medicines and supplies shared with the vaccine
   lot inventory (automatic decrement when a dose is recorded, expiry alerts) and charging
   each application, which depends on billing.
+
+### Procedures — next phases
+Phase 1 (per-clinic catalog, orders from the consultation or direct, checklist and vitals,
+consent on paper, signed note with amendments, pathology specimen mark, suggested follow-up)
+is done. Next:
+
+- **Phase 2 — results and documents:** track the pathology result (received, reported to the
+  patient) with reminders for overdue results; a printable procedure note and consent form;
+  rooms and equipment for procedure appointments.
+- **Phase 3 — inventory and billing:** supplies used per procedure (sutures, anesthetics,
+  IUDs) decremented from the shared inventory, and charging each procedure, which depends on
+  billing.
 
 ## Security — consciously deferred
 

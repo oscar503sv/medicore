@@ -4,7 +4,7 @@
 
 A **multi-tenant** clinic management system built with **Clean Architecture**.
 
-It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (SOAP notes) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications**, **vaccination following El Salvador's national scheme**, **in-clinic medication applications** and organization settings. The interface is available in **Spanish and English**, including the backend's error messages.
+It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (SOAP notes) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications**, **vaccination following El Salvador's national scheme**, **in-clinic medication applications**, **minor procedures** and organization settings. The interface is available in **Spanish and English**, including the backend's error messages.
 
 It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, global stats and audit, account support (password reset, unlock, suspension) and **audited impersonation** of a clinic for support.
 
@@ -40,31 +40,32 @@ src/medicore/
 │   ├── shared/         # Domain errors (with a translatable code) + typed UUID identifiers
 │   ├── value_objects/  # 10 VOs: TimeRange, DateRange, Vitals, IcdCode, Slug,
 │   │                   # SoapNote, ContactInfo, BloodType, Money, UserPreferences
-│   ├── entities/       # 20 aggregates: Appointment (FSM), Consultation, MedicalRecord,
+│   ├── entities/       # 22 aggregates: Appointment (FSM), Consultation, MedicalRecord,
 │   │                   # Prescription, Patient, User, Tenant, Insurer, MedicalDocument,
 │   │                   # Availability, Notification, AuditLog, AuthSession,
 │   │                   # CatalogDiagnosis, RolePermissionOverride, PlatformAdmin,
 │   │                   # PlatformAuditLog, VaccinationRecord, ApplicationOrder,
-│   │                   # ApplicationRecord
-│   ├── services/       # slot_resolver (availability), immunization (scheme), allergies
-│   └── repositories/   # Interfaces (ports): 19 repository Protocols
+│   │                   # ApplicationRecord, ProcedureType, Procedure
+│   ├── services/       # slot_resolver (availability), immunization (scheme), allergies,
+│   │                   # procedure_catalog (default catalog)
+│   └── repositories/   # Interfaces (ports): 20 repository Protocols
 │
 ├── application/      # Use cases (interactors) + infrastructure ports
 │   ├── ports/          # 5 ports: Clock, CodeGenerator, PasswordHasher,
 │   │                   # TokenIssuer, UnitOfWork
 │   ├── common/         # ActorContext, app errors, permission catalog, auditing,
 │   │                   # login lockout, notification emission, timezone
-│   └── use_cases/      # 19 groups: auth, sessions, patients, appointments,
+│   └── use_cases/      # 20 groups: auth, sessions, patients, appointments,
 │                       # consultations, records, prescriptions, availability, users,
 │                       # organization, insurers, diagnoses, audit, role_permissions,
 │                       # notifications, dashboard, vaccinations, applications,
-│                       # platform
+│                       # procedures, platform
 │
 ├── infrastructure/   # Concrete implementations
 │   ├── config.py       # Settings from .env (pydantic-settings) — dev-safe defaults
 │   ├── database/       # SQLAlchemy engine + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (25 tables; complex VOs as JSONB)
+│   │   ├── models/     # ORM models (27 tables; complex VOs as JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (keeps the domain clean)
 │   │   └── repositories/  # SQLAlchemy implementations of the ports
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, code generator, SystemClock
@@ -80,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException with a translatable code
     ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
     ├── schemas/         # Pydantic request + response models per resource
-    └── routers/         # 18 routers, 115 endpoints under /api/v1/
+    └── routers/         # 19 routers, 130 endpoints under /api/v1/
 ```
 
 ### Multi-tenancy
@@ -96,6 +97,7 @@ A separate session (`platform`-scoped token) that operates above the multi-tenan
 - Consultation diagnoses are limited to the catalog of the **ICD version configured per clinic** (ICD-10 / ICD-11), with autocomplete.
 - **Vaccination** following El Salvador's national scheme (MINSAL), for children, adolescents and adults: each patient's card computes every dose's status (given, due, overdue, upcoming…) from their age and records; records are never edited, a wrong one is voided with a reason. A worklist shows overdue and upcoming doses across the clinic.
 - **In-clinic applications** (injections, IV fluids, nebulizations…): the doctor indicates them in the consultation and they become orders for nursing when it is signed; walk-ins with an outside prescription record the prescribing doctor and their JVPM number. Each dose is recorded with lot, site and vitals, never edited (a wrong one is voided with a reason), and opens an observation window (30 min by default, configurable per order) closed as "no reaction" or as an adverse reaction, which notifies the ordering doctor. Applying a drug that clashes with the patient's allergies requires a written, audited justification.
+- **Minor procedures** (sutures, biopsies, wound care, IUD insertion, ECG…): each clinic has a configurable catalog, preloaded with the most common procedures, that says who may perform each one (doctor only, or doctor or nurse), whether it needs informed consent, whether it usually takes a pathology specimen and the suggested follow-up. A procedure is ordered in the consultation (pending when it is signed) or registered directly, optionally tied to a procedure appointment. Before performing it: allergy review, anticoagulants, fasting and vitals; consent signed on paper is recorded with who signed and a witness (no file). The note (anesthesia, technique, findings, materials, complications, home instructions, specimen sent to pathology) is immutable once signed — corrections are amendments — and signing suggests a follow-up date and notifies the ordering doctor when someone else performed it.
 - **Granular permissions** enforced in the application layer (not just the UI) — see the next section.
 - Temporary password with a forced change on first sign-in.
 - Auditing of access and sensitive changes (HIPAA/GDPR), per tenant and global.
@@ -106,7 +108,7 @@ A separate session (`platform`-scoped token) that operates above the multi-tenan
 
 Access control is **granular and customizable per clinic** (`application/common/permissions.py`):
 
-- **Catalog of 27 permissions** (`Permission`, `StrEnum`) grouped by resource: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (including `sign` and `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`.
+- **Catalog of 30 permissions** (`Permission`, `StrEnum`) grouped by resource: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (including `sign` and `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — each with a default permission set in `ROLE_PERMISSIONS`.
 - **Per-tenant overrides**: each clinic can customize a role's set through a `RolePermissionOverride` row. `effective_permissions(role, stored)` resolves defaults vs. override (and intersects with the current catalog to tolerate retired permissions).
 - On every request, the presentation layer puts the effective permissions in `ActorContext.permissions`, so every `ensure_permission(...)` check honors the clinic's customization.
@@ -176,19 +178,21 @@ medicore/
 └── frontend/                 # React + TS + Vite SPA
     └── src/
         ├── api/              # Axios client (cookies, CSRF, error translation)
-        │                     # + 18 per-resource modules
+        │                     # + 19 per-resource modules
         ├── stores/           # Zustand: auth + platformAuth + ui (theme/language/sidebar)
         ├── lib/              # ES/EN i18n, formatting, QueryClient, notifications, timezones…
         ├── types/            # TS types mirroring the backend domain
         ├── components/       # ui/ + shell/ (top bar, notification bell…)
         │                     # + appointments/ + audit/ + patients/ + permissions/
         │                     # + records/ + settings/ + vaccination/ + applications/
+        │                     # + procedures/
         │                     # + guards (RequireAuth…)
-        └── pages/            # 19 clinic screens (Login, Dashboard, Patients,
+        └── pages/            # 20 clinic screens (Login, Dashboard, Patients,
                               # PatientDetail, Appointments, Schedule, Consultation,
                               # Records, Availability, Insurers, Users, Settings,
                               # Audit, Permissions, Notifications, ChangePassword,
-                              # Vaccination, Applications, ComingSoon)
+                              # Vaccination, Applications, Procedures,
+                              # ProcedureDetail)
                               # + platform/ (5 superadmin screens)
 ```
 
@@ -211,10 +215,12 @@ medicore/
 | **11** | Real dashboard metrics, fully ES/EN interface and translatable API errors | ✅ Done |
 | **12** | Vaccination module (El Salvador national scheme, patient card, worklist) | ✅ Done |
 | **13** | In-clinic applications (orders from the consultation or an outside prescription, observation, allergy alert) | ✅ Done |
+| **14** | Minor procedures (per-clinic catalog, consent on paper, signed note with amendments, pathology specimen, follow-up) | ✅ Done |
 | — | Password policy | ⏳ Pending |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable record, inventory and billing | 🗓️ Future |
+| — | Procedures: pathology result tracking, printable note, rooms/equipment, inventory and billing | 🗓️ Future |
 
 ---
 
@@ -270,7 +276,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (563 tests)
+.venv/bin/pytest                          # full suite (581 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -283,7 +289,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ## Database
 
-**25 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
+**27 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
 
 | Table | Description |
 |---|---|
@@ -304,6 +310,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `tenant_counters` | Counters for human-readable codes (`P-00142`, `A-2401`…) |
 | `vaccination_records` | Vaccine doses recorded (national scheme) |
 | `application_orders` + `application_records` | In-clinic application orders and the doses applied |
+| `procedure_types` + `procedures` | Per-clinic procedure catalog and the procedures ordered/performed |
 | `role_permission_overrides` | Per-role, per-tenant permission customization |
 | `diagnosis_codes` | ICD-10/ICD-11 catalog (global, for autocomplete) |
 | `platform_admins` | Platform superadmins |
@@ -316,14 +323,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-563 passing tests
-   114  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
-            immunization schedule, applications, allergy matching)
-   233  — application (auth, sessions, appointments, consultations, records, notifications,
+581 passing tests
+   120  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+            immunization schedule, applications, procedures, allergy matching)
+   240  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   168  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   171  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    48  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    50  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

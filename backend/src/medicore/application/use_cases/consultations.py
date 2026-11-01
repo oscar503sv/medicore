@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
-from medicore.application.common.errors import EntityNotFound
+from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
@@ -17,6 +17,7 @@ from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import MedicalRecord, VaccineAdministration
 from medicore.domain.entities.prescription import PrescriptionDraft
+from medicore.domain.entities.procedure import ProcedureDraft
 from medicore.domain.enums import ClinicalRecordType, Role
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import (
@@ -24,6 +25,7 @@ from medicore.domain.shared.identifiers import (
     ConsultationId,
     InsurerId,
     LocationId,
+    ProcedureTypeId,
     RecordId,
 )
 from medicore.domain.value_objects.icd_code import IcdCode
@@ -210,6 +212,35 @@ class RemoveApplicationDraft(_ConsultationEditor):
         return consultation
 
 
+class AddProcedureDraft(_ConsultationEditor):
+    """Indicate a procedure; it becomes a pending procedure when the consultation is signed.
+    The type's rules (who performs it, consent, follow-up) are frozen with the indication."""
+
+    def execute(
+        self, actor: ActorContext, consultation_id: ConsultationId,
+        type_id: ProcedureTypeId, indication: str,
+    ) -> Consultation:
+        consultation = self._load(actor, consultation_id)
+        kind = self._uow.procedures.get_type(type_id)
+        if kind is None:
+            raise EntityNotFound("ProcedureType", type_id)
+        if not kind.active:
+            raise ValidationError("the procedure type is archived", code="procedure.type_inactive")
+        consultation.add_procedure_draft(ProcedureDraft.of(kind, indication))
+        self._save(consultation)
+        return consultation
+
+
+class RemoveProcedureDraft(_ConsultationEditor):
+    def execute(
+        self, actor: ActorContext, consultation_id: ConsultationId, index: int
+    ) -> Consultation:
+        consultation = self._load(actor, consultation_id)
+        consultation.remove_procedure_draft(index)
+        self._save(consultation)
+        return consultation
+
+
 class AttachDocument(_ConsultationEditor):
     def execute(
         self, actor: ActorContext, consultation_id: ConsultationId, ref: AttachmentRef
@@ -272,6 +303,8 @@ class SignConsultation:
                 self._uow.prescriptions.save(prescription)
             for order in result.applications:
                 self._uow.applications.save_order(order)
+            for procedure in result.procedures:
+                self._uow.procedures.save(procedure)
             self._uow.appointments.save(appointment)
             self._uow.audit.append(
                 audit_entry(
@@ -279,6 +312,7 @@ class SignConsultation:
                     appointment_id=str(appointment.id),
                     prescriptions=len(result.prescriptions),
                     applications=len(result.applications),
+                    procedures=len(result.procedures),
                     subject=subject(
                         result.record.code, patient.full_name if patient else None
                     ),

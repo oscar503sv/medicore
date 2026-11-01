@@ -32,6 +32,7 @@ from medicore.domain.repositories.platform_repository import (
     PlatformAuditLogRepository,
 )
 from medicore.domain.repositories.prescription_repository import PrescriptionRepository
+from medicore.domain.repositories.procedure_repository import ProcedureRepository
 from medicore.domain.repositories.role_permission_override_repository import (
     RolePermissionOverrideRepository,
 )
@@ -45,6 +46,7 @@ from medicore.domain.repositories.vaccination_record_repository import (
 )
 
 __all__ = [
+    "ProcedureRepository",
     "Page",
     "Paging",
     "PatientFilter",

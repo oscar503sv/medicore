@@ -60,6 +60,7 @@ from medicore.infrastructure.persistence.mappers._json import (
     dict_to_attachment,
     dict_to_diagnoses,
     dict_to_draft,
+    dict_to_procedure_draft,
     dict_to_snapshot,
     dict_to_soap,
     dict_to_vaccine,
@@ -249,6 +250,7 @@ def to_consultation(row: ConsultationModel) -> Consultation:
         draft_applications=[
             dict_to_application_draft(d) for d in (row.draft_applications or [])
         ],
+        draft_procedures=[dict_to_procedure_draft(d) for d in (row.draft_procedures or [])],
         attachments=[dict_to_attachment(a) for a in (row.attachments or [])],
         last_saved_at=row.last_saved_at,
     )

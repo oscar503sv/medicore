@@ -34,5 +34,6 @@ class ConsultationModel(Base):
     diagnoses: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     draft_prescriptions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     draft_applications: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    draft_procedures: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     attachments: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     last_saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

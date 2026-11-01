@@ -34,9 +34,9 @@ src/medicore/
 La **regla de dependencia** apunta hacia adentro: `domain` no importa de ninguna otra capa;
 `application` solo de `domain`; `infrastructure`/`presentation` de las internas.
 
-En cifras: **20 entidades** y **10 value objects** de dominio, **19 repositorios (Protocols)**,
+En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios (Protocols)**,
 **5 puertos de aplicación** (Clock, CodeGenerator, PasswordHasher, TokenIssuer, UnitOfWork),
-**19 grupos de casos de uso** y **18 routers / 115 endpoints** bajo `/api/v1/`.
+**20 grupos de casos de uso** y **19 routers / 130 endpoints** bajo `/api/v1/`.
 
 ## Convenciones del dominio
 
@@ -68,7 +68,7 @@ En cifras: **20 entidades** y **10 value objects** de dominio, **19 repositorios
 - **Lockout de login**: contador de intentos fallidos por `(organización, email)` con
   bloqueo temporal y backoff exponencial (HTTP 429 + `Retry-After`); cuenta también
   cuentas inexistentes para no revelar cuáles existen.
-- **Permisos granulares** (`application/common/permissions.py`): catálogo de **27 permisos**
+- **Permisos granulares** (`application/common/permissions.py`): catálogo de **30 permisos**
   (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
   tenant** vía `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults
   vs. override e intersecta con el catálogo vigente; la capa de presentación los coloca en
@@ -104,6 +104,23 @@ En cifras: **20 entidades** y **10 value objects** de dominio, **19 repositorios
   `applications`: lista de trabajo (por aplicar hoy, en observación, registradas hoy),
   historial del paciente, orden externa, cancelar, registrar, cerrar observación y anular.
   Permisos `applications.view` / `applications.administer`.
+- **Procedimientos menores** (`domain/entities/procedure.py`): cada clínica tiene un
+  catálogo de `ProcedureType`, precargado en la primera lectura desde
+  `domain/services/procedure_catalog.py` (14 procedimientos comunes con plantillas de técnica
+  e indicaciones) y editable por el admin: quién lo realiza (`doctor` o `doctor_or_nurse`),
+  consentimiento informado, muestra habitual a patología y días de control sugerido. Un
+  `Procedure` congela esas reglas al indicarse — en la consulta, emitido de forma atómica al
+  firmarla, o registrado directamente — y puede ligarse a una cita de tipo `procedure`, que
+  se completa al firmar el procedimiento. El consentimiento firmado en papel se registra como
+  firmante, parentesco y testigo (sin archivo). Firmar exige el consentimiento (si aplica), la
+  revisión de alergias, la técnica y, si se envió muestra, su descripción; una anestesia que
+  choca con las alergias del paciente necesita una justificación auditada. Una vez firmada,
+  la nota no se edita: las correcciones son enmiendas (quien lo realizó o un médico). Se
+  notifica al médico que lo indicó si lo realizó otra persona, sin contenido clínico. Router
+  `procedures`: catálogo, lista de trabajo (pendientes, citas de procedimiento de hoy,
+  realizados en 30 días), historial del paciente, crear, avance, consentimiento, firmar,
+  cancelar y enmendar. Permisos `procedures.view` / `procedures.perform` /
+  `procedures.catalog`.
 - **Agenda**: disponibilidad por médico, resolución de slots, ciclo de vida de la cita
   (agendada → confirmada → en curso → completada).
 - **Consulta → historial**: al firmar una consulta se emite un `MedicalRecord` inmutable + las
@@ -204,7 +221,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **563 tests** (114 dominio · 233 aplicación · 168 presentación · 48 infraestructura), casi
+Suite de **581 tests** (120 dominio · 240 aplicación · 171 presentación · 50 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 

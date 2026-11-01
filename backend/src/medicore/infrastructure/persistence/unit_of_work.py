@@ -40,6 +40,7 @@ from medicore.infrastructure.persistence.repositories.platform import (
     SqlPlatformAuditLogRepository,
 )
 from medicore.infrastructure.persistence.repositories.platform_reads import SqlPlatformReadModel
+from medicore.infrastructure.persistence.repositories.procedure import SqlProcedureRepository
 from medicore.infrastructure.persistence.repositories.role_permission_override import (
     SqlRolePermissionOverrideRepository,
 )
@@ -77,6 +78,7 @@ class SqlAlchemyUnitOfWork:
         self.role_permissions = SqlRolePermissionOverrideRepository(session, tenant_id)
         self.vaccinations = SqlVaccinationRecordRepository(session, tenant_id)
         self.applications = SqlApplicationRepository(session, tenant_id)
+        self.procedures = SqlProcedureRepository(session, tenant_id)
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
         self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
         self.sessions = SqlAuthSessionRepository(session)  # global (non-scoped)

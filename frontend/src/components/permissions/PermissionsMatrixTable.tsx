@@ -47,6 +47,7 @@ const GROUP_ICONS: Record<string, typeof Users> = {
   permissions: KeyRound,
   vaccinations: Syringe,
   applications: Pill,
+  procedures: Activity,
 }
 
 interface Props {

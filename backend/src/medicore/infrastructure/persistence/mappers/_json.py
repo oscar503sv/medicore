@@ -9,8 +9,9 @@ from medicore.domain.entities.application import ApplicationDraft
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import VaccineAdministration
 from medicore.domain.entities.prescription import PrescriptionDraft, PrescriptionSnapshot
-from medicore.domain.enums import ApplicationRoute, DocumentKind
-from medicore.domain.shared.identifiers import DocumentId
+from medicore.domain.entities.procedure import ProcedureDraft
+from medicore.domain.enums import ApplicationRoute, DocumentKind, ProcedurePerformer
+from medicore.domain.shared.identifiers import DocumentId, ProcedureTypeId
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.time_range import TimeRange
@@ -187,3 +188,28 @@ def vaccine_to_dict(v: VaccineAdministration) -> dict:
 
 def dict_to_vaccine(d: dict) -> VaccineAdministration:
     return VaccineAdministration(name=d["name"], lot=d["lot"], dose=d["dose"], site=d["site"])
+
+
+# ── ProcedureDraft ────────────────────────────────────────────────────────────
+def procedure_draft_to_dict(draft: ProcedureDraft) -> dict:
+    return {
+        "type_id": str(draft.type_id),
+        "type_name": draft.type_name,
+        "performer": str(draft.performer),
+        "requires_consent": draft.requires_consent,
+        "indication": draft.indication,
+        "follow_up_days": draft.follow_up_days,
+        "takes_specimen": draft.takes_specimen,
+    }
+
+
+def dict_to_procedure_draft(d: dict) -> ProcedureDraft:
+    return ProcedureDraft(
+        type_id=ProcedureTypeId.parse(d["type_id"]),
+        type_name=d["type_name"],
+        performer=ProcedurePerformer(d["performer"]),
+        requires_consent=bool(d.get("requires_consent")),
+        indication=d["indication"],
+        follow_up_days=d.get("follow_up_days"),
+        takes_specimen=bool(d.get("takes_specimen")),
+    )
