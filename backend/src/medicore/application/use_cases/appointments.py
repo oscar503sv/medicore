@@ -132,6 +132,21 @@ class ListAppointmentsForDay:
         return self._uow.appointments.list_by_day(on, _scope_doctor(actor, doctor_id))
 
 
+class ListUpcomingAppointments:
+    """The next appointments still to be attended, from now on and across days (dashboard).
+
+    Doctors only see their own agenda, like everywhere else."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(self, actor: ActorContext, limit: int = 6) -> list[Appointment]:
+        ensure_permission(actor, Permission.APPOINTMENTS_VIEW)
+        now = clinic_now(self._uow, actor.tenant_id, self._clock)
+        return self._uow.appointments.list_upcoming(now, limit, _scope_doctor(actor, None))
+
+
 class GetWeeklySchedule:
     def __init__(self, uow: UnitOfWork) -> None:
         self._uow = uow

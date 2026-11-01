@@ -92,7 +92,8 @@ UnitOfWork), **17 use-case groups** and **16 routers / 99 endpoints** under `/ap
   cancelled) and pending ones, registered patients and schedule occupancy (booked slots over
   slots within working hours) — compared with the same weekday of the previous week. A doctor
   sees only their own schedule; other roles see the whole clinic. Without permission for a
-  metric, it comes back as `null`.
+  metric, it comes back as `null`. Alongside it, `GET /appointments/upcoming` lists the next
+  scheduled/confirmed appointments from now on, across days (same doctor scope).
 - **Auditing (HIPAA/GDPR)** per tenant plus a global platform console; every action stores a
   readable `subject` in its metadata for a useful detail column.
 - **Platform console** (superadmin): clinic onboarding/management, global stats, consolidated
@@ -173,7 +174,7 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **489 tests** (89 domain · 201 application · 156 presentation · 43 infrastructure),
+A suite of **496 tests** (89 domain · 205 application · 158 presentation · 44 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 

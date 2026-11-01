@@ -21,6 +21,10 @@ _ACTIVE = {
 }
 
 
+# Still to be attended: what the dashboard lists as "upcoming".
+_PENDING = {str(AppointmentStatus.SCHEDULED), str(AppointmentStatus.CONFIRMED)}
+
+
 def _naive(dt: datetime) -> datetime:
     """Drop tzinfo so naive (SQLite-stored) and aware (request) datetimes are comparable."""
     return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
@@ -54,6 +58,20 @@ class SqlAppointmentRepository:
             .filter(AppointmentModel.patient_id == patient_id.value)
             .order_by(AppointmentModel.scheduled_start)
             .all()
+        )
+        return [to_appointment(r) for r in rows]
+
+    def list_upcoming(
+        self, after: datetime, limit: int, doctor_id: UserId | None = None
+    ) -> list[Appointment]:
+        q = self._q().filter(
+            AppointmentModel.status.in_(_PENDING),
+            AppointmentModel.scheduled_start >= _naive(after),
+        )
+        if doctor_id:
+            q = q.filter(AppointmentModel.doctor_id == doctor_id.value)
+        rows = (
+            q.order_by(AppointmentModel.scheduled_start, AppointmentModel.code).limit(limit).all()
         )
         return [to_appointment(r) for r in rows]
 

@@ -126,7 +126,7 @@ Los hallazgos pendientes están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).
 ## Notificaciones y dashboard
 
 - **Notificaciones in-app**: citas creadas, reprogramadas, canceladas o marcadas como no-show (al doctor), enmiendas de historial (al autor original), documentos subidos (al médico tratante) y altas o cambios de rol de usuarios (a los administradores). Campana en la barra superior con contador (sondeo cada 60 s), filtro de no leídas y enlaces directos al elemento, además de una **página de buzón** (`/notifications`) filtrable por estado y categoría y agrupada por día. Se conservan 90 días.
-- **Dashboard con datos reales** (`GET /dashboard/summary`): citas de hoy, pendientes, pacientes registrados y ocupación de la agenda, cada uno comparado con la semana anterior. El doctor ve su propia agenda; los demás roles, la clínica completa.
+- **Dashboard con datos reales** (`GET /dashboard/summary`): citas de hoy, pendientes, pacientes registrados y ocupación de la agenda, cada uno comparado con la semana anterior, y las próximas citas pendientes a partir de ahora (`GET /appointments/upcoming`). El doctor ve su propia agenda; los demás roles, la clínica completa.
 
 ---
 
@@ -261,7 +261,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (489 tests)
+.venv/bin/pytest                          # suite completa (496 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -305,13 +305,13 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-489 tests en verde
+496 tests en verde
     89  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
-   201  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   205  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   156  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   158  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    43  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    44  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

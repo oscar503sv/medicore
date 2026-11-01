@@ -126,7 +126,7 @@ Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 ## Notifications and dashboard
 
 - **In-app notifications**: appointments created, rescheduled, cancelled or marked as no-show (to the doctor), record amendments (to the original author), uploaded documents (to the treating doctor) and new users or role changes (to administrators). A bell in the top bar with an unread counter (polled every 60 s), an unread-only filter and deep links to the item, plus a full **inbox page** (`/notifications`) filterable by status and category and grouped by day. Kept for 90 days.
-- **Dashboard with real data** (`GET /dashboard/summary`): today's appointments, pending ones, registered patients and schedule occupancy, each compared with the previous week. Doctors see their own schedule; other roles see the whole clinic.
+- **Dashboard with real data** (`GET /dashboard/summary`): today's appointments, pending ones, registered patients and schedule occupancy, each compared with the previous week, plus the next pending appointments from now on (`GET /appointments/upcoming`). Doctors see their own schedule; other roles see the whole clinic.
 
 ---
 
@@ -261,7 +261,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (489 tests)
+.venv/bin/pytest                          # full suite (496 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -305,13 +305,13 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-489 passing tests
+496 passing tests
     89  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend)
-   201  — application (auth, sessions, appointments, consultations, records, notifications,
+   205  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   156  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   158  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    43  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    44  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

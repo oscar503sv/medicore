@@ -27,6 +27,10 @@ export const appointmentsApi = {
   bookingOptions: () =>
     api.get<BookingOptions>('/appointments/booking-options').then((r) => r.data),
 
+  /** Next scheduled/confirmed appointments from now on, across days (doctors: their own). */
+  upcoming: (limit = 6) =>
+    api.get<Appointment[]>('/appointments/upcoming', { params: { limit } }).then((r) => r.data),
+
   listForDay: (on: string, doctorId?: string) =>
     api
       .get<Appointment[]>('/appointments', { params: { on, doctor_id: doctorId } })

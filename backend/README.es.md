@@ -91,7 +91,9 @@ En cifras: **17 entidades** y **10 value objects** de dominio, **17 repositorios
 - **Panel** (`GET /dashboard/summary`): métricas reales del día —citas (sin canceladas) y
   pendientes, pacientes registrados y ocupación de la agenda (franjas reservadas sobre franjas
   dentro del horario)— comparadas con el mismo día de la semana anterior. Un médico ve solo su
-  agenda; los demás roles, la clínica entera. Sin permiso para una métrica, esta llega como `null`.
+  agenda; los demás roles, la clínica entera. Sin permiso para una métrica, esta llega como `null`. Junto a
+  él, `GET /appointments/upcoming` lista las próximas citas agendadas/confirmadas a partir de
+  ahora, aunque sean de otros días (mismo alcance por médico).
 - **Auditoría (HIPAA/GDPR)** por tenant y consola global de plataforma; cada acción guarda un
   `subject` legible en su metadata para una columna de detalle útil.
 - **Consola de plataforma** (superadmin): alta/gestión de clínicas, estadísticas globales,
@@ -172,7 +174,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **489 tests** (89 dominio · 201 aplicación · 156 presentación · 43 infraestructura), casi
+Suite de **496 tests** (89 dominio · 205 aplicación · 158 presentación · 44 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 

@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import { addDays, format, parseISO } from 'date-fns'
 import { Activity, CalendarCheck, Hourglass, Users } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
 import { dashboardApi } from '@/api/dashboard'
@@ -10,7 +12,7 @@ import { Badge } from '@/components/ui/Badge'
 import { statusTone } from '@/components/ui/badgeTone'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { PageLoader } from '@/components/ui/Spinner'
-import { clinicToday, fmtNow, fmtTime } from '@/lib/format'
+import { clinicToday, fmtDate, fmtNow, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { greetingName } from '@/lib/user'
 import { useAuthStore } from '@/stores/auth'
@@ -25,10 +27,19 @@ export function DashboardPage() {
     hour < 12 ? 'dash.greeting_morning' : hour < 19 ? 'dash.greeting_afternoon' : 'dash.greeting_evening'
   const who = greetingName(session?.name ?? '', session?.role, session?.sex)
 
-  const { data: appointments, isLoading } = useQuery({
-    queryKey: ['appointments', 'day', today],
-    queryFn: () => appointmentsApi.listForDay(today),
+  // Next appointments still to be attended — from now on, so the card is never empty just
+  // because today's agenda is over (evenings, weekends).
+  const { data: upcoming, isLoading } = useQuery({
+    queryKey: ['appointments', 'upcoming'],
+    queryFn: () => appointmentsApi.upcoming(6),
   })
+  const tomorrow = format(addDays(parseISO(today), 1), 'yyyy-MM-dd')
+  const dayLabel = (iso: string) => {
+    const day = iso.slice(0, 10)
+    if (day === today) return t('dash.today')
+    if (day === tomorrow) return t('dash.tomorrow')
+    return fmtDate(iso, 'EEE d MMM')
+  }
   const { data: patients } = useQuery({
     queryKey: ['patients', { limit: 5 }],
     queryFn: () => patientsApi.list({ limit: 5 }),
@@ -41,7 +52,7 @@ export function DashboardPage() {
 
   if (isLoading) return <PageLoader />
 
-  const appts = appointments ?? []
+  const appts = upcoming ?? []
   const num = (v: number | null | undefined) => (v == null ? '—' : String(v))
 
   return (
@@ -75,18 +86,28 @@ export function DashboardPage() {
         <Card>
           <CardHeader title={t('dash.upcoming')} />
           <div className="divide-y divide-line-soft">
-            {appts.slice(0, 6).map((a) => (
-              <div key={a.id} className="flex items-center gap-3 px-5 py-3">
-                <span className="w-14 font-mono text-[13px] text-tx-2">{fmtTime(a.scheduled_start)}</span>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-tx">{a.reason}</p>
-                  <p className="text-xs text-tx-3">{a.code}</p>
+            {appts.map((a) => (
+              <Link
+                key={a.id}
+                to={`/appointments?date=${a.scheduled_start.slice(0, 10)}`}
+                className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-surface-2"
+              >
+                <div className="w-20 shrink-0">
+                  <p className="text-xs capitalize text-tx-3">{dayLabel(a.scheduled_start)}</p>
+                  <p className="font-mono text-[13px] text-tx-2">{fmtTime(a.scheduled_start)}</p>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-tx">{a.patient_name ?? a.code}</p>
+                  <p className="truncate text-xs text-tx-3">
+                    {a.reason}
+                    {session?.role !== 'doctor' && a.doctor_name ? ` · ${a.doctor_name}` : ''}
+                  </p>
                 </div>
                 <Badge tone={statusTone(a.status)}>{t(`status.${a.status}`)}</Badge>
-              </div>
+              </Link>
             ))}
             {appts.length === 0 && (
-              <p className="px-5 py-8 text-center text-sm text-tx-3">{t('dash.no_appointments_today')}</p>
+              <p className="px-5 py-8 text-center text-sm text-tx-3">{t('dash.no_upcoming')}</p>
             )}
           </div>
         </Card>

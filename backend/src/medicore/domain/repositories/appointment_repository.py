@@ -22,6 +22,13 @@ class AppointmentRepository(Protocol):
         """Earliest active appointment after ``now`` per patient (omits those without one)."""
         ...
 
+    def list_upcoming(
+        self, after: datetime, limit: int, doctor_id: UserId | None = None
+    ) -> list[Appointment]:
+        """Scheduled or confirmed appointments starting at/after ``after`` (clinic
+        wall-clock), soonest first, at most ``limit``."""
+        ...
+
     def find_overlapping(
         self, doctor_id: UserId, start: datetime, end: datetime
     ) -> list[Appointment]:

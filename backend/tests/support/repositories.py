@@ -422,6 +422,20 @@ class InMemoryAppointmentRepository(_Scoped):
                 result[a.patient_id] = a.scheduled_start
         return result
 
+    def list_upcoming(
+        self, after: datetime, limit: int, doctor_id: UserId | None = None
+    ) -> list[Appointment]:
+        pending = {AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED}
+        result = [
+            a
+            for a in self._mine(self._store.appointments.values())
+            if a.status in pending
+            and a.scheduled_start >= after
+            and (doctor_id is None or a.doctor_id == doctor_id)
+        ]
+        result.sort(key=lambda a: (a.scheduled_start, a.code))
+        return result[:limit]
+
     def find_overlapping(
         self, doctor_id: UserId, start: datetime, end: datetime
     ) -> list[Appointment]:

@@ -15,6 +15,7 @@ from medicore.application.use_cases.appointments import (
     GetBookingOptions,
     GetWeeklySchedule,
     ListAppointmentsForDay,
+    ListUpcomingAppointments,
     MarkNoShow,
     RescheduleAppointment,
 )
@@ -93,6 +94,14 @@ def list_for_day(
     with uow:
         did = UserId.parse(doctor_id) if doctor_id else None
         appts = ListAppointmentsForDay(uow).execute(actor, on, did)
+        return _ser_appointments(uow, appts)
+
+
+@router.get("/upcoming", response_model=list[AppointmentResponse])
+def list_upcoming(actor: Actor, uow: UoW, clock: Clock, limit: int = Query(6, ge=1, le=50)):
+    """Next scheduled/confirmed appointments from now on, across days (dashboard)."""
+    with uow:
+        appts = ListUpcomingAppointments(uow, clock).execute(actor, limit)
         return _ser_appointments(uow, appts)
 
 
