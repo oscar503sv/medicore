@@ -72,6 +72,11 @@ export function clinicToday(): string {
   return formatInTimeZone(new Date(), clinicTz(), 'yyyy-MM-dd')
 }
 
+/** Current wall-clock time (HH:mm) in the clinic's timezone — for "now" markers. */
+export function clinicNowTime(): string {
+  return formatInTimeZone(new Date(), clinicTz(), 'HH:mm')
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/)
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
