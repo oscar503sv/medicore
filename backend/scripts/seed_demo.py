@@ -25,6 +25,10 @@ the last couple of days stay mostly unread.
 Idempotent: re-running skips tenants that already have appointments. ``--reset`` wipes the
 demo tenants first (cascade) and recreates them.
 
+Demo users get the password from ``DEMO_PASSWORD`` (``demo1234`` in development when unset)
+and the clinic admins the one from ``DEMO_ADMIN_PASSWORD`` (``DEMO_PASSWORD`` when unset). In
+production both are required: the script refuses the public default and a shared admin password.
+
 Usage:
     .venv/bin/python scripts/seed_demo.py [--reset]
 """
@@ -32,6 +36,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import random
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
@@ -157,13 +162,20 @@ from medicore.domain.value_objects.time_range import TimeRange
 from medicore.domain.value_objects.vitals import Vitals
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
+from medicore.infrastructure.config import get_settings
 from medicore.infrastructure.database.engine import get_session
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.notification import NotificationModel
 from medicore.infrastructure.persistence.models.tenant import TenantModel
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 
-PASSWORD = "demo1234"
+# Password for every demo user. Override with DEMO_PASSWORD (mandatory in production, where
+# the public default would let anyone log in to a publicly reachable demo). The clinic admins
+# get DEMO_ADMIN_PASSWORD instead (also mandatory in production), so the shared demo password
+# never opens the administration of a clinic.
+_DEFAULT_DEMO_PASSWORD = "demo1234"
+PASSWORD = os.environ.get("DEMO_PASSWORD", "").strip() or _DEFAULT_DEMO_PASSWORD
+ADMIN_PASSWORD = os.environ.get("DEMO_ADMIN_PASSWORD", "").strip() or PASSWORD
 HASHER = BcryptPasswordHasher()
 RNG = random.Random(42)
 TIMEZONE = "America/El_Salvador"
@@ -511,7 +523,8 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
     female = name.startswith("Dra. ") or first.lower().endswith("a")
     return User(
         id=UserId.new(), tenant_id=tid, name=name, email=email,
-        password_hash=HASHER.hash(PASSWORD), role=role, status=UserStatus.ACTIVE,
+        password_hash=HASHER.hash(ADMIN_PASSWORD if role == Role.ADMIN else PASSWORD),
+        role=role, status=UserStatus.ACTIVE,
         sex=Sex.FEMALE if female else Sex.MALE, specialty=specialty,
         phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
     )
@@ -1452,11 +1465,31 @@ def reset_demo(session, slugs: list[str]) -> None:
     print(f"Reset: tenants {slugs} borrados (cascada)")
 
 
+def _check_demo_password() -> None:
+    if len(PASSWORD) < 8:
+        raise SystemExit("DEMO_PASSWORD must be at least 8 characters")
+    if len(ADMIN_PASSWORD) < 8:
+        raise SystemExit("DEMO_ADMIN_PASSWORD must be at least 8 characters")
+    if not get_settings().is_production:
+        return
+    if PASSWORD == _DEFAULT_DEMO_PASSWORD:
+        raise SystemExit(
+            "Refusing to seed in production with the public default password: "
+            "set DEMO_PASSWORD to a strong, private value."
+        )
+    if ADMIN_PASSWORD == PASSWORD:
+        raise SystemExit(
+            "Refusing to seed in production with the shared demo password for the admins: "
+            "set DEMO_ADMIN_PASSWORD to a different, private value."
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reset", action="store_true",
                         help="borra los tenants demo antes de sembrar")
     args = parser.parse_args()
+    _check_demo_password()
 
     session = get_session()
     # Fictitious NITs in the Salvadoran format (municipality-birth-correlative-check).
@@ -1469,7 +1502,11 @@ def main() -> None:
     for slug, legal_name, tax_id, location in demo:
         seed_tenant(session, slug, legal_name, tax_id, location)
     session.close()
-    print("\nListo. Contraseña de todos los usuarios demo:", PASSWORD)
+    if PASSWORD == ADMIN_PASSWORD == _DEFAULT_DEMO_PASSWORD:
+        print("\nListo. Contraseña de todos los usuarios demo:", PASSWORD)
+    else:
+        print("\nListo. Contraseñas demo: DEMO_PASSWORD (usuarios) y DEMO_ADMIN_PASSWORD "
+              "(admins de clínica)")
 
 
 if __name__ == "__main__":

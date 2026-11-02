@@ -124,5 +124,3 @@ Pendiente, en orden de valor aproximado:
 
 1. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
    (`use_cases/auth.py`). NIST sugiere ≥12 o chequeo de entropía (zxcvbn).
-2. **Contraseña demo del seed** — `scripts/seed_demo.py` usa `demo1234` fija. Es un script
-   explícitamente de desarrollo, pero podría generar una contraseña aleatoria e imprimirla.

@@ -123,6 +123,8 @@ class AuthenticateUser:
                     entity_type="User",
                     entity_id=str(user.id),
                     timestamp=now,
+                    ip_address=cmd.ip_address,
+                    user_agent=cmd.user_agent,
                 )
             )
             uow.commit()
@@ -188,6 +190,8 @@ class AuthenticateUser:
                     entity_type="User",
                     entity_id=str(user.id),
                     timestamp=now,
+                    ip_address=cmd.ip_address,
+                    user_agent=cmd.user_agent,
                 )
             )
             uow.commit()

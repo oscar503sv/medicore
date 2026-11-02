@@ -257,7 +257,7 @@ cp .env.example .env
 # API en http://localhost:8000/api/v1/ · docs en /api/v1/docs · health en /health
 ```
 
-El seed reproduce ~8 semanas de actividad de la clínica y las próximas 4 semanas de agenda respecto al día en que se ejecuta (vuelve a correrlo con `--reset` para actualizar las fechas). Tras el seed, todos los usuarios demo usan la contraseña **`demo1234`**. Ver detalles en
+El seed reproduce ~8 semanas de actividad de la clínica y las próximas 4 semanas de agenda respecto al día en que se ejecuta (vuelve a correrlo con `--reset` para actualizar las fechas). Los usuarios demo usan la contraseña de `DEMO_PASSWORD` (en desarrollo, si no se define, **`demo1234`**) y los admins de clínica la de `DEMO_ADMIN_PASSWORD` (la misma `DEMO_PASSWORD` si no se define); en producción ambas son obligatorias y deben ser distintas. Ver detalles en
 [`backend/README.es.md`](backend/README.es.md).
 
 ### Frontend
@@ -355,6 +355,8 @@ Los tests verifican, entre otras cosas:
 | `CORS_ORIGINS` | Orígenes permitidos (coma-separados); `*` solo en desarrollo | `*` |
 | `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` (dev) / `false` (prod) |
 | `TRUSTED_PROXIES` | IPs/CIDRs de reverse-proxies cuyo `X-Forwarded-For` se honra; vacío → IP del socket | vacío |
+| `DEMO_PASSWORD` | Contraseña de los usuarios demo que crea `scripts/seed_demo.py` (≥ 8 caracteres). **Obligatoria en producción**, donde se rechaza la contraseña pública por defecto | `demo1234` (solo dev) |
+| `DEMO_ADMIN_PASSWORD` | Contraseña de los admins de clínica de la demo (≥ 8 caracteres), privada para que la contraseña compartida no abra la administración. **Obligatoria en producción** y distinta de `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
 > En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*`; además los docs quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida y los defaults funcionan tal cual.
 
@@ -363,6 +365,26 @@ Los tests verifican, entre otras cosas:
 ## Despliegue
 
 El backend incluye un `Dockerfile` listo para producción (usuario no-root, uvicorn en el puerto 8000). El frontend se sirve como estático (`dist/`) en el mismo origen tras un reverse-proxy, o en un host separado con `VITE_API_BASE_URL` definido al hacer el build. Pasos detallados en [`backend/README.es.md`](backend/README.es.md) y [`frontend/README.es.md`](frontend/README.es.md).
+
+### Despliegue con Docker Compose / Coolify
+
+El [`docker-compose.yml`](docker-compose.yml) de la raíz levanta todo el stack en un **único origen**: `db` (PostgreSQL 16, volumen persistente), `backend` (aplica `alembic upgrade head` al arrancar) y `frontend` (nginx que sirve el SPA, redirige `/api/` al backend y agrega las cabeceras de seguridad). Solo `frontend` lleva dominio público; el TLS lo termina el proxy de borde (Traefik en Coolify).
+
+1. Genera los secretos: `openssl rand -hex 32` (`JWT_SECRET`) y `openssl rand -base64 24` (`POSTGRES_PASSWORD`), y elige `DEMO_PASSWORD` (la que compartes con quien prueba la demo) y `DEMO_ADMIN_PASSWORD` (privada, para los admins de clínica).
+2. En Coolify: **New Resource → Public Repository** → este repo, rama `main`, **Build Pack: Docker Compose**, archivo `/docker-compose.yml`.
+3. Variables de entorno: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (p. ej. `https://medicore.ejemplo.com`), `DEMO_PASSWORD` y `DEMO_ADMIN_PASSWORD`. Opcionales: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`. Si falta una obligatoria el stack no arranca, a propósito.
+4. Asigna el dominio solo al servicio **frontend** y pulsa **Deploy**.
+5. Carga inicial de datos (una vez), en una terminal del contenedor `backend`:
+   ```sh
+   python scripts/import_icd.py cie11 data/cie11.csv
+   python scripts/import_icd.py cie10 data/cie10.csv
+   python scripts/seed_demo.py            # --reset para actualizar las fechas de la demo
+   python scripts/create_platform_admin.py <correo> "<nombre>" '<contraseña>'
+   ```
+
+Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migraciones nuevas al arrancar.
+
+Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma.
 
 ---
 

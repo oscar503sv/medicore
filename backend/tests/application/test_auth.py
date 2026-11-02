@@ -33,7 +33,8 @@ def test_authenticate_success_returns_session():
     auth = make_auth(seed)
 
     session = auth.execute(
-        AuthenticateUserCommand(slug="clinica-norte", email=seed.doctor.email, password=PASSWORD)
+        AuthenticateUserCommand(slug="clinica-norte", email=seed.doctor.email, password=PASSWORD,
+                                ip_address="203.0.113.7", user_agent="Firefox/159.0")
     )
 
     assert session.user_id == seed.doctor.id
@@ -45,7 +46,8 @@ def test_authenticate_success_returns_session():
     # login is audited and last_seen recorded
     uow = seed.factory.for_tenant(seed.tenant.id)
     assert uow.users.get_by_id(seed.doctor.id).last_seen_at is not None
-    assert uow.audit.query(action="auth.login")
+    (entry,) = uow.audit.query(action="auth.login")
+    assert (entry.ip_address, entry.user_agent) == ("203.0.113.7", "Firefox/159.0")
 
 
 def _counting_auth(seed) -> tuple[AuthenticateUser, list[str]]:

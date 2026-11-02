@@ -257,7 +257,7 @@ cp .env.example .env
 # API at http://localhost:8000/api/v1/ · docs at /api/v1/docs · health at /health
 ```
 
-The seed replays ~8 weeks of clinic activity and the next 4 weeks of agenda relative to the day it runs (re-run it with `--reset` to refresh the dates). After seeding, every demo user has the password **`demo1234`**. See
+The seed replays ~8 weeks of clinic activity and the next 4 weeks of agenda relative to the day it runs (re-run it with `--reset` to refresh the dates). Demo users get the password from `DEMO_PASSWORD` (**`demo1234`** in development when it isn't set) and the clinic admins the one from `DEMO_ADMIN_PASSWORD` (the same `DEMO_PASSWORD` when unset); in production both are required and must differ. See
 [`backend/README.md`](backend/README.md) for details.
 
 ### Frontend
@@ -355,6 +355,8 @@ Among other things, the tests verify:
 | `CORS_ORIGINS` | Allowed origins (comma-separated); `*` only in development | `*` |
 | `ENABLE_DOCS` | Expose Swagger/OpenAPI at `/api/v1/docs` | `true` (dev) / `false` (prod) |
 | `TRUSTED_PROXIES` | IPs/CIDRs of reverse proxies whose `X-Forwarded-For` is honored; empty → socket IP | empty |
+| `DEMO_PASSWORD` | Password for the demo users created by `scripts/seed_demo.py` (≥ 8 chars). **Required in production**, where the public default is rejected | `demo1234` (dev only) |
+| `DEMO_ADMIN_PASSWORD` | Password for the demo clinic admins (≥ 8 chars), kept private so the shared demo password doesn't open the administration. **Required in production** and different from `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
 > In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is still the insecure default or too short, or if `CORS_ORIGINS` is `*`; API docs are also disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and the defaults work as-is.
 
@@ -363,6 +365,26 @@ Among other things, the tests verify:
 ## Deployment
 
 The backend ships a production-ready `Dockerfile` (non-root user, uvicorn on port 8000). The frontend is served as static files (`dist/`) on the same origin behind a reverse proxy, or from a separate host with `VITE_API_BASE_URL` set at build time. Step-by-step instructions in [`backend/README.md`](backend/README.md) and [`frontend/README.md`](frontend/README.md).
+
+### Deployment with Docker Compose / Coolify
+
+The root [`docker-compose.yml`](docker-compose.yml) runs the whole stack on a **single origin**: `db` (PostgreSQL 16, persistent volume), `backend` (applies `alembic upgrade head` on start) and `frontend` (nginx serving the SPA, proxying `/api/` to the backend and adding the security headers). Only `frontend` gets a public domain; TLS is terminated by the edge proxy (Traefik in Coolify).
+
+1. Generate the secrets: `openssl rand -hex 32` (`JWT_SECRET`) and `openssl rand -base64 24` (`POSTGRES_PASSWORD`), and choose `DEMO_PASSWORD` (shared with whoever tries the demo) and `DEMO_ADMIN_PASSWORD` (private, for the clinic admins).
+2. In Coolify: **New Resource → Public Repository** → this repo, branch `main`, **Build Pack: Docker Compose**, compose file `/docker-compose.yml`.
+3. Environment variables: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (e.g. `https://medicore.example.com`), `DEMO_PASSWORD` and `DEMO_ADMIN_PASSWORD`. Optional: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`. If a required one is missing the stack doesn't start, on purpose.
+4. Assign the domain to the **frontend** service only, then **Deploy**.
+5. One-time data load, in a terminal of the `backend` container:
+   ```sh
+   python scripts/import_icd.py cie11 data/cie11.csv
+   python scripts/import_icd.py cie10 data/cie10.csv
+   python scripts/seed_demo.py            # --reset to refresh the demo dates
+   python scripts/create_platform_admin.py <email> "<name>" '<password>'
+   ```
+
+Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on start.
+
+For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched.
 
 ---
 

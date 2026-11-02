@@ -17,6 +17,15 @@ RUN pip install --no-cache-dir .
 COPY alembic.ini ./
 COPY migrations ./migrations
 
+# Operational scripts (ICD catalog import, demo seed, platform admin) + ICD CSVs,
+# so they can be run inside the container: `docker exec <ctr> python scripts/...`.
+COPY scripts ./scripts
+COPY data ./data
+
+# Entrypoint applies pending migrations (`alembic upgrade head`) before starting the app.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Run as a non-root user.
 RUN useradd --create-home --uid 1000 appuser
 USER appuser
@@ -27,4 +36,5 @@ EXPOSE 8000
 # --no-proxy-headers: the app resolves X-Forwarded-For itself against TRUSTED_PROXIES;
 # uvicorn's own (default-on) proxy handling would rewrite request.client first and
 # bypass that single source of truth.
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["uvicorn", "medicore.presentation.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]

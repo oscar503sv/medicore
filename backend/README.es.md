@@ -161,6 +161,8 @@ Copia `.env.example` a `.env` y ajusta los valores:
 | `CORS_ORIGINS` | Orígenes permitidos (coma-separados); `*` solo en desarrollo | `*` |
 | `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` (dev) / `false` (prod, salvo opt-in explícito) |
 | `TRUSTED_PROXIES` | IPs/CIDRs (coma-separados) de los reverse-proxies cuya cabecera `X-Forwarded-For` se honra (p. ej. `127.0.0.1` o `10.0.0.0/8`). Vacío → la cabecera se ignora y se registra la IP del socket. Un valor inválido impide el arranque. | vacío |
+| `DEMO_PASSWORD` | Contraseña de los usuarios demo que crea `scripts/seed_demo.py` (≥ 8 caracteres). **Obligatoria en producción**, donde se rechaza la contraseña pública por defecto. | `demo1234` (solo dev) |
+| `DEMO_ADMIN_PASSWORD` | Contraseña de los admins de clínica de la demo (≥ 8 caracteres), privada para que la contraseña compartida no abra la administración. **Obligatoria en producción** y distinta de `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
 > En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue
 > siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*`. Además los docs
@@ -194,7 +196,10 @@ python -m venv .venv
 
 - API en `http://localhost:8000/api/v1`, documentación interactiva en `/api/v1/docs`,
   health-check en `/health`.
-- Tras correr el seed, todos los usuarios demo usan la contraseña **`demo1234`**.
+- Tras correr el seed, todos los usuarios demo usan la contraseña de `DEMO_PASSWORD`
+  (**`demo1234`** en desarrollo si no se define) y los admins de clínica la de
+  `DEMO_ADMIN_PASSWORD` (la misma `DEMO_PASSWORD` si no se define). En producción ambas son
+  obligatorias: el seed rechaza la contraseña por defecto y una de admins igual a la compartida.
 
 ## Formato de errores
 
@@ -242,13 +247,16 @@ y se **saltan automáticamente** si no hay PostgreSQL accesible.
 ## Despliegue
 
 Imagen Docker lista para producción (`Dockerfile` en esta carpeta; usuario no-root, arranca con
-uvicorn en el puerto 8000):
+uvicorn en el puerto 8000). Su entrypoint aplica las migraciones pendientes (`alembic upgrade
+head`) antes de levantar la app; `SKIP_MIGRATIONS=1` lo omite. Incluye además `scripts/` y los
+CSV de CIE en `data/`, para poder importar el catálogo y correr el seed dentro del contenedor.
+Para el stack completo (PostgreSQL + backend + nginx) ver el `docker-compose.yml` de la raíz.
 
 ```bash
 # Build
 docker build -t medicore-backend .
 
-# Migraciones (paso aparte, antes de levantar la app)
+# Solo migraciones (el entrypoint ya las corre al arrancar)
 docker run --rm --env-file .env medicore-backend alembic upgrade head
 
 # Levantar la API

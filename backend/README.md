@@ -159,6 +159,8 @@ Copy `.env.example` to `.env` and adjust the values:
 | `CORS_ORIGINS` | Allowed origins (comma-separated); `*` only in development | `*` |
 | `ENABLE_DOCS` | Expose Swagger/OpenAPI at `/api/v1/docs` | `true` (dev) / `false` (prod, unless explicitly enabled) |
 | `TRUSTED_PROXIES` | IPs/CIDRs (comma-separated) of the reverse proxies whose `X-Forwarded-For` header is honored (e.g. `127.0.0.1` or `10.0.0.0/8`). Empty → the header is ignored and the socket IP is recorded. An invalid value prevents startup. | empty |
+| `DEMO_PASSWORD` | Password for the demo users created by `scripts/seed_demo.py` (≥ 8 chars). **Required in production**, where the public default is rejected. | `demo1234` (dev only) |
+| `DEMO_ADMIN_PASSWORD` | Password for the demo clinic admins (≥ 8 chars), kept private so the shared demo password doesn't open the administration. **Required in production** and different from `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
 > In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is
 > still the insecure default or too short, or if `CORS_ORIGINS` is `*`. API docs are also
@@ -192,7 +194,10 @@ python -m venv .venv
 
 - API at `http://localhost:8000/api/v1`, interactive docs at `/api/v1/docs`, health check at
   `/health`.
-- After running the seed, every demo user has the password **`demo1234`**.
+- After running the seed, every demo user has the password from `DEMO_PASSWORD` (**`demo1234`**
+  in development when unset) and the clinic admins the one from `DEMO_ADMIN_PASSWORD` (the same
+  `DEMO_PASSWORD` when unset). In production both are required: the seed refuses the default and
+  an admin password equal to the shared one.
 
 ## Error format
 
@@ -240,13 +245,16 @@ automatically** when PostgreSQL isn't reachable.
 ## Deployment
 
 Production-ready Docker image (`Dockerfile` in this folder; non-root user, starts uvicorn on
-port 8000):
+port 8000). Its entrypoint applies pending migrations (`alembic upgrade head`) before starting
+the app; set `SKIP_MIGRATIONS=1` to skip that. It also ships `scripts/` and the ICD CSVs in
+`data/`, so the catalog import and the demo seed can run inside the container. For the full
+stack (PostgreSQL + backend + nginx) see the root `docker-compose.yml`.
 
 ```bash
 # Build
 docker build -t medicore-backend .
 
-# Migrations (a separate step, before starting the app)
+# Migrations only (the entrypoint already runs them on start)
 docker run --rm --env-file .env medicore-backend alembic upgrade head
 
 # Start the API

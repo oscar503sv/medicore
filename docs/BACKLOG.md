@@ -121,5 +121,3 @@ Pending, in rough order of value:
 
 1. **Password policy** — the current minimum is 8 characters with no other requirements
    (`use_cases/auth.py`). NIST suggests ≥12 or an entropy check (zxcvbn).
-2. **Demo seed password** — `scripts/seed_demo.py` uses a fixed `demo1234`. It's explicitly a
-   development script, but it could generate a random password and print it.
