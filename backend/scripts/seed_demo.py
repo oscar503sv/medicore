@@ -689,6 +689,7 @@ def seed_vaccinations(c: Clinic) -> None:
             at = (datetime.combine(on, time(RNG.randint(8, 15), RNG.choice([0, 15, 30, 45])))
                   if here else since + timedelta(minutes=20))  # card copied when registering
         at = min(at, latest)
+        on = min(on, at.date())  # right after midnight "latest" is still yesterday
         given_here = here and outcome == VaccinationOutcome.ADMINISTERED
         route = VACCINES[dose.vaccine].route
         infant = (on - patient.date_of_birth).days < 3 * 365
