@@ -216,23 +216,26 @@ function InsurerModal({
   const t = useT()
   const qc = useQueryClient()
   const [form, setForm] = useState<InsurerPayload>(EMPTY)
-  // Sync the form with the insurer being edited whenever the modal target changes.
-  const [syncedId, setSyncedId] = useState<string | null>(null)
-  const targetId = insurer?.id ?? null
-  if (open && syncedId !== targetId) {
-    setSyncedId(targetId)
-    setForm(
-      insurer
-        ? {
-            name: insurer.name,
-            phone: insurer.phone ?? '',
-            email: insurer.email ?? '',
-            address: insurer.address ?? '',
-            contact_person: insurer.contact_person ?? '',
-            notes: insurer.notes ?? '',
-          }
-        : EMPTY,
-    )
+  // Reload the form every time the modal opens (empty for a new insurer, the insurer's data
+  // when editing). Keyed on open + target so reopening "new" after a save starts empty.
+  const target = open ? (insurer?.id ?? 'new') : null
+  const [syncedFor, setSyncedFor] = useState<string | null>(null)
+  if (syncedFor !== target) {
+    setSyncedFor(target)
+    if (open) {
+      setForm(
+        insurer
+          ? {
+              name: insurer.name,
+              phone: insurer.phone ?? '',
+              email: insurer.email ?? '',
+              address: insurer.address ?? '',
+              contact_person: insurer.contact_person ?? '',
+              notes: insurer.notes ?? '',
+            }
+          : EMPTY,
+      )
+    }
   }
 
   const save = useMutation({
@@ -240,15 +243,10 @@ function InsurerModal({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['insurers'] })
       toast(insurer ? t('insurers.updated_ok') : t('insurers.created_ok'))
-      close()
+      onClose()
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
-
-  function close() {
-    setSyncedId(null)
-    onClose()
-  }
 
   const set = (k: keyof InsurerPayload) => (e: ChangeEvent<HTMLInputElement>) =>
     setForm({ ...form, [k]: e.target.value })
@@ -256,7 +254,7 @@ function InsurerModal({
   return (
     <Modal
       open={open}
-      onClose={close}
+      onClose={onClose}
       title={insurer ? t('insurers.edit') : t('insurers.new')}
       width="max-w-lg"
     >
@@ -280,7 +278,7 @@ function InsurerModal({
         />
         <Input label={t('insurers.notes')} value={form.notes ?? ''} onChange={set('notes')} />
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="outline" onClick={close}>
+          <Button type="button" variant="outline" onClick={onClose}>
             {t('app.cancel')}
           </Button>
           <Button type="submit" loading={save.isPending} disabled={!form.name}>
