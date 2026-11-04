@@ -24,6 +24,8 @@ def _prefs_to_json(user: User) -> dict:
             "internal_messages": str(n.internal_messages),
             "weekly_reports": str(n.weekly_reports),
         },
+        "welcome_seen": p.welcome_seen,
+        "onboarding_dismissed": p.onboarding_dismissed,
     }
 
 

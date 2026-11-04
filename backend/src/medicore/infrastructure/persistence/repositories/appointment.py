@@ -76,6 +76,11 @@ class SqlAppointmentRepository:
         )
         return {PatientId.parse(pid): last for pid, last in rows}
 
+    def exists_for_doctor(self, doctor_id: UserId) -> bool:
+        return (
+            self._q().filter(AppointmentModel.doctor_id == doctor_id.value).first() is not None
+        )
+
     def count_patients_with_upcoming(self, now: datetime) -> int:
         return (
             self._q()

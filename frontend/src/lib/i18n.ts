@@ -1,5 +1,6 @@
 import { useUIStore } from '@/stores/ui'
 import { aplEn, aplEs } from './i18n-applications'
+import { obEn, obEs } from './i18n-onboarding'
 import { prcEn, prcEs } from './i18n-procedures'
 import { vaxEn, vaxEs } from './i18n-vaccination'
 
@@ -9,6 +10,7 @@ const es: Dict = {
   ...vaxEs,
   ...aplEs,
   ...prcEs,
+  ...obEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -934,6 +936,7 @@ const en: Dict = {
   ...vaxEn,
   ...aplEn,
   ...prcEn,
+  ...obEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.cancel': 'Cancel',

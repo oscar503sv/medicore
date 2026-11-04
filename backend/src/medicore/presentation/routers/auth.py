@@ -13,6 +13,7 @@ from medicore.application.use_cases.auth import (
     SwitchTheme,
     UpdateMyProfile,
 )
+from medicore.application.use_cases.onboarding import GetOnboarding, UpdateOnboarding
 from medicore.application.use_cases.sessions import ListMySessions, RevokeMySession
 from medicore.domain.shared.identifiers import SessionId
 from medicore.infrastructure.config import get_settings
@@ -35,11 +36,14 @@ from medicore.presentation.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
     MyProfileResponse,
+    OnboardingResponse,
+    OnboardingStepResponse,
     SessionListResponse,
     SessionResponse,
     SwitchLocaleRequest,
     SwitchThemeRequest,
     UpdateMyProfileRequest,
+    UpdateOnboardingRequest,
 )
 from medicore.presentation.serializers import ser_my_profile, ser_session_info
 
@@ -145,3 +149,22 @@ def update_my_profile(
         actor, name=body.name, phone=body.phone, bio=body.bio
     )
     return ser_my_profile(profile)
+
+
+@router.get("/auth/me/onboarding", response_model=OnboardingResponse)
+def get_my_onboarding(actor: Actor, factory: UoWFactory):
+    o = GetOnboarding(factory).execute(actor)
+    return OnboardingResponse(
+        welcome_seen=o.welcome_seen,
+        dismissed=o.dismissed,
+        steps=[
+            OnboardingStepResponse(key=s.key, done=s.done, optional=s.optional) for s in o.steps
+        ],
+    )
+
+
+@router.patch("/auth/me/onboarding", status_code=204)
+def update_my_onboarding(body: UpdateOnboardingRequest, actor: Actor, factory: UoWFactory):
+    UpdateOnboarding(factory).execute(
+        actor, welcome_seen=body.welcome_seen, dismissed=body.dismissed
+    )

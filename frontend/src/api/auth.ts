@@ -7,6 +7,19 @@ export interface LoginPayload {
   password: string
 }
 
+export interface OnboardingStep {
+  key: string
+  done: boolean
+  optional: boolean
+}
+
+export interface Onboarding {
+  welcome_seen: boolean
+  dismissed: boolean
+  /** Empty for roles without a checklist, and once dismissed. */
+  steps: OnboardingStep[]
+}
+
 export const authApi = {
   login: (payload: LoginPayload) =>
     api.post<Session>('/auth/login', payload).then((r) => r.data),
@@ -30,4 +43,9 @@ export const authApi = {
     api.get<{ items: AuthSessionInfo[] }>('/auth/me/sessions').then((r) => r.data.items),
 
   revokeSession: (sessionId: string) => api.delete(`/auth/me/sessions/${sessionId}`),
+
+  onboarding: () => api.get<Onboarding>('/auth/me/onboarding').then((r) => r.data),
+
+  updateOnboarding: (payload: { welcome_seen?: boolean; dismissed?: boolean }) =>
+    api.patch('/auth/me/onboarding', payload),
 }

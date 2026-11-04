@@ -71,3 +71,20 @@ class SessionInfoResponse(BaseModel):
 
 class SessionListResponse(BaseModel):
     items: list[SessionInfoResponse]
+
+
+class OnboardingStepResponse(BaseModel):
+    key: str
+    done: bool
+    optional: bool
+
+
+class OnboardingResponse(BaseModel):
+    welcome_seen: bool
+    dismissed: bool
+    steps: list[OnboardingStepResponse]
+
+
+class UpdateOnboardingRequest(BaseModel):
+    welcome_seen: bool = False
+    dismissed: bool = False

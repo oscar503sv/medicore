@@ -442,6 +442,11 @@ class InMemoryAppointmentRepository(_Scoped):
                 result[a.patient_id] = a.scheduled_start
         return result
 
+    def exists_for_doctor(self, doctor_id: UserId) -> bool:
+        return any(
+            a.doctor_id == doctor_id for a in self._mine(self._store.appointments.values())
+        )
+
     def count_patients_with_upcoming(self, now: datetime) -> int:
         return len(
             {
@@ -682,6 +687,11 @@ class InMemoryMedicalRecordRepository(_Scoped):
             records = [r for r in records if str(r.type) == filter.type]
         records.sort(key=lambda r: r.encounter_at, reverse=True)
         return records
+
+    def exists_by_author(self, author_id: UserId) -> bool:
+        return any(
+            r.author_id == author_id for r in self._mine(self._store.medical_records.values())
+        )
 
     def save(self, record: MedicalRecord) -> None:
         self._store.medical_records[record.id.value] = record

@@ -81,6 +81,16 @@ class User:
 
         self.preferences = replace(self.preferences, language=language)
 
+    def mark_welcome_seen(self) -> None:
+        from dataclasses import replace
+
+        self.preferences = replace(self.preferences, welcome_seen=True)
+
+    def dismiss_onboarding(self) -> None:
+        from dataclasses import replace
+
+        self.preferences = replace(self.preferences, welcome_seen=True, onboarding_dismissed=True)
+
 
 @dataclass(slots=True)
 class DoctorProfile:

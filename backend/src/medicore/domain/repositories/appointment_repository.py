@@ -26,6 +26,10 @@ class AppointmentRepository(Protocol):
         """Start of the latest completed appointment per patient (omits those without one)."""
         ...
 
+    def exists_for_doctor(self, doctor_id: UserId) -> bool:
+        """Whether the doctor has ever had an appointment booked (any status)."""
+        ...
+
     def count_patients_with_upcoming(self, now: datetime) -> int:
         """Distinct patients with an active appointment after ``now`` (clinic wall-clock)."""
         ...

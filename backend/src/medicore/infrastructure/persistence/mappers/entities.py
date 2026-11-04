@@ -121,6 +121,8 @@ def _prefs_from_json(d: dict) -> UserPreferences:
             internal_messages=NotificationChannel(n.get("internal_messages", "push")),
             weekly_reports=NotificationChannel(n.get("weekly_reports", "none")),
         ),
+        welcome_seen=bool(d.get("welcome_seen", False)),
+        onboarding_dismissed=bool(d.get("onboarding_dismissed", False)),
     )
 
 

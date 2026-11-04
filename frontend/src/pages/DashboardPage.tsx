@@ -5,6 +5,7 @@ import { Activity, CalendarCheck, Hourglass, Users } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
 import { dashboardApi } from '@/api/dashboard'
 import { patientsApi } from '@/api/patients'
+import { GettingStarted } from '@/components/onboarding/GettingStarted'
 import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
 import { Avatar } from '@/components/ui/Avatar'
@@ -58,6 +59,8 @@ export function DashboardPage() {
   return (
     <div className="space-y-6 p-8">
       <PageHeader eyebrow={fmtNow('EEEE, d MMMM')} title={`${t(greetingKey)}, ${who}`} />
+
+      <GettingStarted />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard

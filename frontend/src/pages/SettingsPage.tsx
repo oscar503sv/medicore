@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { Monitor, Moon, Smartphone, Sun } from 'lucide-react'
 import { authApi } from '@/api/auth'
 import { errorMessage } from '@/api/client'
@@ -24,9 +25,13 @@ type Section = 'profile' | 'appearance' | 'sessions' | 'organization'
 
 export function SettingsPage() {
   const t = useT()
-  const [section, setSection] = useState<Section>('profile')
-  const { theme, setTheme, lang, setLang } = useUIStore()
   const canViewOrg = useAuthStore((s) => s.can('organization.view'))
+  // Deep links (e.g. from the getting-started checklist) may open a given section.
+  const [params] = useSearchParams()
+  const [section, setSection] = useState<Section>(
+    params.get('section') === 'organization' && canViewOrg ? 'organization' : 'profile',
+  )
+  const { theme, setTheme, lang, setLang } = useUIStore()
 
   const sections: { id: Section; label: string }[] = [
     { id: 'profile', label: t('settings.profile') },

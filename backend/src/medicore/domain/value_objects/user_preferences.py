@@ -25,3 +25,7 @@ class UserPreferences:
     theme: ThemePref = ThemePref.SYSTEM
     language: LangPref = LangPref.ES
     notifications: NotificationPreferences = field(default_factory=NotificationPreferences)
+    # First-login onboarding: the welcome modal was shown, and the "getting started"
+    # checklist was dismissed for good.
+    welcome_seen: bool = False
+    onboarding_dismissed: bool = False

@@ -18,6 +18,7 @@ from medicore.domain.shared.identifiers import (
     PrescriptionId,
     RecordId,
     TenantId,
+    UserId,
 )
 from medicore.infrastructure.persistence.mappers._json import (
     application_draft_to_dict,
@@ -109,6 +110,12 @@ class SqlMedicalRecordRepository:
         if filter and filter.type:
             q = q.filter(MedicalRecordModel.type == filter.type)
         return [to_medical_record(r) for r in q.all()]
+
+    def exists_by_author(self, author_id: UserId) -> bool:
+        return (
+            self._q().filter(MedicalRecordModel.author_id == author_id.value).first()
+            is not None
+        )
 
     def save(self, record: MedicalRecord) -> None:
         # Records are immutable once signed; amendments are new rows.

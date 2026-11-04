@@ -6,7 +6,7 @@ from typing import Protocol
 
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.repositories._support import RecordFilter
-from medicore.domain.shared.identifiers import PatientId, RecordId
+from medicore.domain.shared.identifiers import PatientId, RecordId, UserId
 
 
 class MedicalRecordRepository(Protocol):
@@ -15,6 +15,10 @@ class MedicalRecordRepository(Protocol):
     def list_by_patient(self, patient_id: PatientId) -> list[MedicalRecord]: ...
 
     def list(self, filter: RecordFilter | None = None) -> list[MedicalRecord]: ...
+
+    def exists_by_author(self, author_id: UserId) -> bool:
+        """Whether the user has signed at least one record."""
+        ...
 
     def save(self, record: MedicalRecord) -> None:
         """Persist a signed/amended record. Implementations must never overwrite a record

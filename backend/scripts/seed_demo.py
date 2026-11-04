@@ -159,6 +159,7 @@ from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.time_range import TimeRange
+from medicore.domain.value_objects.user_preferences import UserPreferences
 from medicore.domain.value_objects.vitals import Vitals
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
@@ -527,6 +528,8 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
         role=role, status=UserStatus.ACTIVE,
         sex=Sex.FEMALE if female else Sex.MALE, specialty=specialty,
         phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
+        # A populated demo clinic needs no first-login checklist.
+        preferences=UserPreferences(welcome_seen=True, onboarding_dismissed=True),
     )
 
 
