@@ -11,3 +11,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Id of the running build (vite.config.ts); compared with /version.json to detect deploys. */
+declare const __BUILD_ID__: string

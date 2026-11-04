@@ -183,14 +183,18 @@ export function InsurersPage() {
         )}
       </Card>
 
-      <InsurerModal
-        open={creating || !!editing}
-        insurer={editing}
-        onClose={() => {
-          setCreating(false)
-          setEditing(null)
-        }}
-      />
+      {/* Mounted only while open and keyed by its target: every opening starts from a fresh
+          form (empty for a new insurer, the insurer's data when editing). */}
+      {(creating || editing) && (
+        <InsurerModal
+          key={editing?.id ?? 'new'}
+          insurer={editing}
+          onClose={() => {
+            setCreating(false)
+            setEditing(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -204,39 +208,21 @@ const EMPTY: InsurerPayload = {
   notes: '',
 }
 
-function InsurerModal({
-  open,
-  insurer,
-  onClose,
-}: {
-  open: boolean
-  insurer: Insurer | null
-  onClose: () => void
-}) {
+function InsurerModal({ insurer, onClose }: { insurer: Insurer | null; onClose: () => void }) {
   const t = useT()
   const qc = useQueryClient()
-  const [form, setForm] = useState<InsurerPayload>(EMPTY)
-  // Reload the form every time the modal opens (empty for a new insurer, the insurer's data
-  // when editing). Keyed on open + target so reopening "new" after a save starts empty.
-  const target = open ? (insurer?.id ?? 'new') : null
-  const [syncedFor, setSyncedFor] = useState<string | null>(null)
-  if (syncedFor !== target) {
-    setSyncedFor(target)
-    if (open) {
-      setForm(
-        insurer
-          ? {
-              name: insurer.name,
-              phone: insurer.phone ?? '',
-              email: insurer.email ?? '',
-              address: insurer.address ?? '',
-              contact_person: insurer.contact_person ?? '',
-              notes: insurer.notes ?? '',
-            }
-          : EMPTY,
-      )
-    }
-  }
+  const [form, setForm] = useState<InsurerPayload>(() =>
+    insurer
+      ? {
+          name: insurer.name,
+          phone: insurer.phone ?? '',
+          email: insurer.email ?? '',
+          address: insurer.address ?? '',
+          contact_person: insurer.contact_person ?? '',
+          notes: insurer.notes ?? '',
+        }
+      : EMPTY,
+  )
 
   const save = useMutation({
     mutationFn: () => (insurer ? insurersApi.update(insurer.id, form) : insurersApi.create(form)),
@@ -253,12 +239,14 @@ function InsurerModal({
 
   return (
     <Modal
-      open={open}
+      open
       onClose={onClose}
       title={insurer ? t('insurers.edit') : t('insurers.new')}
       width="max-w-lg"
     >
+      {/* No browser autofill: it would offer data from other insurers or the user's own. */}
       <form
+        autoComplete="off"
         onSubmit={(e) => {
           e.preventDefault()
           save.mutate()

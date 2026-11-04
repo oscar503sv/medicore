@@ -42,13 +42,35 @@ function injectCsp(apiBaseUrl: string): PluginOption {
   }
 }
 
+/**
+ * Stamp each build with an id: compiled into the app (`__BUILD_ID__`) and published as
+ * `/version.json`. A tab still running an older build notices the mismatch and offers a
+ * reload (see UpdateNotice). nginx serves version.json uncached, like index.html.
+ */
+const BUILD_ID = Date.now().toString(36)
+
+function versionFile(): PluginOption {
+  return {
+    name: 'version-file',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ build: BUILD_ID }),
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   // Where `vite dev` proxies /api requests (only used in development).
   const proxyTarget = env.VITE_API_PROXY_TARGET || 'http://localhost:8000'
 
   return {
-    plugins: [react(), injectCsp(env.VITE_API_BASE_URL || '/api/v1')],
+    plugins: [react(), injectCsp(env.VITE_API_BASE_URL || '/api/v1'), versionFile()],
+    define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

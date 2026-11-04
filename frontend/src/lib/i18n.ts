@@ -14,6 +14,8 @@ const es: Dict = {
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
+  'app.update_available': 'Hay una nueva versión de Medicore.',
+  'app.update_reload': 'Recargar',
   'app.cancel': 'Cancelar',
   'app.create': 'Crear',
   'app.edit': 'Editar',
@@ -939,6 +941,8 @@ const en: Dict = {
   ...obEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
+  'app.update_available': 'A new version of Medicore is available.',
+  'app.update_reload': 'Reload',
   'app.cancel': 'Cancel',
   'app.create': 'Create',
   'app.edit': 'Edit',
