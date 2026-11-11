@@ -152,7 +152,7 @@ def test_platform_reset_password_revokes_user_sessions():
     sid = _session_id(login.token)
 
     ResetUserPassword(seed.factory, PlainPasswordHasher(), clock).execute(
-        actor_for(seed), seed.tenant.id, seed.doctor.id, "temporal-123"
+        actor_for(seed), seed.tenant.id, seed.doctor.id, "Volcan-Izalco-77"
     )
     assert not seed.factory.store.sessions[sid.value].is_active(clock.now())
 

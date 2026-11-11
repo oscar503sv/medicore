@@ -56,7 +56,7 @@ class TestUsers:
                 name="Nuevo",
                 email="nuevo@clinica-norte.test",
                 role=Role.NURSE,
-                password="temporal123",
+                password="Rio-Lempa-482",
             ),
         )
         assert user.status == UserStatus.ACTIVE
@@ -76,7 +76,7 @@ class TestUsers:
                     name="Dup",
                     email=seed.doctor.email,
                     role=Role.DOCTOR,
-                    password="temporal123",
+                    password="Rio-Lempa-482",
                 ),
             )
 
@@ -151,11 +151,11 @@ class TestUsers:
         hasher = PlainPasswordHasher()
         ResetUserPassword(uow, hasher, FixedClock()).execute(
             seed.actor(seed.admin),
-            ResetUserPasswordCommand(user_id=seed.nurse.id, password="nuevaTemp1"),
+            ResetUserPasswordCommand(user_id=seed.nurse.id, password="Volcan-Izalco-77"),
         )
         reloaded = uow.users.get_by_id(seed.nurse.id)
         assert reloaded.must_change_password is True
-        assert hasher.verify("nuevaTemp1", reloaded.password_hash)
+        assert hasher.verify("Volcan-Izalco-77", reloaded.password_hash)
         assert uow.audit.query(action="user.password_reset")
 
     def test_non_admin_cannot_reset_password(self):
@@ -164,7 +164,7 @@ class TestUsers:
         with pytest.raises(PermissionDenied):
             ResetUserPassword(uow, PlainPasswordHasher(), FixedClock()).execute(
                 seed.receptionist_actor,
-                ResetUserPasswordCommand(user_id=seed.nurse.id, password="nuevaTemp1"),
+                ResetUserPasswordCommand(user_id=seed.nurse.id, password="Volcan-Izalco-77"),
             )
 
 

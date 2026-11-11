@@ -13,12 +13,14 @@ import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { PasswordRules } from '@/components/ui/PasswordRules'
 import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { fmtDate } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { PASSWORD_MIN, genPassword } from '@/lib/passwordPolicy'
 import { expiryLabel } from '@/lib/subscriptions'
 import { TIMEZONES, tzLabel } from '@/lib/timezones'
 import { ADDON_MODULES, type TenantStatus } from '@/types'
@@ -29,10 +31,6 @@ const STATUS_TONE: Record<TenantStatus, 'ok' | 'danger' | 'neutral'> = {
   archived: 'neutral',
 }
 
-function genPassword(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-}
 
 export function ClinicsListPage() {
   const t = useT()
@@ -311,7 +309,7 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
                 value={form.admin_password}
                 onChange={(e) => set({ admin_password: e.target.value })}
                 required
-                minLength={8}
+                minLength={PASSWORD_MIN}
               />
             </div>
             <Button
@@ -322,6 +320,10 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
               {t('platform.generate')}
             </Button>
           </div>
+          <PasswordRules
+            password={form.admin_password}
+            personal={[form.admin_name, form.admin_email, form.slug]}
+          />
           <p className="mt-1.5 text-xs text-tx-3">{t('platform.temp_password_hint')}</p>
         </div>
 

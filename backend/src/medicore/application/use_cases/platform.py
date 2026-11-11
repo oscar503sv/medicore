@@ -20,6 +20,7 @@ from medicore.application.common.errors import (
     ValidationError,
 )
 from medicore.application.common.login_throttle import platform_login_identifier
+from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.common.permissions import effective_permissions
 from medicore.application.common.quotas import ensure_seat_for
 from medicore.application.common.timezone import tenant_today
@@ -229,12 +230,9 @@ class CreateTenantWithAdmin:
             slug = Slug(cmd.slug.strip().lower())
         except InvalidValueObject as exc:
             raise ValidationError(str(exc), code="clinic.invalid_slug") from exc
-        if not cmd.admin_password or len(cmd.admin_password) < 8:
-            raise ValidationError(
-                "temporary password must be at least 8 characters",
-                code="password.too_short",
-                min=8,
-            )
+        ensure_password_policy(
+            cmd.admin_password, personal=(cmd.admin_name, cmd.admin_email, str(slug))
+        )
 
         if cmd.trial_days is None and cmd.subscription.period_end is None:
             raise ValidationError(
@@ -518,14 +516,12 @@ class ResetUserPassword:
         user_id: UserId,
         password: str,
     ) -> User:
-        if not password or len(password) < 8:
-            raise ValidationError(
-                "temporary password must be at least 8 characters",
-                code="password.too_short",
-                min=8,
-            )
         with self._factory.for_tenant(tenant_id) as uow:
             user = _require_user(uow, tenant_id, user_id)
+            tenant = uow.tenants.get_by_id(tenant_id)
+            ensure_password_policy(
+                password, personal=(user.name, user.email, str(tenant.slug) if tenant else None)
+            )
             user.set_temporary_password(self._hasher.hash(password))
             uow.users.save(user)
             uow.sessions.revoke_all_for_user(user_id.value, self._clock.now())

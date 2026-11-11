@@ -16,6 +16,7 @@ from medicore.application.common.errors import (
     ValidationError,
 )
 from medicore.application.common.login_throttle import tenant_login_identifier
+from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
@@ -267,10 +268,6 @@ class ChangePassword:
         self._clock = clock
 
     def execute(self, actor: ActorContext, current_password: str, new_password: str) -> None:
-        if not new_password or len(new_password) < 8:
-            raise ValidationError(
-                "new password must be at least 8 characters", code="password.too_short", min=8
-            )
         with self._factory.for_tenant(actor.tenant_id) as uow:
             user = uow.users.get_by_id(actor.user_id)
             if user is None:
@@ -278,6 +275,16 @@ class ChangePassword:
             if not self._hasher.verify(current_password, user.password_hash):
                 raise ValidationError(
                     "current password is incorrect", code="password.current_incorrect"
+                )
+            tenant = uow.tenants.get_by_id(actor.tenant_id)
+            ensure_password_policy(
+                new_password,
+                personal=(user.name, user.email, str(tenant.slug) if tenant else None),
+            )
+            if self._hasher.verify(new_password, user.password_hash):
+                raise ValidationError(
+                    "the new password must differ from the current one",
+                    code="password.same_as_current",
                 )
             user.change_password(self._hasher.hash(new_password))
             uow.users.save(user)

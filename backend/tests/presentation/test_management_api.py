@@ -20,7 +20,7 @@ class TestUsers:
                 "name": "Nuevo",
                 "email": "nuevo@test.es",
                 "role": "nurse",
-                "password": "temporal123",
+                "password": "Rio-Lempa-482",
                 "sex": "female",
             },
             headers=admin_headers,
@@ -51,7 +51,7 @@ class TestUsers:
     def test_reset_password(self, seed, client, admin_headers):
         resp = client.post(
             f"/api/v1/users/{seed.nurse.id}/reset-password",
-            json={"password": "nuevaTemp1"},
+            json={"password": "Volcan-Izalco-77"},
             headers=admin_headers,
         )
         assert resp.status_code == 200
@@ -80,7 +80,7 @@ class TestUsers:
                 "name": "Dup",
                 "email": seed.doctor.email,
                 "role": "nurse",
-                "password": "temporal123",
+                "password": "Rio-Lempa-482",
             },
             headers=admin_headers,
         )

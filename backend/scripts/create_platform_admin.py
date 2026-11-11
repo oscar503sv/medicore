@@ -11,6 +11,8 @@ from __future__ import annotations
 import sys
 
 from medicore.domain.entities.platform_admin import PlatformAdmin
+from medicore.domain.services.password_policy import ensure_acceptable
+from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import PlatformAdminId
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.database.engine import get_session
@@ -18,8 +20,10 @@ from medicore.infrastructure.persistence.repositories.platform import SqlPlatfor
 
 
 def main(email: str, name: str, password: str) -> None:
-    if len(password) < 8:
-        raise SystemExit("password must be at least 8 characters")
+    try:
+        ensure_acceptable(password, personal=(name, email))
+    except InvalidValueObject as exc:
+        raise SystemExit(f"weak password ({exc.code}): {exc}") from exc
     hasher = BcryptPasswordHasher()
     session = get_session()
     try:

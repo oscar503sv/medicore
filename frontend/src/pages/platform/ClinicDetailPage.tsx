@@ -24,15 +24,12 @@ import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { genPassword } from '@/lib/passwordPolicy'
 import { TIMEZONES, tzLabel } from '@/lib/timezones'
 import { deviceLabel } from '@/lib/userAgent'
 import { Activity, CalendarCheck, FileText, Search, Users } from 'lucide-react'
 import type { TenantStatus } from '@/types'
 
-function genPassword(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-}
 
 const STATUS_TONE: Record<TenantStatus, 'ok' | 'danger' | 'neutral'> = {
   active: 'ok',
@@ -128,11 +125,17 @@ export function ClinicDetailPage() {
   }, [users, userQ, roleFilter, statusFilter])
   const pagedUsers = filteredUsers.slice(offset, offset + PAGE_SIZE)
 
+  // The temporary password is shown once so support can hand it to the user.
+  const [issued, setIssued] = useState<{ email: string; password: string } | null>(null)
   const resetPassword = useMutation({
-    mutationFn: (userId: string) => platformTenantsApi.resetUserPassword(id, userId, genPassword()),
-    onSuccess: (res, userId) => {
+    mutationFn: async (userId: string) => {
+      const password = genPassword()
+      const res = await platformTenantsApi.resetUserPassword(id, userId, password)
+      return { res, password }
+    },
+    onSuccess: ({ res, password }, userId) => {
       const u = res.items.find((x) => x.id === userId)
-      toast(`${t('platform.password_reset_ok')} · ${u?.email}`)
+      setIssued({ email: u?.email ?? '', password })
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -266,6 +269,35 @@ export function ClinicDetailPage() {
 
       <SubscriptionCard tenantId={id} onSaved={invalidate} />
       <PaymentsCard tenantId={id} onRecorded={invalidate} />
+
+      <Modal
+        open={!!issued}
+        onClose={() => setIssued(null)}
+        title={t('platform.password_reset_ok')}
+        width="max-w-md"
+      >
+        {issued && (
+          <div className="space-y-4 p-5">
+            <p className="text-sm text-tx-2">{t('platform.temp_password_issued')}</p>
+            <div className="rounded-lg border border-line bg-surface-2 p-3">
+              <p className="text-xs text-tx-3">{issued.email}</p>
+              <p className="select-all font-mono text-lg text-tx">{issued.password}</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard?.writeText(issued.password)
+                  toast(t('platform.copied'))
+                }}
+              >
+                {t('platform.copy')}
+              </Button>
+              <Button onClick={() => setIssued(null)}>{t('app.close')}</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Card>
         <CardHeader title={t('platform.status_actions')} />

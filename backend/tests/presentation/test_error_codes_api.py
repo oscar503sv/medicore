@@ -50,7 +50,7 @@ def test_params_travel_with_the_code(client, admin_headers, seed):
             "name": "Duplicada",
             "email": seed.doctor.email,
             "role": "nurse",
-            "password": "temporal1",
+            "password": "Rio-Lempa-482",
         },
         headers=admin_headers,
     )
@@ -91,7 +91,7 @@ class TestChangePasswordErrors:
         )
         body = _err(resp, 400)
         assert body["code"] == "password.too_short"
-        assert body["params"] == {"min": 8}
+        assert body["params"] == {"min": 10}
 
 
 # ── Every code the backend can emit has a translation in the frontend ───────────────

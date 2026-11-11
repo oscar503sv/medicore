@@ -13,6 +13,7 @@ from medicore.application.common.notifications import (
     active_admins,
     notify,
 )
+from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.common.permissions import (
     Permission,
     ensure_acts_on_admins,
@@ -26,6 +27,11 @@ from medicore.domain.entities.user import User
 from medicore.domain.enums import Role, Sex, UserStatus
 from medicore.domain.repositories._support import Page, Paging, UserFilter
 from medicore.domain.shared.identifiers import UserId
+
+
+def _clinic_slug(uow: UnitOfWork) -> str | None:
+    tenant = uow.tenants.get_by_id(uow.tenant_id)
+    return str(tenant.slug) if tenant else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,12 +76,9 @@ class InviteUser:
                 code="user.email_taken",
                 email=cmd.email,
             )
-        if not cmd.password or len(cmd.password) < 8:
-            raise ValidationError(
-                "temporary password must be at least 8 characters",
-                code="password.too_short",
-                min=8,
-            )
+        ensure_password_policy(
+            cmd.password, personal=(cmd.name, cmd.email, _clinic_slug(self._uow))
+        )
 
         user = User(
             id=UserId.new(),
@@ -257,16 +260,13 @@ class ResetUserPassword:
 
     def execute(self, actor: ActorContext, cmd: ResetUserPasswordCommand) -> User:
         ensure_permission(actor, Permission.USERS_MANAGE)
-        if not cmd.password or len(cmd.password) < 8:
-            raise ValidationError(
-                "temporary password must be at least 8 characters",
-                code="password.too_short",
-                min=8,
-            )
         user = self._uow.users.get_by_id(cmd.user_id)
         if user is None:
             raise EntityNotFound("User", cmd.user_id)
         ensure_acts_on_admins(actor, user.role)
+        ensure_password_policy(
+            cmd.password, personal=(user.name, user.email, _clinic_slug(self._uow))
+        )
         with self._uow:
             user.set_temporary_password(self._hasher.hash(cmd.password))
             self._uow.users.save(user)

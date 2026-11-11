@@ -206,7 +206,7 @@ class TestUserNotifications:
         user = InviteUser(uow, PlainPasswordHasher(), FixedClock()).execute(
             seed.actor(seed.admin),
             InviteUserCommand(
-                name="Nuevo Admin", email="nuevo@x.test", role=Role.ADMIN, password="temporal1"
+                name="Nuevo Admin", email="nuevo@x.test", role=Role.ADMIN, password="Rio-Lempa-482"
             ),
         )
 

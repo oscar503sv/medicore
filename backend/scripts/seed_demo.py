@@ -1394,9 +1394,17 @@ def seed_documents(c: Clinic) -> None:
 def seed_users(c: Clinic) -> None:
     name, local = INVITED[str(c.tenant.slug)]
     second = actor(c, c.second_admin)
+    # Invited with a temporary password that meets the policy; demo users then share the
+    # public demo password, like everyone else seeded.
     user = InviteUser(c.uow(), HASHER, c.at(c.now - timedelta(days=4, hours=3))).execute(
         second, InviteUserCommand(name=name, email=f"{local}@{c.tenant.slug}.test",
-                                  role=Role.NURSE, password=PASSWORD))
+                                  role=Role.NURSE, password="Temporal-Seed-7429"))
+    uow = c.uow()
+    with uow:
+        invited = uow.users.get_by_id(user.id)
+        invited.set_temporary_password(HASHER.hash(PASSWORD))
+        uow.users.save(invited)
+        uow.commit()
     UpdateUserRole(c.uow(), c.at(c.now - timedelta(hours=5))).execute(
         second, user.id, Role.RECEPTIONIST)
 

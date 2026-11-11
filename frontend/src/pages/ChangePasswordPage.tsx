@@ -5,8 +5,10 @@ import { authApi } from '@/api/auth'
 import { errorMessage } from '@/api/client'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { PasswordRules } from '@/components/ui/PasswordRules'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
+import { PASSWORD_MIN, meetsPolicy } from '@/lib/passwordPolicy'
 import { useAuthStore } from '@/stores/auth'
 
 /** Password field with a show/hide toggle (mirrors the login screen). */
@@ -30,7 +32,7 @@ function PasswordField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           required
-          minLength={8}
+          minLength={PASSWORD_MIN}
           className="h-10 w-full rounded-lg border border-line bg-bg px-3 pr-10 text-sm text-tx placeholder:text-tx-4 transition-colors focus:border-accent focus:outline-none"
         />
         <button
@@ -50,6 +52,8 @@ export function ChangePasswordPage() {
   const t = useT()
   const navigate = useNavigate()
   const clearFlag = useAuthStore((s) => s.clearMustChangePassword)
+  const session = useAuthStore((s) => s.session)
+  const personal = [session?.name]
 
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -60,7 +64,8 @@ export function ChangePasswordPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    if (next.length < 8) return setError(t('pwd.min'))
+    if (!meetsPolicy(next, personal)) return setError(t('pwd.min'))
+    if (next === current) return setError(t('err.password.same_as_current'))
     if (next !== confirm) return setError(t('pwd.mismatch'))
     setLoading(true)
     try {
@@ -103,7 +108,10 @@ export function ChangePasswordPage() {
             required
             autoFocus
           />
-          <PasswordField label={t('pwd.new')} value={next} onChange={setNext} />
+          <div>
+            <PasswordField label={t('pwd.new')} value={next} onChange={setNext} />
+            <PasswordRules password={next} personal={personal} />
+          </div>
           <PasswordField label={t('pwd.confirm')} value={confirm} onChange={setConfirm} />
           <Button type="submit" size="lg" loading={loading} className="w-full">
             {t('pwd.submit')}

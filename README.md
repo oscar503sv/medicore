@@ -100,6 +100,7 @@ A separate session (`platform`-scoped token) that operates above the multi-tenan
 - **Minor procedures** (sutures, biopsies, wound care, IUD insertion, ECG…): each clinic has a configurable catalog, preloaded with the most common procedures, that says who may perform each one (doctor only, or doctor or nurse), whether it needs informed consent, whether it usually takes a pathology specimen and the suggested follow-up. A procedure is ordered in the consultation (pending when it is signed) or registered directly, optionally tied to a procedure appointment. Before performing it: allergy review, anticoagulants, fasting and vitals; consent signed on paper is recorded with who signed and a witness (no file). The note (anesthesia, technique, findings, materials, complications, home instructions, specimen sent to pathology) is immutable once signed — corrections are amendments — and signing suggests a follow-up date and notifies the ordering doctor when someone else performed it.
 - **Granular permissions** enforced in the application layer (not just the UI) — see the next section.
 - Temporary password with a forced change on first sign-in.
+- **Password policy** (`domain/services/password_policy.py`, NIST SP 800-63B style) wherever a password is set — invite, reset (clinic or console), change, clinic creation, superadmin script: at least 10 characters (at most 72 bytes, bcrypt's limit), letters plus a number or symbol, not a common password, nothing from the person's name, email or clinic, and different from the current one. No periodic expiry; brute force is covered by the login lockout. The UI shows the requirements live and generates temporary passwords that always comply.
 - Auditing of access and sensitive changes (HIPAA/GDPR), per tenant and global.
 
 ---
@@ -253,7 +254,7 @@ medicore/
 | **13** | In-clinic applications (orders from the consultation or an outside prescription, observation, allergy alert) | ✅ Done |
 | **14** | Minor procedures (per-clinic catalog, consent on paper, signed note with amendments, pathology specimen, follow-up) | ✅ Done |
 | **15** | SaaS subscriptions (plan catalog, optional modules, quotas, manual payments and renewal, read-only after grace, per-user permissions) | ✅ Done |
-| — | Password policy | ⏳ Pending |
+| **16** | Password policy (length, blocklist, nothing personal, live requirements in the UI) | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable record, inventory and billing | 🗓️ Future |

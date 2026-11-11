@@ -14,12 +14,14 @@ import { Card } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
+import { PasswordRules } from '@/components/ui/PasswordRules'
 import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { PASSWORD_MIN, genPassword } from '@/lib/passwordPolicy'
 import { describeUserAgent, deviceLabel } from '@/lib/userAgent'
 import { useAuthStore } from '@/stores/auth'
 import type { Role, User } from '@/types'
@@ -29,11 +31,6 @@ function unitMembers(n: number, t: (k: string) => string): string {
   return n === 1 ? t('users.unit_member') : t('users.unit_members')
 }
 
-/** A readable temporary password the admin can hand off (user must change it on first login). */
-function genPassword(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
-  return Array.from({ length: 10 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
-}
 
 interface UserFieldsState {
   name: string
@@ -369,13 +366,14 @@ function InviteModal({
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 required
-                minLength={8}
+                minLength={PASSWORD_MIN}
               />
             </div>
             <Button type="button" variant="outline" onClick={() => setForm({ ...form, password: genPassword() })}>
               {t('users.generate')}
             </Button>
           </div>
+          <PasswordRules password={form.password} personal={[form.name, form.email]} />
           <p className="mt-1.5 text-xs text-tx-3">{t('users.temp_password_hint')}</p>
         </div>
         <div className="flex justify-end gap-2 pt-2">
@@ -582,13 +580,14 @@ function ResetPasswordModal({ user, onClose }: { user: User | null; onClose: () 
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={8}
+                  minLength={PASSWORD_MIN}
                 />
               </div>
               <Button type="button" variant="outline" onClick={() => setPassword(genPassword())}>
                 {t('users.generate')}
               </Button>
             </div>
+            <PasswordRules password={password} personal={[user.name, user.email]} />
             <p className="mt-1.5 text-xs text-tx-3">{t('users.temp_password_hint')}</p>
           </div>
           <div className="flex justify-end gap-2 pt-2">
