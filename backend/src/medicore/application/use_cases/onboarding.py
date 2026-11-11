@@ -13,7 +13,7 @@ from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.ports.unit_of_work import UnitOfWork, UnitOfWorkFactory
 from medicore.domain.entities.user import User
-from medicore.domain.enums import Role
+from medicore.domain.enums import AddonModule, Role
 from medicore.domain.repositories._support import Paging
 
 
@@ -52,15 +52,18 @@ def _doctor_steps(uow: UnitOfWork, user: User) -> list[OnboardingStep]:
 def _admin_steps(uow: UnitOfWork, user: User) -> list[OnboardingStep]:
     tenant = uow.tenants.get_by_id(user.tenant_id)
     primary = next((loc for loc in tenant.locations if loc.is_primary), None) if tenant else None
-    return [
+    steps = [
         OnboardingStep("clinic", bool(primary and primary.address)),
         OnboardingStep("insurers", bool(uow.insurers.list())),
         # The admin themself is always there: the team starts at the second user.
         OnboardingStep("team", uow.users.list(paging=Paging(limit=2)).total > 1),
-        # Opening the catalog creates the clinic's default procedures.
-        OnboardingStep("catalog", bool(uow.procedures.list_types())),
-        OnboardingStep("roles", bool(uow.role_permissions.list()), optional=True),
     ]
+    # The procedure catalog is part of the optional procedures module.
+    if tenant and tenant.subscription.has_module(AddonModule.PROCEDURES):
+        # Opening the catalog creates the clinic's default procedures.
+        steps.append(OnboardingStep("catalog", bool(uow.procedures.list_types())))
+    steps.append(OnboardingStep("roles", bool(uow.role_permissions.list()), optional=True))
+    return steps
 
 
 _STEPS = {Role.DOCTOR: _doctor_steps, Role.ADMIN: _admin_steps}

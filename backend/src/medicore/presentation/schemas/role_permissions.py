@@ -14,6 +14,7 @@ class RolePermissionsResponse(BaseModel):
 class PermissionsMatrixResponse(BaseModel):
     catalog: list[str]
     roles: dict[str, RolePermissionsResponse]
+    locked: list[str] = []  # permissions of optional modules the clinic hasn't contracted
 
 
 class UpdateRolePermissionsRequest(BaseModel):

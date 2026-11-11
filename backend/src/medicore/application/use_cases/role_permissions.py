@@ -16,12 +16,13 @@ from dataclasses import dataclass
 
 from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
-from medicore.application.common.errors import ValidationError
+from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.permissions import (
     ROLE_PERMISSIONS,
     Permission,
     effective_permissions,
     ensure_permission,
+    locked_permissions,
 )
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -43,10 +44,16 @@ class RolePermissionsDTO:
 class PermissionsMatrixDTO:
     catalog: tuple[str, ...]
     roles: dict[Role, RolePermissionsDTO]
+    # Permissions of optional modules the clinic hasn't contracted: they can be configured,
+    # but no role gets them until the module is added to the subscription.
+    locked: tuple[str, ...] = ()
 
 
-def build_matrix(uow: UnitOfWork) -> PermissionsMatrixDTO:
+def build_matrix(uow: UnitOfWork, tenant_id: TenantId) -> PermissionsMatrixDTO:
     """Assemble catalog + per-role defaults/effective/customized for one tenant."""
+    tenant = uow.tenants.get_by_id(tenant_id)
+    if tenant is None:
+        raise EntityNotFound("Tenant", tenant_id)
     overrides = {o.role: o for o in uow.role_permissions.list()}
     roles: dict[Role, RolePermissionsDTO] = {}
     for role in Role:
@@ -60,6 +67,7 @@ def build_matrix(uow: UnitOfWork) -> PermissionsMatrixDTO:
     return PermissionsMatrixDTO(
         catalog=tuple(sorted(str(p) for p in Permission)),
         roles=roles,
+        locked=tuple(sorted(str(p) for p in locked_permissions(tenant.subscription.modules))),
     )
 
 
@@ -129,7 +137,7 @@ class GetPermissionsMatrix:
 
     def execute(self, actor: ActorContext) -> PermissionsMatrixDTO:
         ensure_permission(actor, Permission.PERMISSIONS_MANAGE)
-        return build_matrix(self._uow)
+        return build_matrix(self._uow, actor.tenant_id)
 
 
 class UpdateRolePermissions:
@@ -153,7 +161,7 @@ class UpdateRolePermissions:
                 )
             )
             self._uow.commit()
-        return build_matrix(self._uow)
+        return build_matrix(self._uow, actor.tenant_id)
 
 
 class ResetRolePermissions:
@@ -178,4 +186,4 @@ class ResetRolePermissions:
                 )
             )
             self._uow.commit()
-        return build_matrix(self._uow)
+        return build_matrix(self._uow, actor.tenant_id)

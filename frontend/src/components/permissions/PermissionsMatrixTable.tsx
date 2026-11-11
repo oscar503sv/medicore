@@ -182,12 +182,21 @@ export function PermissionsMatrixTable({ matrix, onSaveRole, onResetRole, busy }
                   </td>
                 </Tr>
                 {permissions.map((permission) => (
-                  <Tr key={permission} className="transition-colors hover:bg-surface-2/60">
+                  <Tr
+                    key={permission}
+                    className={cn(
+                      'transition-colors hover:bg-surface-2/60',
+                      matrix.locked?.includes(permission) && 'opacity-60',
+                    )}
+                  >
                     <Td>
                       <p className="text-[13px] text-tx">
                         {t(`permission.${permission.replace('.', '_')}`)}
                       </p>
                       <p className="text-[11px] text-tx-4">{permission}</p>
+                      {matrix.locked?.includes(permission) && (
+                        <p className="mt-0.5 text-[11px] text-warn">{t('sub.module_not_contracted')}</p>
+                      )}
                     </Td>
                     {ROLES.map((role) => {
                       const locked = isLocked(role, permission)

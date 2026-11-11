@@ -12,6 +12,7 @@ from datetime import timedelta
 
 from medicore.application.common.audit import platform_audit_entry
 from medicore.application.common.context import ActorContext, PlatformActorContext
+from medicore.application.common.entitlements import granted_permissions
 from medicore.application.common.errors import (
     AuthenticationFailed,
     EntityNotFound,
@@ -554,7 +555,7 @@ class ImpersonateTenant:
                     "clinic has no active admin to impersonate", code="support.no_active_admin"
                 )
             target = admins[0]
-            override = uow.role_permissions.get_by_role(target.role)
+            permissions = granted_permissions(uow, tenant, target.role)
             now = self._clock.now()
             session_id = SessionId.new()
             uow.sessions.add(
@@ -595,13 +596,7 @@ class ImpersonateTenant:
             timezone=tenant.timezone,
             role=str(target.role),
             name=target.name,
-            permissions=tuple(
-                sorted(
-                    effective_permissions(
-                        target.role, override.permissions if override else None
-                    )
-                )
-            ),
+            permissions=tuple(sorted(permissions)),
         )
 
 
@@ -733,7 +728,7 @@ class GetTenantPermissionsMatrix:
 
     def execute(self, actor: PlatformActorContext, tenant_id: TenantId):
         with self._factory.for_tenant(tenant_id) as uow:
-            return role_permissions.build_matrix(uow)
+            return role_permissions.build_matrix(uow, tenant_id)
 
 
 class UpdateTenantRolePermissions:
@@ -763,7 +758,7 @@ class UpdateTenantRolePermissions:
                 )
             )
             uow.commit()
-            return role_permissions.build_matrix(uow)
+            return role_permissions.build_matrix(uow, tenant_id)
 
 
 class ResetTenantRolePermissions:
@@ -785,4 +780,4 @@ class ResetTenantRolePermissions:
                 )
             )
             uow.commit()
-            return role_permissions.build_matrix(uow)
+            return role_permissions.build_matrix(uow, tenant_id)

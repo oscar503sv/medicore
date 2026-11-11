@@ -73,6 +73,8 @@ export const subEs: Record<string, string> = {
   'sub.your_plan_desc':
     'Para cambiar de plan, contratar módulos o renovar, contacta a soporte de Medicore.',
   'sub.no_modules': 'Ninguno',
+  'sub.module_not_contracted':
+    'Módulo no contratado: nadie lo tiene hasta que se agregue a tu plan.',
   'sub.grace_notice':
     'Tu suscripción venció. Tienes hasta el {date} para renovar antes de que la clínica pase a solo lectura.',
   'sub.read_only_notice':
@@ -148,6 +150,8 @@ export const subEn: Record<string, string> = {
   'sub.your_plan': 'Your plan',
   'sub.your_plan_desc': 'To change plan, add modules or renew, contact Medicore support.',
   'sub.no_modules': 'None',
+  'sub.module_not_contracted':
+    "Module not contracted: nobody has it until it's added to your plan.",
   'sub.grace_notice':
     'Your subscription has expired. Renew by {date} before the clinic turns read-only.',
   'sub.read_only_notice': 'Your subscription has expired. The clinic is read-only until renewed.',

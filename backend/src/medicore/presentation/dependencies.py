@@ -15,7 +15,7 @@ import jwt
 from fastapi import Depends, Header, Request, status
 
 from medicore.application.common.context import ActorContext, PlatformActorContext
-from medicore.application.common.permissions import effective_permissions
+from medicore.application.common.entitlements import granted_permissions
 from medicore.domain.enums import Role
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import PlatformAdminId, SessionId, TenantId, UserId
@@ -173,13 +173,13 @@ def get_actor(
     tenant_id = TenantId.parse(claims.tenant_id)
     role = Role(claims.role)
     with factory.for_tenant(tenant_id) as uow:
-        override = uow.role_permissions.get_by_role(role)
         session = uow.sessions.get(session_id)
-    if session is None or not session.is_active(clock.now()):
+        tenant = uow.tenants.get_by_id(tenant_id)
+        effective = granted_permissions(uow, tenant, role) if tenant else frozenset()
+    if session is None or tenant is None or not session.is_active(clock.now()):
         raise ApiError(
             status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
         )
-    effective = effective_permissions(role, override.permissions if override else None)
 
     return ActorContext(
         user_id=UserId.parse(claims.user_id),

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from tests.presentation.conftest import bearer_login
+from tests.support.builders import PASSWORD
+
 
 def _url(seed, suffix: str = "") -> str:
     return f"/api/v1/platform/tenants/{seed.tenant.id}/subscription{suffix}"
@@ -156,3 +159,40 @@ def test_quota_exceeded_is_409_with_code(seed, client, platform_headers, admin_h
     assert resp.status_code == 409, resp.text
     assert resp.json()["code"] == "plan.quota_doctors"
     assert resp.json()["params"] == {"limit": 1}
+
+
+def _set_modules(seed, client, platform_headers, modules: list[str]) -> None:
+    resp = client.put(
+        _url(seed),
+        headers=platform_headers,
+        json={"plan_code": "empresarial", "modules": modules, "period_end": None},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_uncontracted_module_endpoints_are_forbidden(seed, client, platform_headers, auth_headers):
+    _set_modules(seed, client, platform_headers, ["vaccination"])
+    assert client.get("/api/v1/vaccinations/worklist", headers=auth_headers).status_code == 200
+    resp = client.get("/api/v1/procedures/worklist", headers=auth_headers)
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "permission.missing"
+    assert client.get("/api/v1/applications/worklist", headers=auth_headers).status_code == 403
+
+
+def test_profile_and_login_hide_uncontracted_permissions(seed, client, platform_headers):
+    _set_modules(seed, client, platform_headers, ["procedures"])
+    headers = bearer_login(
+        client,
+        "/api/v1/auth/login",
+        {"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
+    )
+    perms = client.get("/api/v1/auth/me", headers=headers).json()["permissions"]
+    assert "procedures.view" in perms
+    assert "vaccinations.view" not in perms and "applications.view" not in perms
+
+
+def test_matrix_lists_locked_permissions(seed, client, platform_headers, admin_headers):
+    _set_modules(seed, client, platform_headers, [])
+    matrix = client.get("/api/v1/permissions", headers=admin_headers).json()
+    assert "vaccinations.record" in matrix["locked"]
+    assert "patients.view" not in matrix["locked"]

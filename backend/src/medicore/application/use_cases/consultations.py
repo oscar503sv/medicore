@@ -196,6 +196,8 @@ class AddApplicationDraft(_ConsultationEditor):
     def execute(
         self, actor: ActorContext, consultation_id: ConsultationId, draft: ApplicationDraft
     ) -> Consultation:
+        # In-clinic applications are an optional module.
+        ensure_permission(actor, Permission.APPLICATIONS_VIEW)
         consultation = self._load(actor, consultation_id)
         consultation.add_application_draft(draft)
         self._save(consultation)
@@ -220,6 +222,8 @@ class AddProcedureDraft(_ConsultationEditor):
         self, actor: ActorContext, consultation_id: ConsultationId,
         type_id: ProcedureTypeId, indication: str,
     ) -> Consultation:
+        # Procedures are an optional module.
+        ensure_permission(actor, Permission.PROCEDURES_VIEW)
         consultation = self._load(actor, consultation_id)
         kind = self._uow.procedures.get_type(type_id)
         if kind is None:

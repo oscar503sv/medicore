@@ -41,6 +41,8 @@ export interface RolePermissionsEntry {
 export interface PermissionsMatrix {
   catalog: Permission[]
   roles: Record<Role, RolePermissionsEntry>
+  /** Permissions of optional modules the clinic hasn't contracted: configurable, not granted. */
+  locked: Permission[]
 }
 
 // The JWT itself lives in an httpOnly cookie — sessions hold only UI metadata.

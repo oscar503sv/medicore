@@ -15,6 +15,7 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
 import { unitLabel } from '@/components/patients/vitalsData'
 import { useT } from '@/lib/i18n'
+import { useAuthStore } from '@/stores/auth'
 import type { Consultation, Patient, Soap, Vitals } from '@/types'
 
 const VITAL_FIELDS: {
@@ -47,6 +48,10 @@ export function ConsultationPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { id = '' } = useParams()
+  // Optional modules: their sections only show when the clinic has contracted them (or a
+  // draft was already added before the module was dropped).
+  const canApplications = useAuthStore((s) => s.can('applications.view'))
+  const canProcedures = useAuthStore((s) => s.can('procedures.view'))
 
   const { data, isLoading } = useQuery({
     queryKey: ['consultation', id],
@@ -239,8 +244,12 @@ export function ConsultationPage() {
 
           <DiagnosesSection consultationId={id} consultation={data} />
           <PrescriptionsSection consultationId={id} consultation={data} />
-          <ConsultationApplications consultationId={id} consultation={data} />
-          <ConsultationProcedures consultationId={id} consultation={data} />
+          {(canApplications || data.draft_applications.length > 0) && (
+            <ConsultationApplications consultationId={id} consultation={data} />
+          )}
+          {(canProcedures || data.draft_procedures.length > 0) && (
+            <ConsultationProcedures consultationId={id} consultation={data} />
+          )}
         </div>
 
         {/* Right rail: completion ring */}

@@ -12,6 +12,7 @@ import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { clinicToday, fmtDate, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { useAuthStore } from '@/stores/auth'
 import type { Patient, Slot } from '@/types'
 
 const STEPS = ['appt.step_patient', 'appt.step_details', 'appt.step_slot']
@@ -47,6 +48,8 @@ export function NewAppointmentModal({
   const [patient, setPatient] = useState<Patient | null>(null)
   const [doctorId, setDoctorId] = useState('')
   const [type, setType] = useState('consult')
+  // Procedure appointments belong to the optional procedures module.
+  const canProcedures = useAuthStore((s) => s.can('procedures.view'))
   const [reason, setReason] = useState('')
   const [withInsurance, setWithInsurance] = useState(false)
   const [insuranceId, setInsuranceId] = useState('')
@@ -219,11 +222,13 @@ export function NewAppointmentModal({
             </Select>
             <div className="grid grid-cols-2 gap-4">
               <Select label={t('appt.type')} value={type} onChange={(e) => setType(e.target.value)}>
-                {Object.entries(TYPE_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
+                {Object.entries(TYPE_LABELS)
+                  .filter(([value]) => value !== 'procedure' || canProcedures)
+                  .map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
               </Select>
               {/* Duration is the doctor's rule — shown for context, never chosen here. */}
               <div>

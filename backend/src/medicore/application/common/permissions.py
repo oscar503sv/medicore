@@ -23,7 +23,7 @@ from collections.abc import Iterable
 from enum import StrEnum
 
 from medicore.application.common.context import ActorContext
-from medicore.domain.enums import Role
+from medicore.domain.enums import AddonModule, Role
 from medicore.domain.shared.errors import PermissionDenied
 
 
@@ -159,6 +159,38 @@ def effective_permissions(role: Role, stored: Iterable[str] | None) -> frozenset
         return ROLE_PERMISSIONS[role]
     catalog = {str(p): p for p in Permission}
     return frozenset(catalog[s] for s in stored if s in catalog)
+
+
+# Optional modules (sold separately): a clinic that hasn't contracted one gets none of its
+# permissions, whatever its roles say. Role customizations keep them stored, so contracting
+# the module later restores exactly what the clinic had configured.
+MODULE_PERMISSIONS: dict[AddonModule, frozenset[Permission]] = {
+    AddonModule.VACCINATION: frozenset(
+        {Permission.VACCINATIONS_VIEW, Permission.VACCINATIONS_RECORD}
+    ),
+    AddonModule.APPLICATIONS: frozenset(
+        {Permission.APPLICATIONS_VIEW, Permission.APPLICATIONS_ADMINISTER}
+    ),
+    AddonModule.PROCEDURES: frozenset(
+        {Permission.PROCEDURES_VIEW, Permission.PROCEDURES_PERFORM, Permission.PROCEDURES_CATALOG}
+    ),
+}
+
+
+def locked_permissions(modules: Iterable[AddonModule]) -> frozenset[Permission]:
+    """Permissions belonging to the modules the clinic has NOT contracted."""
+    contracted = set(modules)
+    return frozenset(
+        p for module, perms in MODULE_PERMISSIONS.items() if module not in contracted
+        for p in perms
+    )
+
+
+def granted(
+    role: Role, stored: Iterable[str] | None, modules: Iterable[AddonModule]
+) -> frozenset[Permission]:
+    """What a role may actually do in a clinic: its effective set minus locked modules."""
+    return effective_permissions(role, stored) - locked_permissions(modules)
 
 
 def has_permission(actor: ActorContext, permission: Permission) -> bool:

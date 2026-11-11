@@ -45,6 +45,7 @@ def ser_matrix(matrix: PermissionsMatrixDTO) -> PermissionsMatrixResponse:
             )
             for role, entry in matrix.roles.items()
         },
+        locked=list(matrix.locked),
     )
 
 
