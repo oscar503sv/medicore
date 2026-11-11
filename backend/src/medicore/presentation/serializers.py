@@ -570,6 +570,13 @@ def ser_system_status(dto, retention_days: int) -> dict:
             "size_bytes": dto.database.size_bytes,
             "revision": dto.database.revision,
             "latency_ms": dto.database_latency_ms,
+            "connections": {
+                "total": dto.connections.total,
+                "active": dto.connections.active,
+                "idle": dto.connections.idle,
+                "idle_in_transaction": dto.connections.idle_in_transaction,
+                "max_connections": dto.connections.max_connections,
+            },
         },
         "largest_tables": [
             {"name": t.name, "size_bytes": t.size_bytes, "rows": t.rows}
@@ -588,6 +595,16 @@ def ser_system_status(dto, retention_days: int) -> dict:
                     "locked_until": lk.locked_until,
                 }
                 for lk in dto.logins.locked
+            ],
+            "console": [
+                {
+                    "admin_name": c.admin_name,
+                    "action": c.action,
+                    "at": c.at,
+                    "ip_address": c.ip_address,
+                    "user_agent": c.user_agent,
+                }
+                for c in dto.console_logins
             ],
         },
         "sessions": dto.sessions,
@@ -615,10 +632,30 @@ def ser_system_status(dto, retention_days: int) -> dict:
                     "location": g.location,
                     "count": g.count,
                     "last_at": g.last_at,
+                    "first_at": g.first_at,
+                    "first_commit": g.first_commit,
+                    "last_commit": g.last_commit,
                 }
                 for g in dto.error_groups
             ],
+            "daily": [{"day": d, "count": n} for d, n in dto.errors_daily],
         },
+        "jobs": [_ser_job(j) for j in dto.jobs],
+    }
+
+
+def _ser_job(j) -> dict:
+    s = j.summary
+    return {
+        "job": j.job,
+        "state": j.state,
+        "expected_every_hours": j.expected_every.total_seconds() / 3600
+        if j.expected_every else None,
+        "last_started_at": s.last_started_at if s else None,
+        "last_finished_at": s.last_finished_at if s else None,
+        "last_ok": s.last_ok if s else None,
+        "last_detail": s.last_detail if s else None,
+        "last_success_at": s.last_success_at if s else None,
     }
 
 
@@ -631,4 +668,5 @@ def ser_error_event(e) -> dict:
         "status": e.status,
         "error_type": e.error_type,
         "location": e.location,
+        "commit": e.commit,
     }

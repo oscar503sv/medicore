@@ -14,6 +14,7 @@ from types import TracebackType
 from typing import Protocol, runtime_checkable
 
 from medicore.domain.entities.error_event import ErrorEvent
+from medicore.domain.entities.job_run import JobRun
 from medicore.domain.repositories import (
     AddonPricingRepository,
     ApplicationRepository,
@@ -41,8 +42,11 @@ from medicore.domain.repositories import (
 )
 from medicore.domain.repositories._support import (
     ActiveImpersonation,
+    ConnectionStats,
+    ConsoleLogin,
     DatabaseStatus,
     ErrorGroup,
+    JobSummary,
     LoginPressure,
     Page,
     PaymentSummary,
@@ -203,7 +207,15 @@ class MonitoringReadModel(Protocol):
         ...
 
     def lockouts_since(self, since: datetime) -> int:
-        """``auth.login_locked`` events recorded since ``since``."""
+        """Lockouts of real accounts (clinic and console) recorded since ``since``."""
+        ...
+
+    def console_logins(self, limit: int) -> list[ConsoleLogin]:
+        """Latest console sign-ins (successful, failed, locked), newest first."""
+        ...
+
+    def connections(self) -> ConnectionStats:
+        """Database connections in use, by state, against the server's limit."""
         ...
 
     def sessions_by_kind(self, now: datetime) -> dict[str, int]:
@@ -220,6 +232,14 @@ class MonitoringReadModel(Protocol):
 
     def recent_errors(self, limit: int, offset: int) -> Page[ErrorEvent]: ...
 
+    def errors_per_day(self, since: datetime) -> list[tuple[date, int]]:
+        """Errors per UTC day since ``since``, oldest first (days without errors omitted)."""
+        ...
+
+    def job_summaries(self) -> list[JobSummary]:
+        """Latest run and latest success of every scheduled task that has ever run."""
+        ...
+
 
 class ErrorLogRepository(Protocol):
     """Store of unexpected server errors. Each mutation commits on its own: it runs from the
@@ -230,6 +250,15 @@ class ErrorLogRepository(Protocol):
     def purge_before(self, cutoff: datetime) -> None:
         """Drop events older than ``cutoff`` (retention)."""
         ...
+
+
+class JobLogRepository(Protocol):
+    """Store of scheduled-task runs. Each mutation commits on its own (a run is recorded even
+    when the task itself failed and rolled back)."""
+
+    def record(self, run: JobRun) -> None: ...
+
+    def purge_before(self, cutoff: datetime) -> None: ...
 
 
 class UnitOfWorkFactory(Protocol):
@@ -264,4 +293,8 @@ class UnitOfWorkFactory(Protocol):
 
     def error_log(self) -> AbstractContextManager[ErrorLogRepository]:
         """Context-managed store of unexpected server errors."""
+        ...
+
+    def job_log(self) -> AbstractContextManager[JobLogRepository]:
+        """Context-managed store of scheduled-task runs."""
         ...

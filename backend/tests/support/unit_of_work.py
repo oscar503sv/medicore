@@ -19,6 +19,7 @@ from tests.support.repositories import (
     InMemoryDoctorProfileRepository,
     InMemoryErrorLogRepository,
     InMemoryInsurerRepository,
+    InMemoryJobLogRepository,
     InMemoryLoginThrottleRepository,
     InMemoryMedicalDocumentRepository,
     InMemoryMedicalRecordRepository,
@@ -173,3 +174,7 @@ class InMemoryUnitOfWorkFactory:
     @contextmanager
     def error_log(self) -> Iterator[InMemoryErrorLogRepository]:
         yield InMemoryErrorLogRepository(self.store)
+
+    @contextmanager
+    def job_log(self) -> Iterator[InMemoryJobLogRepository]:
+        yield InMemoryJobLogRepository(self.store)

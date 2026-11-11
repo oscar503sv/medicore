@@ -8,7 +8,7 @@ specific clinic's data must be touched atomically (e.g. seeding its first admin 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from medicore.application.common.audit import platform_audit_entry
 from medicore.application.common.context import ActorContext, PlatformActorContext
@@ -71,6 +71,27 @@ class PlatformSessionDTO:
     email: str
 
 
+def _login_entry(
+    admin_id: PlatformAdminId,
+    when: datetime,
+    action: str,
+    ip_address: str | None,
+    user_agent: str | None,
+    **metadata: object,
+) -> PlatformAuditLog:
+    return PlatformAuditLog(
+        id=AuditLogId.new(),
+        actor_id=admin_id,
+        action=action,
+        entity_type="PlatformAdmin",
+        entity_id=str(admin_id),
+        timestamp=when,
+        metadata=dict(metadata),
+        ip_address=ip_address,
+        user_agent=(user_agent or "")[:400] or None,
+    )
+
+
 class AuthenticatePlatformAdmin:
     """Authenticate a superadmin by email + password (no organization slug)."""
 
@@ -109,14 +130,39 @@ class AuthenticatePlatformAdmin:
                 raise TooManyLoginAttempts(locked, now)
             try:
                 session = self._authenticate(email, password, ip_address, user_agent)
-            except AuthenticationFailed:
+            except AuthenticationFailed as exc:
                 # Counted for non-existent accounts too, so the lockout does not reveal
                 # which accounts exist (complements the dummy-hash timing defense).
-                throttle.record_failure(identifier, now)
+                locked = throttle.record_failure(identifier, now)
+                self._audit_failure(email, now, exc.code, locked, ip_address, user_agent)
                 raise
             throttle.reset(identifier)
             throttle.purge_stale(now)
             return session
+
+    def _audit_failure(
+        self,
+        email: str,
+        now: datetime,
+        reason: str,
+        locked: datetime | None,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> None:
+        """Record a failed console sign-in on an existing superadmin account (and the lockout
+        when it engages). Unknown emails leave no entry: there is no account to attach it to."""
+        with self._factory.platform_uow() as uow:
+            admin = uow.platform_admins.get_by_email(email)
+            if admin is None:
+                return
+            uow.platform_audit.append(
+                _login_entry(
+                    admin.id, now,
+                    "auth.platform_login_locked" if locked else "auth.platform_login_failed",
+                    ip_address, user_agent, reason=reason,
+                )
+            )
+            uow.commit()
 
     def _authenticate(
         self, email: str, password: str, ip_address: str | None, user_agent: str | None
@@ -145,6 +191,9 @@ class AuthenticatePlatformAdmin:
                     ip_address=ip_address,
                     user_agent=(user_agent or "")[:400] or None,
                 )
+            )
+            uow.platform_audit.append(
+                _login_entry(admin.id, now, "auth.platform_login", ip_address, user_agent)
             )
             uow.commit()
         token = self._tokens.issue(

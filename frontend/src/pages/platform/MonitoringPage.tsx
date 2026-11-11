@@ -15,6 +15,7 @@ import {
 import { errorMessage } from '@/api/client'
 import { platformTenantsApi } from '@/api/platform'
 import { PageHeader } from '@/components/PageHeader'
+import { TrendBars } from '@/components/platform/TrendBars'
 import { StatCard } from '@/components/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -24,9 +25,10 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
-import { fmtBytes, fmtDateTime, fmtDuration, fmtRelative, fmtTime } from '@/lib/format'
+import { fmtBytes, fmtDate, fmtDateTime, fmtDuration, fmtRelative, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-import type { SystemStatus } from '@/types'
+import type { ConsoleLogin, JobState, ScheduledJob, SystemStatus } from '@/types'
+import type { Tone } from '@/components/ui/badgeTone'
 
 const REFRESH_MS = 60_000
 const ERRORS_PAGE = 20
@@ -42,7 +44,7 @@ function Fact({
   icon: typeof Server
   label: string
   value: string
-  detail?: string
+  detail?: string | string[]
   ok?: boolean
 }) {
   return (
@@ -56,7 +58,11 @@ function Fact({
           )}
           {value}
         </p>
-        {detail && <p className="truncate text-xs text-tx-3">{detail}</p>}
+        {(Array.isArray(detail) ? detail : detail ? [detail] : []).map((line) => (
+          <p key={line} className="truncate text-xs text-tx-3">
+            {line}
+          </p>
+        ))}
       </div>
     </div>
   )
@@ -79,7 +85,12 @@ function StatusStrip({ data }: { data: SystemStatus }) {
         label={t('mon.database')}
         value={`PostgreSQL ${database.version.split(' ')[0]}`}
         ok
-        detail={t('mon.latency').replace('{ms}', String(database.latency_ms))}
+        detail={[
+          t('mon.latency').replace('{ms}', String(database.latency_ms)),
+          t('mon.connections')
+            .replace('{n}', String(database.connections.total))
+            .replace('{max}', String(database.connections.max_connections)),
+        ]}
       />
       <Fact
         icon={KeyRound}
@@ -93,6 +104,119 @@ function StatusStrip({ data }: { data: SystemStatus }) {
         value={database.revision ?? '—'}
         detail={`${t('mon.db_size')}: ${fmtBytes(database.size_bytes)}`}
       />
+    </Card>
+  )
+}
+
+const shortCommit = (c: string | null) => (c ? c.slice(0, 7) : '—')
+
+/** "Firefox", "Chrome"… from a user agent; the full string goes in the tooltip. */
+function browserName(ua: string | null): string {
+  if (!ua) return '—'
+  for (const [needle, name] of [
+    ['Edg/', 'Edge'],
+    ['Firefox/', 'Firefox'],
+    ['Chrome/', 'Chrome'],
+    ['Safari/', 'Safari'],
+  ] as const) {
+    if (ua.includes(needle)) return name
+  }
+  return ua.slice(0, 24)
+}
+
+const JOB_TONE: Record<JobState, Tone> = {
+  ok: 'ok',
+  failed: 'danger',
+  overdue: 'warn',
+  never: 'neutral',
+}
+
+const LOGIN_TONE: Record<ConsoleLogin['action'], Tone> = {
+  'auth.platform_login': 'ok',
+  'auth.platform_login_failed': 'warn',
+  'auth.platform_login_locked': 'danger',
+}
+
+function ConsoleLogins({ logins }: { logins: ConsoleLogin[] }) {
+  const t = useT()
+  return (
+    <Card>
+      <CardHeader title={t('mon.console_logins')} />
+      {logins.length === 0 ? (
+        <p className="px-5 py-6 text-sm text-tx-3">{t('mon.console_empty')}</p>
+      ) : (
+        <ul className="divide-y divide-line-soft">
+          {logins.map((l, i) => (
+            <li
+              key={`${l.at}-${i}`}
+              className="flex items-center justify-between gap-3 px-5 py-2.5"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm text-tx">{l.admin_name ?? '—'}</p>
+                <p className="truncate text-xs text-tx-3" title={l.user_agent ?? undefined}>
+                  {fmtRelative(l.at)} · {l.ip_address ?? '—'} · {browserName(l.user_agent)}
+                </p>
+              </div>
+              <Badge tone={LOGIN_TONE[l.action]}>{t(`mon.login.${l.action}`)}</Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  )
+}
+
+function ScheduledJobs({ jobs }: { jobs: ScheduledJob[] }) {
+  const t = useT()
+  const label = (job: string) => {
+    const key = `mon.job.${job}`
+    return t(key) === key ? job : t(key)
+  }
+  return (
+    <Card>
+      <CardHeader title={t('mon.jobs')} />
+      <ul className="divide-y divide-line-soft">
+        {jobs.map((j) => (
+          <li key={j.job} className="flex items-start justify-between gap-3 px-5 py-3">
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-sm text-tx">{label(j.job)}</p>
+              {j.last_finished_at && j.last_started_at ? (
+                <>
+                  <p className="text-xs text-tx-3">
+                    {t('mon.job_last')
+                      .replace('{when}', fmtRelative(j.last_finished_at))
+                      .replace(
+                        '{dur}',
+                        fmtDuration(
+                          (Date.parse(j.last_finished_at) - Date.parse(j.last_started_at)) / 1000,
+                        ),
+                      )}
+                    {!j.last_ok && j.last_detail && (
+                      <span className="font-mono text-danger"> · {j.last_detail}</span>
+                    )}
+                  </p>
+                  {!j.last_ok && (
+                    <p className="text-xs text-tx-3">
+                      {t('mon.job_last_ok').replace(
+                        '{when}',
+                        j.last_success_at ? fmtRelative(j.last_success_at) : '—',
+                      )}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-tx-3">{t('mon.job_never')}</p>
+              )}
+              {j.expected_every_hours && (
+                <p className="text-xs text-tx-4">
+                  {t('mon.job_every').replace('{h}', String(Math.round(j.expected_every_hours)))}
+                </p>
+              )}
+            </div>
+            <Badge tone={JOB_TONE[j.state]}>{t(`mon.job_state.${j.state}`)}</Badge>
+          </li>
+        ))}
+      </ul>
     </Card>
   )
 }
@@ -116,6 +240,7 @@ function ErrorList({ retentionDays }: { retentionDays: number }) {
             <Th>{t('mon.col_route')}</Th>
             <Th>{t('mon.col_type')}</Th>
             <Th>{t('mon.col_location')}</Th>
+            <Th>{t('mon.col_commit')}</Th>
           </Tr>
         </thead>
         <tbody>
@@ -127,6 +252,7 @@ function ErrorList({ retentionDays }: { retentionDays: number }) {
               </Td>
               <Td className="font-mono text-xs text-danger">{e.error_type}</Td>
               <Td className="font-mono text-xs text-tx-3">{e.location}</Td>
+              <Td className="font-mono text-xs text-tx-3">{shortCommit(e.commit)}</Td>
             </Tr>
           ))}
         </tbody>
@@ -307,6 +433,27 @@ export function MonitoringPage() {
         </Card>
       </div>
 
+      <div className="grid gap-5 lg:grid-cols-2">
+        <ConsoleLogins logins={logins.console} />
+        <ScheduledJobs jobs={data.jobs} />
+      </div>
+
+      <Card>
+        <CardHeader title={t('mon.trend')} />
+        <div className="p-5 pt-8">
+          <TrendBars
+            barClassName="bg-danger"
+            points={errors.daily.map((d) => ({
+              date: d.day,
+              count: d.count,
+              label: t('mon.trend_day')
+                .replace('{date}', fmtDate(d.day, 'd MMM'))
+                .replace('{n}', String(d.count)),
+            }))}
+          />
+        </div>
+      </Card>
+
       <Card>
         <CardHeader title={t('mon.errors_groups')} />
         {errors.groups.length === 0 ? (
@@ -329,7 +476,19 @@ export function MonitoringPage() {
                     <span className="text-tx-3">{g.method}</span> {g.route}
                   </Td>
                   <Td className="font-mono text-xs text-danger">{g.error_type}</Td>
-                  <Td className="font-mono text-xs text-tx-3">{g.location}</Td>
+                  <Td className="font-mono text-xs text-tx-3">
+                    {g.location}
+                    {data.runtime.commit && g.first_commit === data.runtime.commit && (
+                      <Badge tone="danger" className="ml-2 font-sans">
+                        {t('mon.new_in_deploy')}
+                      </Badge>
+                    )}
+                    {data.runtime.commit && g.last_commit !== data.runtime.commit && (
+                      <Badge tone="ok" className="ml-2 font-sans">
+                        {t('mon.not_since_deploy')}
+                      </Badge>
+                    )}
+                  </Td>
                   <Td className="text-right font-mono">{g.count}</Td>
                   <Td className="whitespace-nowrap text-sm text-tx-2">{fmtRelative(g.last_at)}</Td>
                 </Tr>

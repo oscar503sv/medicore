@@ -31,6 +31,7 @@ from medicore.infrastructure.persistence.repositories.login_throttle import (
 )
 from medicore.infrastructure.persistence.repositories.monitoring import (
     SqlErrorLogRepository,
+    SqlJobLogRepository,
     SqlMonitoringReadModel,
 )
 from medicore.infrastructure.persistence.repositories.other import (
@@ -226,5 +227,13 @@ class SqlAlchemyUnitOfWorkFactory:
         session = self._factory()
         try:
             yield SqlErrorLogRepository(session)
+        finally:
+            session.close()
+
+    @contextmanager
+    def job_log(self) -> Iterator[SqlJobLogRepository]:
+        session = self._factory()
+        try:
+            yield SqlJobLogRepository(session)
         finally:
             session.close()

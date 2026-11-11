@@ -42,7 +42,7 @@ from medicore.domain.shared.errors import (
     RecordAlreadySigned,
     SlotUnavailable,
 )
-from medicore.presentation.dependencies import get_clock, get_uow_factory
+from medicore.presentation.dependencies import get_clock, get_runtime, get_uow_factory
 
 logger = logging.getLogger("medicore")
 
@@ -93,7 +93,8 @@ def _record_server_error(request: Request, exc: BaseException) -> None:
     try:
         factory = overrides.get(get_uow_factory, get_uow_factory)()
         clock = overrides.get(get_clock, get_clock)()
-        RecordServerError(factory, clock).execute(
+        runtime = overrides.get(get_runtime, get_runtime)()
+        RecordServerError(factory, clock, runtime).execute(
             RecordServerErrorCommand(
                 method=request.method,
                 route=getattr(route, "path", None) or request.url.path,

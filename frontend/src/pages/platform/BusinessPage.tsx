@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Activity, AlertTriangle, Gauge, Search, Wallet, Banknote } from 'lucide-react'
 import { platformTenantsApi } from '@/api/platform'
 import { PageHeader } from '@/components/PageHeader'
-import { WeeklyBars } from '@/components/platform/WeeklyBars'
+import { TrendBars } from '@/components/platform/TrendBars'
 import { StatCard } from '@/components/StatCard'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -205,7 +205,15 @@ export function BusinessPage() {
         <Card>
           <CardHeader title={t('biz.trend')} />
           <div className="p-5 pt-8">
-            <WeeklyBars weeks={data.weekly_signed} />
+            <TrendBars
+              points={data.weekly_signed.map((w) => ({
+                date: w.week,
+                count: w.count,
+                label: `${t('biz.week_of').replace('{date}', fmtDate(w.week, 'd MMM'))} · ${t(
+                  'biz.records',
+                ).replace('{n}', String(w.count))}`,
+              }))}
+            />
             <p className="mt-3 text-xs text-tx-3">{t('biz.trend_desc')}</p>
           </div>
         </Card>

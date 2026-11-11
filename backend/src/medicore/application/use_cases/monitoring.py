@@ -1,12 +1,13 @@
 """Platform console · Monitoring: is the system healthy right now?
 
 The process and its deploy (version, commit, uptime), the database (reachable, latency,
-size, applied migration, largest tables), sign-in pressure (failing accounts, active
-lockouts), live sessions including support access, and the unexpected server errors of
-the last days. Business numbers live in ``business.py``.
+size, connections, applied migration, largest tables), sign-in pressure (failing accounts,
+active lockouts, console sign-ins), live sessions including support access, scheduled
+tasks (did the nightly demo reset run?) and the unexpected server errors of the last days,
+each tagged with the deploy it happened on. Business numbers live in ``business.py``.
 
 Recorded errors keep no message or request data (see ``ErrorEvent``) and are purged after
-``ERROR_RETENTION_DAYS``.
+``ERROR_RETENTION_DAYS``; task runs after ``JOB_RETENTION_DAYS``.
 """
 
 from __future__ import annotations
@@ -14,17 +15,21 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from medicore.application.common.context import PlatformActorContext
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.runtime import RuntimeFacts, RuntimeInfo
 from medicore.application.ports.unit_of_work import UnitOfWorkFactory
 from medicore.domain.entities.error_event import ErrorEvent
+from medicore.domain.entities.job_run import JobRun
 from medicore.domain.repositories._support import (
     ActiveImpersonation,
+    ConnectionStats,
+    ConsoleLogin,
     DatabaseStatus,
     ErrorGroup,
+    JobSummary,
     LoginPressure,
     Page,
     TableSize,
@@ -35,7 +40,48 @@ LOGIN_WINDOW_HOURS = 24
 ERROR_GROUP_DAYS = 7
 TOP_TABLES = 8
 TOP_ERROR_GROUPS = 10
+ERROR_TREND_DAYS = 30
+CONSOLE_LOGINS = 10
 MAX_PAGE = 100
+JOB_RETENTION_DAYS = 90
+
+# Scheduled tasks the console expects, with how long may pass between successful runs
+# before it is flagged (the nightly demo reset gets a couple of hours of slack).
+SCHEDULED_JOBS: dict[str, timedelta] = {"demo_reset": timedelta(hours=26)}
+
+
+@dataclass(frozen=True, slots=True)
+class JobStatus:
+    job: str
+    state: str  # ok | failed | overdue | never
+    expected_every: timedelta | None
+    summary: JobSummary | None
+
+
+def job_statuses(summaries: list[JobSummary], now: datetime) -> list[JobStatus]:
+    """Every expected task plus any other that has run, with its state as of ``now``."""
+    by_job = {s.job: s for s in summaries}
+    out = []
+    for job in [*SCHEDULED_JOBS, *sorted(set(by_job) - set(SCHEDULED_JOBS))]:
+        summary = by_job.get(job)
+        every = SCHEDULED_JOBS.get(job)
+        if summary is None:
+            state = "never"
+        elif not summary.last_ok:
+            state = "failed"
+        elif every and (summary.last_success_at is None or now - summary.last_success_at > every):
+            state = "overdue"
+        else:
+            state = "ok"
+        out.append(JobStatus(job, state, every, summary))
+    return out
+
+
+def _daily(today: date, counts: list[tuple[date, int]]) -> list[tuple[date, int]]:
+    """Every one of the last ERROR_TREND_DAYS days, zero when nothing failed."""
+    by_day = dict(counts)
+    days = [today - timedelta(days=n) for n in range(ERROR_TREND_DAYS - 1, -1, -1)]
+    return [(d, by_day.get(d, 0)) for d in days]
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,13 +91,17 @@ class SystemStatusDTO:
     uptime_seconds: int
     database: DatabaseStatus
     database_latency_ms: float
+    connections: ConnectionStats
     largest_tables: list[TableSize]
     logins: LoginPressure
     lockouts_24h: int
+    console_logins: list[ConsoleLogin]
     sessions: dict[str, int]
     impersonations: list[ActiveImpersonation]
     errors_24h: int
     errors_7d: int
+    errors_daily: list[tuple[date, int]]
+    jobs: list[JobStatus]
     error_groups: list[ErrorGroup] = field(default_factory=list)
 
 
@@ -66,6 +116,9 @@ class GetSystemStatus:
         day_ago = now - timedelta(hours=LOGIN_WINDOW_HOURS)
         week_ago = now - timedelta(days=ERROR_GROUP_DAYS)
         facts = self._runtime.facts()
+        trend_since = datetime.combine(
+            now.date() - timedelta(days=ERROR_TREND_DAYS - 1), datetime.min.time(), now.tzinfo
+        )
         with self._factory.monitoring_reads() as reads:
             started = time.perf_counter()
             reads.ping()
@@ -76,13 +129,17 @@ class GetSystemStatus:
                 uptime_seconds=max(0, int((now - facts.started_at).total_seconds())),
                 database=reads.database(),
                 database_latency_ms=round(latency, 1),
+                connections=reads.connections(),
                 largest_tables=reads.largest_tables(TOP_TABLES),
                 logins=reads.login_pressure(day_ago, now),
                 lockouts_24h=reads.lockouts_since(day_ago),
+                console_logins=reads.console_logins(CONSOLE_LOGINS),
                 sessions=reads.sessions_by_kind(now),
                 impersonations=reads.active_impersonations(now),
                 errors_24h=reads.errors_since(day_ago),
                 errors_7d=reads.errors_since(week_ago),
+                errors_daily=_daily(now.date(), reads.errors_per_day(trend_since)),
+                jobs=job_statuses(reads.job_summaries(), now),
                 error_groups=reads.error_groups(week_ago, TOP_ERROR_GROUPS),
             )
 
@@ -119,11 +176,13 @@ class RecordServerErrorCommand:
 
 
 class RecordServerError:
-    """Keep one unexpected error for the console and drop the ones past retention."""
+    """Keep one unexpected error (tagged with the running deploy) for the console and drop
+    the ones past retention."""
 
-    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock, runtime: RuntimeInfo) -> None:
         self._factory = uow_factory
         self._clock = clock
+        self._runtime = runtime
 
     def execute(self, cmd: RecordServerErrorCommand) -> ErrorEvent:
         now = self._clock.now()
@@ -135,8 +194,29 @@ class RecordServerError:
             status=cmd.status,
             error_type=cmd.error_type[:200],
             location=cmd.location[:300],
+            commit=(self._runtime.facts().commit or "")[:40] or None,
         )
         with self._factory.error_log() as log:
             log.record(event)
             log.purge_before(now - timedelta(days=ERROR_RETENTION_DAYS))
         return event
+
+
+class RecordJobRun:
+    """Record how a scheduled task ended, from the task itself (e.g. ``seed_demo --reset``)."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(self, job: str, started_at: datetime, ok: bool, detail: str = "") -> JobRun:
+        now = self._clock.now()
+        run = JobRun(
+            id=uuid.uuid4(), job=job[:60], started_at=started_at, finished_at=now, ok=ok,
+            detail=detail[:300],
+        )
+        with self._factory.job_log() as log:
+            log.record(run)
+            log.purge_before(now - timedelta(days=JOB_RETENTION_DAYS))
+        return run
+

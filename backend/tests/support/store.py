@@ -15,6 +15,7 @@ from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.diagnosis_catalog import CatalogDiagnosis
 from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.entities.insurer import Insurer
+from medicore.domain.entities.job_run import JobRun
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
@@ -69,6 +70,7 @@ class InMemoryStore:
     sessions: dict[UUID, AuthSession] = field(default_factory=dict)
     # Recorded server errors (platform monitoring).
     error_events: dict[UUID, ErrorEvent] = field(default_factory=dict)
+    job_runs: dict[UUID, JobRun] = field(default_factory=dict)
     # Global subscription catalog, starting from the published price list.
     subscription_payments: dict[UUID, SubscriptionPayment] = field(default_factory=dict)
     plans: dict[str, Plan] = field(default_factory=lambda: {p.code: p for p in default_plans()})

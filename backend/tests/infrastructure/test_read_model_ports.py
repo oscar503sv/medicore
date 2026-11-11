@@ -10,6 +10,7 @@ import pytest
 
 from medicore.application.ports.unit_of_work import (
     ErrorLogRepository,
+    JobLogRepository,
     LoginThrottleRepository,
     MonitoringReadModel,
     PlatformReadModel,
@@ -19,11 +20,13 @@ from medicore.infrastructure.persistence.repositories.login_throttle import (
 )
 from medicore.infrastructure.persistence.repositories.monitoring import (
     SqlErrorLogRepository,
+    SqlJobLogRepository,
     SqlMonitoringReadModel,
 )
 from medicore.infrastructure.persistence.repositories.platform_reads import SqlPlatformReadModel
 from tests.support.repositories import (
     InMemoryErrorLogRepository,
+    InMemoryJobLogRepository,
     InMemoryLoginThrottleRepository,
     InMemoryMonitoringReadModel,
     InMemoryPlatformReadModel,
@@ -43,6 +46,7 @@ def _methods(port) -> set[str]:
         (PlatformReadModel, (SqlPlatformReadModel, InMemoryPlatformReadModel)),
         (MonitoringReadModel, (SqlMonitoringReadModel, InMemoryMonitoringReadModel)),
         (ErrorLogRepository, (SqlErrorLogRepository, InMemoryErrorLogRepository)),
+        (JobLogRepository, (SqlJobLogRepository, InMemoryJobLogRepository)),
         (LoginThrottleRepository, (SqlLoginThrottleRepository, InMemoryLoginThrottleRepository)),
     ],
 )

@@ -156,3 +156,34 @@ class ErrorGroup:
     location: str
     count: int
     last_at: datetime
+    first_at: datetime | None = None
+    first_commit: str | None = None  # deploy in which it was first seen (within the window)
+    last_commit: str | None = None  # deploy of its latest occurrence
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectionStats:
+    total: int
+    active: int
+    idle: int
+    idle_in_transaction: int
+    max_connections: int
+
+
+@dataclass(frozen=True, slots=True)
+class ConsoleLogin:
+    admin_name: str | None
+    action: str  # auth.platform_login | auth.platform_login_failed | auth.platform_login_locked
+    at: datetime
+    ip_address: str | None
+    user_agent: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class JobSummary:
+    job: str
+    last_started_at: datetime
+    last_finished_at: datetime
+    last_ok: bool
+    last_detail: str
+    last_success_at: datetime | None

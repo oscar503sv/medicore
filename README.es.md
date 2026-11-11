@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings desde .env (pydantic-settings) — dev-safe por defecto
 │   ├── database/       # Engine SQLAlchemy + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (31 tablas; VOs complejos como JSONB)
+│   │   ├── models/     # ORM models (32 tablas; VOs complejos como JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (sin contaminar el dominio)
 │   │   └── repositories/  # Implementaciones SQLAlchemy de los puertos
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, generador de códigos, SystemClock
@@ -255,7 +255,7 @@ medicore/
 | **14** | Procedimientos menores (catálogo por clínica, consentimiento en papel, nota firmada con enmiendas, muestra a patología, control) | ✅ Completada |
 | **15** | Suscripciones SaaS (catálogo de planes, módulos opcionales, cupos, pagos y renovación manuales, solo lectura tras la gracia, permisos por usuario) | ✅ Completada |
 | **16** | Política de contraseñas (longitud, lista de bloqueo, nada personal, requisitos en vivo en la UI) | ✅ Completada |
-| **17** | Consola de plataforma: Negocio (MRR, cobros, vencimientos, adopción, cupos) y Monitoreo (salud, errores 500 sin datos de pacientes, accesos, soporte abierto, `/health/ready`) | ✅ Completada |
+| **17** | Consola de plataforma: Negocio (MRR, cobros, vencimientos, adopción, cupos) y Monitoreo (salud, conexiones, errores 500 sin datos de pacientes con su commit y tendencia, accesos y bloqueos, accesos a la consola auditados, soporte abierto, tareas programadas, `/health/ready`) | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 | — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible, inventario y facturación | 🗓️ A futuro |
@@ -328,7 +328,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ## Base de datos
 
-**31 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
+**32 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
 
 | Tabla | Descripción |
 |---|---|
@@ -356,7 +356,8 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `diagnosis_codes` | Catálogo CIE-10/CIE-11 (global, para autocompletado) |
 | `platform_admins` | Superadmins de la plataforma |
 | `platform_audit_logs` | Auditoría global de operaciones de plataforma |
-| `error_events` | Errores inesperados del servidor (ruta, tipo y ubicación; sin datos de pacientes; 30 días) |
+| `error_events` | Errores inesperados del servidor (ruta, tipo, ubicación y commit; sin datos de pacientes; 30 días) |
+| `job_runs` | Ejecuciones de tareas programadas (p. ej. el reset nocturno de la demo) y su resultado |
 
 ---
 
@@ -427,7 +428,7 @@ El [`docker-compose.yml`](docker-compose.yml) de la raíz levanta todo el stack 
 
 Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migraciones nuevas al arrancar.
 
-Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma.
+Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma. Cada ejecución queda registrada y la página *Monitoreo* marca la tarea si falla o si pasan más de 26 h sin un reset exitoso.
 
 **Monitoreo.** La página *Monitoreo* de la consola solo carga si la API responde, así que para enterarte de una caída configura un monitor externo (UptimeRobot, Better Stack…) contra `https://<tu-dominio>/api/v1/health/ready`: responde `200` si la API y la base de datos están bien y `503` si la base de datos no responde. El commit desplegado que muestra la página sale de `SOURCE_COMMIT`, que Coolify inyecta en el contenedor. No la declares en el compose: Coolify bloquea las variables del compose y una vacía taparía la suya. Fuera de Coolify, defínela tú; si falta, la página lo indica.
 

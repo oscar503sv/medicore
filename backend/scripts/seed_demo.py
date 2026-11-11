@@ -77,6 +77,7 @@ from medicore.application.use_cases.consultations import (
     SignConsultationCommand,
     StartConsultation,
 )
+from medicore.application.use_cases.monitoring import RecordJobRun
 from medicore.application.use_cases.patients import CreatePatient, CreatePatientCommand
 from medicore.application.use_cases.procedures import (
     AmendProcedure,
@@ -166,12 +167,16 @@ from medicore.domain.value_objects.user_preferences import UserPreferences
 from medicore.domain.value_objects.vitals import Vitals
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
+from medicore.infrastructure.auth.system_clock import SystemClock
 from medicore.infrastructure.config import get_settings
-from medicore.infrastructure.database.engine import get_session
+from medicore.infrastructure.database.engine import get_session, get_session_factory
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.notification import NotificationModel
 from medicore.infrastructure.persistence.models.tenant import TenantModel
-from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
+from medicore.infrastructure.persistence.unit_of_work import (
+    SqlAlchemyUnitOfWork,
+    SqlAlchemyUnitOfWorkFactory,
+)
 
 # Password for every demo user. Override with DEMO_PASSWORD (mandatory in production, where
 # the public default would let anyone log in to a publicly reachable demo). The clinic admins
@@ -1533,13 +1538,28 @@ def main() -> None:
     args = parser.parse_args()
     _check_demo_password()
 
+    # Recorded for the console's Monitoring page: the nightly --reset is a scheduled task,
+    # so a failed or missing run shows up there. Only the outcome, never data.
+    job = "demo_reset" if args.reset else "demo_seed"
+    clock = SystemClock()
+    started = clock.now()
+    jobs = RecordJobRun(SqlAlchemyUnitOfWorkFactory(get_session_factory()), clock)
+    try:
+        _seed(args.reset)
+    except BaseException as exc:
+        jobs.execute(job, started, ok=False, detail=type(exc).__name__)
+        raise
+    jobs.execute(job, started, ok=True, detail="clinica-demo, centro-norte")
+
+
+def _seed(reset: bool) -> None:
     session = get_session()
     # Fictitious NITs in the Salvadoran format (municipality-birth-correlative-check).
     demo = [("clinica-demo", "Clínica Demo, S.A. de C.V.", "0614-150318-101-4",
              "San Salvador · Centro"),
             ("centro-norte", "Centro Médico Norte, S.A. de C.V.", "0511-020719-102-7",
              "Santa Tecla · Las Palmas")]
-    if args.reset:
+    if reset:
         reset_demo(session, [d[0] for d in demo])
     for slug, legal_name, tax_id, location in demo:
         seed_tenant(session, slug, legal_name, tax_id, location)

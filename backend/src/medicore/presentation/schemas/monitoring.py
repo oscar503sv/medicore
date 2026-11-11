@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel
 
@@ -16,11 +16,20 @@ class RuntimeResponse(BaseModel):
     uptime_seconds: int
 
 
+class ConnectionsResponse(BaseModel):
+    total: int
+    active: int
+    idle: int
+    idle_in_transaction: int
+    max_connections: int
+
+
 class DatabaseResponse(BaseModel):
     version: str
     size_bytes: int
     revision: str | None
     latency_ms: float
+    connections: ConnectionsResponse
 
 
 class TableSizeResponse(BaseModel):
@@ -37,11 +46,20 @@ class LockedLoginResponse(BaseModel):
     locked_until: datetime
 
 
+class ConsoleLoginResponse(BaseModel):
+    admin_name: str | None
+    action: str
+    at: datetime
+    ip_address: str | None
+    user_agent: str | None
+
+
 class LoginsResponse(BaseModel):
     failing_accounts: int
     failed_attempts: int
     lockouts_24h: int
     locked: list[LockedLoginResponse]
+    console: list[ConsoleLoginResponse]
 
 
 class ImpersonationResponse(BaseModel):
@@ -61,6 +79,14 @@ class ErrorGroupResponse(BaseModel):
     location: str
     count: int
     last_at: datetime
+    first_at: datetime | None
+    first_commit: str | None
+    last_commit: str | None
+
+
+class DayCount(BaseModel):
+    day: date
+    count: int
 
 
 class ErrorsResponse(BaseModel):
@@ -68,6 +94,18 @@ class ErrorsResponse(BaseModel):
     last_7d: int
     retention_days: int
     groups: list[ErrorGroupResponse]
+    daily: list[DayCount]
+
+
+class JobResponse(BaseModel):
+    job: str
+    state: str  # ok | failed | overdue | never
+    expected_every_hours: float | None
+    last_started_at: datetime | None
+    last_finished_at: datetime | None
+    last_ok: bool | None
+    last_detail: str | None
+    last_success_at: datetime | None
 
 
 class SystemStatusResponse(BaseModel):
@@ -79,6 +117,7 @@ class SystemStatusResponse(BaseModel):
     sessions: dict[str, int]
     impersonations: list[ImpersonationResponse]
     errors: ErrorsResponse
+    jobs: list[JobResponse]
 
 
 class ErrorEventResponse(BaseModel):
@@ -89,6 +128,7 @@ class ErrorEventResponse(BaseModel):
     status: int
     error_type: str
     location: str
+    commit: str | None
 
 
 class ErrorEventListResponse(BaseModel):

@@ -677,6 +677,30 @@ export interface ErrorGroup {
   location: string
   count: number
   last_at: string
+  first_at: string | null
+  first_commit: string | null
+  last_commit: string | null
+}
+
+export interface ConsoleLogin {
+  admin_name: string | null
+  action: 'auth.platform_login' | 'auth.platform_login_failed' | 'auth.platform_login_locked'
+  at: string
+  ip_address: string | null
+  user_agent: string | null
+}
+
+export type JobState = 'ok' | 'failed' | 'overdue' | 'never'
+
+export interface ScheduledJob {
+  job: string
+  state: JobState
+  expected_every_hours: number | null
+  last_started_at: string | null
+  last_finished_at: string | null
+  last_ok: boolean | null
+  last_detail: string | null
+  last_success_at: string | null
 }
 
 export interface SystemStatus {
@@ -689,17 +713,37 @@ export interface SystemStatus {
     started_at: string
     uptime_seconds: number
   }
-  database: { version: string; size_bytes: number; revision: string | null; latency_ms: number }
+  database: {
+    version: string
+    size_bytes: number
+    revision: string | null
+    latency_ms: number
+    connections: {
+      total: number
+      active: number
+      idle: number
+      idle_in_transaction: number
+      max_connections: number
+    }
+  }
   largest_tables: { name: string; size_bytes: number; rows: number }[]
   logins: {
     failing_accounts: number
     failed_attempts: number
     lockouts_24h: number
     locked: LockedLogin[]
+    console: ConsoleLogin[]
   }
   sessions: { tenant: number; support: number; platform: number }
   impersonations: ActiveImpersonation[]
-  errors: { last_24h: number; last_7d: number; retention_days: number; groups: ErrorGroup[] }
+  errors: {
+    last_24h: number
+    last_7d: number
+    retention_days: number
+    groups: ErrorGroup[]
+    daily: { day: string; count: number }[]
+  }
+  jobs: ScheduledJob[]
 }
 
 export interface ErrorEvent {
@@ -710,5 +754,6 @@ export interface ErrorEvent {
   status: number
   error_type: string
   location: string
+  commit: string | null
 }
 

@@ -8,22 +8,27 @@ from datetime import datetime, timedelta
 import pytest
 
 from medicore.application.common.context import PlatformActorContext
+from medicore.application.common.errors import AuthenticationFailed, TooManyLoginAttempts
 from medicore.application.ports.runtime import RuntimeFacts
 from medicore.application.use_cases.monitoring import (
     ERROR_RETENTION_DAYS,
+    ERROR_TREND_DAYS,
+    JOB_RETENTION_DAYS,
     CheckReadiness,
     GetSystemStatus,
     ListServerErrors,
+    RecordJobRun,
     RecordServerError,
     RecordServerErrorCommand,
 )
-from medicore.application.use_cases.platform import ImpersonateTenant
+from medicore.application.use_cases.platform import AuthenticatePlatformAdmin, ImpersonateTenant
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.error_event import ErrorEvent
+from medicore.domain.entities.job_run import JobRun
 from medicore.domain.shared.identifiers import AuditLogId, SessionId
-from tests.support.builders import seed_clinic
-from tests.support.fakes import FakeTokenIssuer, FixedClock
+from tests.support.builders import PASSWORD, seed_clinic
+from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
 
 NOW = datetime(2026, 5, 31, 9, 0)
 
@@ -57,10 +62,11 @@ def _session(seed, *, scope="tenant", impersonator=None, expires=NOW + timedelta
     return s
 
 
-def _error(seed, when: datetime, route="/api/v1/patients", location="use_cases/patients.py:10"):
+def _error(seed, when: datetime, route="/api/v1/patients", location="use_cases/patients.py:10",
+           commit=None):
     e = ErrorEvent(
         id=uuid.uuid4(), occurred_at=when, method="GET", route=route, status=500,
-        error_type="RuntimeError", location=location,
+        error_type="RuntimeError", location=location, commit=commit,
     )
     seed.factory.store.error_events[e.id] = e
     return e
@@ -148,7 +154,7 @@ def test_record_server_error_keeps_it_and_purges_past_retention():
     stale = _error(seed, NOW - timedelta(days=ERROR_RETENTION_DAYS + 1))
     kept = _error(seed, NOW - timedelta(days=ERROR_RETENTION_DAYS - 1))
 
-    event = RecordServerError(seed.factory, FixedClock(NOW)).execute(
+    event = RecordServerError(seed.factory, FixedClock(NOW), StaticRuntime()).execute(
         RecordServerErrorCommand(
             method="post", route="/api/v1/consultations/{consultation_id}/sign", status=500,
             error_type="sqlalchemy.exc.OperationalError", location="x" * 400,
@@ -160,6 +166,7 @@ def test_record_server_error_keeps_it_and_purges_past_retention():
     assert stale.id not in store
     assert event.method == "POST" and event.occurred_at == NOW
     assert len(event.location) == 300
+    assert event.commit == "abc1234"  # tagged with the running deploy
 
 
 def test_list_server_errors_newest_first_with_paging():
@@ -180,3 +187,92 @@ def test_readiness_fails_when_the_database_is_down():
     seed.factory.store.database_down = True
     with pytest.raises(ConnectionError):
         CheckReadiness(seed.factory).execute()
+
+
+def test_error_groups_tell_the_deploys_apart_and_the_trend_is_zero_filled():
+    seed = seed_clinic()
+    _error(seed, NOW - timedelta(days=2), commit="old1111")
+    _error(seed, NOW - timedelta(hours=1), commit="abc1234")
+
+    dto = _status(seed)
+
+    [group] = dto.error_groups
+    assert (group.first_commit, group.last_commit) == ("old1111", "abc1234")
+    assert group.first_at == NOW - timedelta(days=2)
+    assert len(dto.errors_daily) == ERROR_TREND_DAYS
+    assert dto.errors_daily[-1] == (NOW.date(), 1)
+    assert dto.errors_daily[-3] == ((NOW - timedelta(days=2)).date(), 1)
+    assert sum(n for _, n in dto.errors_daily) == 2
+
+
+def _run(seed, job, finished, ok=True):
+    run = JobRun(id=uuid.uuid4(), job=job, started_at=finished - timedelta(minutes=1),
+                 finished_at=finished, ok=ok, detail="")
+    seed.factory.store.job_runs[run.id] = run
+
+
+def _jobs(seed):
+    return {j.job: j.state for j in _status(seed).jobs}
+
+
+def test_scheduled_jobs_states():
+    seed = seed_clinic()
+    assert _jobs(seed) == {"demo_reset": "never"}
+
+    _run(seed, "demo_reset", NOW - timedelta(hours=3))
+    assert _jobs(seed)["demo_reset"] == "ok"
+
+    _run(seed, "demo_reset", NOW - timedelta(hours=1), ok=False)
+    assert _jobs(seed)["demo_reset"] == "failed"
+
+    seed.factory.store.job_runs.clear()
+    _run(seed, "demo_reset", NOW - timedelta(hours=30))
+    _run(seed, "demo_seed", NOW - timedelta(days=10))  # ad-hoc task: no schedule, still listed
+    assert _jobs(seed) == {"demo_reset": "overdue", "demo_seed": "ok"}
+
+
+def test_record_job_run_purges_old_runs():
+    seed = seed_clinic()
+    _run(seed, "demo_reset", NOW - timedelta(days=JOB_RETENTION_DAYS + 1))
+    run = RecordJobRun(seed.factory, FixedClock(NOW)).execute(
+        "demo_reset", NOW - timedelta(minutes=2), ok=True, detail="2 clínicas"
+    )
+    assert list(seed.factory.store.job_runs) == [run.id]
+    assert run.finished_at == NOW
+
+
+def _login(seed, password, email=None):
+    auth = AuthenticatePlatformAdmin(
+        seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), FixedClock(NOW)
+    )
+    return auth.execute(email or seed.platform_admin.email, password, "10.0.0.7", "Firefox/140")
+
+
+def test_console_sign_ins_are_audited():
+    seed = seed_clinic()
+    _login(seed, PASSWORD)
+    with pytest.raises(AuthenticationFailed):
+        _login(seed, "wrong-password")
+    with pytest.raises(AuthenticationFailed):
+        _login(seed, "wrong-password", email="nobody@medicore.test")  # no account: no entry
+
+    logins = _status(seed).console_logins
+    # Same instant (fixed clock), so compare without order.
+    assert sorted(c.action for c in logins) == ["auth.platform_login", "auth.platform_login_failed"]
+    assert {c.admin_name for c in logins} == {seed.platform_admin.name}
+    assert all(c.ip_address == "10.0.0.7" for c in logins)
+
+
+def test_console_lockout_is_audited_and_counted():
+    seed = seed_clinic()
+    for _ in range(5):
+        with pytest.raises(AuthenticationFailed):
+            _login(seed, "wrong-password")
+    with pytest.raises(TooManyLoginAttempts):
+        _login(seed, PASSWORD)
+
+    dto = _status(seed)
+    assert dto.lockouts_24h == 1
+    actions = [c.action for c in dto.console_logins]
+    assert actions.count("auth.platform_login_locked") == 1
+    assert actions.count("auth.platform_login_failed") == 4

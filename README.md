@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings from .env (pydantic-settings) — dev-safe defaults
 │   ├── database/       # SQLAlchemy engine + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (31 tables; complex VOs as JSONB)
+│   │   ├── models/     # ORM models (32 tables; complex VOs as JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (keeps the domain clean)
 │   │   └── repositories/  # SQLAlchemy implementations of the ports
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, code generator, SystemClock
@@ -255,7 +255,7 @@ medicore/
 | **14** | Minor procedures (per-clinic catalog, consent on paper, signed note with amendments, pathology specimen, follow-up) | ✅ Done |
 | **15** | SaaS subscriptions (plan catalog, optional modules, quotas, manual payments and renewal, read-only after grace, per-user permissions) | ✅ Done |
 | **16** | Password policy (length, blocklist, nothing personal, live requirements in the UI) | ✅ Done |
-| **17** | Platform console: Business (MRR, collections, expirations, adoption, seats) and Monitoring (health, 500 errors without patient data, sign-ins, open support access, `/health/ready`) | ✅ Done |
+| **17** | Platform console: Business (MRR, collections, expirations, adoption, seats) and Monitoring (health, connections, 500 errors without patient data with their commit and trend, sign-ins and lockouts, audited console sign-ins, open support access, scheduled tasks, `/health/ready`) | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable record, inventory and billing | 🗓️ Future |
@@ -328,7 +328,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ## Database
 
-**31 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
+**32 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
 
 | Table | Description |
 |---|---|
@@ -356,7 +356,8 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `diagnosis_codes` | ICD-10/ICD-11 catalog (global, for autocomplete) |
 | `platform_admins` | Platform superadmins |
 | `platform_audit_logs` | Global audit of platform operations |
-| `error_events` | Unexpected server errors (route, type and location; no patient data; 30 days) |
+| `error_events` | Unexpected server errors (route, type, location and commit; no patient data; 30 days) |
+| `job_runs` | Runs of scheduled tasks (e.g. the nightly demo reset) and their outcome |
 
 ---
 
@@ -427,7 +428,7 @@ The root [`docker-compose.yml`](docker-compose.yml) runs the whole stack on a **
 
 Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on start.
 
-For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched.
+For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched. Each run is recorded, and the *Monitoring* page flags the task when it fails or when more than 26 h pass without a successful reset.
 
 **Monitoring.** The console's *Monitoring* page only loads while the API answers, so to hear about an outage point an external monitor (UptimeRobot, Better Stack…) at `https://<your-domain>/api/v1/health/ready`: it answers `200` when the API and the database are fine and `503` when the database does not respond. The deployed commit on that page comes from `SOURCE_COMMIT`, which Coolify injects into the container. Do not declare it in the compose file: Coolify locks compose variables and an empty one would shadow its own. Outside Coolify, set it yourself; if it is missing, the page says so.
 

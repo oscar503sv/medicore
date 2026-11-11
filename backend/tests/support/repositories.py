@@ -16,6 +16,7 @@ from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.error_event import ErrorEvent
+from medicore.domain.entities.job_run import JobRun
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
@@ -30,9 +31,12 @@ from medicore.domain.enums import AppointmentStatus, ProcedureStatus
 from medicore.domain.repositories._support import (
     ActiveImpersonation,
     AuditFilter,
+    ConnectionStats,
+    ConsoleLogin,
     DatabaseStatus,
     ErrorGroup,
     GlobalAuditRow,
+    JobSummary,
     LockedLogin,
     LoginPressure,
     Page,
@@ -963,10 +967,55 @@ class InMemoryMonitoringReadModel:
         )
 
     def lockouts_since(self, since: datetime) -> int:
-        return sum(
+        clinic = sum(
             1 for a in self._store.audit.values()
             if a.action == "auth.login_locked" and a.timestamp >= since
         )
+        console = sum(
+            1 for a in self._store.platform_audit.values()
+            if a.action == "auth.platform_login_locked" and a.timestamp >= since
+        )
+        return clinic + console
+
+    def console_logins(self, limit: int) -> list[ConsoleLogin]:
+        rows = sorted(
+            (a for a in self._store.platform_audit.values()
+             if a.action.startswith("auth.platform_login")),
+            key=lambda a: a.timestamp, reverse=True,
+        )[:limit]
+        out = []
+        for a in rows:
+            admin = self._store.platform_admins.get(a.actor_id.value)
+            out.append(ConsoleLogin(
+                admin.name if admin else None, a.action, a.timestamp, a.ip_address, a.user_agent
+            ))
+        return out
+
+    def connections(self) -> ConnectionStats:
+        return ConnectionStats(
+            total=1, active=1, idle=0, idle_in_transaction=0, max_connections=100
+        )
+
+    def errors_per_day(self, since: datetime) -> list[tuple[date, int]]:
+        days: dict[date, int] = {}
+        for e in self._store.error_events.values():
+            if e.occurred_at >= since:
+                days[e.occurred_at.date()] = days.get(e.occurred_at.date(), 0) + 1
+        return sorted(days.items())
+
+    def job_summaries(self) -> list[JobSummary]:
+        by_job: dict[str, list[JobRun]] = {}
+        for run in self._store.job_runs.values():
+            by_job.setdefault(run.job, []).append(run)
+        out = []
+        for job, runs in sorted(by_job.items()):
+            last = max(runs, key=lambda r: r.finished_at)
+            ok = [r.finished_at for r in runs if r.ok]
+            out.append(JobSummary(
+                job, last.started_at, last.finished_at, last.ok, last.detail,
+                max(ok) if ok else None,
+            ))
+        return out
 
     def sessions_by_kind(self, now: datetime) -> dict[str, int]:
         out = {"tenant": 0, "support": 0, "platform": 0}
@@ -1001,10 +1050,13 @@ class InMemoryMonitoringReadModel:
         for e in self._store.error_events.values():
             if e.occurred_at >= since:
                 groups.setdefault((e.method, e.route, e.error_type, e.location), []).append(e)
-        out = [
-            ErrorGroup(*key, count=len(evs), last_at=max(e.occurred_at for e in evs))
-            for key, evs in groups.items()
-        ]
+        out = []
+        for key, evs in groups.items():
+            evs.sort(key=lambda e: e.occurred_at)
+            out.append(ErrorGroup(
+                *key, count=len(evs), last_at=evs[-1].occurred_at, first_at=evs[0].occurred_at,
+                first_commit=evs[0].commit, last_commit=evs[-1].commit,
+            ))
         out.sort(key=lambda g: (g.count, g.last_at), reverse=True)
         return out[:limit]
 
@@ -1027,3 +1079,17 @@ class InMemoryErrorLogRepository:
         for key, e in list(self._store.error_events.items()):
             if e.occurred_at < cutoff:
                 del self._store.error_events[key]
+
+
+class InMemoryJobLogRepository:
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def record(self, run: JobRun) -> None:
+        self._store.job_runs[run.id] = run
+
+    def purge_before(self, cutoff: datetime) -> None:
+        for key, run in list(self._store.job_runs.items()):
+            if run.finished_at < cutoff:
+                del self._store.job_runs[key]
+

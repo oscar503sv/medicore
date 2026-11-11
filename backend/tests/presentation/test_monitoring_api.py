@@ -28,6 +28,13 @@ def test_system_status_endpoint(client, platform_headers):
     assert data["errors"]["retention_days"] == 30
     assert set(data["sessions"]) == {"tenant", "support", "platform"}
     assert data["sessions"]["platform"] == 1  # this very console session
+    assert len(data["errors"]["daily"]) == 30
+    assert data["database"]["connections"]["max_connections"] == 100
+    assert data["jobs"][0]["job"] == "demo_reset"
+    assert data["jobs"][0]["state"] == "never"
+    assert data["jobs"][0]["expected_every_hours"] == 26
+    [login] = data["logins"]["console"]  # the console sign-in of this test
+    assert login["action"] == "auth.platform_login"
 
 
 def test_monitoring_needs_a_platform_session(client, admin_headers):

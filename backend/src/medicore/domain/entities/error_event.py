@@ -21,3 +21,4 @@ class ErrorEvent:
     status: int
     error_type: str  # exception class, e.g. "sqlalchemy.exc.OperationalError"
     location: str  # innermost project frame, e.g. "use_cases/records.py:142 in execute"
+    commit: str | None = None  # deployed commit when it happened (was it fixed by a deploy?)

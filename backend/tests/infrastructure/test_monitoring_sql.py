@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -19,16 +19,19 @@ from sqlalchemy.orm import Session
 import medicore.infrastructure.persistence.models  # noqa: F401  (register all tables)
 from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.error_event import ErrorEvent
+from medicore.domain.entities.job_run import JobRun
 from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.enums import Role
-from medicore.domain.shared.identifiers import PlatformAdminId, SessionId
+from medicore.domain.shared.identifiers import AuditLogId, PlatformAdminId, SessionId
 from medicore.infrastructure.config import get_settings
 from medicore.infrastructure.persistence.models.login_attempt import LoginAttemptModel
+from medicore.infrastructure.persistence.models.platform import PlatformAuditLogModel
 from medicore.infrastructure.persistence.repositories.auth_session import (
     SqlAuthSessionRepository,
 )
 from medicore.infrastructure.persistence.repositories.monitoring import (
     SqlErrorLogRepository,
+    SqlJobLogRepository,
     SqlMonitoringReadModel,
 )
 from medicore.infrastructure.persistence.repositories.platform import (
@@ -124,14 +127,15 @@ def test_login_pressure(session):
 def test_error_store_groups_pages_and_purges(session):
     log = SqlErrorLogRepository(session)
 
-    def record(when, route="/api/v1/patients"):
+    def record(when, route="/api/v1/patients", commit=None):
         log.record(ErrorEvent(
             id=uuid.uuid4(), occurred_at=when, method="GET", route=route, status=500,
             error_type="RuntimeError", location="use_cases/patients.py:10 in execute",
+            commit=commit,
         ))
 
-    record(FUTURE - timedelta(hours=1))
-    record(FUTURE - timedelta(hours=2))
+    record(FUTURE - timedelta(hours=1), commit="new2222")
+    record(FUTURE - timedelta(hours=2), commit="old1111")
     record(FUTURE - timedelta(hours=3), route="/api/v1/records")
     record(FUTURE - timedelta(days=40))
 
@@ -140,8 +144,56 @@ def test_error_store_groups_pages_and_purges(session):
     top, other = reads.error_groups(FUTURE - timedelta(days=1), 10)
     assert (top.route, top.count) == ("/api/v1/patients", 2)
     assert top.last_at == FUTURE - timedelta(hours=1)
+    assert (top.first_commit, top.last_commit) == ("old1111", "new2222")
+    assert top.first_at == FUTURE - timedelta(hours=2)
     assert other.count == 1
+    assert reads.recent_errors(1, 0).items[0].commit == "new2222"
+    assert reads.errors_per_day(FUTURE - timedelta(days=2)) == [(date(2031, 3, 5), 3)]
     assert reads.recent_errors(2, 0).items[0].occurred_at == FUTURE - timedelta(hours=1)
 
     log.purge_before(FUTURE - timedelta(days=30))
     assert reads.errors_since(FUTURE - timedelta(days=50)) == 3
+
+
+def test_connections(session):
+    stats = SqlMonitoringReadModel(session).connections()
+    assert stats.total >= 1 and stats.active >= 1  # this very query
+    assert stats.max_connections > 0
+
+
+def test_console_logins_and_lockouts(session):
+    root = PlatformAdmin(
+        id=PlatformAdminId.new(), name="Root Logins", email=f"{uuid.uuid4().hex}@mon.test",
+        password_hash="x",
+    )
+    SqlPlatformAdminRepository(session).save(root)
+    session.flush()
+    for minutes, action in ((3, "auth.platform_login_failed"), (2, "auth.platform_login_locked"),
+                            (1, "auth.platform_login")):
+        session.add(PlatformAuditLogModel(
+            id=AuditLogId.new().value, actor_id=root.id.value, action=action,
+            entity_type="PlatformAdmin", entity_id=str(root.id), metadata_={},
+            timestamp=FUTURE - timedelta(minutes=minutes), ip_address="10.0.0.9",
+        ))
+    session.flush()
+    reads = SqlMonitoringReadModel(session)
+    latest = reads.console_logins(3)
+    assert [c.action for c in latest] == [
+        "auth.platform_login", "auth.platform_login_locked", "auth.platform_login_failed"
+    ]
+    assert latest[0].admin_name == "Root Logins"
+    assert reads.lockouts_since(FUTURE - timedelta(hours=1)) == 1
+
+
+def test_job_summaries(session):
+    log = SqlJobLogRepository(session)
+    job = f"zz-job-{uuid.uuid4().hex[:6]}"
+    for hours, ok in ((5, True), (3, True), (1, False)):
+        log.record(JobRun(
+            id=uuid.uuid4(), job=job, started_at=FUTURE - timedelta(hours=hours, minutes=1),
+            finished_at=FUTURE - timedelta(hours=hours), ok=ok, detail="x",
+        ))
+    [summary] = [s for s in SqlMonitoringReadModel(session).job_summaries() if s.job == job]
+    assert summary.last_ok is False
+    assert summary.last_finished_at == FUTURE - timedelta(hours=1)
+    assert summary.last_success_at == FUTURE - timedelta(hours=3)
