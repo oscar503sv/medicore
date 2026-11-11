@@ -18,6 +18,7 @@ import { Modal } from '@/components/ui/Modal'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
+import { FEE_PATTERN, fmtFee } from '@/lib/fees'
 import { useT } from '@/lib/i18n'
 
 /** Catalog tab (admin): the clinic's procedures, the rules each one carries, archive/restore. */
@@ -57,6 +58,7 @@ export function ProcedureCatalog() {
               <Th>{t('prc.col_consent')}</Th>
               <Th>{t('prc.col_follow_up')}</Th>
               <Th>{t('prc.col_specimen')}</Th>
+              <Th className="text-right">{t('fee.price')}</Th>
               <Th>{t('prc.col_state')}</Th>
               <Th />
             </tr>
@@ -71,6 +73,13 @@ export function ProcedureCatalog() {
                   {k.follow_up_days ? t('prc.days').replace('{n}', String(k.follow_up_days)) : '—'}
                 </Td>
                 <Td className="text-[13px] text-tx-2">{k.takes_specimen ? t('prc.yes') : '—'}</Td>
+                <Td className="text-right">
+                  {k.price ? (
+                    <span className="font-mono text-sm text-tx">{fmtFee(k.price)}</span>
+                  ) : (
+                    <span className="text-xs text-tx-4">{t('fee.no_price')}</span>
+                  )}
+                </Td>
                 <Td>
                   <Badge tone={k.active ? 'ok' : 'neutral'}>
                     {k.active ? t('prc.active') : t('prc.archived')}
@@ -114,6 +123,7 @@ const EMPTY = {
   takes_specimen: false,
   technique_template: '',
   instructions_template: '',
+  price: '',
 }
 
 function ProcedureTypeModal({
@@ -141,9 +151,12 @@ function ProcedureTypeModal({
             takes_specimen: kind.takes_specimen,
             technique_template: kind.technique_template ?? '',
             instructions_template: kind.instructions_template ?? '',
+            price: kind.price ?? '',
           },
     )
   }, [kind])
+
+  const priceInvalid = !!form.price.trim() && !FEE_PATTERN.test(form.price.trim())
 
   const save = useMutation({
     mutationFn: () => {
@@ -155,6 +168,7 @@ function ProcedureTypeModal({
         takes_specimen: form.takes_specimen,
         technique_template: form.technique_template.trim() || null,
         instructions_template: form.instructions_template.trim() || null,
+        price: form.price.trim() || null,
       }
       return kind === 'new' || !kind
         ? proceduresApi.createType(payload)
@@ -200,6 +214,18 @@ function ProcedureTypeModal({
         </div>
         <div className="grid items-end gap-4 sm:grid-cols-[180px_1fr]">
           <Input
+            label={t('fee.price')}
+            inputMode="decimal"
+            value={form.price}
+            placeholder="—"
+            error={priceInvalid ? t('err.fee.invalid_amount') : undefined}
+            onChange={(e) => set({ price: e.target.value })}
+            className="font-mono"
+          />
+          <p className="pb-2.5 text-xs text-tx-3">{t('fee.price_hint')}</p>
+        </div>
+        <div className="grid items-end gap-4 sm:grid-cols-[180px_1fr]">
+          <Input
             type="number"
             min={1}
             max={365}
@@ -242,7 +268,7 @@ function ProcedureTypeModal({
           <Button type="button" variant="outline" onClick={onClose}>
             {t('app.cancel')}
           </Button>
-          <Button type="submit" loading={save.isPending} disabled={!form.name.trim()}>
+          <Button type="submit" loading={save.isPending} disabled={!form.name.trim() || priceInvalid}>
             {t('prc.save')}
           </Button>
         </div>

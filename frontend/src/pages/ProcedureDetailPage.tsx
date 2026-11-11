@@ -21,6 +21,7 @@ import {
 } from '@/api/procedures'
 import { NewAppointmentModal } from '@/components/appointments/NewAppointmentModal'
 import { ReasonModal } from '@/components/applications/ReasonModal'
+import { ProcedureFee } from '@/components/procedures/ProcedureFee'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -267,6 +268,8 @@ export function ProcedureDetailPage() {
           </p>
         )}
       </Card>
+
+      <ProcedureFee data={data} />
 
       {editable ? (
         <EditView data={data} form={form} set={set} />

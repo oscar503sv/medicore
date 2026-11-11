@@ -11,6 +11,11 @@ IUD insertion, Pap smears, ECGs, small biopsies…
   signed, relationship, witness — no file is uploaded) and vitals. The note (anesthesia,
   technique, findings, materials, complications, home care) is signed and then immutable:
   corrections are appended as amendments.
+
+Fees: the catalog lists a price per type; each procedure keeps a copy of it next to what is
+charged. A procedure indicated in a consultation may be *included in the consultation fee*
+(not the norm, but it happens): it is then charged nothing. Only those may be included —
+a walk-in or a procedure appointment has no consultation to be included in.
 """
 
 from __future__ import annotations
@@ -30,6 +35,8 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.fee import ZERO, Charge, check_fee
+from medicore.domain.value_objects.money import Money
 
 MAX_FOLLOW_UP_DAYS = 365
 _BP = re.compile(r"^\d{2,3}/\d{2,3}$")
@@ -74,14 +81,24 @@ class ProcedureType:
     instructions_template: str | None = None
     active: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    price: Money | None = None  # None: no price set
 
     def __post_init__(self) -> None:
+        check_fee(self.price)
         self.name = " ".join(self.name.split())
         if not self.name:
             raise InvalidValueObject("the procedure needs a name", code="procedure.name_required")
         _check_follow_up(self.follow_up_days)
         self.technique_template = _text(self.technique_template)
         self.instructions_template = _text(self.instructions_template)
+
+
+def _charge(price: Money | None, included: bool) -> Charge:
+    """A procedure's starting charge: the listed price, or nothing when it is included in
+    the consultation fee."""
+    if included:
+        return Charge(listed=price, charged=ZERO)
+    return Charge.at_list_price(price)
 
 
 # ── consultation draft ────────────────────────────────────────────────────────────────────
@@ -96,6 +113,8 @@ class ProcedureDraft:
     indication: str
     follow_up_days: int | None = None
     takes_specimen: bool = False
+    price: Money | None = None
+    included: bool = False  # included in the consultation fee: charged nothing
 
     def __post_init__(self) -> None:
         if not self.indication.strip():
@@ -103,12 +122,17 @@ class ProcedureDraft:
                                      code="procedure.indication_required")
 
     @classmethod
-    def of(cls, kind: ProcedureType, indication: str) -> ProcedureDraft:
+    def of(cls, kind: ProcedureType, indication: str, included: bool = False) -> ProcedureDraft:
         return cls(
             type_id=kind.id, type_name=kind.name, performer=kind.performer,
             requires_consent=kind.requires_consent, indication=indication.strip(),
             follow_up_days=kind.follow_up_days, takes_specimen=kind.takes_specimen,
+            price=kind.price, included=included,
         )
+
+    @property
+    def charge(self) -> Charge:
+        return _charge(self.price, self.included)
 
 
 # ── procedure ─────────────────────────────────────────────────────────────────────────────
@@ -224,6 +248,9 @@ class Procedure:
     cancelled_by_id: UserId | None = None
     cancel_reason: str | None = None
     amendments: list[ProcedureAmendment] = field(default_factory=list)
+    # fee: the catalog price when it was ordered and what is charged
+    charge: Charge = field(default_factory=Charge)
+    fee_included: bool = False  # included in the consultation it was indicated in
 
     def __post_init__(self) -> None:
         self.indication = self.indication.strip()
@@ -244,7 +271,7 @@ class Procedure:
             indication=draft.indication, ordered_by_id=ordered_by_id,
             created_by_id=ordered_by_id, follow_up_days=draft.follow_up_days,
             takes_specimen=draft.takes_specimen, consultation_id=consultation_id,
-            created_at=now,
+            created_at=now, charge=draft.charge, fee_included=draft.included,
         )
 
     @property
@@ -336,6 +363,24 @@ class Procedure:
         self.cancelled_at = now
         self.cancelled_by_id = by
         self.cancel_reason = reason
+
+    def set_fee(self, *, included: bool, charged: Money | None, note: str | None) -> None:
+        """Change what the procedure is charged: include it in its consultation's fee, or
+        charge an amount (a reason is needed when it differs from the listed price)."""
+        if self.status == ProcedureStatus.CANCELLED:
+            raise ProcedureClosed(f"procedure {self.id} is cancelled")
+        if included:
+            if self.consultation_id is None:
+                raise DomainError(
+                    "only a procedure indicated in a consultation can be included in its fee",
+                    code="fee.included_needs_consultation",
+                )
+            self.charge = Charge(listed=self.charge.listed, charged=ZERO, note=note)
+        else:
+            if charged is None:
+                raise InvalidValueObject("the amount is required", code="fee.invalid_amount")
+            self.charge = self.charge.adjust(charged, note)
+        self.fee_included = included
 
     def amend(self, by: UserId, text: str, reason: str, now: datetime) -> ProcedureAmendment:
         if self.status != ProcedureStatus.COMPLETED:

@@ -9,6 +9,7 @@ import { UpdateNotice } from '@/components/UpdateNotice'
 import { AppointmentsPage } from '@/pages/AppointmentsPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { AvailabilityPage } from '@/pages/AvailabilityPage'
+import { FeesPage } from '@/pages/FeesPage'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { ApplicationsPage } from '@/pages/ApplicationsPage'
 import { ProcedureDetailPage } from '@/pages/ProcedureDetailPage'
@@ -114,6 +115,7 @@ export function App() {
           <Route path="/procedures/:id" element={<ProcedureDetailPage />} />
           <Route path="/vaccination" element={<VaccinationPage />} />
           <Route path="/availability" element={<AvailabilityPage />} />
+          <Route path="/fees" element={<FeesPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/permissions" element={<PermissionsPage />} />
           <Route path="/insurers" element={<InsurersPage />} />

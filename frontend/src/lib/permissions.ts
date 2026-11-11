@@ -1,5 +1,6 @@
 import {
   Activity,
+  BadgeDollarSign,
   Building2,
   MapPin,
   CalendarDays,
@@ -32,6 +33,7 @@ export const GROUP_ICONS: Record<string, typeof Users> = {
   patients: Users,
   appointments: CalendarDays,
   availability: Clock,
+  fees: BadgeDollarSign,
   consultations: Stethoscope,
   records: FileText,
   prescriptions: Pill,

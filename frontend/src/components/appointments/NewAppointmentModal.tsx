@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, Check, Clock, ShieldCheck, Stethoscope, User as UserIcon } from 'lucide-react'
+import {
+  BadgeDollarSign,
+  CalendarDays,
+  Check,
+  Clock,
+  ShieldCheck,
+  Stethoscope,
+  User as UserIcon,
+} from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
 import { errorMessage } from '@/api/client'
+import { feesApi } from '@/api/fees'
 import { insurersApi } from '@/api/insurers'
 import { patientsApi } from '@/api/patients'
 import { Button } from '@/components/ui/Button'
@@ -10,10 +19,11 @@ import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
+import { fmtFee } from '@/lib/fees'
 import { clinicToday, fmtDate, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
-import type { Patient, Slot } from '@/types'
+import type { AppointmentType, Patient, Slot } from '@/types'
 
 const STEPS = ['appt.step_patient', 'appt.step_details', 'appt.step_slot']
 
@@ -82,6 +92,11 @@ export function NewAppointmentModal({
     queryFn: () => appointmentsApi.bookingOptions(),
     enabled: open,
   })
+  const { data: fees } = useQuery({
+    queryKey: ['fees'],
+    queryFn: feesApi.list,
+    enabled: open,
+  })
   const { data: insurers } = useQuery({
     queryKey: ['insurers', 'active'],
     queryFn: () => insurersApi.list(true),
@@ -98,6 +113,14 @@ export function NewAppointmentModal({
   const doctorOffThatDay =
     !!slots && slots.length > 0 && slots.every((s) => s.status === 'out_of_hours')
   const selectedDoctor = options?.doctors.find((d) => d.id === doctorId)
+  // What the patient will be told it costs (the backend copies the same price on booking).
+  const doctorFee = fees?.find((f) => f.doctor_id === doctorId)?.prices[type as AppointmentType]
+  const feeLine =
+    type === 'procedure'
+      ? t('fee.booking_procedure')
+      : doctorFee
+        ? t('fee.booking').replace('{price}', fmtFee(doctorFee)!)
+        : t('fee.booking_none')
   const doctorName = selectedDoctor?.name
   // Appointment duration is the doctor's rule — shown, never chosen.
   const slotMinutes = selectedDoctor?.slot_minutes ?? null
@@ -242,6 +265,17 @@ export function NewAppointmentModal({
                 <p className="mt-1 text-[11px] text-tx-4">{t('appt.duration_by_doctor')}</p>
               </div>
             </div>
+            {doctorId && (
+              <p
+                className={cn(
+                  'flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-[13px]',
+                  doctorFee && type !== 'procedure' ? 'text-tx' : 'text-tx-3',
+                )}
+              >
+                <BadgeDollarSign className="h-3.5 w-3.5 text-tx-3" />
+                {feeLine}
+              </p>
+            )}
             <Input label={t('appt.reason')} value={reason} onChange={(e) => setReason(e.target.value)} />
             <div className="space-y-3 rounded-lg border border-line bg-surface-2/40 p-3">
               <label className="flex items-center gap-2 text-sm text-tx">
@@ -374,6 +408,14 @@ export function NewAppointmentModal({
                   <CalendarDays className="h-3.5 w-3.5" /> {t('appt.type')}
                 </span>
                 <span className="text-right text-tx">{TYPE_LABELS[type] ?? type}</span>
+                <span className="flex items-center gap-2 text-tx-3">
+                  <BadgeDollarSign className="h-3.5 w-3.5" /> {t('fee.col_fee')}
+                </span>
+                <span className="text-right text-tx">
+                  {type === 'procedure'
+                    ? t('fee.by_procedure')
+                    : (fmtFee(doctorFee) ?? t('fee.none'))}
+                </span>
                 <span className="flex items-center gap-2 text-tx-3">
                   <ShieldCheck className="h-3.5 w-3.5" /> {t('appt.insurer')}
                 </span>

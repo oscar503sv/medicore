@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings from .env (pydantic-settings) — dev-safe defaults
 │   ├── database/       # SQLAlchemy engine + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (33 tables; complex VOs as JSONB)
+│   │   ├── models/     # ORM models (34 tables; complex VOs as JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (keeps the domain clean)
 │   │   └── repositories/  # SQLAlchemy implementations of the ports
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, code generator, SystemClock
@@ -256,6 +256,7 @@ medicore/
 | **15** | SaaS subscriptions (plan catalog, optional modules, quotas, manual payments and renewal, read-only after grace, per-user permissions) | ✅ Done |
 | **16** | Password policy (length, blocklist, nothing personal, live requirements in the UI) | ✅ Done |
 | **17** | Platform console: Business (MRR, collections, expirations, adoption, seats) and Monitoring (health, connections, 500 errors without patient data with their commit and trend, sign-ins and lockouts, audited console sign-ins, open support access, scheduled tasks, per-route performance with p50/p95 and 4xx/5xx rates, `/health/ready`) | ✅ Done |
+| **18** | Fees: price per doctor and appointment type, procedure catalog prices, the price copied onto each appointment and procedure, charge adjustments with a reason, procedures included in the consultation, `fees.manage_own` / `fees.manage_all` permissions | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable record, inventory and billing | 🗓️ Future |
@@ -328,7 +329,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ## Database
 
-**33 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
+**34 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
 
 | Table | Description |
 |---|---|
@@ -337,7 +338,8 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `sessions` | Active (revocable) clinic, support and platform sessions |
 | `login_attempts` | Failed-login counter for the lockout |
 | `patients` | Patients (demographics, assigned doctor, tags, allergies) |
-| `appointments` | Appointments with a status FSM |
+| `appointments` | Appointments with a status FSM and their charge (fee in force when booked, amount charged and the reason for an adjustment) |
+| `doctor_fees` | Each doctor's fee per appointment type (USD) |
 | `consultations` | Consultation in progress (mutable draft) |
 | `medical_records` | Signed, immutable medical records |
 | `prescriptions` | Issued prescriptions |
@@ -349,7 +351,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `tenant_counters` | Counters for human-readable codes (`P-00142`, `A-2401`…) |
 | `vaccination_records` | Vaccine doses recorded (national scheme) |
 | `application_orders` + `application_records` | In-clinic application orders and the doses applied |
-| `procedure_types` + `procedures` | Per-clinic procedure catalog and the procedures ordered/performed |
+| `procedure_types` + `procedures` | Per-clinic procedure catalog (with prices) and the procedures ordered/performed, with their charge or included in the consultation |
 | `role_permission_overrides` | Per-role, per-tenant permission customization |
 | `plans` + `addon_pricing` | Plan catalog and optional-module pricing (global) |
 | `subscription_payments` | Payments recorded per clinic (renewals) |

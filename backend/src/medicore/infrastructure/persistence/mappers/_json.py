@@ -12,7 +12,9 @@ from medicore.domain.entities.prescription import PrescriptionDraft, Prescriptio
 from medicore.domain.entities.procedure import ProcedureDraft
 from medicore.domain.enums import ApplicationRoute, DocumentKind, ProcedurePerformer
 from medicore.domain.shared.identifiers import DocumentId, ProcedureTypeId
+from medicore.domain.value_objects.fee import FEE_CURRENCY
 from medicore.domain.value_objects.icd_code import IcdCode
+from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.time_range import TimeRange
 from medicore.domain.value_objects.vitals import Vitals
@@ -200,6 +202,8 @@ def procedure_draft_to_dict(draft: ProcedureDraft) -> dict:
         "indication": draft.indication,
         "follow_up_days": draft.follow_up_days,
         "takes_specimen": draft.takes_specimen,
+        "price": f"{draft.price.amount:.2f}" if draft.price else None,
+        "included": draft.included,
     }
 
 
@@ -212,4 +216,6 @@ def dict_to_procedure_draft(d: dict) -> ProcedureDraft:
         indication=d["indication"],
         follow_up_days=d.get("follow_up_days"),
         takes_specimen=bool(d.get("takes_specimen")),
+        price=Money(Decimal(d["price"]), FEE_CURRENCY) if d.get("price") else None,
+        included=bool(d.get("included")),
     )

@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { addDays, format, parseISO } from 'date-fns'
 import {
+  BadgeDollarSign,
   Calendar as CalendarIcon,
   CalendarCheck,
   CalendarClock,
@@ -24,6 +25,8 @@ import { consultationsApi } from '@/api/consultations'
 import { errorMessage } from '@/api/client'
 import { NewAppointmentModal } from '@/components/appointments/NewAppointmentModal'
 import { RescheduleAppointmentModal } from '@/components/appointments/RescheduleAppointmentModal'
+import { AdjustFeeModal } from '@/components/fees/AdjustFeeModal'
+import { FeeCell } from '@/components/fees/FeeCell'
 import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
 import { Badge } from '@/components/ui/Badge'
@@ -40,6 +43,7 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
+import { useCanPrice } from '@/lib/fees'
 import { clinicNowTime, clinicToday, fmtDate, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -74,6 +78,8 @@ export function AppointmentsPage() {
   const [cancelTarget, setCancelTarget] = useState<Appointment | null>(null)
   const [noShowTarget, setNoShowTarget] = useState<Appointment | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)
+  const [feeTarget, setFeeTarget] = useState<Appointment | null>(null)
+  const canPrice = useCanPrice()
   const [statusFilter, setStatusFilter] = useState<'all' | AppointmentStatus>('all')
   const [doctorId, setDoctorId] = useState('')
   const [q, setQ] = useState('')
@@ -131,6 +137,17 @@ export function AppointmentsPage() {
     onSuccess: (consultation) => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       navigate(`/consultation/${consultation.id}`)
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+
+  const adjustFee = useMutation({
+    mutationFn: (v: { id: string; amount: string; note: string | null }) =>
+      appointmentsApi.adjustFee(v.id, v.amount, v.note),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments'] })
+      toast(t('fee.adjusted_ok'))
+      setFeeTarget(null)
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -314,6 +331,7 @@ export function AppointmentsPage() {
                   {showDoctorCol && <Th>{t('appt.col_doctor')}</Th>}
                   <Th>{t('appt.col_reason')}</Th>
                   <Th>{t('appt.col_status')}</Th>
+                  <Th className="text-right">{t('fee.col_fee')}</Th>
                   <Th />
                 </tr>
               </thead>
@@ -321,7 +339,17 @@ export function AppointmentsPage() {
                 {paged.map((a) => {
                   const inactive = a.status === 'cancelled' || a.status === 'no_show'
                   const manageable = canManage && PENDING.has(a.status)
-                  const menu: MenuItem[] = manageable
+                  const menu: MenuItem[] = [
+                    ...(a.status !== 'cancelled' && canPrice(a.doctor_id)
+                      ? [
+                          {
+                            label: t('fee.adjust'),
+                            icon: BadgeDollarSign,
+                            onSelect: () => setFeeTarget(a),
+                          },
+                        ]
+                      : []),
+                    ...(manageable
                     ? [
                         {
                           label: t('appt.reschedule'),
@@ -336,11 +364,12 @@ export function AppointmentsPage() {
                         {
                           label: t('appt.cancel_appt'),
                           icon: X,
-                          tone: 'danger',
+                          tone: 'danger' as const,
                           onSelect: () => setCancelTarget(a),
                         },
                       ]
-                    : []
+                    : []),
+                  ]
                   return (
                     <Tr
                       key={a.id}
@@ -389,6 +418,9 @@ export function AppointmentsPage() {
                       </Td>
                       <Td>
                         <Badge tone={statusTone(a.status)}>{t(`status.${a.status}`)}</Badge>
+                      </Td>
+                      <Td className="whitespace-nowrap text-right">
+                        <FeeCell appointment={a} />
                       </Td>
                       <Td className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -461,6 +493,17 @@ export function AppointmentsPage() {
       </Card>
 
       <NewAppointmentModal open={modalOpen} onClose={() => setModalOpen(false)} date={date} />
+
+      <AdjustFeeModal
+        open={!!feeTarget}
+        subtitle={feeTarget ? `${feeTarget.code} · ${feeTarget.patient_name ?? '—'}` : ''}
+        listed={feeTarget?.listed_fee ?? null}
+        charged={feeTarget?.fee ?? null}
+        note={feeTarget?.fee_note ?? null}
+        loading={adjustFee.isPending}
+        onClose={() => setFeeTarget(null)}
+        onSave={(amount, note) => adjustFee.mutate({ id: feeTarget!.id, amount, note })}
+      />
 
       <RescheduleAppointmentModal
         appointment={rescheduleTarget}

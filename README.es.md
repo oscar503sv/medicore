@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings desde .env (pydantic-settings) — dev-safe por defecto
 │   ├── database/       # Engine SQLAlchemy + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (33 tablas; VOs complejos como JSONB)
+│   │   ├── models/     # ORM models (34 tablas; VOs complejos como JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (sin contaminar el dominio)
 │   │   └── repositories/  # Implementaciones SQLAlchemy de los puertos
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, generador de códigos, SystemClock
@@ -256,6 +256,7 @@ medicore/
 | **15** | Suscripciones SaaS (catálogo de planes, módulos opcionales, cupos, pagos y renovación manuales, solo lectura tras la gracia, permisos por usuario) | ✅ Completada |
 | **16** | Política de contraseñas (longitud, lista de bloqueo, nada personal, requisitos en vivo en la UI) | ✅ Completada |
 | **17** | Consola de plataforma: Negocio (MRR, cobros, vencimientos, adopción, cupos) y Monitoreo (salud, conexiones, errores 500 sin datos de pacientes con su commit y tendencia, accesos y bloqueos, accesos a la consola auditados, soporte abierto, tareas programadas, rendimiento por ruta con p50/p95 y tasas 4xx/5xx, `/health/ready`) | ✅ Completada |
+| **18** | Tarifas: precio por médico y tipo de cita, precio en el catálogo de procedimientos, copia del precio en cada cita y procedimiento, ajustes de cobro con motivo, procedimientos incluidos en la consulta, permisos `fees.manage_own` / `fees.manage_all` | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 | — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible, inventario y facturación | 🗓️ A futuro |
@@ -328,7 +329,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ## Base de datos
 
-**33 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
+**34 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
 
 | Tabla | Descripción |
 |---|---|
@@ -337,7 +338,8 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `sessions` | Sesiones activas (revocables) de clínica, soporte y plataforma |
 | `login_attempts` | Contador de fallos de login para el lockout |
 | `patients` | Pacientes (datos demográficos, médico asignado, etiquetas, alergias) |
-| `appointments` | Citas con FSM de estado |
+| `appointments` | Citas con FSM de estado y su cobro (tarifa vigente al agendar, monto cobrado y motivo del ajuste) |
+| `doctor_fees` | Tarifa de cada médico por tipo de cita (USD) |
 | `consultations` | Consulta en curso (borrador mutable) |
 | `medical_records` | Historiales firmados e inmutables |
 | `prescriptions` | Recetas emitidas |
@@ -349,7 +351,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `tenant_counters` | Contadores para códigos legibles (`P-00142`, `A-2401`…) |
 | `vaccination_records` | Dosis de vacunas registradas (esquema nacional) |
 | `application_orders` + `application_records` | Órdenes de aplicación en la clínica y las dosis aplicadas |
-| `procedure_types` + `procedures` | Catálogo de procedimientos por clínica y los procedimientos indicados/realizados |
+| `procedure_types` + `procedures` | Catálogo de procedimientos por clínica (con precio) y los procedimientos indicados/realizados, con su cobro o incluidos en la consulta |
 | `role_permission_overrides` | Personalización de permisos por rol y tenant |
 | `plans` + `addon_pricing` | Catálogo de planes y precios de módulos opcionales (global) |
 | `subscription_payments` | Pagos registrados por clínica (renovaciones) |

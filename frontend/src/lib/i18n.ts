@@ -4,6 +4,7 @@ import { bizEn, bizEs } from './i18n-business'
 import { monEn, monEs } from './i18n-monitoring'
 import { obEn, obEs } from './i18n-onboarding'
 import { subEn, subEs } from './i18n-subscriptions'
+import { feeEn, feeEs } from './i18n-fees'
 import { prcEn, prcEs } from './i18n-procedures'
 import { vaxEn, vaxEs } from './i18n-vaccination'
 
@@ -17,6 +18,7 @@ const es: Dict = {
   ...subEs,
   ...bizEs,
   ...monEs,
+  ...feeEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -621,6 +623,14 @@ const es: Dict = {
   'err.procedure.reason_required': 'Indica el motivo.',
   'err.procedure.specimen_required': 'Describe la muestra enviada a patología.',
   'err.procedure.technique_required': 'Describe la técnica antes de firmar.',
+  'err.fee.invalid_amount': 'Escribe un precio válido: de $0 a $10,000, con hasta dos decimales.',
+  'err.fee.note_required': 'Indica por qué el cobro es distinto de la tarifa (cortesía, descuento…).',
+  'err.fee.note_too_long': 'La nota es demasiado larga (máximo 200 caracteres).',
+  'err.fee.not_allowed': 'No tienes permiso para cambiar las tarifas o el cobro de este médico.',
+  'err.fee.procedure_from_catalog': 'Los procedimientos se cobran según el precio del catálogo.',
+  'err.fee.appointment_cancelled': 'Una cita cancelada no tiene cobro.',
+  'err.fee.included_needs_consultation':
+    'Solo un procedimiento indicado en una consulta puede ir incluido en ella.',
   'err.procedure.type_inactive': 'Ese procedimiento está archivado en el catálogo.',
   // misc UI strings
   'app.error_generic': 'Algo salió mal',
@@ -875,6 +885,9 @@ const es: Dict = {
   'audit.action.insurer.reactivated': 'Seguro reactivado',
   'audit.action.prescription.completed': 'Receta completada',
   'audit.action.prescription.cancelled': 'Receta cancelada',
+  'audit.action.fees.updated': 'Tarifas actualizadas',
+  'audit.action.appointment.fee_adjusted': 'Cobro de cita ajustado',
+  'audit.action.procedure.fee_adjusted': 'Cobro de procedimiento ajustado',
   'audit.action.availability.updated': 'Disponibilidad actualizada',
   'audit.action.organization.updated': 'Organización actualizada',
   'audit.action.location.added': 'Sede añadida',
@@ -935,6 +948,7 @@ const es: Dict = {
   'permgroup.permissions': 'Permisos',
   'permgroup.vaccinations': 'Vacunación',
   'permgroup.applications': 'Aplicaciones',
+  'permgroup.fees': 'Tarifas',
   'permgroup.procedures': 'Procedimientos',
   'permission.patients_view': 'Ver pacientes',
   'permission.patients_create': 'Registrar pacientes',
@@ -943,6 +957,8 @@ const es: Dict = {
   'permission.appointments_view': 'Ver agenda y citas',
   'permission.appointments_manage': 'Gestionar citas',
   'permission.availability_manage': 'Gestionar disponibilidad',
+  'permission.fees_manage_own': 'Definir sus propias tarifas y ajustar sus cobros',
+  'permission.fees_manage_all': 'Definir las tarifas y ajustar los cobros de todos los médicos',
   'permission.consultations_start': 'Iniciar consultas',
   'permission.consultations_edit': 'Editar consultas (vitales, diagnósticos, recetas)',
   'permission.records_view': 'Ver expedientes',
@@ -987,6 +1003,7 @@ const en: Dict = {
   ...subEn,
   ...bizEn,
   ...monEn,
+  ...feeEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.update_available': 'A new version of Medicore is available.',
@@ -1576,6 +1593,14 @@ const en: Dict = {
   'err.procedure.reason_required': 'Enter the reason.',
   'err.procedure.specimen_required': 'Describe the specimen sent to pathology.',
   'err.procedure.technique_required': 'Describe the technique before signing.',
+  'err.fee.invalid_amount': 'Enter a valid price: from $0 to $10,000, with up to two decimals.',
+  'err.fee.note_required': 'Say why the charge differs from the fee (courtesy, discount…).',
+  'err.fee.note_too_long': 'The note is too long (200 characters at most).',
+  'err.fee.not_allowed': "You may not change this doctor's fees or charges.",
+  'err.fee.procedure_from_catalog': 'Procedures are charged at their catalog price.',
+  'err.fee.appointment_cancelled': 'A cancelled appointment has no charge.',
+  'err.fee.included_needs_consultation':
+    'Only a procedure indicated in a consultation can be included in it.',
   'err.procedure.type_inactive': 'That procedure is archived in the catalog.',
   // misc UI strings
   'app.error_generic': 'Something went wrong',
@@ -1830,6 +1855,9 @@ const en: Dict = {
   'audit.action.insurer.reactivated': 'Insurer reactivated',
   'audit.action.prescription.completed': 'Prescription completed',
   'audit.action.prescription.cancelled': 'Prescription cancelled',
+  'audit.action.fees.updated': 'Fees updated',
+  'audit.action.appointment.fee_adjusted': 'Appointment charge adjusted',
+  'audit.action.procedure.fee_adjusted': 'Procedure charge adjusted',
   'audit.action.availability.updated': 'Availability updated',
   'audit.action.organization.updated': 'Organization updated',
   'audit.action.location.added': 'Location added',
@@ -1885,6 +1913,7 @@ const en: Dict = {
   'permgroup.permissions': 'Permissions',
   'permgroup.vaccinations': 'Vaccination',
   'permgroup.applications': 'Applications',
+  'permgroup.fees': 'Fees',
   'permgroup.procedures': 'Procedures',
   'permission.patients_view': 'View patients',
   'permission.patients_create': 'Register patients',
@@ -1893,6 +1922,8 @@ const en: Dict = {
   'permission.appointments_view': 'View schedule & appointments',
   'permission.appointments_manage': 'Manage appointments',
   'permission.availability_manage': 'Manage availability',
+  'permission.fees_manage_own': 'Set their own fees and adjust their charges',
+  'permission.fees_manage_all': "Set every doctor's fees and adjust their charges",
   'permission.consultations_start': 'Start consultations',
   'permission.consultations_edit': 'Edit consultations (vitals, diagnoses, prescriptions)',
   'permission.records_view': 'View records',

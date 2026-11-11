@@ -46,6 +46,8 @@ from medicore.domain.shared.identifiers import (
     ProcedureId,
     ProcedureTypeId,
 )
+from medicore.domain.value_objects.fee import Charge
+from medicore.domain.value_objects.money import Money
 
 # The "Realizados" tab shows what was signed in this many days.
 DONE_DAYS = 30
@@ -130,6 +132,7 @@ class ProcedureTypeCommand:
     takes_specimen: bool = False
     technique_template: str | None = None
     instructions_template: str | None = None
+    price: Money | None = None
 
 
 def _unique_name(uow: UnitOfWork, name: str, exclude: ProcedureTypeId | None = None) -> None:
@@ -157,6 +160,7 @@ class CreateProcedureType:
                 follow_up_days=cmd.follow_up_days, takes_specimen=cmd.takes_specimen,
                 technique_template=cmd.technique_template,
                 instructions_template=cmd.instructions_template, created_at=now,
+                price=cmd.price,
             )
             self._uow.procedures.save_type(kind)
             self._uow.audit.append(audit_entry(
@@ -186,7 +190,7 @@ class UpdateProcedureType:
                 requires_consent=cmd.requires_consent, follow_up_days=cmd.follow_up_days,
                 takes_specimen=cmd.takes_specimen, technique_template=cmd.technique_template,
                 instructions_template=cmd.instructions_template, active=old.active,
-                created_at=old.created_at,
+                created_at=old.created_at, price=cmd.price,
             )
             self._uow.procedures.save_type(kind)
             self._uow.audit.append(audit_entry(
@@ -256,7 +260,7 @@ class CreateProcedure:
                 indication=cmd.indication, ordered_by_id=actor.user_id,
                 created_by_id=actor.user_id, follow_up_days=kind.follow_up_days,
                 takes_specimen=kind.takes_specimen, appointment_id=cmd.appointment_id,
-                created_at=now,
+                created_at=now, charge=Charge.at_list_price(kind.price),
             )
             self._uow.procedures.save(procedure)
             self._uow.audit.append(audit_entry(

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from medicore.domain.enums import AppointmentStatus, AppointmentType
-from medicore.domain.shared.errors import InvalidStateTransition
+from medicore.domain.shared.errors import DomainError, InvalidStateTransition
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     InsurerId,
@@ -15,6 +15,8 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.fee import Charge
+from medicore.domain.value_objects.money import Money
 
 # Allowed transitions of the appointment lifecycle.
 #   scheduled → confirmed → in_progress → completed
@@ -66,6 +68,8 @@ class Appointment:
     room: str | None = None
     # Set when the consultation is booked "with insurance"; None means private/out-of-pocket.
     insurance_id: InsurerId | None = None
+    # The doctor's fee for this type when it was booked, and what the visit is charged.
+    charge: Charge = field(default_factory=Charge)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -109,6 +113,15 @@ class Appointment:
         self.scheduled_start = new_start
         if new_duration is not None:
             self.duration_minutes = new_duration
+        self._touch()
+
+    def adjust_fee(self, charged: Money, note: str | None) -> None:
+        """Charge a different amount (a discount, a courtesy, or a price set after booking).
+        A cancelled appointment is not charged at all."""
+        if self.status == AppointmentStatus.CANCELLED:
+            raise DomainError("a cancelled appointment has no fee",
+                              code="fee.appointment_cancelled")
+        self.charge = self.charge.adjust(charged, note)
         self._touch()
 
     def can_transition_to(self, target: AppointmentStatus) -> bool:

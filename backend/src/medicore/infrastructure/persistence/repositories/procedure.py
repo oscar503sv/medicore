@@ -1,7 +1,8 @@
 """SQLAlchemy ProcedureRepository.
 
 Column names match the entity fields one to one (like the applications repository); the
-amendments, a list of value objects, are stored as JSONB.
+amendments, a list of value objects, are stored as JSONB, a price as a Numeric and the
+charge as three columns (``listed_fee``, ``fee``, ``fee_note``).
 """
 
 from __future__ import annotations
@@ -25,6 +26,12 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.infrastructure.persistence.mappers.fee import (
+    amount_of,
+    charge_columns,
+    charge_from,
+    money_from,
+)
 from medicore.infrastructure.persistence.models.procedure import ProcedureModel, ProcedureTypeModel
 
 
@@ -44,6 +51,7 @@ def _amendments_to(items: list[ProcedureAmendment]) -> list[dict]:
 # Field → how to rebuild it from the column (anything not listed is stored as-is).
 _TYPE_TYPES: dict[str, Any] = {
     "id": ProcedureTypeId, "tenant_id": TenantId, "performer": ProcedurePerformer,
+    "price": money_from,
 }
 _PROCEDURE_TYPES: dict[str, Any] = {
     "id": ProcedureId, "tenant_id": TenantId, "patient_id": PatientId, "type_id": ProcedureTypeId,
@@ -57,9 +65,12 @@ _PROCEDURE_TYPES: dict[str, Any] = {
 def _load(cls, row, types: dict[str, Any]):
     obj = cls.__new__(cls)  # skip __post_init__: stored data was validated when written
     for f in fields(cls):
+        if f.name == "charge":
+            setattr(obj, f.name, charge_from(row.listed_fee, row.fee, row.fee_note))
+            continue
         value = getattr(row, f.name)
         kind = types.get(f.name)
-        if kind is _amendments_from:
+        if kind in (_amendments_from, money_from):
             value = kind(value)
         elif value is not None and kind is not None:
             value = kind.parse(value) if issubclass(kind, Identifier) else kind(value)
@@ -70,8 +81,13 @@ def _load(cls, row, types: dict[str, Any]):
 def _dump(obj, row) -> None:
     for f in fields(obj):
         value = getattr(obj, f.name)
+        if f.name == "charge":
+            row.listed_fee, row.fee, row.fee_note = charge_columns(value)
+            continue
         if f.name == "amendments":
             value = _amendments_to(value)
+        elif f.name == "price":
+            value = amount_of(value)
         elif isinstance(value, Identifier | Enum):
             value = value.value
         setattr(row, f.name, value)

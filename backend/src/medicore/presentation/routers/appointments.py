@@ -19,6 +19,7 @@ from medicore.application.use_cases.appointments import (
     MarkNoShow,
     RescheduleAppointment,
 )
+from medicore.application.use_cases.fees import AdjustAppointmentFee
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     InsurerId,
@@ -26,6 +27,7 @@ from medicore.domain.shared.identifiers import (
     PatientId,
     UserId,
 )
+from medicore.domain.value_objects.fee import fee
 from medicore.presentation.dependencies import Actor, Clock, Codes, UoW
 from medicore.presentation.schemas.appointments import (
     AppointmentResponse,
@@ -35,6 +37,7 @@ from medicore.presentation.schemas.appointments import (
     SlotResponse,
     WeeklyScheduleResponse,
 )
+from medicore.presentation.schemas.fees import ChargeRequest
 from medicore.presentation.serializers import ser_appointment, ser_slot, ser_user
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
@@ -180,3 +183,10 @@ def no_show(appointment_id: str, actor: Actor, uow: UoW, clock: Clock):
     return ser_appointment(
         MarkNoShow(uow, clock).execute(actor, AppointmentId.parse(appointment_id))
     )
+
+
+@router.put("/{appointment_id}/fee", response_model=AppointmentResponse)
+def adjust_fee(appointment_id: str, body: ChargeRequest, actor: Actor, uow: UoW, clock: Clock):
+    return ser_appointment(AdjustAppointmentFee(uow, clock).execute(
+        actor, AppointmentId.parse(appointment_id), fee(body.amount), body.note,
+    ))

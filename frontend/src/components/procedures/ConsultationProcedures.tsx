@@ -4,9 +4,12 @@ import { ClipboardList, Plus, Trash2 } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { consultationsApi } from '@/api/consultations'
 import { proceduresApi } from '@/api/procedures'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
 import { Input, Select } from '@/components/ui/Input'
 import { toast } from '@/components/ui/Toast'
+import { fmtFee, useCanPrice } from '@/lib/fees'
 import { useT } from '@/lib/i18n'
 import type { Consultation } from '@/types'
 
@@ -25,6 +28,9 @@ export function ConsultationProcedures({
   const qc = useQueryClient()
   const [typeId, setTypeId] = useState('')
   const [indication, setIndication] = useState('')
+  const [included, setIncluded] = useState(false)
+  // Charging nothing for it is a fee decision: only who may set this doctor's fees.
+  const canPrice = useCanPrice()(consultation.doctor_id)
   const { data: catalog } = useQuery({
     queryKey: ['procedure-catalog'],
     queryFn: proceduresApi.catalog,
@@ -35,11 +41,13 @@ export function ConsultationProcedures({
       consultationsApi.addProcedure(consultationId, {
         type_id: typeId,
         indication: indication.trim(),
+        included,
       }),
     onSuccess: (c) => {
       qc.setQueryData(['consultation', consultationId], c)
       setTypeId('')
       setIndication('')
+      setIncluded(false)
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -78,6 +86,11 @@ export function ConsultationProcedures({
                   : ''}
               </p>
             </div>
+            {d.included ? (
+              <Badge tone="info">{t('fee.included')}</Badge>
+            ) : (
+              d.price && <span className="font-mono text-xs text-tx-2">{fmtFee(d.price)}</span>
+            )}
             <button
               type="button"
               onClick={() => remove.mutate(i)}
@@ -106,6 +119,19 @@ export function ConsultationProcedures({
             onChange={(e) => setIndication(e.target.value)}
           />
         </div>
+        {canPrice && (
+          <label className="flex items-start gap-2 text-sm text-tx-2">
+            <Checkbox
+              className="mt-0.5"
+              checked={included}
+              onChange={(e) => setIncluded(e.target.checked)}
+            />
+            <span>
+              {t('fee.included')}
+              <span className="block text-xs text-tx-3">{t('fee.included_hint')}</span>
+            </span>
+          </label>
+        )}
         <Button
           size="sm"
           disabled={!typeId || !indication.trim()}

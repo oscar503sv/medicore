@@ -4,8 +4,20 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,6 +43,7 @@ class ProcedureTypeModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
+    price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)  # USD
 
 
 class ProcedureModel(Base):
@@ -101,3 +114,8 @@ class ProcedureModel(Base):
     cancelled_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     cancel_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
     amendments: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # fee (USD): the catalog price when ordered, what is charged, and why they differ
+    listed_fee: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    fee: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    fee_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    fee_included: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

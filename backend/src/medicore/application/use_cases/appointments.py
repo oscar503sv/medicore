@@ -21,6 +21,7 @@ from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
+from medicore.application.use_cases.fees import list_price
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.tenant import Location
 from medicore.domain.entities.user import User
@@ -40,6 +41,7 @@ from medicore.domain.shared.identifiers import (
     PatientId,
     UserId,
 )
+from medicore.domain.value_objects.fee import Charge
 
 _BLOCKING_STATUSES = {
     AppointmentStatus.SCHEDULED,
@@ -234,6 +236,8 @@ class CreateAppointment:
             created_by_id=actor.user_id,
             room=cmd.room,
             insurance_id=cmd.insurance_id,
+            # The doctor's price for this type right now; later price changes don't touch it.
+            charge=Charge.at_list_price(list_price(self._uow, cmd.doctor_id, cmd.type)),
             created_at=self._clock.now(),
             updated_at=self._clock.now(),
         )

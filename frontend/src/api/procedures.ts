@@ -13,6 +13,8 @@ export interface ProcedureType {
   technique_template: string | null
   instructions_template: string | null
   active: boolean
+  /** USD "25.00"; null: no price set. */
+  price: string | null
 }
 
 export type ProcedureTypePayload = Omit<ProcedureType, 'id' | 'active'>
@@ -102,6 +104,12 @@ export interface Procedure extends ProcedureProgress {
   cancelled_by_name: string | null
   cancel_reason: string | null
   amendments: Amendment[]
+  /** Catalog price when ordered and what is charged ("25.00"); null: no price. */
+  listed_fee: string | null
+  fee: string | null
+  fee_note: string | null
+  /** Included in the consultation fee it was indicated in. */
+  fee_included: boolean
 }
 
 export interface ProcedurePatient {
@@ -119,6 +127,8 @@ export interface ProcedureDetail {
   instructions_template: string | null
   /** The anesthesia against the patient's allergies. */
   allergy_conflicts: string[]
+  /** The current user may change what it is charged. */
+  fee_editable: boolean
 }
 
 export interface ProcedureWorklist {
@@ -178,4 +188,7 @@ export const proceduresApi = {
 
   amend: (id: string, text: string, reason: string) =>
     api.post<ProcedureDetail>(`/procedures/${id}/amendments`, { text, reason }).then((r) => r.data),
+
+  setFee: (id: string, payload: { included: boolean; amount: string | null; note: string | null }) =>
+    api.put<ProcedureDetail>(`/procedures/${id}/fee`, payload).then((r) => r.data),
 }

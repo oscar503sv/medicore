@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
+from medicore.application.common.fees import ensure_can_price
 from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
@@ -216,21 +217,24 @@ class RemoveApplicationDraft(_ConsultationEditor):
 
 class AddProcedureDraft(_ConsultationEditor):
     """Indicate a procedure; it becomes a pending procedure when the consultation is signed.
-    The type's rules (who performs it, consent, follow-up) are frozen with the indication."""
+    The type's rules (who performs it, consent, follow-up, price) are frozen with the
+    indication. It may be marked as included in the consultation fee (charged nothing)."""
 
     def execute(
         self, actor: ActorContext, consultation_id: ConsultationId,
-        type_id: ProcedureTypeId, indication: str,
+        type_id: ProcedureTypeId, indication: str, included: bool = False,
     ) -> Consultation:
         # Procedures are an optional module.
         ensure_permission(actor, Permission.PROCEDURES_VIEW)
         consultation = self._load(actor, consultation_id)
+        if included:  # charging nothing for it is a fee decision
+            ensure_can_price(actor, consultation.doctor_id)
         kind = self._uow.procedures.get_type(type_id)
         if kind is None:
             raise EntityNotFound("ProcedureType", type_id)
         if not kind.active:
             raise ValidationError("the procedure type is archived", code="procedure.type_inactive")
-        consultation.add_procedure_draft(ProcedureDraft.of(kind, indication))
+        consultation.add_procedure_draft(ProcedureDraft.of(kind, indication, included))
         self._save(consultation)
         return consultation
 

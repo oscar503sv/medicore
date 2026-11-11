@@ -53,6 +53,9 @@ export const appointmentsApi = {
   create: (payload: CreateAppointmentPayload) =>
     api.post<Appointment>('/appointments', payload).then((r) => r.data),
 
+  adjustFee: (id: string, amount: string, note: string | null) =>
+    api.put<Appointment>(`/appointments/${id}/fee`, { amount, note }).then((r) => r.data),
+
   reschedule: (id: string, newStart: string) =>
     api
       .put<Appointment>(`/appointments/${id}/reschedule`, { new_start: newStart })

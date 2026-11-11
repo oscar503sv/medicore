@@ -155,7 +155,7 @@ def add_procedure(
 ):
     c = AddProcedureDraft(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id), ProcedureTypeId.parse(body.type_id),
-        body.indication,
+        body.indication, body.included,
     )
     return ser_consultation(c, uow)
 

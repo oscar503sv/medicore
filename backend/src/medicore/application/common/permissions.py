@@ -10,7 +10,9 @@ Summary of the DOMAIN_MODEL rules the defaults encode:
   * receptionist → manage appointments + register/edit patients; NOT clinical records.
   * nurse        → view patients/agenda, edit open consultations (vitals), view/upload
                    records; NOT book appointments, NOT edit patients, NOT start/sign.
-  * doctor       → all clinical work for their patients + their own availability.
+  * doctor       → all clinical work for their patients + their own availability and fees
+                   (doctors set their own prices by default: the "associated doctors" setup;
+                   a clinic of employed doctors takes ``fees.manage_own`` away).
   * admin        → user & organization management; full access except sign/amend.
                    Only admins act on other admins and hand out permissions.
 
@@ -38,6 +40,8 @@ class Permission(StrEnum):
     APPOINTMENTS_VIEW = "appointments.view"
     APPOINTMENTS_MANAGE = "appointments.manage"
     AVAILABILITY_MANAGE = "availability.manage"
+    FEES_MANAGE_OWN = "fees.manage_own"  # set one's own fees and adjust one's own charges
+    FEES_MANAGE_ALL = "fees.manage_all"  # the same for every doctor
     CONSULTATIONS_START = "consultations.start"
     CONSULTATIONS_EDIT = "consultations.edit"
     RECORDS_VIEW = "records.view"
@@ -73,6 +77,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.APPOINTMENTS_VIEW,
         Permission.APPOINTMENTS_MANAGE,
         Permission.AVAILABILITY_MANAGE,
+        Permission.FEES_MANAGE_ALL,
         Permission.CONSULTATIONS_START,
         Permission.CONSULTATIONS_EDIT,
         Permission.RECORDS_VIEW,
@@ -100,6 +105,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.APPOINTMENTS_VIEW,
         Permission.APPOINTMENTS_MANAGE,
         Permission.AVAILABILITY_MANAGE,
+        Permission.FEES_MANAGE_OWN,
         Permission.CONSULTATIONS_START,
         Permission.CONSULTATIONS_EDIT,
         Permission.RECORDS_VIEW,

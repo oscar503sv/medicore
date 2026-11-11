@@ -12,6 +12,7 @@ from medicore.domain.entities.appointment import Appointment
 from medicore.domain.enums import AppointmentStatus
 from medicore.domain.shared.identifiers import AppointmentId, PatientId, TenantId, UserId
 from medicore.infrastructure.persistence.mappers.entities import to_appointment
+from medicore.infrastructure.persistence.mappers.fee import charge_columns
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 
 _ACTIVE = {
@@ -176,5 +177,6 @@ class SqlAppointmentRepository:
         row.room = appointment.room
         row.insurance_id = appointment.insurance_id.value if appointment.insurance_id else None
         row.created_by_id = appointment.created_by_id.value
+        row.listed_fee, row.fee, row.fee_note = charge_columns(appointment.charge)
         row.created_at = appointment.created_at
         row.updated_at = appointment.updated_at

@@ -7,6 +7,8 @@ from dataclasses import fields
 
 from fastapi import APIRouter
 
+from medicore.application.common.fees import can_price
+from medicore.application.use_cases.fees import SetProcedureFee
 from medicore.application.use_cases.procedures import (
     AmendProcedure,
     CancelProcedure,
@@ -32,8 +34,10 @@ from medicore.domain.shared.identifiers import (
     ProcedureId,
     ProcedureTypeId,
 )
+from medicore.domain.value_objects.fee import fee
 from medicore.presentation.dependencies import Actor, Clock, UoW
 from medicore.presentation.routers.applications import _Names
+from medicore.presentation.schemas.fees import ProcedureChargeRequest
 from medicore.presentation.schemas.procedures import (
     ActiveRequest,
     AmendRequest,
@@ -47,6 +51,7 @@ from medicore.presentation.schemas.procedures import (
     ProgressRequest,
     ReasonRequest,
 )
+from medicore.presentation.serializers import ser_charge, ser_money
 
 router = APIRouter(prefix="/procedures", tags=["procedures"])
 
@@ -59,6 +64,7 @@ def _ser_type(t: ProcedureType) -> dict:
         "requires_consent": t.requires_consent, "follow_up_days": t.follow_up_days,
         "takes_specimen": t.takes_specimen, "technique_template": t.technique_template,
         "instructions_template": t.instructions_template, "active": t.active,
+        "price": ser_money(t.price),
     }
 
 
@@ -97,6 +103,8 @@ def _ser(p: Procedure, name: _Names) -> dict:
             {"at": a.at, "by_name": name(a.by_id), "text": a.text, "reason": a.reason}
             for a in p.amendments
         ],
+        **ser_charge(p.charge),
+        "fee_included": p.fee_included,
     }
 
 
@@ -113,6 +121,7 @@ def _type_cmd(body: ProcedureTypeRequest) -> ProcedureTypeCommand:
         follow_up_days=body.follow_up_days, takes_specimen=body.takes_specimen,
         technique_template=body.technique_template,
         instructions_template=body.instructions_template,
+        price=fee(body.price) if body.price is not None else None,
     )
 
 
@@ -189,6 +198,7 @@ def _detail(uow, actor, procedure_id: ProcedureId) -> dict:
             "technique_template": view.kind.technique_template if view.kind else None,
             "instructions_template": view.kind.instructions_template if view.kind else None,
             "allergy_conflicts": view.allergy_conflicts,
+            "fee_editable": can_price(actor, view.procedure.ordered_by_id),
         }
 
 
@@ -246,4 +256,15 @@ def cancel(procedure_id: str, body: ReasonRequest, actor: Actor, uow: UoW, clock
 def amend(procedure_id: str, body: AmendRequest, actor: Actor, uow: UoW, clock: Clock):
     pid = ProcedureId.parse(procedure_id)
     AmendProcedure(uow, clock).execute(actor, pid, body.text, body.reason)
+    return _detail(uow, actor, pid)
+
+
+@router.put("/{procedure_id}/fee", response_model=ProcedureDetailResponse)
+def set_fee(procedure_id: str, body: ProcedureChargeRequest, actor: Actor, uow: UoW,
+            clock: Clock):
+    pid = ProcedureId.parse(procedure_id)
+    SetProcedureFee(uow, clock).execute(
+        actor, pid, included=body.included,
+        charged=fee(body.amount) if body.amount is not None else None, note=body.note,
+    )
     return _detail(uow, actor, pid)

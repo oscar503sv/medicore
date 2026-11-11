@@ -21,6 +21,7 @@ from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.services.slot_resolver import Slot
+from medicore.domain.value_objects.fee import Charge
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
 from medicore.infrastructure.persistence.mappers._json import (
@@ -260,9 +261,14 @@ def ser_appointment(
         "doctor_name": doctor_name,
         "insurer_name": insurer_name,
         "created_by_id": str(a.created_by_id),
+        **ser_charge(a.charge),
         "created_at": a.created_at,
         "updated_at": a.updated_at,
     }
+
+
+def ser_charge(c: Charge) -> dict:
+    return {"listed_fee": ser_money(c.listed), "fee": ser_money(c.charged), "fee_note": c.note}
 
 
 def ser_slot(s: Slot) -> dict:
@@ -301,7 +307,8 @@ def ser_consultation(c: Consultation, uow=None) -> dict:
         "draft_procedures": [
             {"type_id": str(d.type_id), "type_name": d.type_name, "performer": str(d.performer),
              "requires_consent": d.requires_consent, "indication": d.indication,
-             "follow_up_days": d.follow_up_days}
+             "follow_up_days": d.follow_up_days, "price": ser_money(d.price),
+             "included": d.included}
             for d in c.draft_procedures
         ],
         "attachments": [attachment_to_dict(a) for a in c.attachments],

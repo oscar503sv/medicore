@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +20,7 @@ class ProcedureTypeResponse(BaseModel):
     technique_template: str | None
     instructions_template: str | None
     active: bool
+    price: str | None  # USD "25.00"; None: no price set
 
 
 class ProcedureTypeRequest(BaseModel):
@@ -29,6 +31,7 @@ class ProcedureTypeRequest(BaseModel):
     takes_specimen: bool = False
     technique_template: str | None = Field(None, max_length=2000)
     instructions_template: str | None = Field(None, max_length=1000)
+    price: Decimal | None = None
 
 
 class ActiveRequest(BaseModel):
@@ -100,6 +103,10 @@ class ProcedureResponse(BaseModel):
     cancelled_by_name: str | None
     cancel_reason: str | None
     amendments: list[AmendmentResponse]
+    listed_fee: str | None
+    fee: str | None
+    fee_note: str | None
+    fee_included: bool  # included in the consultation fee
 
 
 class ProcedureDetailResponse(BaseModel):
@@ -108,6 +115,7 @@ class ProcedureDetailResponse(BaseModel):
     technique_template: str | None
     instructions_template: str | None
     allergy_conflicts: list[str]
+    fee_editable: bool  # the actor may change what it is charged
 
 
 class ProcedureItemResponse(BaseModel):

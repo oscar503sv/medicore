@@ -31,7 +31,7 @@ EXPECTED_MATRIX: dict[Role, set[str]] = {
     Role.ADMIN: {
         "patients.view", "patients.create", "patients.edit", "patients.archive",
         "appointments.view", "appointments.manage",
-        "availability.manage",
+        "availability.manage", "fees.manage_all",
         "consultations.start", "consultations.edit",
         "records.view", "records.upload",
         "vaccinations.view",
@@ -48,7 +48,7 @@ EXPECTED_MATRIX: dict[Role, set[str]] = {
     Role.DOCTOR: {
         "patients.view", "patients.create", "patients.edit", "patients.archive",
         "appointments.view", "appointments.manage",
-        "availability.manage",
+        "availability.manage", "fees.manage_own",
         "consultations.start", "consultations.edit",
         "records.view", "records.upload", "records.sign", "records.amend",
         "prescriptions.manage",

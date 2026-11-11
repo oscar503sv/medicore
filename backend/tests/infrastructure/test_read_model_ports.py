@@ -16,6 +16,8 @@ from medicore.application.ports.unit_of_work import (
     PlatformReadModel,
     RequestStatsRepository,
 )
+from medicore.domain.repositories import FeeScheduleRepository
+from medicore.infrastructure.persistence.repositories.fee_schedule import SqlFeeScheduleRepository
 from medicore.infrastructure.persistence.repositories.login_throttle import (
     SqlLoginThrottleRepository,
 )
@@ -28,6 +30,7 @@ from medicore.infrastructure.persistence.repositories.monitoring import (
 from medicore.infrastructure.persistence.repositories.platform_reads import SqlPlatformReadModel
 from tests.support.repositories import (
     InMemoryErrorLogRepository,
+    InMemoryFeeScheduleRepository,
     InMemoryJobLogRepository,
     InMemoryLoginThrottleRepository,
     InMemoryMonitoringReadModel,
@@ -51,6 +54,7 @@ def _methods(port) -> set[str]:
         (ErrorLogRepository, (SqlErrorLogRepository, InMemoryErrorLogRepository)),
         (JobLogRepository, (SqlJobLogRepository, InMemoryJobLogRepository)),
         (RequestStatsRepository, (SqlRequestStatsRepository, InMemoryRequestStatsRepository)),
+        (FeeScheduleRepository, (SqlFeeScheduleRepository, InMemoryFeeScheduleRepository)),
         (LoginThrottleRepository, (SqlLoginThrottleRepository, InMemoryLoginThrottleRepository)),
     ],
 )

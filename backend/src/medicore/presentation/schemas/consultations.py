@@ -58,6 +58,7 @@ class ApplicationDraftRequest(BaseModel):
 class ProcedureDraftRequest(BaseModel):
     type_id: str
     indication: str = Field(min_length=1, max_length=500)
+    included: bool = False  # included in the consultation fee
 
 
 class SignRequest(BaseModel):

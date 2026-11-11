@@ -46,6 +46,10 @@ class AppointmentResponse(BaseModel):
     doctor_name: str | None = None
     insurer_name: str | None = None
     created_by_id: str
+    # fee (USD, "25.00"): the doctor's price when booked, what is charged, and why
+    listed_fee: str | None = None
+    fee: str | None = None
+    fee_note: str | None = None
     created_at: datetime
     updated_at: datetime
 

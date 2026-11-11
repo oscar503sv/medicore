@@ -16,6 +16,7 @@ from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.error_event import ErrorEvent
+from medicore.domain.entities.fee_schedule import FeeSchedule
 from medicore.domain.entities.job_run import JobRun
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
@@ -839,6 +840,21 @@ class InMemoryDoctorAvailabilityRepository(_Scoped):
 
     def save(self, availability: DoctorAvailability) -> None:
         self._store.availability[availability.id.value] = availability
+
+
+class InMemoryFeeScheduleRepository(_Scoped):
+    def get_by_doctor(self, doctor_id: UserId) -> FeeSchedule | None:
+        return next(
+            (f for f in self._mine(self._store.fees.values()) if f.doctor_id == doctor_id), None
+        )
+
+    def list_for_doctors(self, doctor_ids: list[UserId]) -> dict[UserId, FeeSchedule]:
+        wanted = set(doctor_ids)
+        return {f.doctor_id: f for f in self._mine(self._store.fees.values())
+                if f.doctor_id in wanted}
+
+    def save(self, schedule: FeeSchedule) -> None:
+        self._store.fees[schedule.id.value] = schedule
 
 
 class InMemoryNotificationRepository(_Scoped):

@@ -77,6 +77,7 @@ from medicore.application.use_cases.consultations import (
     SignConsultationCommand,
     StartConsultation,
 )
+from medicore.application.use_cases.fees import AdjustAppointmentFee, UpdateDoctorFees
 from medicore.application.use_cases.monitoring import RecordJobRun
 from medicore.application.use_cases.patients import CreatePatient, CreatePatientCommand
 from medicore.application.use_cases.procedures import (
@@ -91,6 +92,7 @@ from medicore.application.use_cases.procedures import (
     SaveProcedureProgress,
     SetProcedureTypeActive,
     SignProcedure,
+    UpdateProcedureType,
 )
 from medicore.application.use_cases.records import (
     AmendMedicalRecord,
@@ -158,6 +160,7 @@ from medicore.domain.shared.identifiers import (
 )
 from medicore.domain.value_objects.blood_type import BloodType
 from medicore.domain.value_objects.contact_info import ContactInfo
+from medicore.domain.value_objects.fee import fee
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.soap_note import SoapNote
@@ -382,6 +385,29 @@ EXTERNAL_PRESCRIBERS = [
 
 
 # Procedures ordered at the consultation, by specialty: (catalog name, indication).
+# Each doctor's fees (USD): consultation, follow-up, check-up, emergency (None: not offered).
+FEES_BY_SPECIALTY: dict[str, tuple[int, int, int, int | None]] = {
+    "Medicina General": (25, 15, 20, 35),
+    "Cardiología": (45, 30, 40, 60),
+    "Pediatría": (30, 20, 25, 40),
+    "Dermatología": (40, 25, 35, None),
+    "Ginecología": (40, 25, 35, 55),
+    "Traumatología": (45, 30, 40, 60),
+    "Endocrinología": (45, 30, 40, None),
+}
+FEE_TYPES = (AppointmentType.CONSULT, AppointmentType.FOLLOW_UP, AppointmentType.CHECK_UP,
+             AppointmentType.EMERGENCY)
+# Catalog prices (USD); a procedure left out has no fixed price.
+PROCEDURE_PRICES: dict[str, int] = {
+    "Curación de herida": 15, "Sutura de herida": 35, "Retiro de puntos": 10,
+    "Drenaje de absceso": 40, "Extracción de uña (onicectomía)": 50, "Lavado de oído": 20,
+    "Infiltración articular": 45, "Crioterapia de lesión cutánea": 35,
+    "Colocación de DIU": 60, "Citología cervicovaginal (Papanicolaou)": 25,
+    "Electrocardiograma": 25, "Biopsia de piel": 60, "Retiro de cuerpo extraño": 30,
+    "Taponamiento nasal anterior": 30,
+}
+FEE_DISCOUNTS = ["Adulto mayor", "Cortesía", "Paciente frecuente", "Descuento por convenio"]
+
 PROCEDURE_ORDERS = {
     "Medicina General": [
         ("Sutura de herida", "Herida cortante de 3 cm en antebrazo izquierdo"),
@@ -978,16 +1004,36 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
     orders = PROCEDURE_ORDERS.get(c.specialty[doctor.id])
     if orders and c.has(AddonModule.PROCEDURES) and RNG.random() < 0.12:
         name, indication = RNG.choice(orders)
+        # Now and then the procedure goes inside the consultation fee.
         AddProcedureDraft(c.uow(), c.at(start + timedelta(minutes=16))).execute(
-            me, consultation.id, c.procedure_types[name].id, indication)
+            me, consultation.id, c.procedure_types[name].id, indication,
+            included=RNG.random() < 0.25)
     record = SignConsultation(c.uow(), c.codes(),
                               c.at(start + timedelta(minutes=RNG.randint(18, 27)))).execute(
         me, SignConsultationCommand(consultation_id=consultation.id))
     c.signed.append(record)
     c.count("consultas firmadas")
+    if appt.charge.listed is not None and RNG.random() < 0.08:
+        listed = appt.charge.listed.amount
+        AdjustAppointmentFee(c.uow(), c.at(start + timedelta(minutes=30))).execute(
+            me, appt.id, fee(0 if RNG.random() < 0.3 else listed * Decimal("0.8")),
+            RNG.choice(FEE_DISCOUNTS))
+        c.count("cobros ajustados")
     reopened = start + timedelta(days=RNG.randint(1, 6), hours=2)
     if RNG.random() < 0.3 and reopened < c.now:  # reopened later (audited as record.viewed)
         GetMedicalRecord(c.uow(), c.at(reopened)).execute(me, record.id)
+
+
+def seed_fees(c: Clinic) -> None:
+    """Each doctor sets their own fees before the agenda starts (associated doctors)."""
+    at = datetime.combine(c.today - timedelta(weeks=PAST_WEEKS, days=4), time(8, 30))
+    for doctor in c.doctors:
+        prices = FEES_BY_SPECIALTY[c.specialty[doctor.id]]
+        UpdateDoctorFees(c.uow(), c.at(at)).execute(actor(c, doctor), doctor.id, {
+            kind: fee(amount) for kind, amount in zip(FEE_TYPES, prices, strict=True)
+            if amount is not None
+        })
+    c.count("tarifas", len(c.doctors))
 
 
 def seed_agenda(c: Clinic) -> None:
@@ -1201,6 +1247,17 @@ def seed_procedure_catalog(c: Clinic) -> None:
     retiro_diu = next(t for t in types if t.name == "Retiro de DIU")
     SetProcedureTypeActive(c.uow(), c.at(start + timedelta(minutes=25))).execute(
         admin, retiro_diu.id, False)
+    for kind in GetProcedureCatalog(c.uow(), c.at(start + timedelta(minutes=26))).execute(admin):
+        if kind.name in PROCEDURE_PRICES:
+            UpdateProcedureType(c.uow(), c.at(start + timedelta(minutes=27))).execute(
+                admin, kind.id, ProcedureTypeCommand(
+                    name=kind.name, performer=kind.performer,
+                    requires_consent=kind.requires_consent, follow_up_days=kind.follow_up_days,
+                    takes_specimen=kind.takes_specimen,
+                    technique_template=kind.technique_template,
+                    instructions_template=kind.instructions_template,
+                    price=fee(PROCEDURE_PRICES[kind.name]),
+                ))
     c.procedure_types = {t.name: t for t in GetProcedureCatalog(
         c.uow(), c.at(start + timedelta(minutes=30))).execute(admin)}
 
@@ -1488,6 +1545,7 @@ def seed_tenant(session, slug: str, legal_name: str, tax_id: str, location: str)
     if c.has(AddonModule.VACCINATION):
         seed_vaccinations(c)
     seed_exceptions(c)
+    seed_fees(c)
     if c.has(AddonModule.PROCEDURES):
         seed_procedure_catalog(c)
     seed_agenda(c)

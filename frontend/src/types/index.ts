@@ -8,6 +8,8 @@ export type Permission =
   | 'appointments.view'
   | 'appointments.manage'
   | 'availability.manage'
+  | 'fees.manage_own'
+  | 'fees.manage_all'
   | 'consultations.start'
   | 'consultations.edit'
   | 'records.view'
@@ -464,6 +466,10 @@ export interface Appointment {
   doctor_name: string | null
   insurer_name: string | null
   created_by_id: string
+  /** The doctor's price when booked and what is charged ("25.00", USD); null: no price. */
+  listed_fee: string | null
+  fee: string | null
+  fee_note: string | null
   created_at: string
   updated_at: string
 }
@@ -648,6 +654,10 @@ export interface ProcedureDraft {
   requires_consent: boolean
   indication: string
   follow_up_days: number | null
+  /** Catalog price when indicated ("25.00"); null: no price. */
+  price: string | null
+  /** Included in the consultation fee (charged nothing). */
+  included: boolean
 }
 
 // ── Platform monitoring ──────────────────────────────────────────────────────

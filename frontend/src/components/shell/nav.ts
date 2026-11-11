@@ -1,5 +1,6 @@
 import {
   Activity,
+  BadgeDollarSign,
   Calendar,
   CalendarDays,
   ClipboardList,
@@ -51,6 +52,7 @@ export const NAV_ITEMS: NavItem[] = [
   // "Mi disponibilidad" is the doctor's own agenda; admins hold availability.manage but
   // have no doctor schedule of their own, so this stays role-gated.
   { to: '/availability', labelKey: 'nav.availability', icon: Stethoscope, roles: ['doctor'], group: 'management' },
+  { to: '/fees', labelKey: 'nav.fees', icon: BadgeDollarSign, permission: 'appointments.view', group: 'management' },
   { to: '/users', labelKey: 'nav.users', icon: UsersRound, permission: 'users.manage', group: 'management' },
   { to: '/permissions', labelKey: 'nav.permissions', icon: KeyRound, permission: 'permissions.manage', group: 'management' },
   { to: '/procedures/catalog', labelKey: 'nav.procedure_catalog', icon: ClipboardList, permission: 'procedures.catalog', group: 'management' },

@@ -42,7 +42,10 @@ export const consultationsApi = {
   removeApplication: (id: string, index: number) =>
     api.delete<Consultation>(`/consultations/${id}/applications/${index}`).then((r) => r.data),
 
-  addProcedure: (id: string, payload: { type_id: string; indication: string }) =>
+  addProcedure: (
+    id: string,
+    payload: { type_id: string; indication: string; included?: boolean },
+  ) =>
     api.post<Consultation>(`/consultations/${id}/procedures`, payload).then((r) => r.data),
 
   removeProcedure: (id: string, index: number) =>
