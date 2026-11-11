@@ -17,9 +17,14 @@ from medicore.domain.services.plan_catalog import (
     default_addon_pricing,
     default_plans,
 )
-from medicore.domain.services.seat_usage import seat_usage
+from medicore.domain.services.seat_usage import (
+    QUOTA_DOCTORS,
+    check_quota,
+    ensure_seats,
+    seat_usage,
+)
 from medicore.domain.services.subscription_pricing import monthly_quote
-from medicore.domain.shared.errors import InvalidValueObject
+from medicore.domain.shared.errors import InvalidValueObject, QuotaExceeded
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
 from medicore.domain.value_objects.subscription import Subscription
@@ -172,3 +177,28 @@ class TestQuote:
     def test_price_override_replaces_the_total(self):
         sub = Subscription(plan_code=EMPRESARIAL, modules=ALL, price_override=usd("250"))
         assert monthly_quote(sub, plan(EMPRESARIAL), default_addon_pricing()) == usd("250")
+
+
+class TestQuotaRule:
+    def test_growing_past_the_limit_is_refused(self):
+        with pytest.raises(QuotaExceeded) as exc:
+            check_quota(QUOTA_DOCTORS, 3, 3, 4)
+        assert (exc.value.code, exc.value.params) == ("plan.quota_doctors", {"limit": 3})
+
+    def test_up_to_the_limit_is_fine(self):
+        check_quota(QUOTA_DOCTORS, 3, 2, 3)
+
+    def test_unlimited(self):
+        check_quota(QUOTA_DOCTORS, None, 99, 100)
+
+    def test_a_clinic_over_its_limit_keeps_what_it_has(self):
+        # e.g. after moving to a smaller plan: a change that doesn't grow usage passes
+        check_quota(QUOTA_DOCTORS, 1, 3, 3)
+        check_quota(QUOTA_DOCTORS, 1, 3, 2)
+
+    def test_seats_check_each_quota(self):
+        limits = PlanLimits(doctors=3, support_users=1)
+        before = seat_usage({Role.ADMIN: 1, Role.NURSE: 1})
+        with pytest.raises(QuotaExceeded) as exc:
+            ensure_seats(limits, before, seat_usage({Role.ADMIN: 2, Role.NURSE: 1}))
+        assert exc.value.code == "plan.quota_support_users"

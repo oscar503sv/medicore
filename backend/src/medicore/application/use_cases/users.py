@@ -14,6 +14,7 @@ from medicore.application.common.notifications import (
     notify,
 )
 from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.quotas import ensure_seat_for
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -86,6 +87,7 @@ class InviteUser:
             joined_at=self._clock.now(),
         )
         with self._uow:
+            ensure_seat_for(self._uow, actor.tenant_id, taking=user.role)
             self._uow.users.save(user)
             self._uow.audit.append(
                 audit_entry(
@@ -124,6 +126,8 @@ class UpdateUserRole:
         user = self._require(user_id)
         previous_role = user.role
         with self._uow:
+            if user.is_active:
+                ensure_seat_for(self._uow, actor.tenant_id, taking=role, releasing=previous_role)
             user.change_role(role)
             self._uow.users.save(user)
             self._uow.audit.append(
@@ -158,6 +162,11 @@ class UpdateUser:
         allowed = {"name", "role", "sex", "phone", "specialty"}
         previous_role = user.role
         with self._uow:
+            if changes.get("role") is not None and user.is_active:
+                ensure_seat_for(
+                    self._uow, actor.tenant_id,
+                    taking=Role(changes["role"]), releasing=previous_role,
+                )
             for key, value in changes.items():
                 if key in allowed:
                     setattr(user, key, value)
@@ -208,6 +217,8 @@ class ReactivateUser:
         if user is None:
             raise EntityNotFound("User", user_id)
         with self._uow:
+            if not user.is_active:
+                ensure_seat_for(self._uow, actor.tenant_id, taking=user.role)
             user.activate()
             self._uow.users.save(user)
             self._uow.audit.append(

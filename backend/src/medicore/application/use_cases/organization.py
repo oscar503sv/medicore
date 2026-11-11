@@ -6,6 +6,7 @@ from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.quotas import ensure_location_for
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.tenant import Location, Tenant
@@ -80,6 +81,7 @@ class AddLocation:
             is_primary=is_primary,
         )
         with self._uow:
+            ensure_location_for(self._uow, tenant)
             tenant.add_location(location)
             self._uow.tenants.save(tenant)
             self._uow.audit.append(

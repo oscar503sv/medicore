@@ -15,6 +15,7 @@ from medicore.application.common.audit import platform_audit_entry
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.quotas import active_by_role
 from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import (
@@ -24,8 +25,7 @@ from medicore.application.ports.unit_of_work import (
 )
 from medicore.domain.entities.plan import CURRENCY, AddonPricing, Plan
 from medicore.domain.entities.tenant import Tenant
-from medicore.domain.enums import AddonModule, PlanFeature, Role, SubscriptionStatus, UserStatus
-from medicore.domain.repositories._support import Paging, UserFilter
+from medicore.domain.enums import AddonModule, PlanFeature, SubscriptionStatus
 from medicore.domain.services.seat_usage import SeatUsage, seat_usage
 from medicore.domain.services.subscription_pricing import monthly_quote
 from medicore.domain.shared.identifiers import TenantId
@@ -57,14 +57,6 @@ class SubscriptionView:
     addon_prices: AddonPricing
 
 
-def _active_by_role(uow: UnitOfWork) -> dict[Role, int]:
-    active = str(UserStatus.ACTIVE)
-    return {
-        role: uow.users.list(UserFilter(role=str(role), status=active), Paging(limit=1)).total
-        for role in Role
-    }
-
-
 def build_view(uow: UnitOfWork, tenant: Tenant, clock: Clock) -> SubscriptionView:
     """Must run inside ``uow`` (tenant-scoped, for the user counts)."""
     sub = tenant.subscription
@@ -80,7 +72,7 @@ def build_view(uow: UnitOfWork, tenant: Tenant, clock: Clock) -> SubscriptionVie
         today=today,
         days_left=sub.days_left(today),
         limits=plan.limits.overridden_by(sub.limit_overrides),
-        usage=seat_usage(_active_by_role(uow)),
+        usage=seat_usage(active_by_role(uow)),
         locations_used=len(tenant.locations),
         monthly_price=monthly_quote(sub, plan, addons),
         addon_prices=addons,

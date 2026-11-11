@@ -31,6 +31,7 @@ from medicore.domain.shared.errors import (
     InvalidStateTransition,
     InvalidValueObject,
     PermissionDenied,
+    QuotaExceeded,
     RecordAlreadySigned,
     SlotUnavailable,
 )
@@ -101,6 +102,11 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_slot(request: Request, exc: SlotUnavailable):
         # The requested slot is not bookable (out of hours, overlapping, or breaks rules).
         # A conflict with the doctor's current availability/agenda → 409. (SPEC C.3)
+        return _json(409, exc)
+
+    @app.exception_handler(QuotaExceeded)
+    async def handle_quota(request: Request, exc: QuotaExceeded):
+        # The subscription has no room left: a conflict with the clinic's plan.
         return _json(409, exc)
 
     @app.exception_handler(InvalidStateTransition)

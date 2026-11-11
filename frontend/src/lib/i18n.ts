@@ -490,6 +490,11 @@ const es: Dict = {
   'err.plan.invalid_trial': 'La duración de la prueba no es válida.',
   'err.plan.unavailable': 'El plan {plan} no existe o no está activo.',
   'err.plan.period_required': 'Indica la fecha de vencimiento o inicia una prueba gratuita.',
+  'err.plan.quota_exceeded': 'Tu plan no tiene espacio para esto. Contacta a soporte de Medicore para ampliarlo.',
+  'err.plan.quota_doctors': 'Tu plan permite hasta {limit} médicos activos. Contacta a soporte de Medicore para ampliarlo.',
+  'err.plan.quota_support_users':
+    'Tu plan permite hasta {limit} usuarios de apoyo activos (enfermería, recepción y administradores adicionales). Contacta a soporte de Medicore para ampliarlo.',
+  'err.plan.quota_locations': 'Tu plan permite hasta {limit} sedes. Contacta a soporte de Medicore para ampliarlo.',
   'err.application_error': 'No se pudo completar la operación.',
   'err.validation_error': 'Los datos enviados no son válidos.',
   'err.domain_error': 'La operación no está permitida.',
@@ -1407,6 +1412,11 @@ const en: Dict = {
   'err.plan.invalid_trial': 'The trial length is not valid.',
   'err.plan.unavailable': 'Plan {plan} does not exist or is not active.',
   'err.plan.period_required': 'Set an expiry date or start a free trial.',
+  'err.plan.quota_exceeded': 'Your plan has no room for this. Contact Medicore support to upgrade.',
+  'err.plan.quota_doctors': 'Your plan allows up to {limit} active doctors. Contact Medicore support to upgrade.',
+  'err.plan.quota_support_users':
+    'Your plan allows up to {limit} active support users (nursing, reception and additional admins). Contact Medicore support to upgrade.',
+  'err.plan.quota_locations': 'Your plan allows up to {limit} sites. Contact Medicore support to upgrade.',
   'err.application_error': 'The operation could not be completed.',
   'err.validation_error': 'The submitted data is not valid.',
   'err.domain_error': 'This operation is not allowed.',

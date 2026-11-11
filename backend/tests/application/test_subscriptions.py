@@ -95,7 +95,11 @@ class TestCatalog:
 
 class TestTenantSubscription:
     def test_view_resolves_plan_usage_and_price(self):
-        seed = seed_clinic()  # Clínica Plus, every module, no expiry
+        seed = seed_clinic()
+        UpdateTenantSubscription(seed.factory, FixedClock()).execute(
+            actor_for(seed), seed.tenant.id,
+            command(CLINICA_PLUS, modules=frozenset(AddonModule), period_end=None),
+        )
         view = GetTenantSubscription(seed.factory, FixedClock()).execute(
             actor_for(seed), seed.tenant.id
         )
@@ -139,13 +143,13 @@ class TestTenantSubscription:
     def test_clinic_already_on_an_inactive_plan_can_keep_it(self):
         seed = seed_clinic()
         platform = seed.factory.platform_uow()
-        plan = platform.plans.get(CLINICA_PLUS)
+        plan = platform.plans.get(EMPRESARIAL)  # the seed clinic's plan
         plan.active = False
         platform.plans.save(plan)
         view = UpdateTenantSubscription(seed.factory, FixedClock()).execute(
-            actor_for(seed), seed.tenant.id, command(CLINICA_PLUS)
+            actor_for(seed), seed.tenant.id, command(EMPRESARIAL)
         )
-        assert view.plan.code == CLINICA_PLUS
+        assert view.plan.code == EMPRESARIAL
 
     def test_custom_price_for_empresarial(self):
         seed = seed_clinic()
@@ -214,7 +218,7 @@ class TestMySubscription:
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
         view = GetMySubscription(uow, FixedClock()).execute(seed.actor(seed.admin))
-        assert view.plan.code == CLINICA_PLUS
+        assert view.plan.code == EMPRESARIAL
 
     def test_doctor_cannot(self):
         seed = seed_clinic()

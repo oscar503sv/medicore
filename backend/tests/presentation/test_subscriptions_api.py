@@ -64,7 +64,7 @@ def test_update_addon_pricing(client, platform_headers):
 def test_get_and_update_tenant_subscription(seed, client, platform_headers):
     resp = client.get(_url(seed), headers=platform_headers)
     assert resp.status_code == 200
-    assert resp.json()["plan"]["code"] == "clinica_plus"
+    assert resp.json()["plan"]["code"] == "empresarial"
 
     resp = client.put(
         _url(seed),
@@ -131,9 +131,28 @@ def test_create_tenant_requires_trial_or_period(client, platform_headers):
 def test_clinic_admin_reads_own_plan(client, admin_headers):
     resp = client.get("/api/v1/organization/subscription", headers=admin_headers)
     assert resp.status_code == 200
-    assert resp.json()["plan"]["code"] == "clinica_plus"
+    assert resp.json()["plan"]["code"] == "empresarial"
 
 
 def test_doctor_cannot_read_clinic_plan(client, auth_headers):
     resp = client.get("/api/v1/organization/subscription", headers=auth_headers)
     assert resp.status_code == 403
+
+
+def test_quota_exceeded_is_409_with_code(seed, client, platform_headers, admin_headers):
+    client.put(
+        _url(seed),
+        headers=platform_headers,
+        json={"plan_code": "independiente", "period_end": None},
+    )
+    resp = client.post(
+        "/api/v1/users",
+        headers=admin_headers,
+        json={
+            "name": "Dra. Nueva", "email": "nueva@norte.test", "role": "doctor",
+            "password": "temp-pass-123",
+        },
+    )
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["code"] == "plan.quota_doctors"
+    assert resp.json()["params"] == {"limit": 1}

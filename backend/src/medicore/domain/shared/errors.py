@@ -72,6 +72,12 @@ class SlotUnavailable(DomainError):
     code = "slot_unavailable"
 
 
+class QuotaExceeded(DomainError):
+    """The clinic's subscription has no room for another doctor, support user or site."""
+
+    code = "plan.quota_exceeded"
+
+
 class PermissionDenied(DomainError):
     """The actor's role does not allow the requested operation."""
 

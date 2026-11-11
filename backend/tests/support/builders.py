@@ -16,7 +16,7 @@ from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import AddonModule, Role, Sex, UserStatus
-from medicore.domain.services.plan_catalog import CLINICA_PLUS
+from medicore.domain.services.plan_catalog import EMPRESARIAL
 from medicore.domain.shared.identifiers import (
     AvailabilityId,
     LocationId,
@@ -35,8 +35,8 @@ PASSWORD = "s3cret-pass"
 
 
 def full_subscription() -> Subscription:
-    """Every module, no expiry: tests outside billing aren't limited by the plan."""
-    return Subscription(plan_code=CLINICA_PLUS, modules=frozenset(AddonModule))
+    """Unlimited plan, every module, no expiry: tests outside billing aren't limited by it."""
+    return Subscription(plan_code=EMPRESARIAL, modules=frozenset(AddonModule))
 
 
 def build_tenant(slug: str = "clinica-norte", subscription: Subscription | None = None) -> Tenant:

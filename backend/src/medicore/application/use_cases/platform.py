@@ -20,6 +20,7 @@ from medicore.application.common.errors import (
 )
 from medicore.application.common.login_throttle import platform_login_identifier
 from medicore.application.common.permissions import effective_permissions
+from medicore.application.common.quotas import ensure_seat_for
 from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
@@ -650,6 +651,8 @@ class UnlockUser:
     ) -> User:
         with self._factory.for_tenant(tenant_id) as uow:
             user = _require_user(uow, tenant_id, user_id)
+            if not user.is_active:
+                ensure_seat_for(uow, tenant_id, taking=user.role)
             user.activate()
             uow.users.save(user)
             uow.platform_audit.append(
@@ -679,6 +682,10 @@ class UpdateTenantUser:
         allowed = {"name", "role", "sex", "phone", "specialty"}
         with self._factory.for_tenant(tenant_id) as uow:
             user = _require_user(uow, tenant_id, user_id)
+            if changes.get("role") is not None and user.is_active:
+                ensure_seat_for(
+                    uow, tenant_id, taking=Role(changes["role"]), releasing=user.role
+                )
             for key, value in changes.items():
                 if key in allowed:
                     setattr(user, key, value)
