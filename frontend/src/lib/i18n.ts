@@ -1,5 +1,6 @@
 import { useUIStore } from '@/stores/ui'
 import { aplEn, aplEs } from './i18n-applications'
+import { bizEn, bizEs } from './i18n-business'
 import { obEn, obEs } from './i18n-onboarding'
 import { subEn, subEs } from './i18n-subscriptions'
 import { prcEn, prcEs } from './i18n-procedures'
@@ -13,6 +14,7 @@ const es: Dict = {
   ...prcEs,
   ...obEs,
   ...subEs,
+  ...bizEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -753,9 +755,7 @@ const es: Dict = {
   'platform.action_activate': 'Activar',
   'platform.action_suspend': 'Suspender',
   'platform.action_archive': 'Archivar',
-  'platform.nav_stats': 'Estadísticas',
   'platform.nav_audit': 'Auditoría',
-  'platform.stats_title': 'Estadísticas globales',
   'platform.audit_title': 'Auditoría global',
   'platform.total_users': 'Usuarios',
   'platform.total_patients': 'Pacientes',
@@ -980,6 +980,7 @@ const en: Dict = {
   ...prcEn,
   ...obEn,
   ...subEn,
+  ...bizEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.update_available': 'A new version of Medicore is available.',
@@ -1705,9 +1706,7 @@ const en: Dict = {
   'platform.action_activate': 'Activate',
   'platform.action_suspend': 'Suspend',
   'platform.action_archive': 'Archive',
-  'platform.nav_stats': 'Statistics',
   'platform.nav_audit': 'Audit',
-  'platform.stats_title': 'Global statistics',
   'platform.audit_title': 'Global audit',
   'platform.total_users': 'Users',
   'platform.total_patients': 'Patients',

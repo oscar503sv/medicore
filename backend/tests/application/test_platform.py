@@ -20,7 +20,6 @@ from medicore.application.use_cases.platform import (
     CreateTenantCommand,
     CreateTenantWithAdmin,
     EndImpersonation,
-    GetGlobalStats,
     GetTenantStats,
     ImpersonateTenant,
     ListGlobalAudit,
@@ -260,15 +259,6 @@ def test_list_tenants_filters_by_status():
     assert page.total == 1
     assert page.items[0].status == TenantStatus.ARCHIVED
     assert seed.platform_admin.status == UserStatus.ACTIVE
-
-
-def test_global_stats_counts():
-    seed = seed_clinic()
-    stats = GetGlobalStats(seed.factory).execute(actor_for(seed))
-    assert stats.total_clinics == 1
-    assert stats.total_users == 4  # admin, doctor, nurse, receptionist
-    assert stats.total_patients == 1
-    assert stats.by_clinic[0].tenant_id == str(seed.tenant.id)
 
 
 def test_tenant_stats_counts():

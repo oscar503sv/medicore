@@ -241,13 +241,44 @@ export interface TenantStats {
   records: number
 }
 
-export interface GlobalStats {
-  total_clinics: number
+/** Where a clinic stands for the business overview. */
+export type ClinicStanding = SubscriptionStatus | 'complimentary' | 'suspended'
+
+export interface ClinicBusiness {
+  tenant_id: string
+  legal_name: string
+  slug: string
+  standing: ClinicStanding
+  plan_code: string
+  plan_name: string
+  modules: AddonModule[]
+  period_end: string | null
+  days_left: number | null
+  monthly: string | null
+  paying: boolean
+  usage: { doctors: number; support_users: number; locations: number }
+  limits: PlanLimits
+  at_capacity: ('doctors' | 'support_users' | 'locations')[]
+  last_activity: string | null
+  active_users: number
+  signed_records: number
+}
+
+export interface BusinessOverview {
+  today: string
+  mrr: string
+  unpriced: number
+  collected_this_month: string
+  collected_last_month: string
+  by_standing: Partial<Record<ClinicStanding, number>>
+  by_plan: { code: string; name: string; clinics: number; mrr: string }[]
+  by_module: Partial<Record<AddonModule, number>>
   active_clinics: number
-  total_patients: number
-  total_users: number
-  total_appointments: number
-  by_clinic: TenantStats[]
+  inactive_clinics: number
+  at_capacity_clinics: number
+  weekly_signed: { week: string; count: number }[]
+  expiring: ClinicBusiness[]
+  clinics: ClinicBusiness[]
 }
 
 export interface AuditEntry {

@@ -285,14 +285,52 @@ class InMemoryPlatformReadModel:
             out[key] = sum(1 for e in self._items(name) if e.tenant_id == tenant_id)
         return out
 
-    def counts_by_tenant(self) -> dict[str, dict[str, int]]:
+    def active_staff_by_tenant(self) -> dict[str, dict[str, int]]:
         out: dict[str, dict[str, int]] = {}
-        for name in self._SOURCES:
-            key = self._KEYS.get(name, name)
-            for e in self._items(name):
-                out.setdefault(str(e.tenant_id), {}).setdefault(key, 0)
-                out[str(e.tenant_id)][key] += 1
+        for u in self._store.users.values():
+            if u.is_active:
+                by_role = out.setdefault(str(u.tenant_id), {})
+                by_role[str(u.role)] = by_role.get(str(u.role), 0) + 1
         return out
+
+    def payments_since(self, day):
+        from medicore.domain.repositories._support import PaymentSummary
+
+        return [
+            PaymentSummary(str(p.tenant_id), p.amount.amount, p.paid_on)
+            for p in self._store.subscription_payments.values()
+            if p.paid_on >= day
+        ]
+
+    def activity_by_tenant(self, active_since, signed_since):
+        from medicore.domain.repositories._support import TenantActivity
+
+        out = {}
+        tenants = {str(e.tenant_id) for e in self._store.audit.values()} | {
+            str(r.tenant_id) for r in self._store.medical_records.values()
+        }
+        for tid in tenants:
+            entries = [e for e in self._store.audit.values() if str(e.tenant_id) == tid]
+            out[tid] = TenantActivity(
+                last_activity=max((e.timestamp for e in entries), default=None),
+                active_users=len({e.actor_id for e in entries if e.timestamp >= active_since}),
+                signed_records=sum(
+                    1 for r in self._store.medical_records.values()
+                    if str(r.tenant_id) == tid and r.signed_at >= signed_since
+                ),
+            )
+        return out
+
+    def signed_per_week(self, since):
+        from collections import Counter
+        from datetime import timedelta
+
+        weeks = Counter(
+            (r.signed_at.date() - timedelta(days=r.signed_at.weekday()))
+            for r in self._store.medical_records.values()
+            if r.signed_at >= since
+        )
+        return sorted(weeks.items())
 
     def global_audit(
         self,

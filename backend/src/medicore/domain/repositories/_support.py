@@ -9,7 +9,8 @@ parameter on every method — the scope is bound when the repository is construc
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,3 +84,21 @@ class AuditFilter:
     actor_id: str | None = None
     date_from: str | None = None  # inclusive day, "YYYY-MM-DD"
     date_to: str | None = None  # inclusive day, "YYYY-MM-DD"
+
+
+@dataclass(frozen=True, slots=True)
+class TenantActivity:
+    """How much a clinic is using Medicore, from its audit trail and signed records."""
+
+    last_activity: datetime | None = None
+    active_users: int = 0  # distinct people with audited activity in the window
+    signed_records: int = 0  # records signed in the window
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentSummary:
+    """One subscription payment, as the business overview needs it."""
+
+    tenant_id: str
+    amount: Decimal
+    paid_on: date

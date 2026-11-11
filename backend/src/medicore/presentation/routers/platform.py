@@ -6,13 +6,13 @@ from fastapi import APIRouter, Query, Request, Response
 
 from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock as ClockPort
+from medicore.application.use_cases.business import GetBusinessOverview
 from medicore.application.use_cases.platform import (
     AddTenantLocation,
     AuthenticatePlatformAdmin,
     CreateTenantCommand,
     CreateTenantWithAdmin,
     EndImpersonation,
-    GetGlobalStats,
     GetPlatformAdmin,
     GetTenant,
     GetTenantPermissionsMatrix,
@@ -54,12 +54,12 @@ from medicore.presentation.dependencies import (
 )
 from medicore.presentation.routers.role_permissions import parse_role, ser_matrix
 from medicore.presentation.schemas.auth import SessionListResponse
+from medicore.presentation.schemas.business import BusinessOverviewResponse
 from medicore.presentation.schemas.platform import (
     AddTenantLocationRequest,
     CreateTenantRequest,
     CreateTenantResponse,
     GlobalAuditListResponse,
-    GlobalStatsResponse,
     ImpersonateRequest,
     ImpersonationResponse,
     PlatformAdminResponse,
@@ -79,8 +79,8 @@ from medicore.presentation.schemas.role_permissions import (
 )
 from medicore.presentation.schemas.users import UserListResponse
 from medicore.presentation.serializers import (
+    ser_business_overview,
     ser_global_audit_row,
-    ser_global_stats,
     ser_platform_admin,
     ser_session_info,
     ser_tenant,
@@ -216,9 +216,9 @@ def set_tenant_status(tenant_id: str, body: SetTenantStatusRequest, actor: Platf
 # ── Statistics & audit ─────────────────────────────────────────────────────────
 
 
-@router.get("/stats", response_model=GlobalStatsResponse)
-def global_stats(actor: PlatformActor, factory: UoWFactory):
-    return ser_global_stats(GetGlobalStats(factory).execute(actor))
+@router.get("/business", response_model=BusinessOverviewResponse)
+def business_overview(actor: PlatformActor, factory: UoWFactory, clock: Clock):
+    return ser_business_overview(GetBusinessOverview(factory, clock).execute(actor))
 
 
 @router.get("/tenants/{tenant_id}/stats", response_model=TenantStatsResponse)

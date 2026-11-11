@@ -401,16 +401,6 @@ class TenantStatsDTO:
     records: int
 
 
-@dataclass(frozen=True, slots=True)
-class GlobalStatsDTO:
-    total_clinics: int
-    active_clinics: int
-    total_patients: int
-    total_users: int
-    total_appointments: int
-    by_clinic: list[TenantStatsDTO]
-
-
 def _counts_to_stats(tenant: Tenant, counts: dict[str, int]) -> TenantStatsDTO:
     return TenantStatsDTO(
         tenant_id=str(tenant.id),
@@ -422,28 +412,6 @@ def _counts_to_stats(tenant: Tenant, counts: dict[str, int]) -> TenantStatsDTO:
         consultations=counts.get("consultations", 0),
         records=counts.get("records", 0),
     )
-
-
-class GetGlobalStats:
-    """Aggregate counts across every clinic plus per-clinic breakdown."""
-
-    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
-        self._factory = uow_factory
-
-    def execute(self, actor: PlatformActorContext) -> GlobalStatsDTO:
-        with self._factory.platform_uow() as uow:
-            tenants = uow.tenants.list(paging=Paging(limit=1000)).items
-        with self._factory.platform_reads() as reads:
-            counts = reads.counts_by_tenant()
-        by_clinic = [_counts_to_stats(t, counts.get(str(t.id), {})) for t in tenants]
-        return GlobalStatsDTO(
-            total_clinics=len(tenants),
-            active_clinics=sum(1 for t in tenants if t.is_active),
-            total_patients=sum(c.patients for c in by_clinic),
-            total_users=sum(c.users for c in by_clinic),
-            total_appointments=sum(c.appointments for c in by_clinic),
-            by_clinic=by_clinic,
-        )
 
 
 class GetTenantStats:

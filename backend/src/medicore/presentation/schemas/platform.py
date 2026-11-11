@@ -106,15 +106,6 @@ class TenantStatsResponse(BaseModel):
     records: int
 
 
-class GlobalStatsResponse(BaseModel):
-    total_clinics: int
-    active_clinics: int
-    total_patients: int
-    total_users: int
-    total_appointments: int
-    by_clinic: list[TenantStatsResponse]
-
-
 class AuditEntryResponse(BaseModel):
     id: str
     tenant_id: str

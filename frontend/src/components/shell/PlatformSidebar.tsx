@@ -7,7 +7,7 @@ import { useUIStore } from '@/stores/ui'
 const NAV = [
   { to: '/platform/clinics', labelKey: 'platform.nav_clinics', icon: Building2 },
   { to: '/platform/plans', labelKey: 'sub.nav_plans', icon: CreditCard },
-  { to: '/platform/stats', labelKey: 'platform.nav_stats', icon: BarChart3 },
+  { to: '/platform/business', labelKey: 'biz.nav', icon: BarChart3 },
   { to: '/platform/audit', labelKey: 'platform.nav_audit', icon: ScrollText },
 ]
 

@@ -9,7 +9,7 @@ multi-aggregate operations (e.g. signing a consultation) are atomic.
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
-from datetime import datetime
+from datetime import date, datetime
 from types import TracebackType
 from typing import Protocol, runtime_checkable
 
@@ -38,6 +38,7 @@ from medicore.domain.repositories import (
     UserRepository,
     VaccinationRecordRepository,
 )
+from medicore.domain.repositories._support import PaymentSummary, TenantActivity
 from medicore.domain.shared.identifiers import TenantId
 
 
@@ -110,8 +111,6 @@ class PlatformUnitOfWork(Protocol):
 class PlatformReadModel(Protocol):
     """Cross-tenant read model for superadmin stats and the global audit viewer."""
 
-    def counts_by_tenant(self) -> dict[str, dict[str, int]]: ...
-
     def tenant_counts(self, tenant_id: TenantId) -> dict[str, int]: ...
 
     def global_audit(
@@ -121,6 +120,24 @@ class PlatformReadModel(Protocol):
         action: str | None = None,
         tenant_id: str | None = None,
     ) -> list: ...
+
+    # ── Business overview ──────────────────────────────────────────────────────
+
+    def active_staff_by_tenant(self) -> dict[str, dict[str, int]]:
+        """Active users per clinic and role (``{tenant_id: {role: n}}``)."""
+        ...
+
+    def payments_since(self, day: date) -> list[PaymentSummary]:
+        """Subscription payments of every clinic paid on or after ``day``."""
+        ...
+
+    def activity_by_tenant(
+        self, active_since: datetime, signed_since: datetime
+    ) -> dict[str, TenantActivity]: ...
+
+    def signed_per_week(self, since: datetime) -> list[tuple[date, int]]:
+        """Records signed across every clinic, per ISO week (Monday), oldest first."""
+        ...
 
 
 class DiagnosisCatalogRepository(Protocol):

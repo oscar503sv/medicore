@@ -88,17 +88,6 @@ def ser_tenant_stats(s) -> dict:
     }
 
 
-def ser_global_stats(s) -> dict:
-    return {
-        "total_clinics": s.total_clinics,
-        "active_clinics": s.active_clinics,
-        "total_patients": s.total_patients,
-        "total_users": s.total_users,
-        "total_appointments": s.total_appointments,
-        "by_clinic": [ser_tenant_stats(c) for c in s.by_clinic],
-    }
-
-
 def ser_audit(e) -> dict:
     return {
         "id": str(e.id),
@@ -514,4 +503,48 @@ def ser_subscription_notice(n: SubscriptionNotice) -> dict:
         "period_end": n.period_end,
         "grace_until": n.grace_until,
         "days_left": n.days_left,
+    }
+
+
+def _ser_clinic_business(r) -> dict:
+    return {
+        "tenant_id": r.tenant_id,
+        "legal_name": r.legal_name,
+        "slug": r.slug,
+        "standing": r.standing,
+        "plan_code": r.plan_code,
+        "plan_name": r.plan_name,
+        "modules": list(r.modules),
+        "period_end": r.period_end,
+        "days_left": r.days_left,
+        "monthly": ser_money(r.monthly),
+        "paying": r.paying,
+        "usage": r.usage,
+        "limits": _ser_limits(r.limits),
+        "at_capacity": list(r.at_capacity),
+        "last_activity": r.activity.last_activity,
+        "active_users": r.activity.active_users,
+        "signed_records": r.activity.signed_records,
+    }
+
+
+def ser_business_overview(dto) -> dict:
+    return {
+        "today": dto.today,
+        "mrr": ser_money(dto.mrr),
+        "unpriced": dto.unpriced,
+        "collected_this_month": ser_money(dto.collected_this_month),
+        "collected_last_month": ser_money(dto.collected_last_month),
+        "by_standing": dto.by_standing,
+        "by_plan": [
+            {"code": p.code, "name": p.name, "clinics": p.clinics, "mrr": ser_money(p.mrr)}
+            for p in dto.by_plan
+        ],
+        "by_module": dto.by_module,
+        "active_clinics": dto.active_clinics,
+        "inactive_clinics": dto.inactive_clinics,
+        "at_capacity_clinics": dto.at_capacity_clinics,
+        "weekly_signed": [{"week": w, "count": n} for w, n in dto.weekly_signed],
+        "expiring": [_ser_clinic_business(r) for r in dto.expiring],
+        "clinics": [_ser_clinic_business(r) for r in dto.clinics],
     }

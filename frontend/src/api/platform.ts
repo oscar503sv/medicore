@@ -4,7 +4,7 @@ import type {
   AddonPricing,
   AuthSessionInfo,
   GlobalAuditEntry,
-  GlobalStats,
+  BusinessOverview,
   PaginatedResponse,
   Permission,
   PaymentMethod,
@@ -147,7 +147,7 @@ export const platformTenantsApi = {
       .post<Tenant>(`/platform/tenants/${id}/status`, { status })
       .then((r) => r.data),
 
-  stats: () => platformApi.get<GlobalStats>('/platform/stats').then((r) => r.data),
+  business: () => platformApi.get<BusinessOverview>('/platform/business').then((r) => r.data),
 
   tenantStats: (id: string) =>
     platformApi.get<TenantStats>(`/platform/tenants/${id}/stats`).then((r) => r.data),

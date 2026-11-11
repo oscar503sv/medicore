@@ -24,7 +24,7 @@ import { PatientsPage } from '@/pages/PatientsPage'
 import { ClinicDetailPage } from '@/pages/platform/ClinicDetailPage'
 import { ClinicsListPage } from '@/pages/platform/ClinicsListPage'
 import { GlobalAuditPage } from '@/pages/platform/GlobalAuditPage'
-import { GlobalStatsPage } from '@/pages/platform/GlobalStatsPage'
+import { BusinessPage } from '@/pages/platform/BusinessPage'
 import { PlansPage } from '@/pages/platform/PlansPage'
 import { PlatformLoginPage } from '@/pages/platform/PlatformLoginPage'
 import { RecordsPage } from '@/pages/RecordsPage'
@@ -65,7 +65,8 @@ export function App() {
           <Route path="/platform/clinics" element={<ClinicsListPage />} />
           <Route path="/platform/clinics/:id" element={<ClinicDetailPage />} />
           <Route path="/platform/plans" element={<PlansPage />} />
-          <Route path="/platform/stats" element={<GlobalStatsPage />} />
+          <Route path="/platform/business" element={<BusinessPage />} />
+          <Route path="/platform/stats" element={<Navigate to="/platform/business" replace />} />
           <Route path="/platform/audit" element={<GlobalAuditPage />} />
         </Route>
 

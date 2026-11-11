@@ -93,15 +93,6 @@ def test_update_tenant_icd_version(seed, client, platform_headers):
     assert resp.json()["icd_version"] == "cie10"
 
 
-def test_global_stats_endpoint(seed, client, platform_headers):
-    resp = client.get("/api/v1/platform/stats", headers=platform_headers)
-    assert resp.status_code == 200, resp.text
-    data = resp.json()
-    assert data["total_clinics"] == 1
-    assert data["total_users"] == 4
-    assert data["by_clinic"][0]["patients"] == 1
-
-
 def test_tenant_stats_endpoint(seed, client, platform_headers):
     resp = client.get(f"/api/v1/platform/tenants/{seed.tenant.id}/stats", headers=platform_headers)
     assert resp.status_code == 200
@@ -182,3 +173,17 @@ def test_platform_lists_and_revokes_tenant_sessions(seed, client, platform_heade
     assert resp.status_code == 204
     # the doctor's token is dead immediately
     assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 401
+
+
+def test_business_overview_endpoint(seed, client, platform_headers):
+    resp = client.get("/api/v1/platform/business", headers=platform_headers)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["mrr"] == "0.00"  # the seeded clinic is open-ended: no monthly revenue
+    assert data["by_standing"] == {"complimentary": 1}
+    assert data["clinics"][0]["usage"]["doctors"] == 1
+    assert len(data["weekly_signed"]) == 12
+
+
+def test_business_overview_needs_a_platform_session(client, admin_headers):
+    assert client.get("/api/v1/platform/business", headers=admin_headers).status_code == 401

@@ -1,4 +1,5 @@
-"""Cross-tenant read model for the superadmin console (stats + global audit).
+"""Cross-tenant read model for the superadmin console (business overview, clinic stats,
+global audit).
 
 Uses a single global session and ``GROUP BY tenant_id`` aggregates over the shared physical
 database — far cheaper than opening one UnitOfWork per tenant.
@@ -6,11 +7,17 @@ database — far cheaper than opening one UnitOfWork per tenant.
 
 from __future__ import annotations
 
+from datetime import date, datetime
+
 from sqlalchemy import desc, func, literal, select, union_all
 from sqlalchemy.orm import Session
 
-from medicore.domain.repositories._support import GlobalAuditRow, Page
-from medicore.domain.shared.identifiers import TenantId
+from medicore.domain.repositories._support import (
+    GlobalAuditRow,
+    Page,
+    PaymentSummary,
+    TenantActivity,
+)
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.audit_log import AuditLogModel
 from medicore.infrastructure.persistence.models.consultation import ConsultationModel
@@ -20,6 +27,7 @@ from medicore.infrastructure.persistence.models.platform import (
     PlatformAdminModel,
     PlatformAuditLogModel,
 )
+from medicore.infrastructure.persistence.models.subscription import SubscriptionPaymentModel
 from medicore.infrastructure.persistence.models.tenant import TenantModel
 from medicore.infrastructure.persistence.models.user import UserModel
 
@@ -36,30 +44,72 @@ class SqlPlatformReadModel:
     def __init__(self, session: Session) -> None:
         self._s = session
 
-    def _grouped(self, model) -> dict[str, int]:
-        rows = self._s.query(model.tenant_id, func.count()).group_by(model.tenant_id).all()
-        return {str(tid): count for tid, count in rows}
+    # ── Business overview ──────────────────────────────────────────────────────
 
-    def counts_by_tenant(self) -> dict[str, dict[str, int]]:
-        grouped = {name: self._grouped(model) for name, model in _COUNTERS.items()}
-        result: dict[str, dict[str, int]] = {}
-        for name, by_tenant in grouped.items():
-            for tid, count in by_tenant.items():
-                result.setdefault(tid, {})[name] = count
-        return result
+    def active_staff_by_tenant(self) -> dict[str, dict[str, int]]:
+        rows = (
+            self._s.query(UserModel.tenant_id, UserModel.role, func.count())
+            .filter(UserModel.status == "active")
+            .group_by(UserModel.tenant_id, UserModel.role)
+            .all()
+        )
+        out: dict[str, dict[str, int]] = {}
+        for tid, role, count in rows:
+            out.setdefault(str(tid), {})[str(role)] = count
+        return out
 
-    def tenant_counts(self, tenant_id: TenantId) -> dict[str, int]:
-        tid = tenant_id.value
-        return {
-            name: (
-                self._s.query(func.count())
-                .select_from(model)
-                .filter(model.tenant_id == tid)
-                .scalar()
-                or 0
+    def payments_since(self, day: date) -> list[PaymentSummary]:
+        rows = (
+            self._s.query(
+                SubscriptionPaymentModel.tenant_id,
+                SubscriptionPaymentModel.amount,
+                SubscriptionPaymentModel.paid_on,
             )
-            for name, model in _COUNTERS.items()
+            .filter(SubscriptionPaymentModel.paid_on >= day)
+            .all()
+        )
+        return [PaymentSummary(str(tid), amount, paid_on) for tid, amount, paid_on in rows]
+
+    def activity_by_tenant(
+        self, active_since: datetime, signed_since: datetime
+    ) -> dict[str, TenantActivity]:
+        last = dict(
+            self._s.query(AuditLogModel.tenant_id, func.max(AuditLogModel.timestamp))
+            .group_by(AuditLogModel.tenant_id)
+            .all()
+        )
+        people = func.count(func.distinct(AuditLogModel.actor_id))
+        active = dict(
+            self._s.query(AuditLogModel.tenant_id, people)
+            .filter(AuditLogModel.timestamp >= active_since)
+            .group_by(AuditLogModel.tenant_id)
+            .all()
+        )
+        signed = dict(
+            self._s.query(MedicalRecordModel.tenant_id, func.count())
+            .filter(MedicalRecordModel.signed_at >= signed_since)
+            .group_by(MedicalRecordModel.tenant_id)
+            .all()
+        )
+        return {
+            str(tid): TenantActivity(
+                last_activity=last.get(tid),
+                active_users=active.get(tid, 0),
+                signed_records=signed.get(tid, 0),
+            )
+            for tid in set(last) | set(active) | set(signed)
         }
+
+    def signed_per_week(self, since: datetime) -> list[tuple[date, int]]:
+        week = func.date_trunc("week", MedicalRecordModel.signed_at)
+        rows = (
+            self._s.query(week, func.count())
+            .filter(MedicalRecordModel.signed_at >= since)
+            .group_by(week)
+            .order_by(week)
+            .all()
+        )
+        return [(start.date(), count) for start, count in rows]
 
     def global_audit(
         self,
