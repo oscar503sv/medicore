@@ -51,6 +51,32 @@ class SqlDoctorAvailabilityRepository:
         )
         return to_doctor_availability(row, exceptions)
 
+    def list_for_doctors(self, doctor_ids: list[UserId]) -> dict[UserId, DoctorAvailability]:
+        if not doctor_ids:
+            return {}
+        rows = (
+            self._s.query(DoctorAvailabilityModel)
+            .filter(
+                DoctorAvailabilityModel.tenant_id == self._tid,
+                DoctorAvailabilityModel.doctor_id.in_([d.value for d in doctor_ids]),
+            )
+            .all()
+        )
+        if not rows:
+            return {}
+        exceptions: dict = {r.id: [] for r in rows}
+        for ex in (
+            self._s.query(AvailabilityExceptionModel)
+            .filter(AvailabilityExceptionModel.availability_id.in_(list(exceptions)))
+            .all()
+        ):
+            exceptions[ex.availability_id].append(ex)
+        result = {}
+        for row in rows:
+            availability = to_doctor_availability(row, exceptions[row.id])
+            result[availability.doctor_id] = availability
+        return result
+
     def save(self, availability: DoctorAvailability) -> None:
         av_dict, ex_dicts = from_doctor_availability(availability)
         row = self._s.get(DoctorAvailabilityModel, availability.id.value)

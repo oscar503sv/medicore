@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import String, and_, literal_column, or_
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.patient import Patient
 from medicore.domain.repositories._support import Page, Paging, PatientFilter
 from medicore.domain.shared.identifiers import PatientId, TenantId
-from medicore.domain.shared.text import ACCENTED, PLAIN, fold
+from medicore.domain.shared.text import fold
 from medicore.domain.value_objects.contact_info import ContactInfo
 from medicore.infrastructure.persistence.mappers.entities import to_patient
-from medicore.infrastructure.persistence.models.patient import PatientModel
+from medicore.infrastructure.persistence.models.patient import PatientModel, patient_search_sql
+
+_SEARCH_SQL = patient_search_sql("patients.")
 
 
 def _contact_to_json(c: ContactInfo) -> dict:
@@ -24,11 +26,6 @@ def _contact_to_json(c: ContactInfo) -> dict:
         "emergency_contact_name": c.emergency_contact_name,
         "emergency_contact_phone": c.emergency_contact_phone,
     }
-
-
-def _fold_sql(expr):
-    """SQL twin of ``fold`` (same translate table)."""
-    return func.translate(func.lower(expr), ACCENTED, PLAIN)
 
 
 class SqlPatientRepository:
@@ -69,11 +66,9 @@ class SqlPatientRepository:
     def search(
         self, query: str, paging: Paging | None = None, filter: PatientFilter | None = None
     ) -> Page[Patient]:
-        name = _fold_sql(PatientModel.first_name + " " + PatientModel.last_name)
-        code = func.lower(PatientModel.code)
-        phone = func.regexp_replace(
-            func.coalesce(PatientModel.contact["phone"].astext, ""), "[^0-9]", "", "g"
-        )
+        # Literal SQL identical to the trigram index expressions, so they can be used.
+        exprs = {k: literal_column(v, String) for k, v in _SEARCH_SQL.items()}
+        name, code, phone = exprs["name"], exprs["code"], exprs["phone"]
         conditions = []
         # Each word on its own: "rosa alvarez" and "alvarez rosa" both match.
         for word in fold(query).split():

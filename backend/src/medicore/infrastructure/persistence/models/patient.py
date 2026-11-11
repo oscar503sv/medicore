@@ -9,7 +9,33 @@ from sqlalchemy import Date, DateTime, ForeignKey, Index, String, UniqueConstrai
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from medicore.domain.shared.text import ACCENTED, PLAIN
 from medicore.infrastructure.database.base import Base
+
+
+def patient_search_sql(table: str = "") -> dict[str, str]:
+    """The normalized expressions the patient search matches against, as literal SQL.
+
+    Shared by the trigram indexes below and by the search query: Postgres only uses an
+    expression index when the query repeats the expression exactly, constants included,
+    so these must not be rebuilt with bound parameters. ``table`` qualifies the columns
+    for the query ("patients."); the index definitions leave them bare.
+    """
+    t = table
+    return {
+        # Accent- and case-folded full name (SQL twin of domain.shared.text.fold).
+        "name": f"translate(lower({t}first_name || ' ' || {t}last_name), '{ACCENTED}', '{PLAIN}')",
+        "code": f"lower({t}code)",
+        # Digits only, so "7012-3456" and "70123456" match alike.
+        "phone": f"regexp_replace(coalesce({t}contact ->> 'phone', ''), '[^0-9]', '', 'g')",
+    }
+
+
+def _trgm_index(key: str) -> Index:
+    expr = patient_search_sql()[key]
+    return Index(
+        f"ix_patients_search_{key}_trgm", text(f"({expr}) gin_trgm_ops"), postgresql_using="gin"
+    )
 
 
 class PatientModel(Base):
@@ -17,6 +43,11 @@ class PatientModel(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "code", name="uq_patients_tenant_code"),
         Index("ix_patients_tenant_name", "tenant_id", "last_name", "first_name"),
+        # Substring search (LIKE '%word%') over name, code and phone: trigram GIN indexes,
+        # one per branch of the search's OR so Postgres can combine them (BitmapOr).
+        _trgm_index("name"),
+        _trgm_index("code"),
+        _trgm_index("phone"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

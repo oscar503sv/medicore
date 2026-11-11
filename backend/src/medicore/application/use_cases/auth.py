@@ -98,6 +98,7 @@ class AuthenticateUser:
                     self._audit_lockout(cmd, now)
                 raise
             throttle.reset(identifier)
+            throttle.purge_stale(now)
             return session
 
     def _audit_lockout(self, cmd: AuthenticateUserCommand, now) -> None:

@@ -17,6 +17,7 @@ from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.appointment import Appointment
+from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.enums import AppointmentStatus, Role, UserStatus
 from medicore.domain.repositories._support import Paging, UserFilter
 from medicore.domain.services.slot_resolver import (
@@ -73,8 +74,10 @@ class GetDashboardSummary:
                 appts_today = len(current)
                 appts_delta = _pct_change(len(current), len(previous))
                 pending = sum(1 for a in current if a.status in _PENDING)
-                occupancy = self._occupancy(today, doctor, current)
-                before = self._occupancy(last_week, doctor, previous)
+                # Doctors and their schedules are read once, for both days.
+                schedules = self._uow.availability.list_for_doctors(self._doctors_in_scope(doctor))
+                occupancy = self._occupancy(today, schedules, current)
+                before = self._occupancy(last_week, schedules, previous)
                 if occupancy is not None and before is not None:
                     occupancy_delta = occupancy - before
 
@@ -105,29 +108,27 @@ class GetDashboardSummary:
             if a.status != AppointmentStatus.CANCELLED
         ]
 
+    def _doctors_in_scope(self, doctor: UserId | None) -> list[UserId]:
+        if doctor is not None:
+            return [doctor]
+        page = self._uow.users.list(
+            UserFilter(role=str(Role.DOCTOR), status=str(UserStatus.ACTIVE)),
+            Paging(limit=1000),
+        )
+        return [u.id for u in page.items]
+
+    @staticmethod
     def _occupancy(
-        self, on: date, doctor: UserId | None, booked: list[Appointment]
+        on: date, schedules: dict[UserId, DoctorAvailability], booked: list[Appointment]
     ) -> int | None:
         """Booked share of the bookable slots across the doctors in scope, in percent.
 
         Every non-cancelled appointment counts as occupying its slot (a no-show still took
         it). Booking rules are ignored: they limit *when* a slot can be booked, not capacity.
         """
-        if doctor is not None:
-            doctors = [doctor]
-        else:
-            page = self._uow.users.list(
-                UserFilter(role=str(Role.DOCTOR), status=str(UserStatus.ACTIVE)),
-                Paging(limit=1000),
-            )
-            doctors = [u.id for u in page.items]
-
         capacity = taken = 0
         start_of_day = datetime.combine(on, time.min)
-        for doctor_id in doctors:
-            availability = self._uow.availability.get_by_doctor(doctor_id)
-            if availability is None:
-                continue
+        for doctor_id, availability in schedules.items():
             busy = [
                 BusyInterval(a.scheduled_start, a.scheduled_end)
                 for a in booked

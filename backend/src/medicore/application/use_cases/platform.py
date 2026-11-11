@@ -121,6 +121,7 @@ class AuthenticatePlatformAdmin:
                 throttle.record_failure(identifier, now)
                 raise
             throttle.reset(identifier)
+            throttle.purge_stale(now)
             return session
 
     def _authenticate(self, email: str, password: str) -> PlatformSessionDTO:

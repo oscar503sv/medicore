@@ -200,6 +200,12 @@ class InMemoryLoginThrottleRepository:
     def reset(self, identifier: str) -> None:
         self._store.login_attempts.pop(identifier, None)
 
+    def purge_stale(self, now: datetime) -> None:
+        window_start = now - timedelta(minutes=WINDOW_MINUTES)
+        for identifier, (_, last, locked) in list(self._store.login_attempts.items()):
+            if last < window_start and (locked is None or locked <= now):
+                del self._store.login_attempts[identifier]
+
 
 class InMemoryDiagnosisCatalogRepository:
     def __init__(self, store: InMemoryStore) -> None:
@@ -745,6 +751,14 @@ class InMemoryDoctorAvailabilityRepository(_Scoped):
             ),
             None,
         )
+
+    def list_for_doctors(self, doctor_ids: list[UserId]) -> dict[UserId, DoctorAvailability]:
+        wanted = set(doctor_ids)
+        return {
+            a.doctor_id: a
+            for a in self._mine(self._store.availability.values())
+            if a.doctor_id in wanted
+        }
 
     def save(self, availability: DoctorAvailability) -> None:
         self._store.availability[availability.id.value] = availability

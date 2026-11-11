@@ -83,6 +83,16 @@ is done. Next:
   IUDs) decremented from the shared inventory, and charging each procedure, which depends on
   billing.
 
+### Performance — session cache in Redis
+
+Every authenticated request runs two transactions: `get_actor` reads the session (so it can
+be revoked server-side) and the role's permission override, then the endpoint opens its
+own. Acceptable at the current volume; when it weighs, caching the session and per-role
+permissions in Redis (invalidated on revocation or permission changes) would save that
+extra database round trip. Already applied (Nov 2026): 2 uvicorn workers
+(`WEB_CONCURRENCY`), trigram indexes for the patient search, batched availability reads in
+the dashboard and purging stale `login_attempts` on login.
+
 ## Security — consciously deferred
 
 Quick wins already applied (June 2026): constant-time login, CORS/docs validation in

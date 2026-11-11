@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session
 
 import medicore.infrastructure.persistence.models  # noqa: F401  (register all tables)
@@ -22,6 +22,7 @@ from medicore.domain.shared.identifiers import AppointmentId
 from medicore.domain.value_objects.contact_info import ContactInfo
 from medicore.infrastructure.config import get_settings
 from medicore.infrastructure.database.base import Base
+from medicore.infrastructure.persistence.models.patient import patient_search_sql
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from tests.support.builders import build_patient, build_tenant, build_user
 
@@ -107,3 +108,41 @@ def test_search_last_visits_and_upcoming_count(session):
     last = uow.appointments.last_visits([rosa.id, ramon.id])
     assert last == {rosa.id: datetime(2026, 5, 20, 9, 0)}
     assert uow.appointments.count_patients_with_upcoming(NOW) == 1
+
+
+def test_search_query_can_use_the_trigram_indexes(session):
+    """The planner only matches an expression index when the query repeats the expression
+    exactly; a drift (e.g. constants sent as bound parameters) silently means full scans.
+    Checked in two deterministic steps instead of on a plan, which depends on data volume:
+    the repository's SQL embeds the shared expressions verbatim, and each of them is
+    servable by its index."""
+    tenant = build_tenant(slug=f"test-ptrgm-{AppointmentId.new().value.hex[:8]}")
+    uow = SqlAlchemyUnitOfWork(session, tenant.id)
+    uow.tenants.save(tenant)
+    session.flush()
+
+    statements: list[str] = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if "FROM patients" in statement and "LIKE" in statement:
+            statements.append(statement)
+
+    engine = session.connection().engine
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        uow.patients.search("rosa 71234567")
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    assert statements, "search query not captured"
+
+    exprs = patient_search_sql("patients.")
+    for expr in exprs.values():
+        assert expr in statements[-1]
+
+    session.execute(text("SET LOCAL enable_seqscan = off"))
+    for key, expr in exprs.items():
+        plan = "\n".join(
+            session.execute(text(f"EXPLAIN SELECT 1 FROM patients WHERE {expr} LIKE '%abc%'"))
+            .scalars()
+        )
+        assert f"ix_patients_search_{key}_trgm" in plan, plan

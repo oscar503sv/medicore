@@ -86,6 +86,16 @@ control sugerido) está hecha. Siguiente:
   DIU) descontados del inventario compartido, y cobro de cada procedimiento, que depende de
   la facturación.
 
+### Rendimiento — caché de sesión con Redis
+
+Cada request autenticado hace dos transacciones: `get_actor` lee la sesión (para poder
+revocarla del lado del servidor) y el override de permisos del rol, y luego el endpoint
+abre la suya. Es aceptable con el volumen actual; cuando pese, cachear en Redis la sesión
+y los permisos por rol (con invalidación al revocar o al cambiar permisos) ahorraría ese
+viaje extra a la base. Ya aplicado (nov 2026): 2 workers de uvicorn (`WEB_CONCURRENCY`),
+índices trigram para la búsqueda de pacientes, lectura en lote de disponibilidades en el
+dashboard y purga de `login_attempts` viejos al iniciar sesión.
+
 ## Seguridad — diferido conscientemente
 
 Quick wins ya aplicados (jun 2026): login en tiempo constante, validación de CORS/docs en

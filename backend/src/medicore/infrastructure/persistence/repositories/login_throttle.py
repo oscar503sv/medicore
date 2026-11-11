@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
 from medicore.application.common.login_throttle import WINDOW_MINUTES, lockout_until
@@ -61,4 +61,11 @@ class SqlLoginThrottleRepository:
         self._s.query(LoginAttemptModel).filter(
             LoginAttemptModel.identifier == identifier
         ).delete()
+        self._s.commit()
+
+    def purge_stale(self, now: datetime) -> None:
+        self._s.query(LoginAttemptModel).filter(
+            LoginAttemptModel.last_failed_at < now - timedelta(minutes=WINDOW_MINUTES),
+            or_(LoginAttemptModel.locked_until.is_(None), LoginAttemptModel.locked_until <= now),
+        ).delete(synchronize_session=False)
         self._s.commit()

@@ -13,7 +13,7 @@ import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 import medicore.infrastructure.persistence.models  # noqa: F401  (register all tables)
@@ -92,3 +92,28 @@ def test_reset_clears_the_history(repo):
     repo.reset(IDENTIFIER)
     assert repo.locked_until(IDENTIFIER, NOW) is None
     assert repo.record_failure(IDENTIFIER, NOW) is None  # back to count = 1
+
+
+def test_purge_stale_keeps_recent_and_locked_entries(repo):
+    stale, recent, locked = (f"tenant:test-throttle:{n}@example.test" for n in "srl")
+    old = NOW - timedelta(minutes=30)
+    repo.record_failure(stale, old)  # failed long ago, never locked
+    repo.record_failure(recent, NOW - timedelta(minutes=5))  # still inside the window
+    for _ in range(9):  # 9th failure → 15-minute lockout, still active at NOW
+        repo.record_failure(locked, NOW - timedelta(minutes=16))
+    repo._s.execute(
+        text("UPDATE login_attempts SET locked_until = :lu WHERE identifier = :id"),
+        {"lu": NOW + timedelta(minutes=5), "id": locked},
+    )
+
+    repo.purge_stale(NOW)
+
+    left = set(
+        repo._s.execute(
+            text(
+                "SELECT identifier FROM login_attempts"
+                " WHERE identifier LIKE 'tenant:test-throttle:%'"
+            )
+        ).scalars()
+    )
+    assert left == {recent, locked}

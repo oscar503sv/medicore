@@ -273,7 +273,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
   mismo host) para que la auditoría registre la IP real del cliente.
 - Opcional: `ENABLE_DOCS=false` para ocultar Swagger/OpenAPI.
 
-> Para varios workers: `uvicorn ... --workers N` (sobreescribiendo el `CMD`) o un gestor de procesos.
+> Para varios workers basta con `WEB_CONCURRENCY=N` (uvicorn la lee; el `docker-compose.yml` usa 2). Cada
+> worker tiene su propio pool de hasta 15 conexiones: mantén `N × 15` por debajo de `max_connections` de Postgres.
 > La app se sirve detrás de un reverse-proxy que termina TLS y reenvía `X-Forwarded-For`.
 > La cabecera **solo se honra** si la conexión viene de un proxy listado en
 > `TRUSTED_PROXIES` (recorriendo la cadena de derecha a izquierda y descartando los hops

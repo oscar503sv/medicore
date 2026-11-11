@@ -372,7 +372,7 @@ El [`docker-compose.yml`](docker-compose.yml) de la raíz levanta todo el stack 
 
 1. Genera los secretos: `openssl rand -hex 32` (`JWT_SECRET`) y `openssl rand -base64 24` (`POSTGRES_PASSWORD`), y elige `DEMO_PASSWORD` (la que compartes con quien prueba la demo) y `DEMO_ADMIN_PASSWORD` (privada, para los admins de clínica).
 2. En Coolify: **New Resource → Public Repository** → este repo, rama `main`, **Build Pack: Docker Compose**, archivo `/docker-compose.yml`.
-3. Variables de entorno: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (p. ej. `https://medicore.ejemplo.com`), `DEMO_PASSWORD` y `DEMO_ADMIN_PASSWORD`. Opcionales: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`. Si falta una obligatoria el stack no arranca, a propósito.
+3. Variables de entorno: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (p. ej. `https://medicore.ejemplo.com`), `DEMO_PASSWORD` y `DEMO_ADMIN_PASSWORD`. Opcionales: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`, `WEB_CONCURRENCY` (workers de uvicorn, por defecto 2). Si falta una obligatoria el stack no arranca, a propósito.
 4. Asigna el dominio solo al servicio **frontend** y pulsa **Deploy**.
 5. Carga inicial de datos (una vez), en una terminal del contenedor `backend`:
    ```sh

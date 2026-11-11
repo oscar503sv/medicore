@@ -144,6 +144,12 @@ class LoginThrottleRepository(Protocol):
         """Forget the failure history (called on successful login)."""
         ...
 
+    def purge_stale(self, now: datetime) -> None:
+        """Drop entries that no longer affect anything: last failure outside the window and
+        no active lockout (the next failure would restart at 1 anyway). Run on successful
+        logins, so identifiers that failed and never came back don't pile up."""
+        ...
+
 
 class UnitOfWorkFactory(Protocol):
     def for_tenant(self, tenant_id: TenantId) -> UnitOfWork:
