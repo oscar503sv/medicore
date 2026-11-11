@@ -232,6 +232,17 @@ class TestOrganization:
         UpdateOrganization(uow, FixedClock()).execute(admin, legal_name="Clínica Norte SLU")
         assert uow.tenants.get_by_id(seed.tenant.id).legal_name == "Clínica Norte SLU"
 
+    def test_clinic_admin_cannot_change_its_own_subscription(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        before = uow.tenants.get_by_id(seed.tenant.id)
+        plan, seats = before.plan, before.seat_limit
+        UpdateOrganization(uow, FixedClock()).execute(
+            seed.actor(seed.admin), plan="enterprise", seat_limit=999
+        )
+        after = uow.tenants.get_by_id(seed.tenant.id)
+        assert (after.plan, after.seat_limit) == (plan, seats)
+
     def test_add_location(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)

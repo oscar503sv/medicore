@@ -4,7 +4,7 @@ import type { Organization } from '@/types'
 export const organizationApi = {
   get: () => api.get<Organization>('/organization').then((r) => r.data),
 
-  update: (payload: Partial<Pick<Organization, 'legal_name' | 'tax_id' | 'timezone' | 'plan'>>) =>
+  update: (payload: Partial<Pick<Organization, 'legal_name' | 'tax_id' | 'timezone'>>) =>
     api.patch<Organization>('/organization', payload).then((r) => r.data),
 
   addLocation: (payload: { name: string; address?: string; is_primary?: boolean }) =>

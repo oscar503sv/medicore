@@ -26,7 +26,9 @@ class GetOrganization:
 
 
 class UpdateOrganization:
-    _EDITABLE = {"legal_name", "tax_id", "timezone", "plan", "seat_limit", "icd_version"}
+    # The subscription (plan, limits) is not the clinic's to change: only the platform
+    # console sets it, so it is deliberately absent here.
+    _EDITABLE = {"legal_name", "tax_id", "timezone", "icd_version"}
 
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow

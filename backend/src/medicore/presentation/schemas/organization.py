@@ -9,8 +9,6 @@ class UpdateOrganizationRequest(BaseModel):
     legal_name: str | None = None
     tax_id: str | None = None
     timezone: str | None = None
-    plan: str | None = None
-    seat_limit: int | None = None
 
 
 class AddLocationRequest(BaseModel):

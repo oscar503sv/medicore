@@ -106,6 +106,19 @@ class TestOrganization:
         assert resp.status_code == 200
         assert resp.json()["legal_name"] == "Clínica Norte SLU"
 
+    def test_update_organization_ignores_subscription_fields(self, seed, client, admin_headers):
+        before = client.get("/api/v1/organization", headers=admin_headers).json()
+        resp = client.patch(
+            "/api/v1/organization",
+            json={"plan": "enterprise", "seat_limit": 999},
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        assert (resp.json()["plan"], resp.json()["seat_limit"]) == (
+            before["plan"],
+            before["seat_limit"],
+        )
+
     def test_add_location(self, seed, client, admin_headers):
         resp = client.post(
             "/api/v1/organization/locations",
