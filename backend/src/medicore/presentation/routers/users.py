@@ -73,6 +73,7 @@ def invite_user(body: InviteUserRequest, actor: Actor, uow: UoW, hasher: Hasher,
         sex=body.sex,
         phone=body.phone,
         specialty=body.specialty,
+        jvpm=body.jvpm,
     )
     user = InviteUser(uow, hasher, clock).execute(actor, cmd)
     return ser_user(user)

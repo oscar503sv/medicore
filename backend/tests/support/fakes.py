@@ -79,6 +79,7 @@ class SequentialCodeGenerator:
         self._patient = 141  # next → P-00142
         self._appointment = 2400  # next → A-2401
         self._record = 0
+        self._certificate = 0
 
     def next_patient_code(self) -> str:
         self._patient += 1
@@ -92,3 +93,7 @@ class SequentialCodeGenerator:
         self._record += 1
         suffix = _RECORD_SUFFIX.get(record_type, "GN")
         return f"REC-{on.year}-{on.month:02d}{on.day:02d}-{suffix}"
+
+    def next_certificate_code(self, on: date) -> str:
+        self._certificate += 1
+        return f"CM-{on.year}-{self._certificate:04d}"

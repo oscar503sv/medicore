@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from medicore.domain.enums import ApplicationRoute
+from medicore.domain.enums import ApplicationRoute, ExamKind
 
 
 class VitalsSchema(BaseModel):
@@ -61,6 +61,12 @@ class ProcedureDraftRequest(BaseModel):
     included: bool = False  # included in the consultation fee
 
 
+class ExamRequestSchema(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    kind: ExamKind = ExamKind.LAB
+    notes: str | None = Field(None, max_length=500)
+
+
 class SignRequest(BaseModel):
     chief_complaint: str = ""
 
@@ -80,6 +86,7 @@ class ConsultationResponse(BaseModel):
     draft_prescriptions: list[dict[str, Any]]
     draft_applications: list[dict[str, Any]] = []
     draft_procedures: list[dict[str, Any]] = []
+    draft_exams: list[dict[str, Any]] = []
     attachments: list[dict[str, Any]]
     completion_percent: int
     last_saved_at: datetime | None

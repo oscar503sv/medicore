@@ -17,6 +17,7 @@ class InviteUserRequest(BaseModel):
     sex: Sex | None = None
     phone: str | None = None
     specialty: str | None = None
+    jvpm: str | None = None
 
 
 class UpdateRoleRequest(BaseModel):
@@ -29,6 +30,7 @@ class UpdateUserRequest(BaseModel):
     sex: Sex | None = None
     phone: str | None = None
     specialty: str | None = None
+    jvpm: str | None = None
 
 
 class ResetPasswordRequest(BaseModel):
@@ -45,6 +47,7 @@ class UserResponse(BaseModel):
     sex: str | None = None
     specialty: str | None
     phone: str | None = None
+    jvpm: str | None = None
     avatar_initials: str
     last_seen_at: datetime | None
     joined_at: datetime

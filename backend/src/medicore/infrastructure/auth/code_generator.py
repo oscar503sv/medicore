@@ -64,3 +64,7 @@ class DbSequentialCodeGenerator:
         n = self._next("record")
         suffix = _RECORD_SUFFIX.get(record_type, "GN")
         return f"REC-{on.year}-{on.month:02d}{on.day:02d}-{suffix}-{n}"
+
+    def next_certificate_code(self, on: date) -> str:
+        n = self._next("certificate")
+        return f"CM-{on.year}-{n:04d}"

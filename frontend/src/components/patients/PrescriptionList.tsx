@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, X } from 'lucide-react'
+import { Check, Printer, X } from 'lucide-react'
 import { errorMessage } from '@/api/client'
+import { openPrint } from '@/api/printing'
 import { prescriptionsApi } from '@/api/prescriptions'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -29,6 +30,7 @@ export function PrescriptionList({ patientId }: { patientId: string }) {
   const t = useT()
   const qc = useQueryClient()
   const canManage = useAuthStore((s) => s.can('prescriptions.manage'))
+  const canPrint = useAuthStore((s) => s.can('records.view'))
 
   const { data: items, isLoading } = useQuery({
     queryKey: ['prescriptions', patientId],
@@ -72,6 +74,16 @@ export function PrescriptionList({ patientId }: { patientId: string }) {
                 {rx.end_date ? ` → ${fmtDate(rx.end_date)}` : ` · ${t('rx.indefinite')}`}
               </p>
             </div>
+            {canPrint && rx.record_id && (
+              <Button
+                size="sm"
+                variant="ghost"
+                title={t('pr.btn.prescription')}
+                onClick={() => openPrint(`prescription/${rx.record_id}`)}
+              >
+                <Printer className="h-3.5 w-3.5" />
+              </Button>
+            )}
             {actionable && (
               <div className="flex shrink-0 gap-1">
                 <Button

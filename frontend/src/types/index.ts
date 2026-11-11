@@ -78,6 +78,8 @@ export interface MyProfile {
   specialty: string | null
   phone: string | null
   bio: string | null
+  /** Doctors: JVPM registration number, printed on their documents. */
+  jvpm: string | null
   permissions: Permission[]
 }
 
@@ -138,6 +140,7 @@ export interface TenantLocation {
   id: string
   name: string
   address: string | null
+  phone?: string | null
   is_primary: boolean
 }
 
@@ -365,6 +368,7 @@ export interface User {
   sex: Sex | null
   specialty: string | null
   phone: string | null
+  jvpm: string | null
   avatar_initials: string
   last_seen_at: string | null
   joined_at: string
@@ -537,6 +541,25 @@ export interface PrescriptionDraft {
   duration_days: number | null
 }
 
+export type ExamKind = 'lab' | 'imaging' | 'other'
+
+/** A lab, imaging or other exam ordered in a consultation (frozen into the record). */
+export interface ExamRequest {
+  name: string
+  kind: ExamKind
+  notes: string | null
+}
+
+/** A prescription as frozen into a signed record. */
+export interface PrescriptionSnapshot {
+  drug: string
+  dose: string
+  schedule: string
+  start_date: string
+  end_date: string | null
+  duration_days: number | null
+}
+
 export interface Consultation {
   id: string
   tenant_id: string
@@ -552,6 +575,7 @@ export interface Consultation {
   draft_prescriptions: PrescriptionDraft[]
   draft_applications: ApplicationDraft[]
   draft_procedures: ProcedureDraft[]
+  draft_exams: ExamRequest[]
   attachments: unknown[]
   completion_percent: number
   last_saved_at: string | null
@@ -578,8 +602,9 @@ export interface MedicalRecord {
   soap: Soap
   vitals: Vitals
   diagnoses: Diagnosis[]
-  prescriptions: unknown[]
+  prescriptions: PrescriptionSnapshot[]
   vaccines: unknown[]
+  exams: ExamRequest[]
   attachments: unknown[]
   signed_at: string
   signed_by_id: string
@@ -641,6 +666,7 @@ export interface Location {
   id: string
   name: string
   address: string | null
+  phone?: string | null
   is_primary: boolean
 }
 
@@ -650,7 +676,38 @@ export interface Organization {
   tax_id: string
   slug: string
   timezone: string
+  print_settings: PrintSettings
   locations: Location[]
+}
+
+export type PaperSize = 'half_letter' | 'letter'
+
+/** Paper for prescriptions, orders, certificates and slips; letterhead hides the header. */
+export interface PrintSettings {
+  paper: PaperSize
+  letterhead: boolean
+}
+
+export type CertificateKind = 'attendance' | 'rest'
+
+/** A constancia médica issued from a signed record. */
+export interface MedicalCertificate {
+  id: string
+  code: string
+  patient_id: string
+  record_id: string
+  doctor_id: string
+  doctor_name: string | null
+  kind: CertificateKind
+  issued_at: string
+  rest_from: string | null
+  rest_days: number | null
+  rest_until: string | null
+  diagnosis: string | null
+  remarks: string | null
+  addressee: string | null
+  voided_at: string | null
+  void_reason: string | null
 }
 
 /** An in-clinic application indicated during a consultation (issued as an order on signing). */

@@ -74,6 +74,7 @@ class SqlUserRepository:
         row.sex = str(user.sex) if user.sex else None
         row.specialty = user.specialty
         row.phone = user.phone
+        row.jvpm = user.jvpm
         row.must_change_password = user.must_change_password
         row.preferences = _prefs_to_json(user)
         row.permission_adjustments = adjustments_to_json(user.permission_adjustments)

@@ -26,6 +26,7 @@ from medicore.domain.repositories import (
     DoctorProfileRepository,
     FeeScheduleRepository,
     InsurerRepository,
+    MedicalCertificateRepository,
     MedicalDocumentRepository,
     MedicalRecordRepository,
     NotificationRepository,
@@ -71,6 +72,7 @@ class UnitOfWork(Protocol):
     medical_records: MedicalRecordRepository
     prescriptions: PrescriptionRepository
     documents: MedicalDocumentRepository
+    certificates: MedicalCertificateRepository
     availability: DoctorAvailabilityRepository
     fees: FeeScheduleRepository
     users: UserRepository

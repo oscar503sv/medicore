@@ -17,6 +17,7 @@ from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.entities.fee_schedule import FeeSchedule
 from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.job_run import JobRun
+from medicore.domain.entities.medical_certificate import MedicalCertificate
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
@@ -55,6 +56,7 @@ class InMemoryStore:
     documents: dict[UUID, MedicalDocument] = field(default_factory=dict)
     availability: dict[UUID, DoctorAvailability] = field(default_factory=dict)
     fees: dict[UUID, FeeSchedule] = field(default_factory=dict)
+    certificates: dict[UUID, MedicalCertificate] = field(default_factory=dict)
     notifications: dict[UUID, Notification] = field(default_factory=dict)
     audit: dict[UUID, AuditLog] = field(default_factory=dict)
     role_permission_overrides: dict[UUID, RolePermissionOverride] = field(default_factory=dict)

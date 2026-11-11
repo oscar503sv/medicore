@@ -46,6 +46,12 @@ class TenantModel(Base):
     practice_model: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="associated", default="associated"
     )
+    print_paper: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="half_letter", default="half_letter"
+    )
+    print_letterhead: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )
@@ -64,6 +70,7 @@ class LocationModel(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     tenant: Mapped[TenantModel] = relationship("TenantModel", back_populates="locations")

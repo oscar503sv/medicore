@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { FilePen, ShieldCheck } from 'lucide-react'
 import { recordsApi } from '@/api/records'
 import { AmendRecordModal } from '@/components/records/AmendRecordModal'
+import { RecordCertificates, RecordPrintActions } from '@/components/records/RecordDocuments'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -72,6 +73,10 @@ export function RecordDrawer({
             </div>
           </div>
 
+          <div className="mt-4">
+            <RecordPrintActions record={record} />
+          </div>
+
           {/* Vitals */}
           {Object.values(record.vitals).some((v) => v !== null) && (
             <section className="mt-5">
@@ -120,20 +125,37 @@ export function RecordDrawer({
             <section className="mt-6">
               <p className="eyebrow mb-2">{t('consult.prescriptions')}</p>
               <div className="space-y-1.5">
-                {record.prescriptions.map((rx, i) => {
-                  const p = rx as { drug: string; dose: string; schedule: string }
-                  return (
-                    <div key={i} className="rounded-lg border border-line px-3 py-2">
-                      <p className="text-sm font-medium text-tx">{p.drug}</p>
-                      <p className="text-xs text-tx-3">
-                        {p.dose} · {p.schedule}
-                      </p>
-                    </div>
-                  )
-                })}
+                {record.prescriptions.map((p, i) => (
+                  <div key={i} className="rounded-lg border border-line px-3 py-2">
+                    <p className="text-sm font-medium text-tx">{p.drug}</p>
+                    <p className="text-xs text-tx-3">
+                      {p.dose} · {p.schedule}
+                    </p>
+                  </div>
+                ))}
               </div>
             </section>
           )}
+
+          {/* Exam orders */}
+          {record.exams.length > 0 && (
+            <section className="mt-6">
+              <p className="eyebrow mb-2">{t('record.exams')}</p>
+              <div className="space-y-1.5">
+                {record.exams.map((e, i) => (
+                  <div key={i} className="rounded-lg border border-line px-3 py-2">
+                    <p className="text-sm font-medium text-tx">{e.name}</p>
+                    <p className="text-xs text-tx-3">
+                      {t(`exam.kind.${e.kind}`)}
+                      {e.notes ? ` · ${e.notes}` : ''}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <RecordCertificates recordId={record.id} />
 
           {/* Signer */}
           <div className="mt-8 flex items-center gap-2 border-t border-line pt-5 text-[13px] text-tx-3">

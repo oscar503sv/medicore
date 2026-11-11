@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from medicore.application.use_cases.consultations import (
     AddApplicationDraft,
     AddDiagnosis,
+    AddExam,
     AddPrescriptionDraft,
     AddProcedureDraft,
     AutosaveConsultation,
@@ -16,6 +17,7 @@ from medicore.application.use_cases.consultations import (
     GetConsultation,
     RemoveApplicationDraft,
     RemoveDiagnosis,
+    RemoveExam,
     RemovePrescriptionDraft,
     RemoveProcedureDraft,
     SignConsultation,
@@ -25,6 +27,7 @@ from medicore.application.use_cases.consultations import (
 from medicore.domain.entities.application import ApplicationDraft
 from medicore.domain.entities.prescription import PrescriptionDraft
 from medicore.domain.shared.identifiers import AppointmentId, ConsultationId, ProcedureTypeId
+from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
@@ -34,6 +37,7 @@ from medicore.presentation.schemas.consultations import (
     AutosaveRequest,
     ConsultationResponse,
     DiagnosisRequest,
+    ExamRequestSchema,
     PrescriptionDraftRequest,
     ProcedureDraftRequest,
     SignRequest,
@@ -167,6 +171,21 @@ def remove_procedure(
     c = RemoveProcedureDraft(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id), index
     )
+    return ser_consultation(c, uow)
+
+
+@router.post("/{consultation_id}/exams", response_model=ConsultationResponse)
+def add_exam(
+    consultation_id: str, body: ExamRequestSchema, actor: Actor, uow: UoW, clock: Clock
+):
+    exam = ExamRequest(name=body.name, kind=body.kind, notes=body.notes)
+    c = AddExam(uow, clock).execute(actor, ConsultationId.parse(consultation_id), exam)
+    return ser_consultation(c, uow)
+
+
+@router.delete("/{consultation_id}/exams/{index}", response_model=ConsultationResponse)
+def remove_exam(consultation_id: str, index: int, actor: Actor, uow: UoW, clock: Clock):
+    c = RemoveExam(uow, clock).execute(actor, ConsultationId.parse(consultation_id), index)
     return ser_consultation(c, uow)
 
 

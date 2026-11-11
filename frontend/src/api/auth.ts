@@ -36,7 +36,12 @@ export const authApi = {
 
   getMyProfile: () => api.get<MyProfile>('/auth/me').then((r) => r.data),
 
-  updateMyProfile: (payload: { name?: string; phone?: string | null; bio?: string | null }) =>
+  updateMyProfile: (payload: {
+    name?: string
+    phone?: string | null
+    bio?: string | null
+    jvpm?: string | null
+  }) =>
     api.patch<MyProfile>('/auth/me', payload).then((r) => r.data),
 
   listSessions: () =>

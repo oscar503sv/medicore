@@ -9,12 +9,15 @@ from medicore.application.use_cases.organization import (
     GetOrganization,
     UpdateLocation,
     UpdateOrganization,
+    UpdatePrintSettings,
 )
 from medicore.domain.shared.identifiers import LocationId
+from medicore.domain.value_objects.print_settings import PrintSettings
 from medicore.presentation.dependencies import Actor, Clock, UoW
 from medicore.presentation.schemas.organization import (
     AddLocationRequest,
     OrganizationResponse,
+    PrintSettingsSchema,
     UpdateLocationRequest,
     UpdateOrganizationRequest,
 )
@@ -40,7 +43,8 @@ def update_organization(body: UpdateOrganizationRequest, actor: Actor, uow: UoW,
 @router.post("/locations", response_model=OrganizationResponse, status_code=201)
 def add_location(body: AddLocationRequest, actor: Actor, uow: UoW, clock: Clock):
     tenant = AddLocation(uow, clock).execute(
-        actor, name=body.name, address=body.address, is_primary=body.is_primary
+        actor, name=body.name, address=body.address, is_primary=body.is_primary,
+        phone=body.phone,
     )
     return ser_tenant(tenant)
 
@@ -52,3 +56,9 @@ def update_location(
     changes = {k: v for k, v in body.model_dump(exclude_none=True).items()}
     tenant = UpdateLocation(uow, clock).execute(actor, LocationId.parse(location_id), **changes)
     return ser_tenant(tenant)
+
+
+@router.put("/print-settings", response_model=OrganizationResponse)
+def update_print_settings(body: PrintSettingsSchema, actor: Actor, uow: UoW, clock: Clock):
+    settings = PrintSettings(paper=body.paper, letterhead=body.letterhead)
+    return ser_tenant(UpdatePrintSettings(uow, clock).execute(actor, settings))

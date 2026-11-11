@@ -154,3 +154,33 @@ body {
     display: none;
   }
 }
+
+/* ─── Printable documents ────────────────────────────────────────────────── */
+/* The sheet is always black on white, whatever the theme. On screen it previews the paper
+   with its margins as padding; on paper the @page margins (set by the print view) apply. */
+.print-sheet {
+  background: #fff;
+  color: #111;
+  padding: var(--sheet-margin);
+  font-size: 11pt;
+  line-height: 1.45;
+}
+@media print {
+  html,
+  body {
+    background: #fff !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-sheet {
+    width: auto !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+  .print-avoid-break {
+    break-inside: avoid;
+  }
+}

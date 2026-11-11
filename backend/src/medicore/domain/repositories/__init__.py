@@ -22,6 +22,9 @@ from medicore.domain.repositories.doctor_availability_repository import (
 )
 from medicore.domain.repositories.fee_schedule_repository import FeeScheduleRepository
 from medicore.domain.repositories.insurer_repository import InsurerRepository
+from medicore.domain.repositories.medical_certificate_repository import (
+    MedicalCertificateRepository,
+)
 from medicore.domain.repositories.medical_document_repository import (
     MedicalDocumentRepository,
 )
@@ -69,6 +72,7 @@ __all__ = [
     "DoctorAvailabilityRepository",
     "FeeScheduleRepository",
     "InsurerRepository",
+    "MedicalCertificateRepository",
     "MedicalDocumentRepository",
     "MedicalRecordRepository",
     "NotificationRepository",

@@ -30,6 +30,7 @@ class UserModel(Base):
     sex: Mapped[str | None] = mapped_column(String(10), nullable=True)
     specialty: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    jvpm: Mapped[str | None] = mapped_column(String(20), nullable=True)
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )

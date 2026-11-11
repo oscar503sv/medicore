@@ -23,7 +23,7 @@ from medicore.application.common.quotas import ensure_seat_for
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.unit_of_work import UnitOfWork
-from medicore.domain.entities.user import User
+from medicore.domain.entities.user import User, normalize_jvpm
 from medicore.domain.enums import Role, Sex, UserStatus
 from medicore.domain.repositories._support import Page, Paging, UserFilter
 from medicore.domain.shared.identifiers import UserId
@@ -43,6 +43,7 @@ class InviteUserCommand:
     sex: Sex | None = None
     phone: str | None = None
     specialty: str | None = None
+    jvpm: str | None = None
 
 
 class ListUsers:
@@ -91,6 +92,7 @@ class InviteUser:
             sex=cmd.sex,
             specialty=cmd.specialty,
             phone=cmd.phone,
+            jvpm=normalize_jvpm(cmd.jvpm),
             must_change_password=True,
             joined_at=self._clock.now(),
         )
@@ -170,7 +172,9 @@ class UpdateUser:
             raise EntityNotFound("User", user_id)
         new_role = Role(changes["role"]) if changes.get("role") is not None else user.role
         ensure_acts_on_admins(actor, user.role, new_role)
-        allowed = {"name", "role", "sex", "phone", "specialty"}
+        allowed = {"name", "role", "sex", "phone", "specialty", "jvpm"}
+        if "jvpm" in changes:
+            changes["jvpm"] = normalize_jvpm(changes["jvpm"])  # type: ignore[arg-type]
         previous_role = user.role
         with self._uow:
             if changes.get("role") is not None and user.is_active:

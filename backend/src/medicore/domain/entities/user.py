@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from medicore.domain.enums import LangPref, Role, Sex, ThemePref, UserStatus
+from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import (
     DoctorProfileId,
     LocationId,
@@ -26,6 +27,21 @@ def derive_initials(name: str) -> str:
     return (parts[0][0] + parts[-1][0]).upper()
 
 
+JVPM_MAX_DIGITS = 10
+
+
+def normalize_jvpm(value: str | None) -> str | None:
+    """A doctor's registration number with the Junta de Vigilancia de la Profesión Médica,
+    printed on prescriptions and certificates: digits only; blank clears it."""
+    if value is None or not value.strip():
+        return None
+    number = value.strip()
+    if not number.isdigit() or len(number) > JVPM_MAX_DIGITS:
+        raise InvalidValueObject("the JVPM number must be digits only", code="user.invalid_jvpm",
+                                 max=JVPM_MAX_DIGITS)
+    return number
+
+
 @dataclass(slots=True)
 class User:
     """An access account belonging to exactly one tenant."""
@@ -40,6 +56,7 @@ class User:
     sex: Sex | None = None
     specialty: str | None = None
     phone: str | None = None
+    jvpm: str | None = None  # doctors: registration number printed on their documents
     must_change_password: bool = False
     preferences: UserPreferences = field(default_factory=UserPreferences)
     # Exceptions to the role's permissions (only honored on plans with per-user permissions).

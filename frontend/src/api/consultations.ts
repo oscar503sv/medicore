@@ -1,5 +1,12 @@
 import { api } from './client'
-import type { ApplicationDraft, Consultation, MedicalRecord, Soap, Vitals } from '@/types'
+import type {
+  ApplicationDraft,
+  Consultation,
+  ExamKind,
+  MedicalRecord,
+  Soap,
+  Vitals,
+} from '@/types'
 
 export const consultationsApi = {
   get: (id: string) =>
@@ -50,6 +57,12 @@ export const consultationsApi = {
 
   removeProcedure: (id: string, index: number) =>
     api.delete<Consultation>(`/consultations/${id}/procedures/${index}`).then((r) => r.data),
+
+  addExam: (id: string, payload: { name: string; kind: ExamKind; notes?: string | null }) =>
+    api.post<Consultation>(`/consultations/${id}/exams`, payload).then((r) => r.data),
+
+  removeExam: (id: string, index: number) =>
+    api.delete<Consultation>(`/consultations/${id}/exams/${index}`).then((r) => r.data),
 
   sign: (id: string) =>
     api.post<MedicalRecord>(`/consultations/${id}/sign`, {}).then((r) => r.data),

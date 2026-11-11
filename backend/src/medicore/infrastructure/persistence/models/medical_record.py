@@ -37,6 +37,7 @@ class MedicalRecordModel(Base):
     diagnoses: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     prescriptions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     vaccines: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    exams: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     attachments: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     signed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     signed_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)

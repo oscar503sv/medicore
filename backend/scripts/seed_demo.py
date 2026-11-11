@@ -66,9 +66,14 @@ from medicore.application.use_cases.appointments import (
     RescheduleAppointment,
 )
 from medicore.application.use_cases.availability import AddAvailabilityException
+from medicore.application.use_cases.certificates import (
+    IssueCertificateCommand,
+    IssueMedicalCertificate,
+)
 from medicore.application.use_cases.consultations import (
     AddApplicationDraft,
     AddDiagnosis,
+    AddExam,
     AddPrescriptionDraft,
     AddProcedureDraft,
     AutosaveConsultation,
@@ -130,7 +135,9 @@ from medicore.domain.enums import (
     ApplicationSite,
     AppointmentType,
     AvailabilityExceptionKind,
+    CertificateKind,
     DocumentKind,
+    ExamKind,
     InjectionSite,
     PracticeModel,
     PrescriptionStatus,
@@ -162,6 +169,7 @@ from medicore.domain.shared.identifiers import (
 )
 from medicore.domain.value_objects.blood_type import BloodType
 from medicore.domain.value_objects.contact_info import ContactInfo
+from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.fee import fee
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.slug import Slug
@@ -410,6 +418,50 @@ PROCEDURE_PRICES: dict[str, int] = {
 }
 FEE_DISCOUNTS = ["Adulto mayor", "Cortesía", "Paciente frecuente", "Descuento por convenio"]
 
+# Exams a doctor of each specialty usually orders (name, kind, notes).
+EXAM_ORDERS = {
+    "Medicina General": [
+        ("Hemograma completo", ExamKind.LAB, None),
+        ("Glucosa en ayunas", ExamKind.LAB, "Ayuno de 8 horas"),
+        ("Examen general de orina", ExamKind.LAB, None),
+        ("Examen general de heces", ExamKind.LAB, None),
+        ("Perfil lipídico", ExamKind.LAB, "Ayuno de 12 horas"),
+        ("Radiografía de tórax", ExamKind.IMAGING, "PA y lateral"),
+    ],
+    "Cardiología": [
+        ("Perfil lipídico", ExamKind.LAB, "Ayuno de 12 horas"),
+        ("Electrocardiograma", ExamKind.OTHER, None),
+        ("Ecocardiograma", ExamKind.IMAGING, None),
+        ("Creatinina sérica", ExamKind.LAB, None),
+    ],
+    "Pediatría": [
+        ("Hemograma completo", ExamKind.LAB, None),
+        ("Examen general de orina", ExamKind.LAB, None),
+        ("Examen general de heces", ExamKind.LAB, None),
+    ],
+    "Dermatología": [
+        ("Examen micológico directo (KOH)", ExamKind.LAB, None),
+        ("Hemograma completo", ExamKind.LAB, None),
+    ],
+    "Ginecología": [
+        ("Ultrasonografía pélvica", ExamKind.IMAGING, "Con vejiga llena"),
+        ("Ultrasonografía transvaginal", ExamKind.IMAGING, None),
+        ("Prueba de embarazo (β-hCG)", ExamKind.LAB, None),
+        ("Citología cervicovaginal", ExamKind.LAB, None),
+        ("Mamografía", ExamKind.IMAGING, "Bilateral"),
+    ],
+    "Traumatología": [
+        ("Radiografía de rodilla", ExamKind.IMAGING, "AP y lateral"),
+        ("Radiografía de columna lumbar", ExamKind.IMAGING, None),
+        ("Resonancia magnética", ExamKind.IMAGING, None),
+    ],
+    "Endocrinología": [
+        ("Perfil tiroideo (TSH, T4 libre)", ExamKind.LAB, None),
+        ("Hemoglobina glicosilada (HbA1c)", ExamKind.LAB, None),
+        ("Glucosa en ayunas", ExamKind.LAB, "Ayuno de 8 horas"),
+    ],
+}
+
 PROCEDURE_ORDERS = {
     "Medicina General": [
         ("Sutura de herida", "Herida cortante de 3 cm en antebrazo izquierdo"),
@@ -566,6 +618,8 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
         role=role, status=UserStatus.ACTIVE,
         sex=Sex.FEMALE if female else Sex.MALE, specialty=specialty,
         phone=f"7{RNG.randint(100, 999)}-{RNG.randint(1000, 9999)}",
+        # Doctors sign prescriptions with their (fictitious) board number.
+        jvpm=str(RNG.randint(10000, 29999)) if role == Role.DOCTOR else None,
         # A populated demo clinic needs no first-login checklist.
         preferences=UserPreferences(welcome_seen=True, onboarding_dismissed=True),
     )
@@ -609,7 +663,8 @@ def get_or_create_tenant(
     tenant = Tenant(
         id=tid, legal_name=legal_name, tax_id=tax_id, slug=Slug(slug), timezone=TIMEZONE,
         subscription=DEMO_SUBSCRIPTIONS[slug], practice_model=DEMO_PRACTICE_MODELS[slug],
-        locations=[Location(id=LocationId.new(), tenant_id=tid, name=location, is_primary=True)],
+        locations=[Location(id=LocationId.new(), tenant_id=tid, name=location, is_primary=True,
+                            phone=f"2{RNG.randint(200, 299)}-{RNG.randint(1000, 9999)}")],
     )
     uow = SqlAlchemyUnitOfWork(session, tid)
     with uow:
@@ -1011,6 +1066,12 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
             ApplicationDraft(drug=drug, dose=dose, route=route, doses_total=n,
                              interval_hours=every, observation_minutes=obs, instructions=notes),
         )
+    exams = EXAM_ORDERS.get(c.specialty[doctor.id], EXAM_ORDERS["Medicina General"])
+    if RNG.random() < 0.3:
+        for name, kind, notes in RNG.sample(exams, min(len(exams), RNG.choice([1, 1, 2, 3]))):
+            AddExam(c.uow(), c.at(start + timedelta(minutes=15))).execute(
+                me, consultation.id, ExamRequest(name=name, kind=kind, notes=notes))
+        c.count("órdenes de exámenes")
     orders = PROCEDURE_ORDERS.get(c.specialty[doctor.id])
     if orders and c.has(AddonModule.PROCEDURES) and RNG.random() < 0.12:
         name, indication = RNG.choice(orders)
@@ -1023,6 +1084,17 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
         me, SignConsultationCommand(consultation_id=consultation.id))
     c.signed.append(record)
     c.count("consultas firmadas")
+    if RNG.random() < 0.06:  # a rest or attendance certificate for work or school
+        rest = RNG.random() < 0.7
+        IssueMedicalCertificate(c.uow(), c.codes(), c.at(start + timedelta(minutes=28))).execute(
+            me, IssueCertificateCommand(
+                record_id=record.id,
+                kind=CertificateKind.REST if rest else CertificateKind.ATTENDANCE,
+                rest_from=start.date() if rest else None,
+                rest_days=RNG.choice([1, 2, 3, 3, 5]) if rest else None,
+                include_diagnosis=RNG.random() < 0.4,
+                addressee=RNG.choice([None, "Recursos Humanos", "Dirección del centro escolar"])))
+        c.count("constancias médicas")
     if appt.charge.listed is not None and RNG.random() < 0.08:
         listed = appt.charge.listed.amount
         AdjustAppointmentFee(c.uow(), c.at(start + timedelta(minutes=30))).execute(

@@ -35,6 +35,7 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
@@ -71,6 +72,7 @@ class Consultation:
     draft_prescriptions: list[PrescriptionDraft] = field(default_factory=list)
     draft_applications: list[ApplicationDraft] = field(default_factory=list)
     draft_procedures: list[ProcedureDraft] = field(default_factory=list)
+    draft_exams: list[ExamRequest] = field(default_factory=list)
     attachments: list[AttachmentRef] = field(default_factory=list)
     status: ConsultationStatus = ConsultationStatus.DRAFT
     last_saved_at: datetime | None = None
@@ -123,6 +125,14 @@ class Consultation:
     def remove_procedure_draft(self, index: int) -> None:
         self._assert_draft()
         del self.draft_procedures[index]
+
+    def add_exam(self, exam: ExamRequest) -> None:
+        self._assert_draft()
+        self.draft_exams.append(exam)
+
+    def remove_exam(self, index: int) -> None:
+        self._assert_draft()
+        del self.draft_exams[index]
 
     def attach_document(self, ref: AttachmentRef) -> None:
         self._assert_draft()
@@ -218,6 +228,7 @@ class Consultation:
             diagnoses=tuple(self.diagnoses),
             prescriptions=tuple(p.snapshot() for p in issued),
             vaccines=vaccines,
+            exams=tuple(self.draft_exams),
             attachments=tuple(self.attachments),
         )
 

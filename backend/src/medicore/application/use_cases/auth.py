@@ -23,7 +23,7 @@ from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
 from medicore.application.ports.unit_of_work import UnitOfWork, UnitOfWorkFactory
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.auth_session import AuthSession
-from medicore.domain.entities.user import DoctorProfile
+from medicore.domain.entities.user import DoctorProfile, normalize_jvpm
 from medicore.domain.enums import LangPref, Role, Sex, ThemePref, UserStatus
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import (
@@ -303,6 +303,7 @@ class MyProfileDTO:
     specialty: str | None
     phone: str | None
     bio: str | None
+    jvpm: str | None = None
     permissions: tuple[str, ...] = ()
 
 
@@ -327,6 +328,7 @@ def _build_profile(uow: UnitOfWork, user_id: UserId) -> MyProfileDTO:
         specialty=user.specialty,
         phone=user.phone,
         bio=bio,
+        jvpm=user.jvpm,
         permissions=tuple(sorted(permissions)),
     )
 
@@ -346,9 +348,9 @@ class GetMyProfile:
 class UpdateMyProfile:
     """Update the actor's own editable profile fields.
 
-    Only ``name`` and ``phone`` are writable on the User; ``email``, ``role``, ``sex`` and
-    ``specialty`` are immutable here. ``bio`` is persisted on the doctor's DoctorProfile
-    (created on demand) and ignored for non-doctor users.
+    Only ``name``, ``phone`` and (for doctors) ``jvpm`` are writable on the User; ``email``,
+    ``role``, ``sex`` and ``specialty`` are immutable here. ``bio`` is persisted on the
+    doctor's DoctorProfile (created on demand) and ignored for non-doctor users.
     """
 
     def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
@@ -362,6 +364,7 @@ class UpdateMyProfile:
         name: str | None = None,
         phone: str | None = None,
         bio: str | None = None,
+        jvpm: str | None = None,
     ) -> MyProfileDTO:
         with self._factory.for_tenant(actor.tenant_id) as uow:
             user = uow.users.get_by_id(actor.user_id)
@@ -371,6 +374,8 @@ class UpdateMyProfile:
                 user.name = name
             if phone is not None:
                 user.phone = phone
+            if jvpm is not None and user.role == Role.DOCTOR:
+                user.jvpm = normalize_jvpm(jvpm)
             uow.users.save(user)
             if bio is not None and user.role == Role.DOCTOR:
                 profile = uow.doctor_profiles.get_by_user_id(actor.user_id)

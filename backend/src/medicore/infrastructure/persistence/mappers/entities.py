@@ -23,6 +23,7 @@ from medicore.domain.enums import (
     IcdVersion,
     LangPref,
     NotificationChannel,
+    PaperSize,
     PatientStatus,
     PracticeModel,
     PrescriptionStatus,
@@ -52,6 +53,7 @@ from medicore.domain.shared.identifiers import (
 from medicore.domain.value_objects.blood_type import BloodType
 from medicore.domain.value_objects.contact_info import ContactInfo
 from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
+from medicore.domain.value_objects.print_settings import PrintSettings
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.user_preferences import (
     NotificationPreferences,
@@ -62,6 +64,7 @@ from medicore.infrastructure.persistence.mappers._json import (
     dict_to_attachment,
     dict_to_diagnoses,
     dict_to_draft,
+    dict_to_exam,
     dict_to_procedure_draft,
     dict_to_snapshot,
     dict_to_soap,
@@ -92,6 +95,7 @@ def to_location(row: LocationModel) -> Location:
         tenant_id=TenantId.parse(row.tenant_id),
         name=row.name,
         address=row.address,
+        phone=row.phone,
         is_primary=row.is_primary,
     )
 
@@ -110,6 +114,11 @@ def to_tenant(row: TenantModel) -> Tenant:
         locations=locations,
         practice_model=PracticeModel(row.practice_model)
         if row.practice_model in PracticeModel else PracticeModel.ASSOCIATED,
+        print_settings=PrintSettings(
+            paper=PaperSize(row.print_paper) if row.print_paper in PaperSize
+            else PaperSize.HALF_LETTER,
+            letterhead=row.print_letterhead,
+        ),
         created_at=row.created_at,
     )
 
@@ -153,6 +162,7 @@ def to_user(row: UserModel) -> User:
         sex=Sex(row.sex) if row.sex else None,
         specialty=row.specialty,
         phone=row.phone,
+        jvpm=row.jvpm,
         must_change_password=row.must_change_password,
         preferences=_prefs_from_json(row.preferences or {}),
         permission_adjustments=adjustments_from_json(row.permission_adjustments or {}),
@@ -270,6 +280,7 @@ def to_consultation(row: ConsultationModel) -> Consultation:
             dict_to_application_draft(d) for d in (row.draft_applications or [])
         ],
         draft_procedures=[dict_to_procedure_draft(d) for d in (row.draft_procedures or [])],
+        draft_exams=[dict_to_exam(e) for e in (row.draft_exams or [])],
         attachments=[dict_to_attachment(a) for a in (row.attachments or [])],
         last_saved_at=row.last_saved_at,
     )
@@ -298,6 +309,7 @@ def to_medical_record(row: MedicalRecordModel) -> MedicalRecord:
         diagnoses=dict_to_diagnoses(row.diagnoses or []),
         prescriptions=tuple(dict_to_snapshot(p) for p in (row.prescriptions or [])),
         vaccines=tuple(dict_to_vaccine(v) for v in (row.vaccines or [])),
+        exams=tuple(dict_to_exam(e) for e in (row.exams or [])),
         attachments=tuple(dict_to_attachment(a) for a in (row.attachments or [])),
         signed_at=row.signed_at,
         signed_by_id=UserId.parse(row.signed_by_id),

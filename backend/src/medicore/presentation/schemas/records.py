@@ -44,6 +44,7 @@ class RecordResponse(BaseModel):
     diagnoses: list[dict[str, Any]]
     prescriptions: list[dict[str, Any]]
     vaccines: list[dict[str, Any]]
+    exams: list[dict[str, Any]] = []
     attachments: list[dict[str, Any]]
     signed_at: datetime
     signed_by_id: str

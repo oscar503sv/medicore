@@ -13,6 +13,7 @@ export const usersApi = {
     sex?: string | null
     phone?: string | null
     specialty?: string | null
+    jvpm?: string | null
   }) => api.post<User>('/users', payload).then((r) => r.data),
 
   update: (
@@ -23,6 +24,7 @@ export const usersApi = {
       sex?: string | null
       phone?: string | null
       specialty?: string | null
+      jvpm?: string | null
     },
   ) => api.patch<User>(`/users/${id}`, payload).then((r) => r.data),
 

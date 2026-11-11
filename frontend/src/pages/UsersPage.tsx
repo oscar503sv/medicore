@@ -38,6 +38,7 @@ interface UserFieldsState {
   sex: string
   phone: string
   specialty: string
+  jvpm: string
 }
 
 export function UsersPage() {
@@ -304,6 +305,16 @@ function UserFields({
           onChange={(e) => set({ specialty: e.target.value })}
         />
       </div>
+      {value.role === 'doctor' && (
+        <Input
+          label={t('user.jvpm')}
+          inputMode="numeric"
+          maxLength={10}
+          value={value.jvpm}
+          onChange={(e) => set({ jvpm: e.target.value.replace(/\D/g, '') })}
+          placeholder="12345"
+        />
+      )}
     </>
   )
 }
@@ -318,7 +329,16 @@ function InviteModal({
   onDone: () => void
 }) {
   const t = useT()
-  const empty = { name: '', email: '', role: 'nurse', sex: 'female', phone: '', specialty: '', password: '' }
+  const empty = {
+    name: '',
+    email: '',
+    role: 'nurse',
+    sex: 'female',
+    phone: '',
+    specialty: '',
+    jvpm: '',
+    password: '',
+  }
   const [form, setForm] = useState(empty)
 
   const invite = useMutation({
@@ -331,6 +351,7 @@ function InviteModal({
         sex: form.sex || null,
         phone: form.phone || null,
         specialty: form.specialty || null,
+        jvpm: form.role === 'doctor' ? form.jvpm || null : null,
       }),
     onSuccess: () => {
       toast(t('users.created_ok'))
@@ -410,6 +431,7 @@ function EditUserModal({
             sex: user.sex ?? 'female',
             phone: user.phone ?? '',
             specialty: user.specialty ?? '',
+            jvpm: user.jvpm ?? '',
           }
         : null,
     )
@@ -423,6 +445,7 @@ function EditUserModal({
         sex: form!.sex || null,
         phone: form!.phone || null,
         specialty: form!.specialty || null,
+        ...(form!.role === 'doctor' ? { jvpm: form!.jvpm } : {}),
       }),
     onSuccess: () => {
       toast(t('users.updated_ok'))

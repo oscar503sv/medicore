@@ -18,6 +18,7 @@ from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.entities.fee_schedule import FeeSchedule
 from medicore.domain.entities.job_run import JobRun
+from medicore.domain.entities.medical_certificate import MedicalCertificate
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
@@ -53,6 +54,7 @@ from medicore.domain.repositories._support import (
 )
 from medicore.domain.shared.identifiers import (
     AppointmentId,
+    CertificateId,
     ConsultationId,
     DocumentId,
     NotificationId,
@@ -1213,3 +1215,22 @@ class InMemoryAnalyticsReadModel(_Scoped):
             and _naive(since) <= _naive(r.recorded_at) < _naive(until)
             and (user_id is None or r.recorded_by_id == user_id)
         )
+
+
+class InMemoryMedicalCertificateRepository(_Scoped):
+    def get_by_id(self, certificate_id: CertificateId) -> MedicalCertificate | None:
+        c = self._store.certificates.get(certificate_id.value)
+        return c if c and c.tenant_id == self._tenant else None
+
+    def list_by_patient(self, patient_id: PatientId) -> list[MedicalCertificate]:
+        mine = [c for c in self._mine(self._store.certificates.values())
+                if c.patient_id == patient_id]
+        return sorted(mine, key=lambda c: c.issued_at, reverse=True)
+
+    def list_by_record(self, record_id: RecordId) -> list[MedicalCertificate]:
+        mine = [c for c in self._mine(self._store.certificates.values())
+                if c.record_id == record_id]
+        return sorted(mine, key=lambda c: c.issued_at, reverse=True)
+
+    def save(self, certificate: MedicalCertificate) -> None:
+        self._store.certificates[certificate.id.value] = certificate

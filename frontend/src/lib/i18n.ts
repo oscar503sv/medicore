@@ -6,6 +6,7 @@ import { obEn, obEs } from './i18n-onboarding'
 import { subEn, subEs } from './i18n-subscriptions'
 import { feeEn, feeEs } from './i18n-fees'
 import { analyticsEn, analyticsEs } from './i18n-analytics'
+import { printingEn, printingEs } from './i18n-printing'
 import { prcEn, prcEs } from './i18n-procedures'
 import { vaxEn, vaxEs } from './i18n-vaccination'
 
@@ -21,6 +22,7 @@ const es: Dict = {
   ...monEs,
   ...feeEs,
   ...analyticsEs,
+  ...printingEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -502,6 +504,17 @@ const es: Dict = {
   'err.plan.invalid_grace': 'Los días de gracia no son válidos.',
   'err.plan.invalid_trial': 'La duración de la prueba no es válida.',
   'err.plan.unavailable': 'El plan {plan} no existe o no está activo.',
+  'err.user.invalid_jvpm': 'El número de JVPM solo lleva dígitos (máximo {max}).',
+  'err.exam.invalid_name': 'Escribe el nombre del examen (máximo {max} caracteres).',
+  'err.exam.notes_too_long': 'Las indicaciones del examen son muy largas (máximo {max}).',
+  'err.certificate.rest_required': 'Indica desde cuándo y cuántos días de reposo.',
+  'err.certificate.rest_days_range': 'Los días de reposo van de 1 a {max}.',
+  'err.certificate.text_too_long': 'El texto es muy largo (máximo {max} caracteres).',
+  'err.certificate.void_reason_required': 'Escribe por qué anulas la constancia.',
+  'err.certificate.not_own': 'Solo el médico que firmó la consulta puede emitir o anular sus constancias.',
+  'err.print.nothing_to_print': 'Este documento no tiene nada que imprimir.',
+  'err.print.certificate_voided': 'La constancia está anulada y no se imprime.',
+  'err.print.doctor_required': 'Elige el médico cuya agenda quieres imprimir.',
   'err.analytics.not_allowed': 'No tienes acceso a las métricas.',
   'err.analytics.invalid_range':
     'Revisa el periodo: necesita una fecha de inicio y una de fin posterior, de hasta {max} días.',
@@ -1012,6 +1025,7 @@ const en: Dict = {
   ...monEn,
   ...feeEn,
   ...analyticsEn,
+  ...printingEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.update_available': 'A new version of Medicore is available.',
@@ -1478,6 +1492,17 @@ const en: Dict = {
   'err.plan.invalid_grace': 'The grace days are not valid.',
   'err.plan.invalid_trial': 'The trial length is not valid.',
   'err.plan.unavailable': 'Plan {plan} does not exist or is not active.',
+  'err.user.invalid_jvpm': 'The JVPM number is digits only (at most {max}).',
+  'err.exam.invalid_name': 'Enter the exam name (at most {max} characters).',
+  'err.exam.notes_too_long': 'The exam notes are too long (at most {max}).',
+  'err.certificate.rest_required': 'Enter when the rest starts and how many days.',
+  'err.certificate.rest_days_range': 'Rest days go from 1 to {max}.',
+  'err.certificate.text_too_long': 'The text is too long (at most {max} characters).',
+  'err.certificate.void_reason_required': 'Say why you void the certificate.',
+  'err.certificate.not_own': 'Only the doctor who signed the visit can issue or void its certificates.',
+  'err.print.nothing_to_print': 'This document has nothing to print.',
+  'err.print.certificate_voided': 'The certificate is voided and is not printed.',
+  'err.print.doctor_required': 'Choose the doctor whose agenda to print.',
   'err.analytics.not_allowed': "You don't have access to metrics.",
   'err.analytics.invalid_range':
     'Check the period: it needs a start date and a later end date, up to {max} days.',

@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 22 routers, 154 endpoints bajo /api/v1/
+    └── routers/         # 24 routers, 167 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -186,6 +186,25 @@ Los hallazgos pendientes están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).
 
 ---
 
+## Documentos imprimibles
+
+Todo documento se imprime desde el navegador (`/print/:kind/:id`; "Guardar como PDF" también funciona) con el encabezado de la clínica, los datos del paciente y el nombre y número de **JVPM** del médico. El tamaño de papel (**media carta** por defecto, o carta) y el papel membretado (el encabezado se deja en blanco) se configuran en **Ajustes → Organización → Impresión** y se pueden cambiar al imprimir.
+
+| Documento | Dónde | Notas |
+|---|---|---|
+| **Receta** | Consulta firmada (al firmar, en el expediente, en las recetas del paciente) | Incluye el *Plan* del SOAP como "Indicaciones generales" solo si el médico lo escribió (se puede omitir al imprimir) |
+| **Orden de exámenes** | Consulta firmada | Exámenes indicados en la consulta (laboratorio, imagen, otros) con atajos de los más comunes |
+| **Constancia médica** | Consulta firmada — solo la emite el médico que la firmó | Reposo/incapacidad (hasta 90 días, con fechas) o asistencia (horario de la consulta); diagnóstico solo si el paciente lo autoriza; código `CM-{año}-{n}`, reimprimible y anulable con motivo |
+| **Copia de expediente** | Consulta firmada | Signos vitales, SOAP, diagnósticos, recetas, vacunas y exámenes |
+| **Procedimiento** | Detalle del procedimiento | Indicaciones de cuidado, consentimiento para firmar en papel, solicitud de patología |
+| **Carné de vacunación** | Paciente → Vacunas | Dosis aplicadas y próximas |
+| **Comprobante de cita** | Citas | Fecha, médico, tipo y lugar — **nunca el precio** |
+| **Agenda del día** | Agenda (vista de día) | El día de un médico |
+
+Cada impresión queda en la auditoría (`document.printed`, con el documento y el paciente); las constancias además registran `certificate.issued` / `certificate.voided`.
+
+---
+
 ## Errores de la API
 
 Toda respuesta de error tiene la misma forma:
@@ -237,12 +256,12 @@ medicore/
         │                     # + records/ + settings/ + vaccination/ + applications/
         │                     # + procedures/ + analytics/
         │                     # + guards (RequireAuth…)
-        └── pages/            # 23 pantallas de clínica (Login, Dashboard, Analytics,
+        └── pages/            # 24 pantallas de clínica (Login, Dashboard, Analytics,
                               # Patients, PatientDetail, Appointments, Schedule,
                               # Consultation, Records, Availability, Insurers, Fees,
                               # Users, Settings, Audit, Permissions, Notifications,
                               # ChangePassword, Vaccination, Applications, Procedures,
-                              # ProcedureDetail, ProcedureCatalog)
+                              # ProcedureDetail, ProcedureCatalog, Print)
                               # + platform/ (5 pantallas de superadmin)
 ```
 
@@ -272,10 +291,11 @@ medicore/
 | **18** | Tarifas: precio por médico y tipo de cita, precio en el catálogo de procedimientos, copia del precio en cada cita y procedimiento, ajustes de cobro con motivo, procedimientos incluidos en la consulta, permisos `fees.manage_own` / `fees.manage_all` | ✅ Completada |
 | **19** | Niveles de analítica por plan (panel básico, de la clínica, métricas operativas) y complemento de analítica avanzada | ✅ Completada |
 | **20** | Métricas de la práctica por nivel (comparación de periodos, por médico, tendencia semanal, tipos, aseguradoras, mapa de calor, anticipación, pacientes que regresan, módulos), permisos `analytics.*` y modelo de la clínica (médicos asociados o empleados) | ✅ Completada |
+| **21** | Impresión: receta (con indicaciones generales), órdenes de exámenes, constancias médicas (reposo/asistencia, anulables), copia de expediente, documentos de procedimientos, carné de vacunación, comprobante de cita sin precio y agenda del día; media carta o carta, papel membretado, JVPM del médico, cada impresión auditada | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
-| — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible, inventario y facturación | 🗓️ A futuro |
-| — | Procedimientos: seguimiento del resultado de patología, nota imprimible, salas/equipo, inventario y facturación | 🗓️ A futuro |
+| — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible de la aplicación, inventario y facturación | 🗓️ A futuro |
+| — | Procedimientos: seguimiento del resultado de patología, salas/equipo, inventario y facturación | 🗓️ A futuro |
 
 ---
 
@@ -331,7 +351,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (581 tests)
+.venv/bin/pytest                          # suite completa (945 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -384,14 +404,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-581 tests en verde
-   120  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+945 tests en verde
+   242  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   240  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   399  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   171  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   222  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    50  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    82  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

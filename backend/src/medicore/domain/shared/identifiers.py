@@ -173,3 +173,8 @@ class SubscriptionPaymentId(Identifier):
 @dataclass(frozen=True, slots=True)
 class FeeScheduleId(Identifier):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class CertificateId(Identifier):
+    pass

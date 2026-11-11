@@ -19,6 +19,7 @@ from medicore.presentation.routers import (
     audit,
     auth,
     availability,
+    certificates,
     consultations,
     dashboard,
     diagnoses,
@@ -29,6 +30,7 @@ from medicore.presentation.routers import (
     patients,
     platform,
     prescriptions,
+    printing,
     procedures,
     records,
     role_permissions,
@@ -96,6 +98,8 @@ def create_app() -> FastAPI:
     app.include_router(diagnoses.router, prefix=API_PREFIX)
     app.include_router(prescriptions.router, prefix=API_PREFIX)
     app.include_router(records.router, prefix=API_PREFIX)
+    app.include_router(certificates.router, prefix=API_PREFIX)
+    app.include_router(printing.router, prefix=API_PREFIX)
     app.include_router(availability.router, prefix=API_PREFIX)
     app.include_router(fees.router, prefix=API_PREFIX)
     app.include_router(users.router, prefix=API_PREFIX)

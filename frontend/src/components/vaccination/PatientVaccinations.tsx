@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { addYears, differenceInMonths, format, parseISO } from 'date-fns'
-import { Ban, Building2, ChevronDown, FileText, Plus, Syringe } from 'lucide-react'
+import { Ban, Building2, ChevronDown, FileText, Plus, Printer, Syringe } from 'lucide-react'
 import {
   vaccinationsApi,
   type DoseState,
@@ -9,6 +9,7 @@ import {
   type VaccinationRecord,
   type VaccineStage,
 } from '@/api/vaccinations'
+import { openPrint } from '@/api/printing'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -116,6 +117,10 @@ export function PatientVaccinations({
           {pending === 0 && <Badge tone="ok">{t('vax.summary_upto')}</Badge>}
         </div>
         <div className="flex-1" />
+        <Button variant="outline" onClick={() => openPrint(`vaccination-card/${patientId}`)}>
+          <Printer className="h-4 w-4" />
+          {t('pr.btn.vaccination_card')}
+        </Button>
         {canRecord && (
           <Button variant="accent" onClick={() => setPreset({})}>
             <Plus className="h-4 w-4" />

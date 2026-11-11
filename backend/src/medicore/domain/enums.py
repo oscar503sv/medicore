@@ -292,3 +292,26 @@ class SubscriptionStatus(StrEnum):
     ACTIVE = "active"
     GRACE = "grace"  # expired, still fully usable while the grace days last
     READ_ONLY = "read_only"  # grace over: data can be read, nothing written
+
+
+class PaperSize(StrEnum):
+    """Paper for prescriptions, orders and other short documents (full documents such as
+    the record copy always print on letter)."""
+
+    HALF_LETTER = "half_letter"  # 5.5 × 8.5 in, the usual prescription pad
+    LETTER = "letter"
+
+
+class ExamKind(StrEnum):
+    """What an exam order asks for."""
+
+    LAB = "lab"
+    IMAGING = "imaging"
+    OTHER = "other"
+
+
+class CertificateKind(StrEnum):
+    """A medical certificate: proof that the patient was seen, or rest days (incapacidad)."""
+
+    ATTENDANCE = "attendance"
+    REST = "rest"

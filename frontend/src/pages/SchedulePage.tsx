@@ -1,9 +1,10 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Printer } from 'lucide-react'
 import { addDays, format, parseISO, startOfWeek } from 'date-fns'
 import { appointmentsApi, type BookingDoctor } from '@/api/appointments'
+import { openPrint } from '@/api/printing'
 import { PageHeader } from '@/components/PageHeader'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -169,6 +170,18 @@ export function SchedulePage() {
                   </option>
                 ))}
               </Select>
+            )}
+            {view === 'day' && (isDoctor || doctorId) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  openPrint(`agenda/${date}${doctorId && !isDoctor ? `?doctor=${doctorId}` : ''}`)
+                }
+              >
+                <Printer className="h-4 w-4" />
+                {t('pr.btn.agenda')}
+              </Button>
             )}
             <Button variant="outline" size="sm" onClick={() => go({ date: today })}>
               {t(view === 'week' ? 'sched.this_week' : 'sched.today')}

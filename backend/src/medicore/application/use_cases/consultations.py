@@ -29,6 +29,7 @@ from medicore.domain.shared.identifiers import (
     ProcedureTypeId,
     RecordId,
 )
+from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
@@ -249,6 +250,28 @@ class RemoveProcedureDraft(_ConsultationEditor):
         return consultation
 
 
+class AddExam(_ConsultationEditor):
+    """Order a lab, imaging or other exam; it is frozen into the record when signing."""
+
+    def execute(
+        self, actor: ActorContext, consultation_id: ConsultationId, exam: ExamRequest
+    ) -> Consultation:
+        consultation = self._load(actor, consultation_id)
+        consultation.add_exam(exam)
+        self._save(consultation)
+        return consultation
+
+
+class RemoveExam(_ConsultationEditor):
+    def execute(
+        self, actor: ActorContext, consultation_id: ConsultationId, index: int
+    ) -> Consultation:
+        consultation = self._load(actor, consultation_id)
+        consultation.remove_exam(index)
+        self._save(consultation)
+        return consultation
+
+
 class AttachDocument(_ConsultationEditor):
     def execute(
         self, actor: ActorContext, consultation_id: ConsultationId, ref: AttachmentRef
@@ -321,6 +344,7 @@ class SignConsultation:
                     prescriptions=len(result.prescriptions),
                     applications=len(result.applications),
                     procedures=len(result.procedures),
+                    exams=len(result.record.exams),
                     subject=subject(
                         result.record.code, patient.full_name if patient else None
                     ),

@@ -18,6 +18,7 @@ from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.enums import IcdVersion
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import LocationId
+from medicore.domain.value_objects.print_settings import PrintSettings
 
 
 class GetOrganization:
@@ -74,7 +75,8 @@ class UpdateOrganization:
 
 
 def open_location(
-    uow: UnitOfWork, tenant: Tenant, name: str, address: str | None, is_primary: bool = False
+    uow: UnitOfWork, tenant: Tenant, name: str, address: str | None, is_primary: bool = False,
+    phone: str | None = None,
 ) -> Location:
     """Add a site to the clinic within its plan's site limit (shared with the console)."""
     ensure_location_for(uow, tenant)
@@ -83,6 +85,7 @@ def open_location(
         tenant_id=tenant.id,
         name=name,
         address=address,
+        phone=(phone or "").strip() or None,
         is_primary=is_primary,
     )
     tenant.add_location(location)
@@ -95,14 +98,15 @@ class AddLocation:
         self._clock = clock
 
     def execute(
-        self, actor: ActorContext, name: str, address: str | None = None, is_primary: bool = False
+        self, actor: ActorContext, name: str, address: str | None = None,
+        is_primary: bool = False, phone: str | None = None,
     ) -> Tenant:
         ensure_permission(actor, Permission.LOCATIONS_MANAGE)
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", actor.tenant_id)
         with self._uow:
-            location = open_location(self._uow, tenant, name, address, is_primary)
+            location = open_location(self._uow, tenant, name, address, is_primary, phone)
             self._uow.tenants.save(tenant)
             self._uow.audit.append(
                 audit_entry(
@@ -133,11 +137,41 @@ class UpdateLocation:
             for key in ("name", "address"):
                 if key in changes:
                     setattr(location, key, changes[key])
+            if "phone" in changes:  # blank clears it
+                location.phone = (str(changes["phone"] or "")).strip() or None
             self._uow.tenants.save(tenant)
             self._uow.audit.append(
                 audit_entry(
                     actor, self._clock.now(), "location.updated", "Location", str(location_id),
                     subject=subject(location.name),
+                )
+            )
+            self._uow.commit()
+        return tenant
+
+
+class UpdatePrintSettings:
+    """Paper for the clinic's short documents and whether it prints on letterhead."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(self, actor: ActorContext, settings: PrintSettings) -> Tenant:
+        ensure_permission(actor, Permission.ORGANIZATION_MANAGE)
+        tenant = self._uow.tenants.get_by_id(actor.tenant_id)
+        if tenant is None:
+            raise EntityNotFound("Tenant", actor.tenant_id)
+        before = tenant.print_settings
+        with self._uow:
+            tenant.print_settings = settings
+            self._uow.tenants.save(tenant)
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "organization.print_settings_updated", "Tenant",
+                    str(tenant.id), subject=subject(tenant.legal_name),
+                    before={"paper": str(before.paper), "letterhead": before.letterhead},
+                    after={"paper": str(settings.paper), "letterhead": settings.letterhead},
                 )
             )
             self._uow.commit()

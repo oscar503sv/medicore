@@ -10,8 +10,9 @@ from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import VaccineAdministration
 from medicore.domain.entities.prescription import PrescriptionDraft, PrescriptionSnapshot
 from medicore.domain.entities.procedure import ProcedureDraft
-from medicore.domain.enums import ApplicationRoute, DocumentKind, ProcedurePerformer
+from medicore.domain.enums import ApplicationRoute, DocumentKind, ExamKind, ProcedurePerformer
 from medicore.domain.shared.identifiers import DocumentId, ProcedureTypeId
+from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.fee import FEE_CURRENCY
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.money import Money
@@ -190,6 +191,17 @@ def vaccine_to_dict(v: VaccineAdministration) -> dict:
 
 def dict_to_vaccine(d: dict) -> VaccineAdministration:
     return VaccineAdministration(name=d["name"], lot=d["lot"], dose=d["dose"], site=d["site"])
+
+
+# ── ExamRequest ───────────────────────────────────────────────────────────────
+def exam_to_dict(e: ExamRequest) -> dict:
+    return {"name": e.name, "kind": str(e.kind), "notes": e.notes}
+
+
+def dict_to_exam(d: dict) -> ExamRequest:
+    kind = d.get("kind")
+    return ExamRequest(name=d["name"], kind=ExamKind(kind) if kind in ExamKind else ExamKind.OTHER,
+                       notes=d.get("notes"))
 
 
 # ── ProcedureDraft ────────────────────────────────────────────────────────────

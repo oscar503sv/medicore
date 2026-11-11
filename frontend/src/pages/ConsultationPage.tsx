@@ -7,6 +7,8 @@ import { consultationsApi } from '@/api/consultations'
 import { diagnosesApi } from '@/api/diagnoses'
 import { ConsultationApplications } from '@/components/applications/ConsultationApplications'
 import { ConsultationProcedures } from '@/components/procedures/ConsultationProcedures'
+import { ConsultationExams } from '@/components/records/ConsultationExams'
+import { RecordPrintActions } from '@/components/records/RecordDocuments'
 import { Badge } from '@/components/ui/Badge'
 import { typeTone } from '@/components/ui/badgeTone'
 import { Button } from '@/components/ui/Button'
@@ -16,7 +18,7 @@ import { toast } from '@/components/ui/Toast'
 import { unitLabel } from '@/components/patients/vitalsData'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
-import type { Consultation, Patient, Soap, Vitals } from '@/types'
+import type { Consultation, MedicalRecord, Patient, Soap, Vitals } from '@/types'
 
 const VITAL_FIELDS: {
   key: keyof Vitals
@@ -63,6 +65,7 @@ export function ConsultationPage() {
   const [soap, setSoap] = useState<Soap | null>(null)
   const [completion, setCompletion] = useState(0)
   const [signOpen, setSignOpen] = useState(false)
+  const [signed, setSigned] = useState<MedicalRecord | null>(null)
   const [elapsed, setElapsed] = useState(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -100,10 +103,11 @@ export function ConsultationPage() {
   const sign = useMutation({
     mutationFn: () =>
       consultationsApi.sign(id),
-    onSuccess: () => {
+    onSuccess: (record) => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       toast(t('consult.signed_ok'))
-      navigate('/appointments')
+      setSignOpen(false)
+      setSigned(record) // offer the patient's documents before leaving
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -244,6 +248,7 @@ export function ConsultationPage() {
 
           <DiagnosesSection consultationId={id} consultation={data} />
           <PrescriptionsSection consultationId={id} consultation={data} />
+          <ConsultationExams consultationId={id} consultation={data} />
           {(canApplications || data.draft_applications.length > 0) && (
             <ConsultationApplications consultationId={id} consultation={data} />
           )}
@@ -277,6 +282,21 @@ export function ConsultationPage() {
             <Button loading={sign.isPending} onClick={() => sign.mutate()}>
               {t('consult.sign')}
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* After signing: print what the patient takes home */}
+      <Modal
+        open={!!signed}
+        onClose={() => navigate('/appointments')}
+        title={t('pr.after_sign_title')}
+      >
+        <div className="space-y-4 p-5">
+          <p className="text-sm text-tx-2">{t('pr.after_sign_desc')}</p>
+          {signed && <RecordPrintActions record={signed} />}
+          <div className="flex justify-end">
+            <Button onClick={() => navigate('/appointments')}>{t('pr.after_sign_done')}</Button>
           </div>
         </div>
       </Modal>

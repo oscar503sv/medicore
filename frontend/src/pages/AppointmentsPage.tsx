@@ -15,12 +15,14 @@ import {
   ChevronRight,
   Clock,
   Plus,
+  Printer,
   Search,
   Stethoscope,
   UserX,
   X,
 } from 'lucide-react'
 import { appointmentsApi } from '@/api/appointments'
+import { openPrint } from '@/api/printing'
 import { consultationsApi } from '@/api/consultations'
 import { errorMessage } from '@/api/client'
 import { NewAppointmentModal } from '@/components/appointments/NewAppointmentModal'
@@ -340,6 +342,15 @@ export function AppointmentsPage() {
                   const inactive = a.status === 'cancelled' || a.status === 'no_show'
                   const manageable = canManage && PENDING.has(a.status)
                   const menu: MenuItem[] = [
+                    ...(PENDING.has(a.status)
+                      ? [
+                          {
+                            label: t('pr.btn.appointment'),
+                            icon: Printer,
+                            onSelect: () => openPrint(`appointment/${a.id}`),
+                          },
+                        ]
+                      : []),
                     ...(a.status !== 'cancelled' && canPrice(a.doctor_id)
                       ? [
                           {

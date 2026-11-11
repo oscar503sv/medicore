@@ -27,6 +27,7 @@ from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
 from medicore.infrastructure.persistence.mappers._json import (
     attachment_to_dict,
     diagnoses_to_list,
+    exam_to_dict,
     snapshot_to_dict,
     soap_to_dict,
     time_range_to_dict,
@@ -46,6 +47,7 @@ def ser_user(u: User) -> dict:
         "sex": str(u.sex) if u.sex else None,
         "specialty": u.specialty,
         "phone": u.phone,
+        "jvpm": u.jvpm,
         "avatar_initials": u.avatar_initials,
         "last_seen_at": u.last_seen_at,
         "joined_at": u.joined_at,
@@ -142,6 +144,7 @@ def ser_my_profile(p: MyProfileDTO) -> dict:
         "specialty": p.specialty,
         "phone": p.phone,
         "bio": p.bio,
+        "jvpm": p.jvpm,
         "permissions": list(p.permissions),
     }
 
@@ -311,6 +314,7 @@ def ser_consultation(c: Consultation, uow=None) -> dict:
              "included": d.included}
             for d in c.draft_procedures
         ],
+        "draft_exams": [exam_to_dict(e) for e in c.draft_exams],
         "attachments": [attachment_to_dict(a) for a in c.attachments],
         "completion_percent": c.compute_completion(),
         "last_saved_at": c.last_saved_at,
@@ -341,6 +345,7 @@ def ser_record(
         "diagnoses": diagnoses_to_list(r.diagnoses),
         "prescriptions": [snapshot_to_dict(p) for p in r.prescriptions],
         "vaccines": [vaccine_to_dict(v) for v in r.vaccines],
+        "exams": [exam_to_dict(e) for e in r.exams],
         "attachments": [attachment_to_dict(a) for a in r.attachments],
         "signed_at": r.signed_at,
         "signed_by_id": str(r.signed_by_id),
@@ -406,11 +411,16 @@ def ser_tenant(t: Tenant, today: date | None = None) -> dict:
         "timezone": t.timezone,
         "status": str(t.status),
         "icd_version": str(t.icd_version),
+        "print_settings": {
+            "paper": str(t.print_settings.paper),
+            "letterhead": t.print_settings.letterhead,
+        },
         "locations": [
             {
                 "id": str(loc.id),
                 "name": loc.name,
                 "address": loc.address,
+                "phone": loc.phone,
                 "is_primary": loc.is_primary,
             }
             for loc in t.locations

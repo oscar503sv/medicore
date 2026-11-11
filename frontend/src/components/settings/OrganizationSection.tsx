@@ -10,11 +10,12 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
 import { useAuthStore } from '@/stores/auth'
-import type { Location, Organization } from '@/types'
+import type { Location, Organization, PaperSize, PrintSettings } from '@/types'
 
 export function OrganizationSection() {
   const t = useT()
@@ -121,7 +122,11 @@ export function OrganizationSection() {
                     {loc.name}
                     {loc.is_primary && <Badge tone="accent">{t('org.location_primary')}</Badge>}
                   </p>
-                  {loc.address && <p className="text-xs text-tx-3">{loc.address}</p>}
+                  {(loc.address || loc.phone) && (
+                    <p className="text-xs text-tx-3">
+                      {[loc.address, loc.phone].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                 </div>
               </div>
               {canManageLocations && (
@@ -134,6 +139,8 @@ export function OrganizationSection() {
           ))}
         </div>
       </Card>
+
+      <PrintSettingsCard org={org} canManage={canManage} onSaved={applyResult} />
 
       <LocationModal
         open={addOpen}
@@ -165,12 +172,14 @@ function LocationModal({
   const t = useT()
   const [name, setName] = useState('')
   const [address, setAddress] = useState('')
+  const [phone, setPhone] = useState('')
   const [isPrimary, setIsPrimary] = useState(false)
 
   useEffect(() => {
     if (open) {
       setName(location?.name ?? '')
       setAddress(location?.address ?? '')
+      setPhone(location?.phone ?? '')
       setIsPrimary(location?.is_primary ?? false)
     }
   }, [open, location])
@@ -178,8 +187,8 @@ function LocationModal({
   const save = useMutation({
     mutationFn: () =>
       location
-        ? organizationApi.updateLocation(location.id, { name, address })
-        : organizationApi.addLocation({ name, address, is_primary: isPrimary }),
+        ? organizationApi.updateLocation(location.id, { name, address, phone })
+        : organizationApi.addLocation({ name, address, phone, is_primary: isPrimary }),
     onSuccess: (data) => {
       onSaved(data)
       toast(t(location ? 'org.location_updated_ok' : 'org.location_added_ok'))
@@ -206,6 +215,13 @@ function LocationModal({
           value={address}
           onChange={(e) => setAddress(e.target.value)}
         />
+        <Input
+          label={t('settings.location_phone')}
+          value={phone}
+          maxLength={50}
+          placeholder="2222-3333"
+          onChange={(e) => setPhone(e.target.value)}
+        />
         {!location && (
           <label className="flex cursor-pointer items-center gap-2 text-sm text-tx-2">
             <Checkbox checked={isPrimary} onChange={(e) => setIsPrimary(e.target.checked)} />
@@ -222,5 +238,57 @@ function LocationModal({
         </div>
       </div>
     </Modal>
+  )
+}
+
+/** Paper for the clinic's short documents and whether it prints on letterhead. */
+function PrintSettingsCard({
+  org,
+  canManage,
+  onSaved,
+}: {
+  org: Organization
+  canManage: boolean
+  onSaved: (org: Organization) => void
+}) {
+  const t = useT()
+  const save = useMutation({
+    mutationFn: (settings: PrintSettings) => organizationApi.setPrintSettings(settings),
+    onSuccess: (data) => {
+      onSaved(data)
+      toast(t('settings.print_saved'))
+    },
+    onError: (err) => toast(errorMessage(err), 'danger'),
+  })
+  const current = org.print_settings
+  return (
+    <Card>
+      <CardHeader title={t('settings.print_title')} />
+      <div className="space-y-4 p-5">
+        <p className="text-[13px] text-tx-3">{t('settings.print_desc')}</p>
+        <div className={canManage ? '' : 'pointer-events-none opacity-60'}>
+          <Segmented<PaperSize>
+            value={current.paper}
+            onChange={(paper) => save.mutate({ ...current, paper })}
+            options={(['half_letter', 'letter'] as PaperSize[]).map((p) => ({
+              value: p,
+              label: t(`pr.paper.${p}`),
+            }))}
+          />
+        </div>
+        <label className="flex items-start gap-2.5">
+          <Checkbox
+            checked={current.letterhead}
+            disabled={!canManage || save.isPending}
+            onChange={(e) => save.mutate({ ...current, letterhead: e.target.checked })}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="block text-sm text-tx">{t('settings.print_letterhead')}</span>
+            <span className="block text-xs text-tx-3">{t('settings.print_letterhead_hint')}</span>
+          </span>
+        </label>
+      </div>
+    </Card>
   )
 }

@@ -48,6 +48,7 @@ class MyProfileResponse(BaseModel):
     specialty: str | None = None
     phone: str | None = None
     bio: str | None = None
+    jvpm: str | None = None
     permissions: list[str] = []
 
 
@@ -55,6 +56,7 @@ class UpdateMyProfileRequest(BaseModel):
     name: str | None = None
     phone: str | None = None
     bio: str | None = None
+    jvpm: str | None = None
 
 
 class SessionInfoResponse(BaseModel):

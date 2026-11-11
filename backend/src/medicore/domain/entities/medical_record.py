@@ -22,6 +22,7 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
@@ -66,12 +67,13 @@ class MedicalRecord:
     diagnoses: tuple[IcdCode, ...] = ()
     prescriptions: tuple[PrescriptionSnapshot, ...] = ()
     vaccines: tuple[VaccineAdministration, ...] = ()
+    exams: tuple[ExamRequest, ...] = ()  # exam orders issued in the consultation
     attachments: tuple[AttachmentRef, ...] = ()
     amends_record_id: RecordId | None = None  # set on amendments
 
     def __post_init__(self) -> None:
         # Normalize any list inputs to tuples so the aggregate is truly immutable.
-        for name in ("diagnoses", "prescriptions", "vaccines", "attachments"):
+        for name in ("diagnoses", "prescriptions", "vaccines", "exams", "attachments"):
             value = getattr(self, name)
             if not isinstance(value, tuple):
                 object.__setattr__(self, name, tuple(value))

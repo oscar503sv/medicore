@@ -214,12 +214,14 @@ function ProfileSection() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [bio, setBio] = useState('')
+  const [jvpm, setJvpm] = useState('')
   const [phoneTouched, setPhoneTouched] = useState(false)
 
   function reset() {
     setName(profile?.name ?? '')
     setPhone(profile?.phone ?? '')
     setBio(profile?.bio ?? '')
+    setJvpm(profile?.jvpm ?? '')
     setPhoneTouched(false)
   }
 
@@ -234,7 +236,7 @@ function ProfileSection() {
       authApi.updateMyProfile({
         name,
         phone: phone || null,
-        ...(profile?.role === 'doctor' ? { bio: bio || null } : {}),
+        ...(profile?.role === 'doctor' ? { bio: bio || null, jvpm } : {}),
       }),
     onSuccess: (updated) => {
       toast(t('settings.profile_saved'))
@@ -255,7 +257,7 @@ function ProfileSection() {
   const dirty =
     name !== profile.name ||
     phone !== (profile.phone ?? '') ||
-    (isDoctor && bio !== (profile.bio ?? ''))
+    (isDoctor && (bio !== (profile.bio ?? '') || jvpm !== (profile.jvpm ?? '')))
   const phoneInvalid = !isValidPhone(phone)
 
   return (
@@ -291,6 +293,19 @@ function ProfileSection() {
             error={phoneTouched && phoneInvalid ? t('patientform.phone_invalid') : undefined}
           />
           <Input label={t('users.col_specialty')} value={profile.specialty ?? ''} disabled />
+          {isDoctor && (
+            <div>
+              <Input
+                label={t('user.jvpm')}
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="12345"
+                value={jvpm}
+                onChange={(e) => setJvpm(e.target.value.replace(/\D/g, ''))}
+              />
+              <p className="mt-1 text-xs text-tx-3">{t('user.jvpm_hint')}</p>
+            </div>
+          )}
         </div>
 
         {isDoctor && (

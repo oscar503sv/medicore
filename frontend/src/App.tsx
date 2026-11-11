@@ -23,6 +23,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { NotificationsPage } from '@/pages/NotificationsPage'
 import { PatientDetailPage } from '@/pages/PatientDetailPage'
 import { PatientsPage } from '@/pages/PatientsPage'
+import { PrintPage } from '@/pages/PrintPage'
 import { ClinicDetailPage } from '@/pages/platform/ClinicDetailPage'
 import { ClinicsListPage } from '@/pages/platform/ClinicsListPage'
 import { GlobalAuditPage } from '@/pages/platform/GlobalAuditPage'
@@ -92,6 +93,16 @@ export function App() {
               <div className="h-screen">
                 <ConsultationPage />
               </div>
+            </RequireAuth>
+          }
+        />
+
+        {/* Printable documents, opened in their own tab (no shell chrome) */}
+        <Route
+          path="/print/:kind/:id"
+          element={
+            <RequireAuth>
+              <PrintPage />
             </RequireAuth>
           }
         />

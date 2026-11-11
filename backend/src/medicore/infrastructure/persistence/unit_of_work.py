@@ -31,6 +31,9 @@ from medicore.infrastructure.persistence.repositories.insurer import SqlInsurerR
 from medicore.infrastructure.persistence.repositories.login_throttle import (
     SqlLoginThrottleRepository,
 )
+from medicore.infrastructure.persistence.repositories.medical_certificate import (
+    SqlMedicalCertificateRepository,
+)
 from medicore.infrastructure.persistence.repositories.monitoring import (
     SqlErrorLogRepository,
     SqlJobLogRepository,
@@ -85,6 +88,7 @@ class SqlAlchemyUnitOfWork:
         self.documents = SqlMedicalDocumentRepository(session, tenant_id)
         self.availability = SqlDoctorAvailabilityRepository(session, tenant_id)
         self.fees = SqlFeeScheduleRepository(session, tenant_id)
+        self.certificates = SqlMedicalCertificateRepository(session, tenant_id)
         self.users = SqlUserRepository(session, tenant_id)
         self.doctor_profiles = SqlDoctorProfileRepository(session, tenant_id)
         self.notifications = SqlNotificationRepository(session, tenant_id)

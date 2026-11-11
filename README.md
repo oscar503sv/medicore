@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException with a translatable code
     ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
     ├── schemas/         # Pydantic request + response models per resource
-    └── routers/         # 22 routers, 154 endpoints under /api/v1/
+    └── routers/         # 24 routers, 167 endpoints under /api/v1/
 ```
 
 ### Multi-tenancy
@@ -186,6 +186,25 @@ Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ---
 
+## Printable documents
+
+Every document prints from the browser (`/print/:kind/:id`, "Save as PDF" works too) with the clinic's header, the patient strip and the doctor's name and **JVPM** number. Paper size (**half-letter** by default, or letter) and pre-printed letterhead (the header is left blank) are set in **Settings → Organization → Printing** and can be switched per print.
+
+| Document | Where | Notes |
+|---|---|---|
+| **Prescription** | Signed visit (after signing, the record, the patient's prescriptions) | Includes the SOAP *Plan* as "General instructions" only when the doctor wrote one (it can be left out per print) |
+| **Exam order** | Signed visit | Exams ordered during the consultation (lab, imaging, other) with one-click common picks |
+| **Medical certificate** | Signed visit — issued only by the doctor who signed it | Rest (up to 90 days, with dates) or attendance (visit hours); diagnosis only if the patient agrees; coded `CM-{year}-{n}`, reprintable and voidable with a reason |
+| **Record copy** | Signed visit | Vitals, SOAP, diagnoses, prescriptions, vaccines and exams |
+| **Procedure** | Procedure detail | Care instructions, consent form to sign on paper, pathology request |
+| **Vaccination card** | Patient → Vaccines | Doses given and upcoming |
+| **Appointment slip** | Appointments | Date, doctor, type and location — **never the price** |
+| **Daily agenda** | Schedule (day view) | One doctor's day |
+
+Each print is audited (`document.printed`, with the document and the patient); certificates add `certificate.issued` / `certificate.voided`.
+
+---
+
 ## API errors
 
 Every error response has the same shape:
@@ -237,12 +256,12 @@ medicore/
         │                     # + records/ + settings/ + vaccination/ + applications/
         │                     # + procedures/ + analytics/
         │                     # + guards (RequireAuth…)
-        └── pages/            # 23 clinic screens (Login, Dashboard, Analytics,
+        └── pages/            # 24 clinic screens (Login, Dashboard, Analytics,
                               # Patients, PatientDetail, Appointments, Schedule,
                               # Consultation, Records, Availability, Insurers, Fees,
                               # Users, Settings, Audit, Permissions, Notifications,
                               # ChangePassword, Vaccination, Applications, Procedures,
-                              # ProcedureDetail, ProcedureCatalog)
+                              # ProcedureDetail, ProcedureCatalog, Print)
                               # + platform/ (5 superadmin screens)
 ```
 
@@ -272,10 +291,11 @@ medicore/
 | **18** | Fees: price per doctor and appointment type, procedure catalog prices, the price copied onto each appointment and procedure, charge adjustments with a reason, procedures included in the consultation, `fees.manage_own` / `fees.manage_all` permissions | ✅ Done |
 | **19** | Analytics tiers per plan (basic dashboard, clinic dashboard, operational metrics) and the advanced-analytics add-on | ✅ Done |
 | **20** | Practice metrics per tier (period comparison, per doctor, weekly trend, types, insurers, heatmap, lead time, returning patients, modules), `analytics.*` permissions and the clinic's practice model (associated or employed doctors) | ✅ Done |
+| **21** | Printing: prescription (with general instructions), exam orders, medical certificates (rest/attendance, voidable), record copy, procedure documents, vaccination card, appointment slip without price and daily agenda; half-letter or letter, letterhead, doctor JVPM, every print audited | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
-| — | Applications: frequent-drug catalog, printable record, inventory and billing | 🗓️ Future |
-| — | Procedures: pathology result tracking, printable note, rooms/equipment, inventory and billing | 🗓️ Future |
+| — | Applications: frequent-drug catalog, printable application record, inventory and billing | 🗓️ Future |
+| — | Procedures: pathology result tracking, rooms/equipment, inventory and billing | 🗓️ Future |
 
 ---
 
@@ -331,7 +351,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (581 tests)
+.venv/bin/pytest                          # full suite (945 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -384,14 +404,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-581 passing tests
-   120  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+945 passing tests
+   242  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   240  — application (auth, sessions, appointments, consultations, records, notifications,
+   399  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   171  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   222  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    50  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    82  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

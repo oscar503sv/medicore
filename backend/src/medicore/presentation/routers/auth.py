@@ -146,7 +146,7 @@ def update_my_profile(
     body: UpdateMyProfileRequest, actor: Actor, factory: UoWFactory, clock: Clock
 ):
     profile = UpdateMyProfile(factory, clock).execute(
-        actor, name=body.name, phone=body.phone, bio=body.bio
+        actor, name=body.name, phone=body.phone, bio=body.bio, jvpm=body.jvpm
     )
     return ser_my_profile(profile)
 

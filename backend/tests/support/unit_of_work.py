@@ -23,6 +23,7 @@ from tests.support.repositories import (
     InMemoryInsurerRepository,
     InMemoryJobLogRepository,
     InMemoryLoginThrottleRepository,
+    InMemoryMedicalCertificateRepository,
     InMemoryMedicalDocumentRepository,
     InMemoryMedicalRecordRepository,
     InMemoryMonitoringReadModel,
@@ -60,6 +61,7 @@ class InMemoryUnitOfWork:
         self.documents = InMemoryMedicalDocumentRepository(store, tenant_id)
         self.availability = InMemoryDoctorAvailabilityRepository(store, tenant_id)
         self.fees = InMemoryFeeScheduleRepository(store, tenant_id)
+        self.certificates = InMemoryMedicalCertificateRepository(store, tenant_id)
         self.users = InMemoryUserRepository(store, tenant_id)
         self.doctor_profiles = InMemoryDoctorProfileRepository(store, tenant_id)
         self.notifications = InMemoryNotificationRepository(store, tenant_id)

@@ -9,9 +9,11 @@ import {
   FileSignature,
   FlaskConical,
   PenLine,
+  Printer,
   XCircle,
 } from 'lucide-react'
 import { errorMessage } from '@/api/client'
+import { openPrint } from '@/api/printing'
 import { patientsApi } from '@/api/patients'
 import {
   proceduresApi,
@@ -237,12 +239,32 @@ export function ProcedureDetailPage() {
               {` · ${t(`prc.performer.${p.performer}`)}`}
             </p>
           </div>
-          {editable && (
-            <Button variant="outline" size="sm" onClick={() => setCancelling(true)}>
-              <XCircle className="h-4 w-4" />
-              {t('prc.cancel')}
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {p.status !== 'cancelled' && p.requires_consent && (
+              <Button variant="outline" size="sm" onClick={() => openPrint(`consent/${p.id}`)}>
+                <Printer className="h-4 w-4" />
+                {t('pr.btn.consent')}
+              </Button>
+            )}
+            {p.instructions && (
+              <Button variant="outline" size="sm" onClick={() => openPrint(`instructions/${p.id}`)}>
+                <Printer className="h-4 w-4" />
+                {t('pr.btn.instructions')}
+              </Button>
+            )}
+            {p.status !== 'cancelled' && (p.takes_specimen || p.specimen_sent) && (
+              <Button variant="outline" size="sm" onClick={() => openPrint(`pathology/${p.id}`)}>
+                <Printer className="h-4 w-4" />
+                {t('pr.btn.pathology')}
+              </Button>
+            )}
+            {editable && (
+              <Button variant="outline" size="sm" onClick={() => setCancelling(true)}>
+                <XCircle className="h-4 w-4" />
+                {t('prc.cancel')}
+              </Button>
+            )}
+          </div>
         </div>
         {isOpen(p) && !editable && performer.canPerform && (
           <p className="mt-3 rounded-lg bg-surface-2 px-3 py-2 text-[13px] text-tx-2">

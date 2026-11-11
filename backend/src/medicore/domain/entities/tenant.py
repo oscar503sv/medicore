@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from medicore.domain.enums import IcdVersion, PracticeModel, TenantStatus
 from medicore.domain.shared.errors import DomainError, InvalidValueObject
 from medicore.domain.shared.identifiers import LocationId, TenantId
+from medicore.domain.value_objects.print_settings import PrintSettings
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.subscription import Subscription
 
@@ -20,6 +21,7 @@ class Location:
     tenant_id: TenantId
     name: str  # e.g. "San Salvador · Escalón"
     address: str | None = None
+    phone: str | None = None  # printed on the clinic's documents
     is_primary: bool = False
 
 
@@ -39,6 +41,7 @@ class Tenant:
     locations: list[Location] = field(default_factory=list)
     # Decides the default permissions on fees and income (see PracticeModel).
     practice_model: PracticeModel = PracticeModel.ASSOCIATED
+    print_settings: PrintSettings = field(default_factory=PrintSettings)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:

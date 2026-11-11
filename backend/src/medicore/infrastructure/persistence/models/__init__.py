@@ -18,6 +18,9 @@ from medicore.infrastructure.persistence.models.error_event import ErrorEventMod
 from medicore.infrastructure.persistence.models.fee_schedule import FeeScheduleModel
 from medicore.infrastructure.persistence.models.insurer import InsurerModel
 from medicore.infrastructure.persistence.models.login_attempt import LoginAttemptModel
+from medicore.infrastructure.persistence.models.medical_certificate import (
+    MedicalCertificateModel,
+)
 from medicore.infrastructure.persistence.models.medical_document import MedicalDocumentModel
 from medicore.infrastructure.persistence.models.medical_record import MedicalRecordModel
 from medicore.infrastructure.persistence.models.notification import NotificationModel
@@ -62,6 +65,7 @@ __all__ = [
     "InsurerModel",
     "LocationModel",
     "LoginAttemptModel",
+    "MedicalCertificateModel",
     "MedicalDocumentModel",
     "MedicalRecordModel",
     "NotificationModel",

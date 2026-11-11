@@ -53,6 +53,8 @@ class SqlTenantRepository:
         row.status = str(tenant.status)
         row.icd_version = str(tenant.icd_version)
         row.practice_model = str(tenant.practice_model)
+        row.print_paper = str(tenant.print_settings.paper)
+        row.print_letterhead = tenant.print_settings.letterhead
         row.created_at = tenant.created_at
 
         # Sync locations
@@ -70,4 +72,5 @@ class SqlTenantRepository:
                 row.locations.append(loc_row)
             loc_row.name = loc.name
             loc_row.address = loc.address
+            loc_row.phone = loc.phone
             loc_row.is_primary = loc.is_primary
