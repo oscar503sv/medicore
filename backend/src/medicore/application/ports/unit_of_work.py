@@ -43,6 +43,7 @@ from medicore.domain.repositories import (
 )
 from medicore.domain.repositories._support import (
     ActiveImpersonation,
+    AppointmentFact,
     ConnectionStats,
     ConsoleLogin,
     DatabaseStatus,
@@ -51,11 +52,12 @@ from medicore.domain.repositories._support import (
     LoginPressure,
     Page,
     PaymentSummary,
+    ProcedureFact,
     RequestStatsRow,
     TableSize,
     TenantActivity,
 )
-from medicore.domain.shared.identifiers import TenantId
+from medicore.domain.shared.identifiers import PatientId, TenantId, UserId
 
 
 @runtime_checkable
@@ -85,6 +87,7 @@ class UnitOfWork(Protocol):
     sessions: AuthSessionRepository  # global (not tenant-filtered)
     plans: PlanRepository  # global subscription catalog
     addon_pricing: AddonPricingRepository  # global subscription catalog
+    analytics: AnalyticsReadModel  # practice metrics (read-only)
 
     def __enter__(self) -> UnitOfWork: ...
 
@@ -98,6 +101,42 @@ class UnitOfWork(Protocol):
     def commit(self) -> None: ...
 
     def rollback(self) -> None: ...
+
+
+class AnalyticsReadModel(Protocol):
+    """Tenant-scoped reads behind the clinic's metrics. ``doctor_id`` narrows everything to
+    one doctor's appointments (None: the whole clinic)."""
+
+    def appointment_facts(
+        self, start: datetime, end: datetime, doctor_id: UserId | None = None
+    ) -> list[AppointmentFact]:
+        """Appointments starting in ``[start, end)`` (clinic wall-clock), any status."""
+        ...
+
+    def first_visits(
+        self, patient_ids: list[PatientId], doctor_id: UserId | None = None
+    ) -> dict[PatientId, datetime]:
+        """Start of each patient's first completed appointment (omits those without one)."""
+        ...
+
+    def procedure_facts(
+        self, since: datetime, until: datetime, doctor_id: UserId | None = None
+    ) -> list[ProcedureFact]:
+        """Completed procedures performed in ``[since, until)`` (instants), by ordering
+        doctor."""
+        ...
+
+    def vaccinations_recorded(
+        self, first: date, last: date, user_id: UserId | None = None
+    ) -> int:
+        """Vaccines given between ``first`` and ``last`` (inclusive), voided ones excluded."""
+        ...
+
+    def applications_recorded(
+        self, since: datetime, until: datetime, user_id: UserId | None = None
+    ) -> int:
+        """Doses applied in ``[since, until)`` (instants), voided or refused ones excluded."""
+        ...
 
 
 @runtime_checkable

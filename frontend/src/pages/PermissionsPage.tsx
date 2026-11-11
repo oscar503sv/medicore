@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/PageHeader'
 import { PermissionsMatrixTable } from '@/components/permissions/PermissionsMatrixTable'
+import { PracticeModelCard } from '@/components/permissions/PracticeModelCard'
 import { Card } from '@/components/ui/Card'
 import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
@@ -41,6 +42,13 @@ export function PermissionsPage() {
   return (
     <div className="space-y-5 p-8">
       <PageHeader eyebrow={t('permissions.subtitle')} title={t('permissions.title')} />
+      <PracticeModelCard
+        current={matrix.practice_model}
+        onSaved={(next) => {
+          qc.setQueryData(['permissions-matrix'], next)
+          toast(t('pm.saved_ok'))
+        }}
+      />
       <Card>
         <PermissionsMatrixTable
           matrix={matrix}

@@ -1,6 +1,7 @@
 import {
   Activity,
   BadgeDollarSign,
+  BarChart3,
   Building2,
   MapPin,
   CalendarDays,
@@ -47,6 +48,7 @@ export const GROUP_ICONS: Record<string, typeof Users> = {
   vaccinations: Syringe,
   applications: Pill,
   procedures: Activity,
+  analytics: BarChart3,
 }
 
 /** The catalog grouped by resource (the part before the dot), in catalog order. */

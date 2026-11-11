@@ -13,6 +13,7 @@ from medicore.presentation.dependencies import get_uow_factory
 from medicore.presentation.error_handlers import register_error_handlers
 from medicore.presentation.request_metrics import RequestMetricsMiddleware
 from medicore.presentation.routers import (
+    analytics,
     applications,
     appointments,
     audit,
@@ -90,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(patients.router, prefix=API_PREFIX)
     app.include_router(insurers.router, prefix=API_PREFIX)
     app.include_router(appointments.router, prefix=API_PREFIX)
+    app.include_router(analytics.router, prefix=API_PREFIX)
     app.include_router(consultations.router, prefix=API_PREFIX)
     app.include_router(diagnoses.router, prefix=API_PREFIX)
     app.include_router(prescriptions.router, prefix=API_PREFIX)

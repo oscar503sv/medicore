@@ -202,3 +202,29 @@ class RequestStatsRow:
     total_ms: float
     max_ms: float
     buckets: tuple[int, ...]  # LatencyHistogram counts
+
+
+# ── Practice metrics (tenant-scoped read model) ──────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class AppointmentFact:
+    """The columns of an appointment the clinic's metrics need, and nothing clinical."""
+
+    doctor_id: str
+    patient_id: str
+    type: str
+    status: str
+    scheduled_start: datetime  # clinic wall-clock (naive)
+    created_at: datetime  # instant it was booked (UTC)
+    insurer_id: str | None
+    charged: Decimal | None  # what the visit is charged (None: no price was set)
+
+
+@dataclass(frozen=True, slots=True)
+class ProcedureFact:
+    """A completed procedure, attributed to the doctor who ordered it."""
+
+    doctor_id: str
+    performed_at: datetime  # instant (UTC)
+    charged: Decimal | None  # None or zero when included in the consultation

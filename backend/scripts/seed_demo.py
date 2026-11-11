@@ -132,6 +132,7 @@ from medicore.domain.enums import (
     AvailabilityExceptionKind,
     DocumentKind,
     InjectionSite,
+    PracticeModel,
     PrescriptionStatus,
     ProcedurePerformer,
     Role,
@@ -570,6 +571,13 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
     )
 
 
+# How each demo clinic's doctors work: Clínica Demo shows associated doctors (each sets their
+# prices and sees their income), Centro Norte employed ones (the administration does).
+DEMO_PRACTICE_MODELS = {
+    "clinica-demo": PracticeModel.ASSOCIATED,
+    "centro-norte": PracticeModel.EMPLOYED,
+}
+
 # The public demo clinics never expire. Clínica Demo shows every feature; Centro Norte shows
 # a smaller plan (Clínica: 3 doctors, 3 support seats, per-user permissions) with one module,
 # so the demo also shows locked modules, full seats and the clinic analytics tier (Clínica
@@ -600,7 +608,7 @@ def get_or_create_tenant(
     tid = TenantId.new()
     tenant = Tenant(
         id=tid, legal_name=legal_name, tax_id=tax_id, slug=Slug(slug), timezone=TIMEZONE,
-        subscription=DEMO_SUBSCRIPTIONS[slug],
+        subscription=DEMO_SUBSCRIPTIONS[slug], practice_model=DEMO_PRACTICE_MODELS[slug],
         locations=[Location(id=LocationId.new(), tenant_id=tid, name=location, is_primary=True)],
     )
     uow = SqlAlchemyUnitOfWork(session, tid)
@@ -1018,20 +1026,28 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
     if appt.charge.listed is not None and RNG.random() < 0.08:
         listed = appt.charge.listed.amount
         AdjustAppointmentFee(c.uow(), c.at(start + timedelta(minutes=30))).execute(
-            me, appt.id, fee(0 if RNG.random() < 0.3 else listed * Decimal("0.8")),
-            RNG.choice(FEE_DISCOUNTS))
+            pricing_actor(c, doctor), appt.id,
+            fee(0 if RNG.random() < 0.3 else listed * Decimal("0.8")), RNG.choice(FEE_DISCOUNTS))
         c.count("cobros ajustados")
     reopened = start + timedelta(days=RNG.randint(1, 6), hours=2)
     if RNG.random() < 0.3 and reopened < c.now:  # reopened later (audited as record.viewed)
         GetMedicalRecord(c.uow(), c.at(reopened)).execute(me, record.id)
 
 
+def pricing_actor(c: Clinic, doctor: User) -> ActorContext:
+    """Who sets prices and adjusts charges: each doctor with associated doctors, the
+    administration with employed ones."""
+    employed = c.tenant.practice_model == PracticeModel.EMPLOYED
+    return actor(c, c.admin if employed else doctor)
+
+
 def seed_fees(c: Clinic) -> None:
-    """Each doctor sets their own fees before the agenda starts (associated doctors)."""
+    """The fees are set before the agenda starts (by each doctor or by the admin, per the
+    clinic's practice model)."""
     at = datetime.combine(c.today - timedelta(weeks=PAST_WEEKS, days=4), time(8, 30))
     for doctor in c.doctors:
         prices = FEES_BY_SPECIALTY[c.specialty[doctor.id]]
-        UpdateDoctorFees(c.uow(), c.at(at)).execute(actor(c, doctor), doctor.id, {
+        UpdateDoctorFees(c.uow(), c.at(at)).execute(pricing_actor(c, doctor), doctor.id, {
             kind: fee(amount) for kind, amount in zip(FEE_TYPES, prices, strict=True)
             if amount is not None
         })

@@ -17,6 +17,7 @@ export function Sidebar() {
   const visible = NAV_ITEMS.filter(
     (item) =>
       (item.permission ? can(item.permission) : true) &&
+      (item.anyPermission ? item.anyPermission.some((p) => can(p)) : true) &&
       (item.roles ? !!role && item.roles.includes(role) : true),
   )
   // The most specific item wins, so /procedures/catalog doesn't also light up /procedures.

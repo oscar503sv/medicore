@@ -260,6 +260,16 @@ class AnalyticsTier(StrEnum):
         return self.rank >= other.rank
 
 
+class PracticeModel(StrEnum):
+    """How the clinic's doctors work, which decides the default permissions on fees and
+    income: associated doctors share the premises and each runs their own practice (sets
+    their prices, sees their income; the clinic admin sees activity without money); in a
+    clinic of employed doctors the administration sets prices and sees the money."""
+
+    ASSOCIATED = "associated"
+    EMPLOYED = "employed"
+
+
 class PlanFeature(StrEnum):
     """Capabilities that differ between plans (beyond their quotas)."""
 

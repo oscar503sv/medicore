@@ -8,6 +8,7 @@ from medicore.application.use_cases.role_permissions import (
     GetPermissionsMatrix,
     PermissionsMatrixDTO,
     ResetRolePermissions,
+    SetPracticeModel,
     UpdateRolePermissions,
 )
 from medicore.domain.enums import Role
@@ -15,6 +16,7 @@ from medicore.presentation.dependencies import Actor, Clock, UoW
 from medicore.presentation.errors import ApiError
 from medicore.presentation.schemas.role_permissions import (
     PermissionsMatrixResponse,
+    PracticeModelRequest,
     RolePermissionsResponse,
     UpdateRolePermissionsRequest,
 )
@@ -46,6 +48,7 @@ def ser_matrix(matrix: PermissionsMatrixDTO) -> PermissionsMatrixResponse:
             for role, entry in matrix.roles.items()
         },
         locked=list(matrix.locked),
+        practice_model=matrix.practice_model,
     )
 
 
@@ -67,3 +70,8 @@ def update_role(
 def reset_role(role: str, actor: Actor, uow: UoW, clock: Clock):
     matrix = ResetRolePermissions(uow, clock).execute(actor, parse_role(role))
     return ser_matrix(matrix)
+
+
+@router.put("/practice-model", response_model=PermissionsMatrixResponse)
+def set_practice_model(body: PracticeModelRequest, actor: Actor, uow: UoW, clock: Clock):
+    return ser_matrix(SetPracticeModel(uow, clock).execute(actor, body.model))

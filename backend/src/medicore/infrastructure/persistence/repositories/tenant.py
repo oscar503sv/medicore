@@ -52,6 +52,7 @@ class SqlTenantRepository:
         subscription_to_row(tenant.subscription, row)
         row.status = str(tenant.status)
         row.icd_version = str(tenant.icd_version)
+        row.practice_model = str(tenant.practice_model)
         row.created_at = tenant.created_at
 
         # Sync locations

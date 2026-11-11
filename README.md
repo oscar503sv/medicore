@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException with a translatable code
     ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
     ├── schemas/         # Pydantic request + response models per resource
-    └── routers/         # 19 routers, 130 endpoints under /api/v1/
+    └── routers/         # 22 routers, 154 endpoints under /api/v1/
 ```
 
 ### Multi-tenancy
@@ -169,7 +169,20 @@ Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 ## Notifications and dashboard
 
 - **In-app notifications**: appointments created, rescheduled, cancelled or marked as no-show (to the doctor), record amendments (to the original author), uploaded documents (to the treating doctor) and new users or role changes (to administrators). A bell in the top bar with an unread counter (polled every 60 s), an unread-only filter and deep links to the item, plus a full **inbox page** (`/notifications`) filterable by status and category and grouped by day. Kept for 90 days.
-- **Dashboard with real data** (`GET /dashboard/summary`): today's appointments, pending ones, registered patients and schedule occupancy, each compared with the previous week, plus the next pending appointments from now on (`GET /appointments/upcoming`). Doctors see their own schedule; other roles see the whole clinic.
+- **Dashboard with real data** (`GET /dashboard/summary`): today's appointments, pending ones, registered patients and schedule occupancy, each compared with the previous week, plus the next pending appointments from now on (`GET /appointments/upcoming`). Doctors see their own schedule; other roles see the whole clinic. Whoever can see metrics also gets a **month summary** there.
+
+## Practice metrics
+
+`GET /analytics/overview` aggregates appointments, charges, insurers, procedures, vaccinations and applications — counts and amounts only, never clinical text. What it returns depends on the clinic's **analytics tier** (sections above it come back empty and the UI shows what the plan would add):
+
+| Tier | Content |
+|---|---|
+| **Basic dashboard** | Current month against the same days of last month: visits attended, new patients, no-show and cancellation rates, estimated income |
+| **Clinic dashboard** | Any period (this week, this month, last month, last 90 days, custom range up to a year), per-doctor table and filter, 12-week trend, appointment types and insurers |
+| **Operational metrics** | Day × hour heatmap, booking lead time, returning vs first-time patients and module activity |
+
+- **Who sees what**: `analytics.own` (a doctor's own appointments), `analytics.clinic` (the whole clinic) and `analytics.money` (income in the metrics one can see). Income is the charge recorded on attended visits and performed procedures — not money received.
+- **The clinic's practice model** (`tenants.practice_model`, set in **Roles & permissions**): *associated doctors* (default — each doctor sets their prices and sees their income; the administration sees the clinic's activity without money) or *employed doctors* (the administration sets prices and sees income; doctors see their metrics without money). Switching moves only the fee and income defaults; the rest of a customized role is kept, and the change is audited (`organization.practice_model_changed`).
 
 ---
 
@@ -215,21 +228,21 @@ medicore/
 └── frontend/                 # React + TS + Vite SPA
     └── src/
         ├── api/              # Axios client (cookies, CSRF, error translation)
-        │                     # + 19 per-resource modules
+        │                     # + 21 per-resource modules
         ├── stores/           # Zustand: auth + platformAuth + ui (theme/language/sidebar)
         ├── lib/              # ES/EN i18n, formatting, QueryClient, notifications, timezones…
         ├── types/            # TS types mirroring the backend domain
         ├── components/       # ui/ + shell/ (top bar, notification bell…)
         │                     # + appointments/ + audit/ + patients/ + permissions/
         │                     # + records/ + settings/ + vaccination/ + applications/
-        │                     # + procedures/
+        │                     # + procedures/ + analytics/
         │                     # + guards (RequireAuth…)
-        └── pages/            # 20 clinic screens (Login, Dashboard, Patients,
-                              # PatientDetail, Appointments, Schedule, Consultation,
-                              # Records, Availability, Insurers, Users, Settings,
-                              # Audit, Permissions, Notifications, ChangePassword,
-                              # Vaccination, Applications, Procedures,
-                              # ProcedureDetail)
+        └── pages/            # 23 clinic screens (Login, Dashboard, Analytics,
+                              # Patients, PatientDetail, Appointments, Schedule,
+                              # Consultation, Records, Availability, Insurers, Fees,
+                              # Users, Settings, Audit, Permissions, Notifications,
+                              # ChangePassword, Vaccination, Applications, Procedures,
+                              # ProcedureDetail, ProcedureCatalog)
                               # + platform/ (5 superadmin screens)
 ```
 
@@ -258,6 +271,7 @@ medicore/
 | **17** | Platform console: Business (MRR, collections, expirations, adoption, seats) and Monitoring (health, connections, 500 errors without patient data with their commit and trend, sign-ins and lockouts, audited console sign-ins, open support access, scheduled tasks, per-route performance with p50/p95 and 4xx/5xx rates, `/health/ready`) | ✅ Done |
 | **18** | Fees: price per doctor and appointment type, procedure catalog prices, the price copied onto each appointment and procedure, charge adjustments with a reason, procedures included in the consultation, `fees.manage_own` / `fees.manage_all` permissions | ✅ Done |
 | **19** | Analytics tiers per plan (basic dashboard, clinic dashboard, operational metrics) and the advanced-analytics add-on | ✅ Done |
+| **20** | Practice metrics per tier (period comparison, per doctor, weekly trend, types, insurers, heatmap, lead time, returning patients, modules), `analytics.*` permissions and the clinic's practice model (associated or employed doctors) | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable record, inventory and billing | 🗓️ Future |

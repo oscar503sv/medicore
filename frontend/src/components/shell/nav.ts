@@ -1,6 +1,7 @@
 import {
   Activity,
   BadgeDollarSign,
+  BarChart3,
   Calendar,
   CalendarDays,
   ClipboardList,
@@ -27,6 +28,7 @@ export interface NavItem {
   icon: LucideIcon
   // Visibility gates (both must pass when present; an item with neither is visible to all):
   permission?: Permission // capability-based gate, matches the backend catalog
+  anyPermission?: Permission[] // visible with at least one of these
   roles?: Role[] // role-based gate, for pages tied to an identity rather than a capability
   group: NavGroup
 }
@@ -40,6 +42,7 @@ export const NAV_GROUPS: { id: NavGroup; labelKey: string }[] = [
 export const NAV_ITEMS: NavItem[] = [
   // General
   { to: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard, group: 'general' },
+  { to: '/analytics', labelKey: 'nav.analytics', icon: BarChart3, anyPermission: ['analytics.own', 'analytics.clinic'], group: 'general' },
   // Clínico
   { to: '/patients', labelKey: 'nav.patients', icon: Users, permission: 'patients.view', group: 'clinical' },
   { to: '/appointments', labelKey: 'nav.appointments', icon: Calendar, permission: 'appointments.view', group: 'clinical' },

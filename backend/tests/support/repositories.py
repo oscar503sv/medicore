@@ -28,9 +28,10 @@ from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
-from medicore.domain.enums import AppointmentStatus, ProcedureStatus
+from medicore.domain.enums import ApplicationOutcome, AppointmentStatus, ProcedureStatus
 from medicore.domain.repositories._support import (
     ActiveImpersonation,
+    AppointmentFact,
     AuditFilter,
     ConnectionStats,
     ConsoleLogin,
@@ -43,6 +44,7 @@ from medicore.domain.repositories._support import (
     Page,
     Paging,
     PatientFilter,
+    ProcedureFact,
     RecordFilter,
     RequestStatsRow,
     TableSize,
@@ -1138,3 +1140,76 @@ class InMemoryRequestStatsRepository:
         for key in [k for k in self._store.request_stats if k[0] < cutoff]:
             del self._store.request_stats[key]
 
+
+
+def _naive(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=None) if dt.tzinfo is not None else dt
+
+
+class InMemoryAnalyticsReadModel(_Scoped):
+    """Instants are compared without tzinfo: the tests' clocks are naive."""
+
+    def appointment_facts(
+        self, start: datetime, end: datetime, doctor_id: UserId | None = None
+    ) -> list[AppointmentFact]:
+        return [
+            AppointmentFact(
+                doctor_id=str(a.doctor_id), patient_id=str(a.patient_id), type=str(a.type),
+                status=str(a.status), scheduled_start=a.scheduled_start,
+                created_at=a.created_at,
+                insurer_id=str(a.insurance_id) if a.insurance_id else None,
+                charged=a.charge.charged.amount if a.charge.charged else None,
+            )
+            for a in self._mine(self._store.appointments.values())
+            if start <= a.scheduled_start < end
+            and (doctor_id is None or a.doctor_id == doctor_id)
+        ]
+
+    def first_visits(
+        self, patient_ids: list[PatientId], doctor_id: UserId | None = None
+    ) -> dict[PatientId, datetime]:
+        wanted = set(patient_ids)
+        first: dict[PatientId, datetime] = {}
+        for a in self._mine(self._store.appointments.values()):
+            if (
+                a.patient_id in wanted
+                and a.status == AppointmentStatus.COMPLETED
+                and (doctor_id is None or a.doctor_id == doctor_id)
+                and (a.patient_id not in first or a.scheduled_start < first[a.patient_id])
+            ):
+                first[a.patient_id] = a.scheduled_start
+        return first
+
+    def procedure_facts(
+        self, since: datetime, until: datetime, doctor_id: UserId | None = None
+    ) -> list[ProcedureFact]:
+        return [
+            ProcedureFact(
+                doctor_id=str(p.ordered_by_id), performed_at=p.performed_at,
+                charged=None if p.fee_included or p.charge.charged is None
+                else p.charge.charged.amount,
+            )
+            for p in self._mine(self._store.procedures.values())
+            if p.status == ProcedureStatus.COMPLETED and p.performed_at is not None
+            and _naive(since) <= _naive(p.performed_at) < _naive(until)
+            and (doctor_id is None or p.ordered_by_id == doctor_id)
+        ]
+
+    def vaccinations_recorded(
+        self, first: date, last: date, user_id: UserId | None = None
+    ) -> int:
+        return sum(
+            1 for v in self._mine(self._store.vaccinations.values())
+            if v.voided_at is None and first <= v.occurred_on <= last
+            and (user_id is None or v.recorded_by_id == user_id)
+        )
+
+    def applications_recorded(
+        self, since: datetime, until: datetime, user_id: UserId | None = None
+    ) -> int:
+        return sum(
+            1 for r in self._mine(self._store.application_records.values())
+            if r.voided_at is None and r.outcome == ApplicationOutcome.APPLIED
+            and _naive(since) <= _naive(r.recorded_at) < _naive(until)
+            and (user_id is None or r.recorded_by_id == user_id)
+        )

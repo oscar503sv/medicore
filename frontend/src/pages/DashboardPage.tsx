@@ -2,7 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { addDays, format, parseISO } from 'date-fns'
 import { Activity, CalendarCheck, Hourglass, Users } from 'lucide-react'
+import { analyticsApi } from '@/api/analytics'
 import { appointmentsApi } from '@/api/appointments'
+import { MetricTiles } from '@/components/analytics/MetricTiles'
 import { dashboardApi } from '@/api/dashboard'
 import { patientsApi } from '@/api/patients'
 import { GettingStarted } from '@/components/onboarding/GettingStarted'
@@ -51,6 +53,14 @@ export function DashboardPage() {
     queryFn: dashboardApi.summary,
   })
 
+  // Month to date against the same days of last month: every tier includes it.
+  const canMetrics = useAuthStore((s) => s.can('analytics.own') || s.can('analytics.clinic'))
+  const { data: month } = useQuery({
+    queryKey: ['analytics', { period: 'month' }],
+    queryFn: () => analyticsApi.overview({ period: 'month' }),
+    enabled: canMetrics,
+  })
+
   if (isLoading) return <PageLoader />
 
   const appts = upcoming ?? []
@@ -84,6 +94,24 @@ export function DashboardPage() {
         />
         <StatCard icon={Hourglass} label={t('dash.pending_today')} value={num(summary?.pending_today)} />
       </div>
+
+      {month && (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold text-tx">{t('an.month_summary')}</h2>
+            <Link to="/analytics" className="text-[13px] text-accent hover:underline">
+              {t('an.see_metrics')}
+            </Link>
+          </div>
+          <MetricTiles
+            compact
+            current={month.current}
+            previous={month.previous}
+            money={month.money}
+            compareLabel={t('an.vs_previous')}
+          />
+        </section>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.6fr_1fr]">
         <Card>

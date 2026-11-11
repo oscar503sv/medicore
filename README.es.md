@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 19 routers, 130 endpoints bajo /api/v1/
+    └── routers/         # 22 routers, 154 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -169,7 +169,20 @@ Los hallazgos pendientes están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).
 ## Notificaciones y dashboard
 
 - **Notificaciones in-app**: citas creadas, reprogramadas, canceladas o marcadas como no-show (al doctor), enmiendas de historial (al autor original), documentos subidos (al médico tratante) y altas o cambios de rol de usuarios (a los administradores). Campana en la barra superior con contador (sondeo cada 60 s), filtro de no leídas y enlaces directos al elemento, además de una **página de buzón** (`/notifications`) filtrable por estado y categoría y agrupada por día. Se conservan 90 días.
-- **Dashboard con datos reales** (`GET /dashboard/summary`): citas de hoy, pendientes, pacientes registrados y ocupación de la agenda, cada uno comparado con la semana anterior, y las próximas citas pendientes a partir de ahora (`GET /appointments/upcoming`). El doctor ve su propia agenda; los demás roles, la clínica completa.
+- **Dashboard con datos reales** (`GET /dashboard/summary`): citas de hoy, pendientes, pacientes registrados y ocupación de la agenda, cada uno comparado con la semana anterior, y las próximas citas pendientes a partir de ahora (`GET /appointments/upcoming`). El doctor ve su propia agenda; los demás roles, la clínica completa. Quien puede ver métricas también recibe ahí un **resumen del mes**.
+
+## Métricas de la práctica
+
+`GET /analytics/overview` agrega citas, cobros, aseguradoras, procedimientos, vacunas y aplicaciones: solo conteos y montos, nunca texto clínico. Lo que devuelve depende del **nivel de analítica** de la clínica (las secciones por encima llegan vacías y la interfaz muestra lo que añadiría el plan):
+
+| Nivel | Contenido |
+|---|---|
+| **Panel básico** | Mes en curso contra los mismos días del mes anterior: consultas atendidas, pacientes nuevos, inasistencia, cancelaciones e ingreso estimado |
+| **Panel de la clínica** | Cualquier periodo (esta semana, este mes, mes anterior, últimos 90 días, rango personalizado de hasta un año), tabla y filtro por médico, tendencia de 12 semanas, tipos de cita y aseguradoras |
+| **Métricas operativas** | Mapa de calor día × hora, anticipación con que agendan, pacientes que regresan vs. primera vez y actividad de los módulos |
+
+- **Quién ve qué**: `analytics.own` (las citas propias de un médico), `analytics.clinic` (toda la clínica) y `analytics.money` (ingresos en las métricas que puede ver). El ingreso es el cobro registrado en consultas atendidas y procedimientos realizados, no dinero recibido.
+- **Modelo de la clínica** (`tenants.practice_model`, en **Roles y permisos**): *médicos asociados* (por defecto: cada médico pone sus precios y ve sus ingresos; la administración ve la actividad sin dinero) o *médicos empleados* (la administración pone los precios y ve los ingresos; los médicos ven sus métricas sin dinero). Cambiarlo solo mueve los valores por defecto de tarifas e ingresos; el resto de un rol personalizado se conserva, y el cambio queda auditado (`organization.practice_model_changed`).
 
 ---
 
@@ -215,21 +228,21 @@ medicore/
 └── frontend/                 # SPA React + TS + Vite
     └── src/
         ├── api/              # Cliente Axios (cookies, CSRF, traducción de errores)
-        │                     # + 19 módulos por recurso
+        │                     # + 21 módulos por recurso
         ├── stores/           # Zustand: auth + platformAuth + ui (tema/idioma/sidebar)
         ├── lib/              # i18n ES/EN, formato, QueryClient, notificaciones, timezones…
         ├── types/            # Tipos TS espejo del dominio backend
         ├── components/       # ui/ + shell/ (topbar, campana de notificaciones…)
         │                     # + appointments/ + audit/ + patients/ + permissions/
         │                     # + records/ + settings/ + vaccination/ + applications/
-        │                     # + procedures/
+        │                     # + procedures/ + analytics/
         │                     # + guards (RequireAuth…)
-        └── pages/            # 20 pantallas de clínica (Login, Dashboard, Patients,
-                              # PatientDetail, Appointments, Schedule, Consultation,
-                              # Records, Availability, Insurers, Users, Settings,
-                              # Audit, Permissions, Notifications, ChangePassword,
-                              # Vaccination, Applications, Procedures,
-                              # ProcedureDetail)
+        └── pages/            # 23 pantallas de clínica (Login, Dashboard, Analytics,
+                              # Patients, PatientDetail, Appointments, Schedule,
+                              # Consultation, Records, Availability, Insurers, Fees,
+                              # Users, Settings, Audit, Permissions, Notifications,
+                              # ChangePassword, Vaccination, Applications, Procedures,
+                              # ProcedureDetail, ProcedureCatalog)
                               # + platform/ (5 pantallas de superadmin)
 ```
 
@@ -258,6 +271,7 @@ medicore/
 | **17** | Consola de plataforma: Negocio (MRR, cobros, vencimientos, adopción, cupos) y Monitoreo (salud, conexiones, errores 500 sin datos de pacientes con su commit y tendencia, accesos y bloqueos, accesos a la consola auditados, soporte abierto, tareas programadas, rendimiento por ruta con p50/p95 y tasas 4xx/5xx, `/health/ready`) | ✅ Completada |
 | **18** | Tarifas: precio por médico y tipo de cita, precio en el catálogo de procedimientos, copia del precio en cada cita y procedimiento, ajustes de cobro con motivo, procedimientos incluidos en la consulta, permisos `fees.manage_own` / `fees.manage_all` | ✅ Completada |
 | **19** | Niveles de analítica por plan (panel básico, de la clínica, métricas operativas) y complemento de analítica avanzada | ✅ Completada |
+| **20** | Métricas de la práctica por nivel (comparación de periodos, por médico, tendencia semanal, tipos, aseguradoras, mapa de calor, anticipación, pacientes que regresan, módulos), permisos `analytics.*` y modelo de la clínica (médicos asociados o empleados) | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 | — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible, inventario y facturación | 🗓️ A futuro |

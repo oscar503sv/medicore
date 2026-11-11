@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from medicore.domain.enums import IcdVersion, TenantStatus
+from medicore.domain.enums import IcdVersion, PracticeModel, TenantStatus
 from medicore.domain.shared.errors import DomainError, InvalidValueObject
 from medicore.domain.shared.identifiers import LocationId, TenantId
 from medicore.domain.value_objects.slug import Slug
@@ -37,6 +37,8 @@ class Tenant:
     status: TenantStatus = TenantStatus.ACTIVE
     icd_version: IcdVersion = IcdVersion.CIE11
     locations: list[Location] = field(default_factory=list)
+    # Decides the default permissions on fees and income (see PracticeModel).
+    practice_model: PracticeModel = PracticeModel.ASSOCIATED
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:

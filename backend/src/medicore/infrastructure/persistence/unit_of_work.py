@@ -9,6 +9,7 @@ from types import TracebackType
 from sqlalchemy.orm import Session
 
 from medicore.domain.shared.identifiers import TenantId
+from medicore.infrastructure.persistence.repositories.analytics import SqlAnalyticsReadModel
 from medicore.infrastructure.persistence.repositories.application import (
     SqlApplicationRepository,
 )
@@ -93,6 +94,7 @@ class SqlAlchemyUnitOfWork:
         self.applications = SqlApplicationRepository(session, tenant_id)
         self.procedures = SqlProcedureRepository(session, tenant_id)
         self.subscription_payments = SqlSubscriptionPaymentRepository(session, tenant_id)
+        self.analytics = SqlAnalyticsReadModel(session, tenant_id)
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
         self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
         self.sessions = SqlAuthSessionRepository(session)  # global (non-scoped)

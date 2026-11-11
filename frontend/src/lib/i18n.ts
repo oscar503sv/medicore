@@ -5,6 +5,7 @@ import { monEn, monEs } from './i18n-monitoring'
 import { obEn, obEs } from './i18n-onboarding'
 import { subEn, subEs } from './i18n-subscriptions'
 import { feeEn, feeEs } from './i18n-fees'
+import { analyticsEn, analyticsEs } from './i18n-analytics'
 import { prcEn, prcEs } from './i18n-procedures'
 import { vaxEn, vaxEs } from './i18n-vaccination'
 
@@ -19,6 +20,7 @@ const es: Dict = {
   ...bizEs,
   ...monEs,
   ...feeEs,
+  ...analyticsEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -500,6 +502,9 @@ const es: Dict = {
   'err.plan.invalid_grace': 'Los días de gracia no son válidos.',
   'err.plan.invalid_trial': 'La duración de la prueba no es válida.',
   'err.plan.unavailable': 'El plan {plan} no existe o no está activo.',
+  'err.analytics.not_allowed': 'No tienes acceso a las métricas.',
+  'err.analytics.invalid_range':
+    'Revisa el periodo: necesita una fecha de inicio y una de fin posterior, de hasta {max} días.',
   'err.plan.analytics_included':
     'El plan {plan} ya incluye la analítica avanzada; no hace falta contratarla aparte.',
   'err.plan.period_required': 'Indica la fecha de vencimiento o inicia una prueba gratuita.',
@@ -1006,6 +1011,7 @@ const en: Dict = {
   ...bizEn,
   ...monEn,
   ...feeEn,
+  ...analyticsEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.update_available': 'A new version of Medicore is available.',
@@ -1472,6 +1478,9 @@ const en: Dict = {
   'err.plan.invalid_grace': 'The grace days are not valid.',
   'err.plan.invalid_trial': 'The trial length is not valid.',
   'err.plan.unavailable': 'Plan {plan} does not exist or is not active.',
+  'err.analytics.not_allowed': "You don't have access to metrics.",
+  'err.analytics.invalid_range':
+    'Check the period: it needs a start date and a later end date, up to {max} days.',
   'err.plan.analytics_included':
     'Plan {plan} already includes advanced analytics; there is no need to add it.',
   'err.plan.period_required': 'Set an expiry date or start a free trial.',

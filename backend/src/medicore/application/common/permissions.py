@@ -10,11 +10,15 @@ Summary of the DOMAIN_MODEL rules the defaults encode:
   * receptionist → manage appointments + register/edit patients; NOT clinical records.
   * nurse        → view patients/agenda, edit open consultations (vitals), view/upload
                    records; NOT book appointments, NOT edit patients, NOT start/sign.
-  * doctor       → all clinical work for their patients + their own availability and fees
-                   (doctors set their own prices by default: the "associated doctors" setup;
-                   a clinic of employed doctors takes ``fees.manage_own`` away).
-  * admin        → user & organization management; full access except sign/amend.
-                   Only admins act on other admins and hand out permissions.
+  * doctor       → all clinical work for their patients + their own availability, fees and
+                   metrics (with their income).
+  * admin        → user & organization management; full access except sign/amend; the
+                   clinic's metrics without money. Only admins act on other admins and hand
+                   out permissions.
+
+Those defaults describe a clinic of associated doctors. The clinic's practice model shifts
+them (``role_defaults``): with employed doctors, the doctor no longer sets prices nor sees
+income, and the admin sees the money.
 
 Ownership checks (e.g. doctors only edit their own consultations) stay next to the use
 cases — they answer "may they do it to *this* object", not "may the role do it at all".
@@ -27,7 +31,7 @@ from enum import StrEnum
 
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import ValidationError
-from medicore.domain.enums import AddonModule, Role
+from medicore.domain.enums import AddonModule, PracticeModel, Role
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
 
@@ -66,6 +70,11 @@ class Permission(StrEnum):
     LOCATIONS_MANAGE = "locations.manage"
     AUDIT_VIEW = "audit.view"
     PERMISSIONS_MANAGE = "permissions.manage"
+    # Metrics: "own" covers the appointments where the user is the doctor; "clinic" every
+    # doctor's. "money" adds income figures to whichever of the two the user has.
+    ANALYTICS_OWN = "analytics.own"
+    ANALYTICS_CLINIC = "analytics.clinic"
+    ANALYTICS_MONEY = "analytics.money"
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -96,6 +105,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.LOCATIONS_MANAGE,
         Permission.AUDIT_VIEW,
         Permission.PERMISSIONS_MANAGE,
+        Permission.ANALYTICS_CLINIC,
     }),
     Role.DOCTOR: frozenset({
         Permission.PATIENTS_VIEW,
@@ -121,6 +131,8 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.PROCEDURES_PERFORM,
         Permission.DIAGNOSES_VIEW,
         Permission.INSURERS_VIEW,
+        Permission.ANALYTICS_OWN,
+        Permission.ANALYTICS_MONEY,
     }),
     Role.NURSE: frozenset({
         Permission.PATIENTS_VIEW,
@@ -154,20 +166,45 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
 }
 
 
+# How each practice model shifts the code defaults (which describe associated doctors):
+# role → (permissions added, permissions removed).
+PRACTICE_MODEL_SHIFTS: dict[PracticeModel, dict[Role, tuple[frozenset[Permission], ...]]] = {
+    PracticeModel.ASSOCIATED: {},
+    PracticeModel.EMPLOYED: {
+        Role.ADMIN: (frozenset({Permission.ANALYTICS_MONEY}), frozenset()),
+        Role.DOCTOR: (
+            frozenset(),
+            frozenset({Permission.FEES_MANAGE_OWN, Permission.ANALYTICS_MONEY}),
+        ),
+    },
+}
+
+
 def permissions_for(role: Role) -> frozenset[Permission]:
     """The CODE-DEFAULT permission set for a role (no tenant customization applied)."""
     return ROLE_PERMISSIONS[role]
 
 
-def effective_permissions(role: Role, stored: Iterable[str] | None) -> frozenset[Permission]:
-    """Resolve a role's effective set: the tenant's stored override, or the defaults.
+def role_defaults(
+    role: Role, model: PracticeModel = PracticeModel.ASSOCIATED
+) -> frozenset[Permission]:
+    """A role's defaults in a clinic of the given practice model."""
+    added, removed = PRACTICE_MODEL_SHIFTS[model].get(role, (frozenset(), frozenset()))
+    return (ROLE_PERMISSIONS[role] | added) - removed
+
+
+def effective_permissions(
+    role: Role, stored: Iterable[str] | None, model: PracticeModel = PracticeModel.ASSOCIATED
+) -> frozenset[Permission]:
+    """Resolve a role's effective set: the tenant's stored override, or the defaults for
+    the clinic's practice model.
 
     ``stored`` is the override row's string list (None when the role is not customized).
     Stored strings are intersected with the current catalog so a permission removed from
     the code never breaks reads; validation against the catalog happens only on write.
     """
     if stored is None:
-        return ROLE_PERMISSIONS[role]
+        return role_defaults(role, model)
     catalog = {str(p): p for p in Permission}
     return frozenset(catalog[s] for s in stored if s in catalog)
 
@@ -247,10 +284,11 @@ def granted(
     stored: Iterable[str] | None,
     modules: Iterable[AddonModule],
     adjustments: PermissionAdjustments | None = None,
+    model: PracticeModel = PracticeModel.ASSOCIATED,
 ) -> frozenset[Permission]:
     """What a user may actually do in a clinic: the role's effective set, with the user's
     own adjustments when given, minus the permissions of uncontracted modules."""
-    perms = effective_permissions(role, stored)
+    perms = effective_permissions(role, stored, model)
     if adjustments is not None and not adjustments.is_empty:
         catalog = {str(p): p for p in Permission}
         wanted = adjustments.apply(str(p) for p in perms)

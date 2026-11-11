@@ -16,9 +16,12 @@ export function TrendBars({
   points,
   barClassName = 'bg-accent',
   axisFormat = 'd MMM',
+  valueFormat = String,
 }: {
   points: TrendPoint[]
   barClassName?: string
+  /** How the directly labelled latest value is written (e.g. as money). */
+  valueFormat?: (n: number) => string
   /** date-fns pattern of the first and last axis labels ('HH:mm' for hourly series). */
   axisFormat?: string
 }) {
@@ -43,7 +46,7 @@ export function TrendBars({
           >
             <div className="flex h-full w-3/5 max-w-6 flex-col items-center justify-end">
               {i === last && hover === null && (
-                <span className="mb-1 font-mono text-xs text-tx-2">{p.count}</span>
+                <span className="mb-1 font-mono text-xs text-tx-2">{valueFormat(p.count)}</span>
               )}
               <div
                 className={cn('w-full rounded-t transition-opacity', barClassName)}

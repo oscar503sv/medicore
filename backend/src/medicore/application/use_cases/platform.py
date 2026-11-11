@@ -800,7 +800,12 @@ class UpdateTenantRolePermissions:
         parsed = role_permissions.validate_role_update(role, permissions)
         with self._factory.for_tenant(tenant_id) as uow:
             existing = uow.role_permissions.get_by_role(role)
-            before = effective_permissions(role, existing.permissions if existing else None)
+            tenant = uow.tenants.get_by_id(tenant_id)
+            if tenant is None:
+                raise EntityNotFound("Tenant", tenant_id)
+            before = effective_permissions(
+                role, existing.permissions if existing else None, tenant.practice_model
+            )
             role_permissions.upsert_override(uow, tenant_id, role, parsed, self._clock.now())
             uow.platform_audit.append(
                 _audit(

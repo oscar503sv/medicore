@@ -24,6 +24,7 @@ from medicore.domain.enums import (
     LangPref,
     NotificationChannel,
     PatientStatus,
+    PracticeModel,
     PrescriptionStatus,
     RecordStatus,
     Role,
@@ -107,6 +108,8 @@ def to_tenant(row: TenantModel) -> Tenant:
         status=TenantStatus(row.status),
         icd_version=IcdVersion(row.icd_version),
         locations=locations,
+        practice_model=PracticeModel(row.practice_model)
+        if row.practice_model in PracticeModel else PracticeModel.ASSOCIATED,
         created_at=row.created_at,
     )
 

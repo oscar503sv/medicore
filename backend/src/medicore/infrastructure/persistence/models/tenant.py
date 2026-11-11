@@ -43,6 +43,9 @@ class TenantModel(Base):
     icd_version: Mapped[str] = mapped_column(
         String(10), nullable=False, server_default="cie11", default="cie11"
     )
+    practice_model: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="associated", default="associated"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from medicore.application.ports.unit_of_work import (
+    AnalyticsReadModel,
     ErrorLogRepository,
     JobLogRepository,
     LoginThrottleRepository,
@@ -17,6 +18,7 @@ from medicore.application.ports.unit_of_work import (
     RequestStatsRepository,
 )
 from medicore.domain.repositories import FeeScheduleRepository
+from medicore.infrastructure.persistence.repositories.analytics import SqlAnalyticsReadModel
 from medicore.infrastructure.persistence.repositories.fee_schedule import SqlFeeScheduleRepository
 from medicore.infrastructure.persistence.repositories.login_throttle import (
     SqlLoginThrottleRepository,
@@ -29,6 +31,7 @@ from medicore.infrastructure.persistence.repositories.monitoring import (
 )
 from medicore.infrastructure.persistence.repositories.platform_reads import SqlPlatformReadModel
 from tests.support.repositories import (
+    InMemoryAnalyticsReadModel,
     InMemoryErrorLogRepository,
     InMemoryFeeScheduleRepository,
     InMemoryJobLogRepository,
@@ -56,6 +59,7 @@ def _methods(port) -> set[str]:
         (RequestStatsRepository, (SqlRequestStatsRepository, InMemoryRequestStatsRepository)),
         (FeeScheduleRepository, (SqlFeeScheduleRepository, InMemoryFeeScheduleRepository)),
         (LoginThrottleRepository, (SqlLoginThrottleRepository, InMemoryLoginThrottleRepository)),
+        (AnalyticsReadModel, (SqlAnalyticsReadModel, InMemoryAnalyticsReadModel)),
     ],
 )
 def test_adapters_implement_the_whole_port(port, adapters):

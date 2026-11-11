@@ -34,6 +34,7 @@ def granted_permissions(uow: UnitOfWork, tenant: Tenant, user: User) -> frozense
         override.permissions if override else None,
         tenant.subscription.modules,
         adjustments,
+        tenant.practice_model,
     )
 
 

@@ -9,6 +9,7 @@ from types import TracebackType
 from medicore.domain.shared.identifiers import TenantId
 from tests.support.repositories import (
     InMemoryAddonPricingRepository,
+    InMemoryAnalyticsReadModel,
     InMemoryApplicationRepository,
     InMemoryAppointmentRepository,
     InMemoryAuditLogRepository,
@@ -68,6 +69,7 @@ class InMemoryUnitOfWork:
         self.applications = InMemoryApplicationRepository(store, tenant_id)
         self.procedures = InMemoryProcedureRepository(store, tenant_id)
         self.subscription_payments = InMemorySubscriptionPaymentRepository(store, tenant_id)
+        self.analytics = InMemoryAnalyticsReadModel(store, tenant_id)
         self.tenants = InMemoryTenantRepository(store)
         self.platform_audit = InMemoryPlatformAuditLogRepository(store)
         self.sessions = InMemoryAuthSessionRepository(store)

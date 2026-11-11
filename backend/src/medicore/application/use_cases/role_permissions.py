@@ -8,6 +8,10 @@ A tenant may customize which permissions each role holds, within guardrails:
   granted to other roles nor removed from the doctor (a clinic where nobody can sign
   is broken).
 * Writes must be a subset of the current catalog; reads tolerate stale strings.
+
+The defaults themselves depend on the clinic's practice model (associated or employed
+doctors): changing it moves the defaults of every role, and customized roles get the same
+shift applied to their stored set, so their other customizations survive.
 """
 
 from __future__ import annotations
@@ -18,17 +22,17 @@ from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.permissions import (
-    ROLE_PERMISSIONS,
     Permission,
     effective_permissions,
     ensure_permission,
     locked_permissions,
+    role_defaults,
     validate_for_role,
 )
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.role_permission_override import RolePermissionOverride
-from medicore.domain.enums import Role
+from medicore.domain.enums import PracticeModel, Role
 from medicore.domain.shared.identifiers import RolePermissionOverrideId, TenantId
 
 
@@ -46,6 +50,7 @@ class PermissionsMatrixDTO:
     # Permissions of optional modules the clinic hasn't contracted: they can be configured,
     # but no role gets them until the module is added to the subscription.
     locked: tuple[str, ...] = ()
+    practice_model: PracticeModel = PracticeModel.ASSOCIATED
 
 
 def build_matrix(uow: UnitOfWork, tenant_id: TenantId) -> PermissionsMatrixDTO:
@@ -54,20 +59,31 @@ def build_matrix(uow: UnitOfWork, tenant_id: TenantId) -> PermissionsMatrixDTO:
     if tenant is None:
         raise EntityNotFound("Tenant", tenant_id)
     overrides = {o.role: o for o in uow.role_permissions.list()}
+    model = tenant.practice_model
     roles: dict[Role, RolePermissionsDTO] = {}
     for role in Role:
         override = overrides.get(role)
         stored = override.permissions if override else None
         roles[role] = RolePermissionsDTO(
-            defaults=tuple(sorted(str(p) for p in ROLE_PERMISSIONS[role])),
-            effective=tuple(sorted(str(p) for p in effective_permissions(role, stored))),
+            defaults=tuple(sorted(str(p) for p in role_defaults(role, model))),
+            effective=tuple(
+                sorted(str(p) for p in effective_permissions(role, stored, model))
+            ),
             customized=override is not None,
         )
     return PermissionsMatrixDTO(
         catalog=tuple(sorted(str(p) for p in Permission)),
         roles=roles,
         locked=tuple(sorted(str(p) for p in locked_permissions(tenant.subscription.modules))),
+        practice_model=model,
     )
+
+
+def _tenant(uow: UnitOfWork, tenant_id: TenantId):
+    tenant = uow.tenants.get_by_id(tenant_id)
+    if tenant is None:
+        raise EntityNotFound("Tenant", tenant_id)
+    return tenant
 
 
 def validate_role_update(role: Role, permissions: list[str]) -> frozenset[Permission]:
@@ -124,7 +140,8 @@ class UpdateRolePermissions:
         ensure_permission(actor, Permission.PERMISSIONS_MANAGE)
         parsed = validate_role_update(role, permissions)
         existing = self._uow.role_permissions.get_by_role(role)
-        before = effective_permissions(role, existing.permissions if existing else None)
+        model = _tenant(self._uow, actor.tenant_id).practice_model
+        before = effective_permissions(role, existing.permissions if existing else None, model)
         with self._uow:
             upsert_override(self._uow, actor.tenant_id, role, parsed, self._clock.now())
             self._uow.audit.append(
@@ -160,3 +177,46 @@ class ResetRolePermissions:
             )
             self._uow.commit()
         return build_matrix(self._uow, actor.tenant_id)
+
+
+class SetPracticeModel:
+    """Say how the clinic's doctors work (associated or employed). The defaults of every
+    role follow the model; a customized role gets the same shift applied to its stored set
+    (e.g. employed doctors lose ``fees.manage_own`` and ``analytics.money``), keeping the
+    rest of its customization. Per-user exceptions are left as they are."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(self, actor: ActorContext, model: PracticeModel) -> PermissionsMatrixDTO:
+        ensure_permission(actor, Permission.PERMISSIONS_MANAGE)
+        with self._uow:
+            tenant = _tenant(self._uow, actor.tenant_id)
+            previous = tenant.practice_model
+            if model == previous:
+                return build_matrix(self._uow, actor.tenant_id)
+            now = self._clock.now()
+            shifted = []
+            for override in self._uow.role_permissions.list():
+                role = override.role
+                old, new = role_defaults(role, previous), role_defaults(role, model)
+                if role == Role.ADMIN or old == new:
+                    continue
+                current = effective_permissions(role, override.permissions, previous)
+                updated = validate_for_role(
+                    role, [str(p) for p in (current | (new - old)) - (old - new)]
+                )
+                upsert_override(self._uow, actor.tenant_id, role, updated, now)
+                shifted.append(diff_for_audit(role, current, updated))
+            tenant.practice_model = model
+            self._uow.tenants.save(tenant)
+            self._uow.audit.append(
+                audit_entry(
+                    actor, now, "organization.practice_model_changed", "Tenant",
+                    str(tenant.id), before=str(previous), after=str(model),
+                    customized_roles=shifted,
+                )
+            )
+            self._uow.commit()
+            return build_matrix(self._uow, actor.tenant_id)

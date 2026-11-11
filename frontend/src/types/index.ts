@@ -34,6 +34,9 @@ export type Permission =
   | 'procedures.view'
   | 'procedures.perform'
   | 'procedures.catalog'
+  | 'analytics.own'
+  | 'analytics.clinic'
+  | 'analytics.money'
 
 export interface RolePermissionsEntry {
   defaults: Permission[]
@@ -46,7 +49,11 @@ export interface PermissionsMatrix {
   roles: Record<Role, RolePermissionsEntry>
   /** Permissions of optional modules the clinic hasn't contracted: configurable, not granted. */
   locked: Permission[]
+  /** How the clinic's doctors work; it decides the defaults on fees and income. */
+  practice_model: PracticeModel
 }
+
+export type PracticeModel = 'associated' | 'employed'
 
 // The JWT itself lives in an httpOnly cookie — sessions hold only UI metadata.
 export interface Session {

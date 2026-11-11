@@ -48,9 +48,11 @@ def _sorted(items) -> tuple[str, ...]:
     return tuple(sorted(str(p) for p in items))
 
 
-def _role_set(uow: UnitOfWork, role: Role) -> frozenset[Permission]:
+def _role_set(uow: UnitOfWork, tenant: Tenant, role: Role) -> frozenset[Permission]:
     override = uow.role_permissions.get_by_role(role)
-    return effective_permissions(role, override.permissions if override else None)
+    return effective_permissions(
+        role, override.permissions if override else None, tenant.practice_model
+    )
 
 
 def _load(uow: UnitOfWork, actor: ActorContext, user_id: UserId) -> tuple[Tenant, User]:
@@ -69,7 +71,7 @@ def _dto(uow: UnitOfWork, tenant: Tenant, user: User) -> UserPermissionsDTO:
         user=user,
         available=has_feature(uow, tenant, PlanFeature.USER_PERMISSIONS),
         catalog=_sorted(Permission),
-        role_permissions=_sorted(_role_set(uow, user.role)),
+        role_permissions=_sorted(_role_set(uow, tenant, user.role)),
         granted=tuple(sorted(adj.granted)),
         revoked=tuple(sorted(adj.revoked)),
         effective=_sorted(granted_permissions(uow, tenant, user)),
@@ -117,7 +119,7 @@ class UpdateUserPermissions:
                 )
             wanted = validate_for_role(user.role, permissions)
             before = granted_permissions(self._uow, tenant, user)
-            role_set = _role_set(self._uow, user.role)
+            role_set = _role_set(self._uow, tenant, user.role)
             user.adjust_permissions(
                 PermissionAdjustments.between(
                     (str(p) for p in role_set), (str(p) for p in wanted)
