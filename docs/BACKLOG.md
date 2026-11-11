@@ -93,6 +93,13 @@ extra database round trip. Already applied (Nov 2026): 2 uvicorn workers
 (`WEB_CONCURRENCY`), trigram indexes for the patient search, batched availability reads in
 the dashboard and purging stale `login_attempts` on login.
 
+### Subscriptions — annual billing
+
+Plans are priced monthly today. Offer an annual option (e.g. two months free): an annual
+price per plan, editable from the console like the monthly one, and renewal adding a year to
+the paid period instead of a month. The subscription itself does not change, since it already
+stores the date it is paid until.
+
 ## Security — consciously deferred
 
 Quick wins already applied (June 2026): constant-time login, CORS/docs validation in

@@ -119,6 +119,7 @@ from medicore.domain.entities.procedure import Procedure, ProcedureProgress, Pro
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import (
+    AddonModule,
     ApplicationOrderSource,
     ApplicationOutcome,
     ApplicationRoute,
@@ -144,6 +145,7 @@ from medicore.domain.services.immunization import (
     add_months,
     applies_to,
 )
+from medicore.domain.services.plan_catalog import CLINICA_PLUS
 from medicore.domain.shared.errors import DomainError
 from medicore.domain.shared.identifiers import (
     AvailabilityId,
@@ -158,6 +160,7 @@ from medicore.domain.value_objects.contact_info import ContactInfo
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.soap_note import SoapNote
+from medicore.domain.value_objects.subscription import Subscription
 from medicore.domain.value_objects.time_range import TimeRange
 from medicore.domain.value_objects.user_preferences import UserPreferences
 from medicore.domain.value_objects.vitals import Vitals
@@ -533,6 +536,10 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
     )
 
 
+# The public demo clinics show every feature and never expire.
+DEMO_SUBSCRIPTION = Subscription(plan_code=CLINICA_PLUS, modules=frozenset(AddonModule))
+
+
 def get_or_create_tenant(
     session, slug: str, legal_name: str, tax_id: str, location: str
 ) -> Tenant:
@@ -540,10 +547,18 @@ def get_or_create_tenant(
     if row:
         print(f"  tenant '{slug}' ya existe")
         tid = TenantId.parse(row.id)
-        return SqlAlchemyUnitOfWork(session, tid).tenants.get_by_id(tid)
+        uow = SqlAlchemyUnitOfWork(session, tid)
+        with uow:
+            tenant = uow.tenants.get_by_id(tid)
+            if tenant.subscription != DEMO_SUBSCRIPTION:
+                tenant.subscription = DEMO_SUBSCRIPTION
+                uow.tenants.save(tenant)
+                uow.commit()
+        return tenant
     tid = TenantId.new()
     tenant = Tenant(
         id=tid, legal_name=legal_name, tax_id=tax_id, slug=Slug(slug), timezone=TIMEZONE,
+        subscription=DEMO_SUBSCRIPTION,
         locations=[Location(id=LocationId.new(), tenant_id=tid, name=location, is_primary=True)],
     )
     uow = SqlAlchemyUnitOfWork(session, tid)

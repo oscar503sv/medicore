@@ -236,12 +236,11 @@ class TestOrganization:
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
         before = uow.tenants.get_by_id(seed.tenant.id)
-        plan, seats = before.plan, before.seat_limit
+        subscription = before.subscription
         UpdateOrganization(uow, FixedClock()).execute(
-            seed.actor(seed.admin), plan="enterprise", seat_limit=999
+            seed.actor(seed.admin), subscription=None, plan_code="empresarial", seat_limit=999
         )
-        after = uow.tenants.get_by_id(seed.tenant.id)
-        assert (after.plan, after.seat_limit) == (plan, seats)
+        assert uow.tenants.get_by_id(seed.tenant.id).subscription == subscription
 
     def test_add_location(self):
         seed = seed_clinic()

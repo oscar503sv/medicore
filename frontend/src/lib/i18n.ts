@@ -1,6 +1,7 @@
 import { useUIStore } from '@/stores/ui'
 import { aplEn, aplEs } from './i18n-applications'
 import { obEn, obEs } from './i18n-onboarding'
+import { subEn, subEs } from './i18n-subscriptions'
 import { prcEn, prcEs } from './i18n-procedures'
 import { vaxEn, vaxEs } from './i18n-vaccination'
 
@@ -11,6 +12,7 @@ const es: Dict = {
   ...aplEs,
   ...prcEs,
   ...obEs,
+  ...subEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -480,6 +482,14 @@ const es: Dict = {
   // backend error codes (`code` in error responses; see backend error_handlers)
   'err.internal': 'Error interno del servidor. Inténtalo de nuevo más tarde.',
   'err.request_invalid': 'Hay datos con formato incorrecto: {fields}.',
+  'err.plan.invalid_limit': 'Los límites del plan no pueden ser negativos.',
+  'err.plan.invalid_price': 'El precio no es válido.',
+  'err.plan.name_required': 'El plan necesita un nombre.',
+  'err.plan.required': 'Elige un plan.',
+  'err.plan.invalid_grace': 'Los días de gracia no son válidos.',
+  'err.plan.invalid_trial': 'La duración de la prueba no es válida.',
+  'err.plan.unavailable': 'El plan {plan} no existe o no está activo.',
+  'err.plan.period_required': 'Indica la fecha de vencimiento o inicia una prueba gratuita.',
   'err.application_error': 'No se pudo completar la operación.',
   'err.validation_error': 'Los datos enviados no son válidos.',
   'err.domain_error': 'La operación no está permitida.',
@@ -657,8 +667,6 @@ const es: Dict = {
   'org.tax_id': 'ID fiscal',
   'org.timezone': 'Zona horaria',
   'org.slug': 'Identificador',
-  'org.plan': 'Plan',
-  'org.seat_limit': 'Límite de usuarios',
   'org.saved_ok': 'Organización actualizada',
   'org.locations': 'Sedes',
   'org.add_location': 'Añadir sede',
@@ -690,7 +698,6 @@ const es: Dict = {
   'platform.suspended_clinics': 'Suspendidas',
   'platform.col_name': 'Nombre',
   'platform.col_slug': 'Identificador',
-  'platform.col_plan': 'Plan',
   'platform.col_status': 'Estado',
   'platform.status_active': 'Activa',
   'platform.status_suspended': 'Suspendida',
@@ -712,8 +719,6 @@ const es: Dict = {
   'platform.f_admin_name': 'Nombre',
   'platform.f_admin_email': 'Correo',
   'platform.f_temp_password': 'Contraseña temporal',
-  'platform.f_plan': 'Plan',
-  'platform.f_seat_limit': 'Límite de usuarios',
   'platform.back_to_clinics': 'Volver a clínicas',
   'platform.clinic_info': 'Información de la clínica',
   'platform.status_actions': 'Estado de la clínica',
@@ -939,6 +944,7 @@ const en: Dict = {
   ...aplEn,
   ...prcEn,
   ...obEn,
+  ...subEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.update_available': 'A new version of Medicore is available.',
@@ -1393,6 +1399,14 @@ const en: Dict = {
   // backend error codes (`code` in error responses; see backend error_handlers)
   'err.internal': 'Internal server error. Please try again later.',
   'err.request_invalid': 'Some data has an invalid format: {fields}.',
+  'err.plan.invalid_limit': 'Plan limits cannot be negative.',
+  'err.plan.invalid_price': 'The price is not valid.',
+  'err.plan.name_required': 'The plan needs a name.',
+  'err.plan.required': 'Choose a plan.',
+  'err.plan.invalid_grace': 'The grace days are not valid.',
+  'err.plan.invalid_trial': 'The trial length is not valid.',
+  'err.plan.unavailable': 'Plan {plan} does not exist or is not active.',
+  'err.plan.period_required': 'Set an expiry date or start a free trial.',
   'err.application_error': 'The operation could not be completed.',
   'err.validation_error': 'The submitted data is not valid.',
   'err.domain_error': 'This operation is not allowed.',
@@ -1570,8 +1584,6 @@ const en: Dict = {
   'org.tax_id': 'Tax ID',
   'org.timezone': 'Timezone',
   'org.slug': 'Slug',
-  'org.plan': 'Plan',
-  'org.seat_limit': 'Seat limit',
   'org.saved_ok': 'Organization updated',
   'org.locations': 'Locations',
   'org.add_location': 'Add location',
@@ -1603,7 +1615,6 @@ const en: Dict = {
   'platform.suspended_clinics': 'Suspended',
   'platform.col_name': 'Name',
   'platform.col_slug': 'Identifier',
-  'platform.col_plan': 'Plan',
   'platform.col_status': 'Status',
   'platform.status_active': 'Active',
   'platform.status_suspended': 'Suspended',
@@ -1625,8 +1636,6 @@ const en: Dict = {
   'platform.f_admin_name': 'Name',
   'platform.f_admin_email': 'Email',
   'platform.f_temp_password': 'Temporary password',
-  'platform.f_plan': 'Plan',
-  'platform.f_seat_limit': 'Seat limit',
   'platform.back_to_clinics': 'Back to clinics',
   'platform.clinic_info': 'Clinic information',
   'platform.status_actions': 'Clinic status',

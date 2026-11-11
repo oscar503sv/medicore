@@ -222,3 +222,29 @@ class ProcedureSource(StrEnum):
 
     CONSULTATION = "consultation"
     DIRECT = "direct"
+
+
+# ── Subscriptions ─────────────────────────────────────────────────────────────
+
+
+class AddonModule(StrEnum):
+    """Optional modules a clinic contracts on top of its plan."""
+
+    VACCINATION = "vaccination"
+    APPLICATIONS = "applications"
+    PROCEDURES = "procedures"
+
+
+class PlanFeature(StrEnum):
+    """Capabilities that differ between plans (beyond their quotas)."""
+
+    USER_PERMISSIONS = "user_permissions"  # per-user permission overrides
+
+
+class SubscriptionStatus(StrEnum):
+    """Derived from the paid/trial period and the grace days, never stored."""
+
+    TRIAL = "trial"
+    ACTIVE = "active"
+    GRACE = "grace"  # expired, still fully usable while the grace days last
+    READ_ONLY = "read_only"  # grace over: data can be read, nothing written

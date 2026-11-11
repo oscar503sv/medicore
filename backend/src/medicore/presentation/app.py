@@ -25,6 +25,7 @@ from medicore.presentation.routers import (
     procedures,
     records,
     role_permissions,
+    subscriptions,
     users,
     vaccinations,
 )
@@ -93,6 +94,7 @@ def create_app() -> FastAPI:
     app.include_router(applications.router, prefix=API_PREFIX)
     app.include_router(procedures.router, prefix=API_PREFIX)
     app.include_router(platform.router, prefix=API_PREFIX)
+    app.include_router(subscriptions.router, prefix=API_PREFIX)
 
     @app.get("/health", tags=["health"])
     def health():

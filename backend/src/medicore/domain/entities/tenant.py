@@ -9,6 +9,7 @@ from medicore.domain.enums import IcdVersion, TenantStatus
 from medicore.domain.shared.errors import DomainError, InvalidValueObject
 from medicore.domain.shared.identifiers import LocationId, TenantId
 from medicore.domain.value_objects.slug import Slug
+from medicore.domain.value_objects.subscription import Subscription
 
 
 @dataclass(slots=True)
@@ -31,8 +32,8 @@ class Tenant:
     tax_id: str
     slug: Slug
     timezone: str  # IANA, e.g. "America/El_Salvador"
-    plan: str = "pro"
-    seat_limit: int = 10
+    # Plan, modules and paid period; set only from the platform console.
+    subscription: Subscription
     status: TenantStatus = TenantStatus.ACTIVE
     icd_version: IcdVersion = IcdVersion.CIE11
     locations: list[Location] = field(default_factory=list)

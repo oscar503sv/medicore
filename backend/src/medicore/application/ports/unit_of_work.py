@@ -14,6 +14,7 @@ from types import TracebackType
 from typing import Protocol, runtime_checkable
 
 from medicore.domain.repositories import (
+    AddonPricingRepository,
     ApplicationRepository,
     AppointmentRepository,
     AuditLogRepository,
@@ -26,6 +27,7 @@ from medicore.domain.repositories import (
     MedicalRecordRepository,
     NotificationRepository,
     PatientRepository,
+    PlanRepository,
     PlatformAdminRepository,
     PlatformAuditLogRepository,
     PrescriptionRepository,
@@ -61,6 +63,8 @@ class UnitOfWork(Protocol):
     tenants: TenantRepository  # global (not tenant-filtered)
     platform_audit: PlatformAuditLogRepository  # global (not tenant-filtered)
     sessions: AuthSessionRepository  # global (not tenant-filtered)
+    plans: PlanRepository  # global subscription catalog
+    addon_pricing: AddonPricingRepository  # global subscription catalog
 
     def __enter__(self) -> UnitOfWork: ...
 
@@ -84,6 +88,8 @@ class PlatformUnitOfWork(Protocol):
     platform_admins: PlatformAdminRepository
     platform_audit: PlatformAuditLogRepository
     sessions: AuthSessionRepository
+    plans: PlanRepository
+    addon_pricing: AddonPricingRepository
 
     def __enter__(self) -> PlatformUnitOfWork: ...
 

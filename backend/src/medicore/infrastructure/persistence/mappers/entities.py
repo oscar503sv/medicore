@@ -66,6 +66,7 @@ from medicore.infrastructure.persistence.mappers._json import (
     dict_to_vaccine,
     dict_to_vitals,
 )
+from medicore.infrastructure.persistence.mappers.subscription import subscription_from_row
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.audit_log import AuditLogModel
 from medicore.infrastructure.persistence.models.consultation import ConsultationModel
@@ -100,8 +101,7 @@ def to_tenant(row: TenantModel) -> Tenant:
         tax_id=row.tax_id,
         slug=Slug(row.slug),
         timezone=row.timezone,
-        plan=row.plan,
-        seat_limit=row.seat_limit,
+        subscription=subscription_from_row(row),
         status=TenantStatus(row.status),
         icd_version=IcdVersion(row.icd_version),
         locations=locations,

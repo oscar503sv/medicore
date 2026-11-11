@@ -96,6 +96,13 @@ viaje extra a la base. Ya aplicado (nov 2026): 2 workers de uvicorn (`WEB_CONCUR
 índices trigram para la búsqueda de pacientes, lectura en lote de disponibilidades en el
 dashboard y purga de `login_attempts` viejos al iniciar sesión.
 
+### Suscripciones — cobro anual
+
+Hoy los planes tienen precio mensual. Ofrecer una opción anual (p. ej. dos meses gratis):
+un precio anual por plan, editable desde la consola igual que el mensual, y que la renovación
+sume un año al periodo pagado en lugar de un mes. La suscripción en sí no cambia, porque ya
+guarda la fecha hasta la que está pagada.
+
 ## Seguridad — diferido conscientemente
 
 Quick wins ya aplicados (jun 2026): login en tiempo constante, validación de CORS/docs en

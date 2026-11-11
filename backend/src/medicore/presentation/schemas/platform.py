@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from medicore.domain.enums import IcdVersion, Role, Sex, TenantStatus
+from medicore.domain.enums import AddonModule, IcdVersion, Role, Sex, TenantStatus
+from medicore.presentation.schemas.subscriptions import TenantSubscriptionSummary
 
 
 class PlatformLoginRequest(BaseModel):
@@ -41,11 +42,10 @@ class TenantResponse(BaseModel):
     tax_id: str
     slug: str
     timezone: str
-    plan: str
-    seat_limit: int
     status: str
     icd_version: str
     locations: list[LocationResponse]
+    subscription: TenantSubscriptionSummary
 
 
 class TenantListResponse(BaseModel):
@@ -65,6 +65,11 @@ class CreateTenantRequest(BaseModel):
     admin_name: str
     admin_email: str
     admin_password: str
+    # Subscription: a free trial of ``trial_days`` from today, or paid until ``period_end``.
+    plan_code: str
+    modules: list[AddonModule] = []
+    trial_days: int | None = Field(default=None, ge=1, le=90)
+    period_end: date | None = None
 
 
 class CreateTenantResponse(BaseModel):
@@ -77,8 +82,6 @@ class UpdateTenantRequest(BaseModel):
     legal_name: str | None = None
     tax_id: str | None = None
     timezone: str | None = None
-    plan: str | None = None
-    seat_limit: int | None = None
     icd_version: IcdVersion | None = None
     location_name: str | None = None  # renames the clinic's primary location
 

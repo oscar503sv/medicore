@@ -44,6 +44,10 @@ from medicore.infrastructure.persistence.repositories.procedure import SqlProced
 from medicore.infrastructure.persistence.repositories.role_permission_override import (
     SqlRolePermissionOverrideRepository,
 )
+from medicore.infrastructure.persistence.repositories.subscription import (
+    SqlAddonPricingRepository,
+    SqlPlanRepository,
+)
 from medicore.infrastructure.persistence.repositories.tenant import SqlTenantRepository
 from medicore.infrastructure.persistence.repositories.user import (
     SqlDoctorProfileRepository,
@@ -82,6 +86,8 @@ class SqlAlchemyUnitOfWork:
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
         self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
         self.sessions = SqlAuthSessionRepository(session)  # global (non-scoped)
+        self.plans = SqlPlanRepository(session)  # global (non-scoped)
+        self.addon_pricing = SqlAddonPricingRepository(session)  # global (non-scoped)
 
         self._committed = False
 
@@ -123,6 +129,8 @@ class PlatformUnitOfWork:
         self.platform_admins = SqlPlatformAdminRepository(session)
         self.platform_audit = SqlPlatformAuditLogRepository(session)
         self.sessions = SqlAuthSessionRepository(session)
+        self.plans = SqlPlanRepository(session)
+        self.addon_pricing = SqlAddonPricingRepository(session)
         self._committed = False
 
     def __enter__(self) -> PlatformUnitOfWork:

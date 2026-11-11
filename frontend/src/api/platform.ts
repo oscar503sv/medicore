@@ -1,14 +1,21 @@
 import { api, platformApi } from './client'
 import type {
+  AddonModule,
+  AddonPricing,
   AuthSessionInfo,
   GlobalAuditEntry,
   GlobalStats,
   PaginatedResponse,
   Permission,
   PermissionsMatrix,
+  Plan,
+  PlanCatalog,
+  PlanFeature,
+  PlanLimits,
   PlatformAdminProfile,
   PlatformSession,
   Role,
+  Subscription,
   Tenant,
   TenantStats,
   User,
@@ -24,6 +31,53 @@ export interface CreateTenantPayload {
   admin_name: string
   admin_email: string
   admin_password: string
+  plan_code: string
+  modules: AddonModule[]
+  trial_days: number | null // a free trial from today, or…
+  period_end: string | null // …paid until this date
+}
+
+export interface UpdatePlanPayload {
+  name: string
+  monthly_price: string | null
+  limits: PlanLimits
+  features: PlanFeature[]
+  active: boolean
+}
+
+export interface SubscriptionPayload {
+  plan_code: string
+  modules: AddonModule[]
+  period_end: string | null
+  is_trial: boolean
+  grace_days: number
+  limit_overrides: PlanLimits | null
+  price_override: string | null
+}
+
+export const platformPlansApi = {
+  catalog: () => platformApi.get<PlanCatalog>('/platform/plans').then((r) => r.data),
+
+  update: (code: string, payload: UpdatePlanPayload) =>
+    platformApi.put<Plan>(`/platform/plans/${code}`, payload).then((r) => r.data),
+
+  updateAddons: (payload: AddonPricing) =>
+    platformApi.put<AddonPricing>('/platform/addon-pricing', payload).then((r) => r.data),
+
+  subscription: (tenantId: string) =>
+    platformApi
+      .get<Subscription>(`/platform/tenants/${tenantId}/subscription`)
+      .then((r) => r.data),
+
+  updateSubscription: (tenantId: string, payload: SubscriptionPayload) =>
+    platformApi
+      .put<Subscription>(`/platform/tenants/${tenantId}/subscription`, payload)
+      .then((r) => r.data),
+
+  startTrial: (tenantId: string, days = 7) =>
+    platformApi
+      .post<Subscription>(`/platform/tenants/${tenantId}/subscription/trial`, { days })
+      .then((r) => r.data),
 }
 
 export interface CreateTenantResult {
@@ -56,8 +110,6 @@ export const platformTenantsApi = {
       legal_name: string
       tax_id: string
       timezone: string
-      plan: string
-      seat_limit: number
       icd_version: string
       location_name: string
     }>,

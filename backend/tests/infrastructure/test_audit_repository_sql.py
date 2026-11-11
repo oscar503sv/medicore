@@ -62,6 +62,7 @@ def _tenant(session) -> TenantId:
             id=tenant_id.value,
             legal_name="Clínica Test SL",
             tax_id="B00000000",
+            plan_code="clinica",  # seeded by the subscriptions migration
             slug=f"test-{uuid.uuid4().hex[:12]}",
             created_at=datetime(2026, 6, 1, tzinfo=UTC),
         )

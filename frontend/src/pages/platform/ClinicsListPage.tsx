@@ -3,10 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Building2, CheckCircle2, Plus, Ban } from 'lucide-react'
 import { errorMessage } from '@/api/client'
-import { platformTenantsApi, type CreateTenantPayload } from '@/api/platform'
+import { platformPlansApi, platformTenantsApi, type CreateTenantPayload } from '@/api/platform'
 import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
+import { SubscriptionBadge } from '@/components/subscriptions/SubscriptionBadge'
 import { Badge } from '@/components/ui/Badge'
+import { Checkbox } from '@/components/ui/Checkbox'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input, Select } from '@/components/ui/Input'
@@ -15,9 +17,11 @@ import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
+import { fmtDate } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { expiryLabel } from '@/lib/subscriptions'
 import { TIMEZONES, tzLabel } from '@/lib/timezones'
-import type { TenantStatus } from '@/types'
+import { ADDON_MODULES, type TenantStatus } from '@/types'
 
 const STATUS_TONE: Record<TenantStatus, 'ok' | 'danger' | 'neutral'> = {
   active: 'ok',
@@ -40,6 +44,11 @@ export function ClinicsListPage() {
     queryKey: ['platform-tenants'],
     queryFn: () => platformTenantsApi.list({ limit: 200 }),
   })
+  const { data: catalog } = useQuery({
+    queryKey: ['platform-plans'],
+    queryFn: platformPlansApi.catalog,
+  })
+  const planName = (code: string) => catalog?.plans.find((p) => p.code === code)?.name ?? code
 
   if (isLoading || !data) return <PageLoader />
 
@@ -72,8 +81,9 @@ export function ClinicsListPage() {
             <Tr>
               <Th>{t('platform.col_name')}</Th>
               <Th>{t('platform.col_slug')}</Th>
-              <Th>{t('platform.col_plan')}</Th>
-              <Th>CIE</Th>
+              <Th>{t('sub.col_plan')}</Th>
+              <Th>{t('sub.col_subscription')}</Th>
+              <Th>{t('sub.col_expiry')}</Th>
               <Th>{t('platform.col_status')}</Th>
             </Tr>
           </thead>
@@ -82,8 +92,23 @@ export function ClinicsListPage() {
               <Tr key={c.id} onClick={() => navigate(`/platform/clinics/${c.id}`)}>
                 <Td className="font-medium text-tx">{c.legal_name}</Td>
                 <Td className="font-mono text-[13px]">{c.slug}</Td>
-                <Td>{c.plan}</Td>
-                <Td className="uppercase">{c.icd_version}</Td>
+                <Td>
+                  <p className="text-tx">{planName(c.subscription.plan_code)}</p>
+                  {c.subscription.modules.length > 0 && (
+                    <p className="text-xs text-tx-3">
+                      {c.subscription.modules.map((m) => t(`sub.module.${m}`)).join(' · ')}
+                    </p>
+                  )}
+                </Td>
+                <Td>
+                  <SubscriptionBadge status={c.subscription.status} />
+                </Td>
+                <Td>
+                  <p className="text-sm text-tx">
+                    {c.subscription.period_end ? fmtDate(c.subscription.period_end) : '—'}
+                  </p>
+                  <p className="text-xs text-tx-3">{expiryLabel(t, c.subscription.days_left)}</p>
+                </Td>
                 <Td>
                   <Badge tone={STATUS_TONE[c.status]}>{t(`platform.status_${c.status}`)}</Badge>
                 </Td>
@@ -114,8 +139,18 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
     admin_name: '',
     admin_email: '',
     admin_password: genPassword(),
+    plan_code: 'clinica',
+    modules: [],
+    trial_days: 7,
+    period_end: null,
   }
   const [form, setForm] = useState<CreateTenantPayload>(empty)
+  const { data: catalog } = useQuery({
+    queryKey: ['platform-plans'],
+    queryFn: platformPlansApi.catalog,
+    enabled: open,
+  })
+  const onTrial = form.trial_days !== null
   const set = (patch: Partial<CreateTenantPayload>) => setForm((f) => ({ ...f, ...patch }))
 
   const create = useMutation({
@@ -186,6 +221,70 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
               </option>
             ))}
           </Select>
+        </div>
+
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <p className="mb-3 text-[13px] font-semibold text-tx">{t('sub.card_title')}</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Select
+              label={t('sub.f_plan')}
+              value={form.plan_code}
+              onChange={(e) => set({ plan_code: e.target.value })}
+            >
+              {(catalog?.plans ?? [])
+                .filter((p) => p.active)
+                .map((p) => (
+                  <option key={p.code} value={p.code}>
+                    {p.name}
+                  </option>
+                ))}
+            </Select>
+            <Select
+              label={t('sub.f_start')}
+              value={onTrial ? 'trial' : 'paid'}
+              onChange={(e) =>
+                set(
+                  e.target.value === 'trial'
+                    ? { trial_days: 7, period_end: null }
+                    : { trial_days: null },
+                )
+              }
+            >
+              <option value="trial">{t('sub.start_trial_opt')}</option>
+              <option value="paid">{t('sub.start_paid_opt')}</option>
+            </Select>
+            <div>
+              <span className="mb-1.5 block text-[13px] font-medium text-tx-2">
+                {t('sub.f_modules')}
+              </span>
+              <div className="space-y-1.5">
+                {ADDON_MODULES.map((m) => (
+                  <label key={m} className="flex items-center gap-2 text-sm text-tx">
+                    <Checkbox
+                      checked={form.modules.includes(m)}
+                      onChange={(e) =>
+                        set({
+                          modules: e.target.checked
+                            ? [...form.modules, m]
+                            : form.modules.filter((x) => x !== m),
+                        })
+                      }
+                    />
+                    {t(`sub.module.${m}`)}
+                  </label>
+                ))}
+              </div>
+            </div>
+            {!onTrial && (
+              <Input
+                label={t('sub.f_period_end')}
+                type="date"
+                value={form.period_end ?? ''}
+                onChange={(e) => set({ period_end: e.target.value || null })}
+                required
+              />
+            )}
+          </div>
         </div>
 
         <div className="rounded-lg border border-line bg-surface-2 p-4">

@@ -27,6 +27,7 @@ from medicore.domain.repositories.medical_document_repository import (
 from medicore.domain.repositories.medical_record_repository import MedicalRecordRepository
 from medicore.domain.repositories.notification_repository import NotificationRepository
 from medicore.domain.repositories.patient_repository import PatientRepository
+from medicore.domain.repositories.plan_repository import AddonPricingRepository, PlanRepository
 from medicore.domain.repositories.platform_repository import (
     PlatformAdminRepository,
     PlatformAuditLogRepository,
@@ -46,6 +47,8 @@ from medicore.domain.repositories.vaccination_record_repository import (
 )
 
 __all__ = [
+    "AddonPricingRepository",
+    "PlanRepository",
     "ProcedureRepository",
     "Page",
     "Paging",

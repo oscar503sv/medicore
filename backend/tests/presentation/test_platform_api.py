@@ -49,12 +49,19 @@ def test_list_and_create_tenant(seed, client, platform_headers):
             "admin_name": "Admin Este",
             "admin_email": "admin@este.test",
             "admin_password": "temp-pass-123",
+            "plan_code": "clinica",
+            "modules": ["vaccination"],
+            "trial_days": 7,
         },
     )
     assert resp.status_code == 201, resp.text
     data = resp.json()
     assert data["tenant"]["slug"] == "clinica-este"
     assert data["tenant"]["icd_version"] == "cie11"
+    sub = data["tenant"]["subscription"]
+    assert (sub["plan_code"], sub["modules"], sub["is_trial"], sub["status"]) == (
+        "clinica", ["vaccination"], True, "trial",
+    )
 
     listing2 = client.get("/api/v1/platform/tenants", headers=platform_headers)
     assert listing2.json()["total"] == initial_total + 1

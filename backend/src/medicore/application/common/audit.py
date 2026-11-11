@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from medicore.application.common.context import ActorContext
+from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.domain.entities.audit_log import AuditLog
-from medicore.domain.shared.identifiers import AuditLogId
+from medicore.domain.entities.platform_audit_log import PlatformAuditLog
+from medicore.domain.shared.identifiers import AuditLogId, TenantId
 
 
 def subject(*parts: object) -> str:
@@ -38,6 +39,31 @@ def audit_entry(
         entity_id=entity_id,
         metadata=meta,
         timestamp=when,
+        ip_address=actor.ip_address,
+        user_agent=actor.user_agent,
+    )
+
+
+def platform_audit_entry(
+    actor: PlatformActorContext,
+    when: datetime,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    *,
+    tenant_id: TenantId | None = None,
+    **metadata: object,
+) -> PlatformAuditLog:
+    """An entry for the platform (superadmin) trail; ``tenant_id`` links it to a clinic."""
+    return PlatformAuditLog(
+        id=AuditLogId.new(),
+        actor_id=actor.admin_id,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        metadata=dict(metadata),
+        timestamp=when,
+        tenant_id=tenant_id,
         ip_address=actor.ip_address,
         user_agent=actor.user_agent,
     )

@@ -32,7 +32,9 @@ from medicore.application.use_cases.platform import (
     UpdateTenant,
     UpdateTenantUser,
 )
+from medicore.application.use_cases.subscriptions import SubscriptionCommand
 from medicore.domain.enums import IcdVersion, Role, TenantStatus, UserStatus
+from medicore.domain.services.plan_catalog import CLINICA
 from medicore.domain.shared.identifiers import SessionId, UserId
 from tests.support.builders import PASSWORD, seed_clinic
 from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
@@ -41,6 +43,13 @@ from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
 def make_platform_auth(seed):
     return AuthenticatePlatformAdmin(
         seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), FixedClock()
+    )
+
+
+def _sub(plan_code: str, period_end=None) -> SubscriptionCommand:
+    return SubscriptionCommand(
+        plan_code=plan_code, modules=frozenset(), period_end=period_end,
+        is_trial=False, grace_days=7,
     )
 
 
@@ -170,6 +179,8 @@ def test_create_tenant_with_admin():
         admin_name="Admin Sur",
         admin_email="admin@sur.test",
         admin_password="temp-pass-123",
+        subscription=_sub(CLINICA),
+        trial_days=7,
     )
     result = CreateTenantWithAdmin(seed.factory, PlainPasswordHasher(), FixedClock()).execute(
         actor_for(seed), cmd
@@ -193,6 +204,7 @@ def test_create_tenant_duplicate_slug_rejected():
     cmd = CreateTenantCommand(
         legal_name="Dup", tax_id="B1", slug="clinica-norte", timezone="Europe/Madrid",
         location_name="X", admin_name="A", admin_email="a@x.test", admin_password="temp-pass-123",
+        subscription=_sub(CLINICA), trial_days=7,
     )
     with pytest.raises(ValidationError):
         CreateTenantWithAdmin(seed.factory, PlainPasswordHasher(), FixedClock()).execute(
@@ -232,10 +244,11 @@ def test_reactivated_tenant_allows_login():
 def test_update_tenant_changes_icd_version():
     seed = seed_clinic()
     tenant = UpdateTenant(seed.factory, FixedClock()).execute(
-        actor_for(seed), seed.tenant.id, icd_version="cie10", plan="enterprise"
+        actor_for(seed), seed.tenant.id, icd_version="cie10", subscription=None
     )
     assert tenant.icd_version == IcdVersion.CIE10
-    assert tenant.plan == "enterprise"
+    # the subscription has its own use case; the generic update can't touch it
+    assert tenant.subscription == seed.tenant.subscription
 
 
 def test_list_tenants_filters_by_status():

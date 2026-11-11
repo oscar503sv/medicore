@@ -9,6 +9,7 @@ import type { Permission, PermissionsMatrix, Role, User } from '@/types'
 import { PageHeader } from '@/components/PageHeader'
 import { PermissionsMatrixTable } from '@/components/permissions/PermissionsMatrixTable'
 import { StatCard } from '@/components/StatCard'
+import { SubscriptionCard } from '@/components/subscriptions/SubscriptionCard'
 import { Badge } from '@/components/ui/Badge'
 import { statusTone } from '@/components/ui/badgeTone'
 import { Button } from '@/components/ui/Button'
@@ -50,8 +51,6 @@ export function ClinicDetailPage() {
 
   const [legalName, setLegalName] = useState('')
   const [taxId, setTaxId] = useState('')
-  const [plan, setPlan] = useState('')
-  const [seatLimit, setSeatLimit] = useState(10)
   const [icdVersion, setIcdVersion] = useState('cie11')
   const [timezone, setTimezone] = useState('America/El_Salvador')
   const [locationName, setLocationName] = useState('')
@@ -60,8 +59,6 @@ export function ClinicDetailPage() {
     if (clinic) {
       setLegalName(clinic.legal_name)
       setTaxId(clinic.tax_id)
-      setPlan(clinic.plan)
-      setSeatLimit(clinic.seat_limit)
       setIcdVersion(clinic.icd_version)
       setTimezone(clinic.timezone)
       const primary = clinic.locations.find((l) => l.is_primary) ?? clinic.locations[0]
@@ -79,8 +76,6 @@ export function ClinicDetailPage() {
       platformTenantsApi.update(id, {
         legal_name: legalName,
         tax_id: taxId,
-        plan,
-        seat_limit: seatLimit,
         icd_version: icdVersion,
         timezone,
         location_name: locationName,
@@ -206,8 +201,6 @@ export function ClinicDetailPage() {
   const dirty =
     legalName !== clinic.legal_name ||
     taxId !== clinic.tax_id ||
-    plan !== clinic.plan ||
-    seatLimit !== clinic.seat_limit ||
     icdVersion !== clinic.icd_version ||
     timezone !== clinic.timezone ||
     locationName !== primaryName
@@ -240,14 +233,6 @@ export function ClinicDetailPage() {
           <div className="grid grid-cols-2 gap-4">
             <Input label={t('platform.f_legal_name')} value={legalName} onChange={(e) => setLegalName(e.target.value)} required />
             <Input label={t('platform.f_tax_id')} value={taxId} onChange={(e) => setTaxId(e.target.value)} required />
-            <Input label={t('platform.f_plan')} value={plan} onChange={(e) => setPlan(e.target.value)} />
-            <Input
-              label={t('platform.f_seat_limit')}
-              type="number"
-              min={1}
-              value={seatLimit}
-              onChange={(e) => setSeatLimit(Number(e.target.value))}
-            />
             <Select label={t('platform.f_icd')} value={icdVersion} onChange={(e) => setIcdVersion(e.target.value)}>
               <option value="cie11">CIE-11</option>
               <option value="cie10">CIE-10</option>
@@ -274,6 +259,8 @@ export function ClinicDetailPage() {
           </div>
         </form>
       </Card>
+
+      <SubscriptionCard tenantId={id} onSaved={invalidate} />
 
       <Card>
         <CardHeader title={t('platform.status_actions')} />

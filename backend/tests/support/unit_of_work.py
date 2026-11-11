@@ -8,6 +8,7 @@ from types import TracebackType
 
 from medicore.domain.shared.identifiers import TenantId
 from tests.support.repositories import (
+    InMemoryAddonPricingRepository,
     InMemoryApplicationRepository,
     InMemoryAppointmentRepository,
     InMemoryAuditLogRepository,
@@ -22,6 +23,7 @@ from tests.support.repositories import (
     InMemoryMedicalRecordRepository,
     InMemoryNotificationRepository,
     InMemoryPatientRepository,
+    InMemoryPlanRepository,
     InMemoryPlatformAdminRepository,
     InMemoryPlatformAuditLogRepository,
     InMemoryPlatformReadModel,
@@ -61,6 +63,8 @@ class InMemoryUnitOfWork:
         self.tenants = InMemoryTenantRepository(store)
         self.platform_audit = InMemoryPlatformAuditLogRepository(store)
         self.sessions = InMemoryAuthSessionRepository(store)
+        self.plans = InMemoryPlanRepository(store)
+        self.addon_pricing = InMemoryAddonPricingRepository(store)
         self._snapshot: dict | None = None
         self._committed = False
 
@@ -98,6 +102,8 @@ class InMemoryPlatformUnitOfWork:
         self.platform_admins = InMemoryPlatformAdminRepository(store)
         self.platform_audit = InMemoryPlatformAuditLogRepository(store)
         self.sessions = InMemoryAuthSessionRepository(store)
+        self.plans = InMemoryPlanRepository(store)
+        self.addon_pricing = InMemoryAddonPricingRepository(store)
         self._snapshot: dict | None = None
         self._committed = False
 

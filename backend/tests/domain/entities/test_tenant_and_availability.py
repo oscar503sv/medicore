@@ -24,6 +24,7 @@ from medicore.domain.shared.identifiers import (
 )
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.time_range import TimeRange
+from tests.support.builders import full_subscription
 
 
 def make_tenant(locations=None) -> Tenant:
@@ -37,6 +38,7 @@ def make_tenant(locations=None) -> Tenant:
         tax_id="B12345678",
         slug=Slug("clinica-norte"),
         timezone="Europe/Madrid",
+        subscription=full_subscription(),
         locations=locs,
     )
 
@@ -59,6 +61,7 @@ class TestTenant:
                 tax_id="y",
                 slug=Slug("x"),
                 timezone="Europe/Madrid",
+                subscription=full_subscription(),
                 locations=[
                     Location(LocationId.new(), tid, "A", is_primary=True),
                     Location(LocationId.new(), tid, "B", is_primary=True),

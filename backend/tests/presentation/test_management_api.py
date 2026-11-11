@@ -107,17 +107,15 @@ class TestOrganization:
         assert resp.json()["legal_name"] == "Clínica Norte SLU"
 
     def test_update_organization_ignores_subscription_fields(self, seed, client, admin_headers):
-        before = client.get("/api/v1/organization", headers=admin_headers).json()
+        url = "/api/v1/organization/subscription"
+        before = client.get(url, headers=admin_headers).json()
         resp = client.patch(
             "/api/v1/organization",
-            json={"plan": "enterprise", "seat_limit": 999},
+            json={"plan_code": "empresarial", "seat_limit": 999, "modules": []},
             headers=admin_headers,
         )
         assert resp.status_code == 200
-        assert (resp.json()["plan"], resp.json()["seat_limit"]) == (
-            before["plan"],
-            before["seat_limit"],
-        )
+        assert client.get(url, headers=admin_headers).json() == before
 
     def test_add_location(self, seed, client, admin_headers):
         resp = client.post(

@@ -18,6 +18,7 @@ from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
+from medicore.domain.entities.plan import AddonPricing, Plan
 from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
@@ -26,6 +27,7 @@ from medicore.domain.entities.role_permission_override import RolePermissionOver
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.entities.vaccination_record import VaccinationRecord
+from medicore.domain.services.plan_catalog import default_addon_pricing, default_plans
 
 
 @dataclass
@@ -63,6 +65,11 @@ class InMemoryStore:
     login_attempts: dict[str, tuple] = field(default_factory=dict)
     # Global revocable sessions (tenant and platform scopes share the store).
     sessions: dict[UUID, AuthSession] = field(default_factory=dict)
+    # Global subscription catalog, starting from the published price list.
+    plans: dict[str, Plan] = field(default_factory=lambda: {p.code: p for p in default_plans()})
+    addon_pricing: dict[str, AddonPricing] = field(
+        default_factory=lambda: {"current": default_addon_pricing()}
+    )
 
     def snapshot(self) -> dict[str, dict]:
         return {f.name: copy.deepcopy(getattr(self, f.name)) for f in fields(self)}

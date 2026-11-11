@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 
+from medicore.application.common.audit import platform_audit_entry
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.errors import (
     AuthenticationFailed,
@@ -19,11 +20,16 @@ from medicore.application.common.errors import (
 )
 from medicore.application.common.login_throttle import platform_login_identifier
 from medicore.application.common.permissions import effective_permissions
+from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
 from medicore.application.ports.unit_of_work import UnitOfWorkFactory
 from medicore.application.use_cases import role_permissions
+from medicore.application.use_cases.subscriptions import (
+    SubscriptionCommand,
+    resolve_subscription,
+)
 from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.tenant import Location, Tenant
@@ -47,29 +53,7 @@ from medicore.domain.shared.identifiers import (
 )
 from medicore.domain.value_objects.slug import Slug
 
-
-def _audit(
-    actor: PlatformActorContext,
-    when,
-    action: str,
-    entity_type: str,
-    entity_id: str,
-    *,
-    tenant_id: TenantId | None = None,
-    **metadata: object,
-) -> PlatformAuditLog:
-    return PlatformAuditLog(
-        id=AuditLogId.new(),
-        actor_id=actor.admin_id,
-        action=action,
-        entity_type=entity_type,
-        entity_id=entity_id,
-        metadata=dict(metadata),
-        timestamp=when,
-        tenant_id=tenant_id,
-        ip_address=actor.ip_address,
-        user_agent=actor.user_agent,
-    )
+_audit = platform_audit_entry
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
@@ -210,6 +194,10 @@ class CreateTenantCommand:
     admin_name: str
     admin_email: str
     admin_password: str
+    # Plan and modules; the period comes from ``trial_days`` (a free trial starting today)
+    # or, for a paid start, from ``subscription.period_end``. One of them is required.
+    subscription: SubscriptionCommand
+    trial_days: int | None = None
     icd_version: IcdVersion = IcdVersion.CIE11
 
 
@@ -245,11 +233,17 @@ class CreateTenantWithAdmin:
                 min=8,
             )
 
+        if cmd.trial_days is None and cmd.subscription.period_end is None:
+            raise ValidationError(
+                "a new clinic needs a trial or a paid-until date", code="plan.period_required"
+            )
+
         with self._factory.platform_uow() as platform:
             if platform.tenants.get_by_slug(slug) is not None:
                 raise ValidationError(
                     f"slug already in use: {slug}", code="clinic.slug_taken", slug=str(slug)
                 )
+            subscription = resolve_subscription(platform, cmd.subscription)
 
         tenant_id = TenantId.new()
         tenant = Tenant(
@@ -258,6 +252,7 @@ class CreateTenantWithAdmin:
             tax_id=cmd.tax_id,
             slug=slug,
             timezone=cmd.timezone,
+            subscription=subscription,
             icd_version=cmd.icd_version,
             locations=[
                 Location(
@@ -268,6 +263,11 @@ class CreateTenantWithAdmin:
                 )
             ],
         )
+        if cmd.trial_days is not None:
+            # The trial starts on the clinic's own "today", hence after its timezone is known.
+            tenant.subscription = subscription.start_trial(
+                tenant_today(tenant, self._clock), cmd.trial_days
+            )
         admin = User(
             id=UserId.new(),
             tenant_id=tenant_id,
@@ -287,13 +287,15 @@ class CreateTenantWithAdmin:
                 _audit(
                     actor, self._clock.now(), "tenant.created", "Tenant", str(tenant_id),
                     tenant_id=tenant_id, slug=str(slug), admin_email=admin.email,
+                    plan=tenant.subscription.plan_code, trial=tenant.subscription.is_trial,
                 )
             )
             uow.commit()
         return CreateTenantResult(tenant=tenant, admin=admin)
 
 
-_EDITABLE = {"legal_name", "tax_id", "timezone", "plan", "seat_limit", "icd_version"}
+# The subscription has its own use cases (subscriptions.py).
+_EDITABLE = {"legal_name", "tax_id", "timezone", "icd_version"}
 
 
 class UpdateTenant:

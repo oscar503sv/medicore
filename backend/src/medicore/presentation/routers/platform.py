@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, Request, Response
 
+from medicore.application.common.timezone import tenant_today
+from medicore.application.ports.clock import Clock as ClockPort
 from medicore.application.use_cases.platform import (
     AuthenticatePlatformAdmin,
     CreateTenantCommand,
@@ -28,8 +30,11 @@ from medicore.application.use_cases.platform import (
     UpdateTenantUser,
 )
 from medicore.application.use_cases.sessions import ListTenantSessions, RevokeTenantSession
+from medicore.application.use_cases.subscriptions import SubscriptionCommand
+from medicore.domain.entities.tenant import Tenant
 from medicore.domain.repositories._support import Paging, TenantFilter
 from medicore.domain.shared.identifiers import SessionId, TenantId, UserId
+from medicore.domain.value_objects.subscription import DEFAULT_GRACE_DAYS
 from medicore.infrastructure.config import get_settings
 from medicore.presentation.cookies import (
     PLATFORM_COOKIE,
@@ -84,6 +89,11 @@ from medicore.presentation.serializers import (
 router = APIRouter(prefix="/platform", tags=["platform"])
 
 
+def _ser(tenant: Tenant, clock: ClockPort) -> dict:
+    """A clinic as the console shows it, subscription status as of the clinic's today."""
+    return ser_tenant(tenant, today=tenant_today(tenant, clock))
+
+
 @router.post("/login", response_model=PlatformSessionResponse)
 def login(body: PlatformLoginRequest, response: Response, factory: UoWFactory, hasher: Hasher,
           issuer: JwtIssuer, clock: Clock):
@@ -125,6 +135,7 @@ def me(actor: PlatformActor, factory: UoWFactory):
 def list_tenants(
     actor: PlatformActor,
     factory: UoWFactory,
+    clock: Clock,
     status: str | None = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -132,7 +143,7 @@ def list_tenants(
     f = TenantFilter(status=status) if status else None
     page = ListTenants(factory).execute(actor, f, Paging(offset=offset, limit=limit))
     return TenantListResponse(
-        items=[ser_tenant(t) for t in page.items],
+        items=[_ser(t, clock) for t in page.items],
         total=page.total,
         offset=page.offset,
         limit=page.limit,
@@ -152,18 +163,26 @@ def create_tenant(body: CreateTenantRequest, actor: PlatformActor, factory: UoWF
         admin_name=body.admin_name,
         admin_email=body.admin_email,
         admin_password=body.admin_password,
+        subscription=SubscriptionCommand(
+            plan_code=body.plan_code,
+            modules=frozenset(body.modules),
+            period_end=body.period_end,
+            is_trial=False,
+            grace_days=DEFAULT_GRACE_DAYS,
+        ),
+        trial_days=body.trial_days,
     )
     result = CreateTenantWithAdmin(factory, hasher, clock).execute(actor, cmd)
     return CreateTenantResponse(
-        tenant=ser_tenant(result.tenant),
+        tenant=_ser(result.tenant, clock),
         admin_user_id=str(result.admin.id),
         admin_email=result.admin.email,
     )
 
 
 @router.get("/tenants/{tenant_id}", response_model=TenantResponse)
-def get_tenant(tenant_id: str, actor: PlatformActor, factory: UoWFactory):
-    return ser_tenant(GetTenant(factory).execute(actor, TenantId.parse(tenant_id)))
+def get_tenant(tenant_id: str, actor: PlatformActor, factory: UoWFactory, clock: Clock):
+    return _ser(GetTenant(factory).execute(actor, TenantId.parse(tenant_id)), clock)
 
 
 @router.patch("/tenants/{tenant_id}", response_model=TenantResponse)
@@ -171,7 +190,7 @@ def update_tenant(tenant_id: str, body: UpdateTenantRequest, actor: PlatformActo
                   factory: UoWFactory, clock: Clock):
     changes = body.model_dump(exclude_none=True)
     tenant = UpdateTenant(factory, clock).execute(actor, TenantId.parse(tenant_id), **changes)
-    return ser_tenant(tenant)
+    return _ser(tenant, clock)
 
 
 @router.post("/tenants/{tenant_id}/status", response_model=TenantResponse)
@@ -180,7 +199,7 @@ def set_tenant_status(tenant_id: str, body: SetTenantStatusRequest, actor: Platf
     tenant = SetTenantStatus(factory, clock).execute(
         actor, TenantId.parse(tenant_id), body.status
     )
-    return ser_tenant(tenant)
+    return _ser(tenant, clock)
 
 
 # ── Statistics & audit ─────────────────────────────────────────────────────────

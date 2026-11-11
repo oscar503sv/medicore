@@ -135,11 +135,71 @@ export interface Tenant {
   tax_id: string
   slug: string
   timezone: string
-  plan: string
-  seat_limit: number
   status: TenantStatus
   icd_version: IcdVersion
   locations: TenantLocation[]
+  subscription: TenantSubscriptionSummary
+}
+
+// ── Subscriptions ─────────────────────────────────────────────────────────────
+export type AddonModule = 'vaccination' | 'applications' | 'procedures'
+export const ADDON_MODULES: AddonModule[] = ['vaccination', 'applications', 'procedures']
+export type PlanFeature = 'user_permissions'
+export type SubscriptionStatus = 'trial' | 'active' | 'grace' | 'read_only'
+
+/** Quotas; `null` = unlimited on a plan, "use the plan's" on a clinic override. */
+export interface PlanLimits {
+  doctors: number | null
+  support_users: number | null
+  locations: number | null
+  storage_gb: number | null
+}
+
+/** Money travels as a decimal string ("79.00", USD). */
+export interface Plan {
+  code: string
+  name: string
+  monthly_price: string | null
+  limits: PlanLimits
+  features: PlanFeature[]
+  active: boolean
+  sort_order: number
+}
+
+export interface AddonPricing {
+  prices: Record<AddonModule, string>
+  bundle_price: string
+}
+
+export interface PlanCatalog {
+  plans: Plan[]
+  addons: AddonPricing
+}
+
+export interface Subscription {
+  plan: Plan
+  modules: AddonModule[]
+  period_end: string | null
+  is_trial: boolean
+  grace_days: number
+  status: SubscriptionStatus
+  today: string
+  days_left: number | null
+  limits: PlanLimits
+  limit_overrides: PlanLimits | null
+  price_override: string | null
+  monthly_price: string | null
+  usage: { doctors: number; support_users: number; locations: number }
+  addon_prices: AddonPricing
+}
+
+export interface TenantSubscriptionSummary {
+  plan_code: string
+  modules: AddonModule[]
+  period_end: string | null
+  is_trial: boolean
+  status: SubscriptionStatus
+  days_left: number | null
 }
 
 export interface TenantStats {
@@ -492,8 +552,6 @@ export interface Organization {
   tax_id: string
   slug: string
   timezone: string
-  plan: string
-  seat_limit: number
   locations: Location[]
 }
 

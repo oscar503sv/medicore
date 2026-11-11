@@ -15,7 +15,8 @@ from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
-from medicore.domain.enums import Role, Sex, UserStatus
+from medicore.domain.enums import AddonModule, Role, Sex, UserStatus
+from medicore.domain.services.plan_catalog import CLINICA_PLUS
 from medicore.domain.shared.identifiers import (
     AvailabilityId,
     LocationId,
@@ -25,6 +26,7 @@ from medicore.domain.shared.identifiers import (
     UserId,
 )
 from medicore.domain.value_objects.slug import Slug
+from medicore.domain.value_objects.subscription import Subscription
 from medicore.domain.value_objects.time_range import TimeRange
 from tests.support.fakes import PlainPasswordHasher
 from tests.support.unit_of_work import InMemoryUnitOfWorkFactory
@@ -32,7 +34,12 @@ from tests.support.unit_of_work import InMemoryUnitOfWorkFactory
 PASSWORD = "s3cret-pass"
 
 
-def build_tenant(slug: str = "clinica-norte") -> Tenant:
+def full_subscription() -> Subscription:
+    """Every module, no expiry: tests outside billing aren't limited by the plan."""
+    return Subscription(plan_code=CLINICA_PLUS, modules=frozenset(AddonModule))
+
+
+def build_tenant(slug: str = "clinica-norte", subscription: Subscription | None = None) -> Tenant:
     tid = TenantId.new()
     return Tenant(
         id=tid,
@@ -40,6 +47,7 @@ def build_tenant(slug: str = "clinica-norte") -> Tenant:
         tax_id="B12345678",
         slug=Slug(slug),
         timezone="Europe/Madrid",
+        subscription=subscription or full_subscription(),
         locations=[
             Location(id=LocationId.new(), tenant_id=tid, name="Madrid · Atocha", is_primary=True)
         ],

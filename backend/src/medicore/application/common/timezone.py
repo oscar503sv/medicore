@@ -8,11 +8,12 @@ would see "now" shifted by its offset). These helpers reconcile the two referenc
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
+from medicore.domain.entities.tenant import Tenant
 from medicore.domain.shared.identifiers import TenantId
 
 
@@ -45,3 +46,11 @@ def clinic_instant(uow: UnitOfWork, tenant_id: TenantId, clock: Clock, wall: dat
     tenant = uow.tenants.get_by_id(tenant_id)
     tz = ZoneInfo(tenant.timezone) if tenant and tenant.timezone else UTC
     return wall.replace(tzinfo=tz).astimezone(UTC)
+
+
+def tenant_today(tenant: Tenant, clock: Clock) -> date:
+    """The clinic's local calendar date (a naive test clock is taken as wall-clock)."""
+    now = clock.now()
+    if now.tzinfo is not None:
+        now = now.astimezone(ZoneInfo(tenant.timezone) if tenant.timezone else UTC)
+    return now.date()

@@ -35,6 +35,4 @@ class OrganizationResponse(BaseModel):
     tax_id: str
     slug: str
     timezone: str
-    plan: str
-    seat_limit: int
     locations: list[LocationResponse]

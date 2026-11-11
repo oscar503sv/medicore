@@ -19,6 +19,7 @@ from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
+from medicore.domain.entities.plan import AddonPricing, Plan
 from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
@@ -86,6 +87,32 @@ class InMemoryTenantRepository:
 
     def save(self, tenant: Tenant) -> None:
         self._store.tenants[tenant.id.value] = tenant
+
+
+class InMemoryPlanRepository:
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def list(self, include_inactive: bool = True) -> list[Plan]:
+        plans = [p for p in self._store.plans.values() if include_inactive or p.active]
+        return sorted(plans, key=lambda p: (p.sort_order, p.code))
+
+    def get(self, code: str) -> Plan | None:
+        return self._store.plans.get(code)
+
+    def save(self, plan: Plan) -> None:
+        self._store.plans[plan.code] = plan
+
+
+class InMemoryAddonPricingRepository:
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def get(self) -> AddonPricing:
+        return self._store.addon_pricing["current"]
+
+    def save(self, pricing: AddonPricing) -> None:
+        self._store.addon_pricing["current"] = pricing
 
 
 class InMemoryPlatformAdminRepository:

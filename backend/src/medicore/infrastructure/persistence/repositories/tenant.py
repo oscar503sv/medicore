@@ -9,6 +9,7 @@ from medicore.domain.repositories._support import Page, Paging, TenantFilter
 from medicore.domain.shared.identifiers import TenantId
 from medicore.domain.value_objects.slug import Slug
 from medicore.infrastructure.persistence.mappers.entities import to_tenant
+from medicore.infrastructure.persistence.mappers.subscription import subscription_to_row
 from medicore.infrastructure.persistence.models.tenant import LocationModel, TenantModel
 
 
@@ -48,8 +49,7 @@ class SqlTenantRepository:
         row.tax_id = tenant.tax_id
         row.slug = str(tenant.slug)
         row.timezone = tenant.timezone
-        row.plan = tenant.plan
-        row.seat_limit = tenant.seat_limit
+        subscription_to_row(tenant.subscription, row)
         row.status = str(tenant.status)
         row.icd_version = str(tenant.icd_version)
         row.created_at = tenant.created_at

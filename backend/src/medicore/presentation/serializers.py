@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from medicore.application.use_cases.auth import MyProfileDTO
 from medicore.application.use_cases.sessions import SessionInfoDTO
+from medicore.application.use_cases.subscriptions import SubscriptionView
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
@@ -14,10 +15,13 @@ from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
+from medicore.domain.entities.plan import AddonPricing, Plan
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.services.slot_resolver import Slot
+from medicore.domain.value_objects.money import Money
+from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
 from medicore.infrastructure.persistence.mappers._json import (
     attachment_to_dict,
     diagnoses_to_list,
@@ -381,15 +385,14 @@ def ser_availability(av: DoctorAvailability) -> dict:
     }
 
 
-def ser_tenant(t: Tenant) -> dict:
-    return {
+def ser_tenant(t: Tenant, today: date | None = None) -> dict:
+    """``today`` (the clinic's date) adds the subscription summary the console shows."""
+    data = {
         "id": str(t.id),
         "legal_name": t.legal_name,
         "tax_id": t.tax_id,
         "slug": str(t.slug),
         "timezone": t.timezone,
-        "plan": t.plan,
-        "seat_limit": t.seat_limit,
         "status": str(t.status),
         "icd_version": str(t.icd_version),
         "locations": [
@@ -401,4 +404,74 @@ def ser_tenant(t: Tenant) -> dict:
             }
             for loc in t.locations
         ],
+    }
+    if today is not None:
+        sub = t.subscription
+        data["subscription"] = {
+            "plan_code": sub.plan_code,
+            "modules": sorted(str(m) for m in sub.modules),
+            "period_end": sub.period_end,
+            "is_trial": sub.is_trial,
+            "status": str(sub.status(today)),
+            "days_left": sub.days_left(today),
+        }
+    return data
+
+
+# ── Subscriptions ─────────────────────────────────────────────────────────────
+
+
+def ser_money(m: Money | None) -> str | None:
+    return None if m is None else f"{m.amount:.2f}"
+
+
+def _ser_limits(limits: PlanLimits | LimitOverrides) -> dict:
+    return {
+        "doctors": limits.doctors,
+        "support_users": limits.support_users,
+        "locations": limits.locations,
+        "storage_gb": limits.storage_gb,
+    }
+
+
+def ser_plan(p: Plan) -> dict:
+    return {
+        "code": p.code,
+        "name": p.name,
+        "monthly_price": ser_money(p.monthly_price),
+        "limits": _ser_limits(p.limits),
+        "features": sorted(str(f) for f in p.features),
+        "active": p.active,
+        "sort_order": p.sort_order,
+    }
+
+
+def ser_addon_pricing(a: AddonPricing) -> dict:
+    return {
+        "prices": {str(m): ser_money(price) for m, price in a.prices.items()},
+        "bundle_price": ser_money(a.bundle_price),
+    }
+
+
+def ser_subscription(v: SubscriptionView) -> dict:
+    sub = v.subscription
+    return {
+        "plan": ser_plan(v.plan),
+        "modules": sorted(str(m) for m in sub.modules),
+        "period_end": sub.period_end,
+        "is_trial": sub.is_trial,
+        "grace_days": sub.grace_days,
+        "status": str(v.status),
+        "today": v.today,
+        "days_left": v.days_left,
+        "limits": _ser_limits(v.limits),
+        "limit_overrides": _ser_limits(sub.limit_overrides) if sub.limit_overrides else None,
+        "price_override": ser_money(sub.price_override),
+        "monthly_price": ser_money(v.monthly_price),
+        "usage": {
+            "doctors": v.usage.doctors,
+            "support_users": v.usage.support_users,
+            "locations": v.locations_used,
+        },
+        "addon_prices": ser_addon_pricing(v.addon_prices),
     }

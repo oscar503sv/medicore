@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MapPin, Pencil, Plus } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { organizationApi } from '@/api/organization'
+import { PlanCard } from '@/components/subscriptions/PlanCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -58,6 +59,8 @@ export function OrganizationSection() {
 
   return (
     <div className="space-y-6">
+      <PlanCard />
+
       <Card>
         <CardHeader title={t('settings.organization')} />
         <div className="space-y-4 p-5">
@@ -83,8 +86,6 @@ export function OrganizationSection() {
               onChange={(e) => setTimezone(e.target.value)}
             />
             <Input label={t('org.slug')} value={org.slug} disabled />
-            <Input label={t('org.plan')} value={org.plan} disabled />
-            <Input label={t('org.seat_limit')} value={String(org.seat_limit)} disabled />
           </div>
           {canManage && (
             <div className="flex justify-end">
