@@ -429,7 +429,7 @@ Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migr
 
 Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma.
 
-**Monitoreo.** La página *Monitoreo* de la consola solo carga si la API responde, así que para enterarte de una caída configura un monitor externo (UptimeRobot, Better Stack…) contra `https://<tu-dominio>/api/v1/health/ready`: responde `200` si la API y la base de datos están bien y `503` si la base de datos no responde. Para que la página muestre el commit desplegado, el compose pasa `SOURCE_COMMIT` al backend (Coolify ofrece esa variable predefinida; si no llega, la página lo indica).
+**Monitoreo.** La página *Monitoreo* de la consola solo carga si la API responde, así que para enterarte de una caída configura un monitor externo (UptimeRobot, Better Stack…) contra `https://<tu-dominio>/api/v1/health/ready`: responde `200` si la API y la base de datos están bien y `503` si la base de datos no responde. El commit desplegado que muestra la página sale de `SOURCE_COMMIT`, que Coolify inyecta en el contenedor. No la declares en el compose: Coolify bloquea las variables del compose y una vacía taparía la suya. Fuera de Coolify, defínela tú; si falta, la página lo indica.
 
 ---
 

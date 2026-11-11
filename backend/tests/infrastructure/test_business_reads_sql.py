@@ -84,6 +84,14 @@ def test_active_staff_by_tenant(session, clinic):
     assert staff[str(tenant.id)] == {"doctor": 1, "nurse": 1}
 
 
+def test_tenant_counts(session, clinic):
+    tenant, *_ = clinic
+    counts = SqlPlatformReadModel(session).tenant_counts(tenant.id)
+    assert counts == {
+        "patients": 0, "users": 3, "appointments": 0, "consultations": 0, "records": 0
+    }
+
+
 def test_payments_since(session, clinic):
     tenant, *_ = clinic
     repo = SqlSubscriptionPaymentRepository(session, tenant.id)

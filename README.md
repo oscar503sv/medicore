@@ -429,7 +429,7 @@ Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on s
 
 For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched.
 
-**Monitoring.** The console's *Monitoring* page only loads while the API answers, so to hear about an outage point an external monitor (UptimeRobot, Better Stack…) at `https://<your-domain>/api/v1/health/ready`: it answers `200` when the API and the database are fine and `503` when the database does not respond. To show the deployed commit on that page, the compose file passes `SOURCE_COMMIT` to the backend (Coolify provides that predefined variable; if it does not arrive, the page says so).
+**Monitoring.** The console's *Monitoring* page only loads while the API answers, so to hear about an outage point an external monitor (UptimeRobot, Better Stack…) at `https://<your-domain>/api/v1/health/ready`: it answers `200` when the API and the database are fine and `503` when the database does not respond. The deployed commit on that page comes from `SOURCE_COMMIT`, which Coolify injects into the container. Do not declare it in the compose file: Coolify locks compose variables and an empty one would shadow its own. Outside Coolify, set it yourself; if it is missing, the page says so.
 
 ---
 

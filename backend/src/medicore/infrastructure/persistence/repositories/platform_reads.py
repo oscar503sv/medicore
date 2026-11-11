@@ -18,6 +18,7 @@ from medicore.domain.repositories._support import (
     PaymentSummary,
     TenantActivity,
 )
+from medicore.domain.shared.identifiers import TenantId
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.audit_log import AuditLogModel
 from medicore.infrastructure.persistence.models.consultation import ConsultationModel
@@ -43,6 +44,20 @@ _COUNTERS = {
 class SqlPlatformReadModel:
     def __init__(self, session: Session) -> None:
         self._s = session
+
+    def tenant_counts(self, tenant_id: TenantId) -> dict[str, int]:
+        """Totals of one clinic (clinic detail page)."""
+        tid = tenant_id.value
+        return {
+            name: (
+                self._s.query(func.count())
+                .select_from(model)
+                .filter(model.tenant_id == tid)
+                .scalar()
+                or 0
+            )
+            for name, model in _COUNTERS.items()
+        }
 
     # ── Business overview ──────────────────────────────────────────────────────
 
