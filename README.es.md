@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings desde .env (pydantic-settings) — dev-safe por defecto
 │   ├── database/       # Engine SQLAlchemy + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (27 tablas; VOs complejos como JSONB)
+│   │   ├── models/     # ORM models (30 tablas; VOs complejos como JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (sin contaminar el dominio)
 │   │   └── repositories/  # Implementaciones SQLAlchemy de los puertos
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, generador de códigos, SystemClock
@@ -88,7 +88,7 @@ src/medicore/
 Toda entidad de negocio lleva `tenant_id`. El filtro se aplica **en cada repositorio**, no en el caller — el aislamiento se cumple estructuralmente. El `UnitOfWork` está scoped por tenant: `factory.for_tenant(tenant_id)`. Las operaciones globales (resolución de slug, superadmin) usan un `UnitOfWork` no scopeado o helpers de solo lectura.
 
 ### Plataforma (superadmin)
-Sesión separada (token de scope `platform`) que opera por encima del límite multi-tenant: alta/edición de clínicas, cambio de estado (activa / suspendida / archivada), estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión de usuarios) e **impersonación**. La impersonación emite un token de tenant marcado con `impersonated_by` y con TTL más corta, de modo que toda escritura durante el soporte queda auditada.
+Sesión separada (token de scope `platform`) que opera por encima del límite multi-tenant: alta/edición de clínicas (incluidas la zona horaria y las sedes), la **suscripción** de cada clínica (plan, módulos, periodo pagado, condiciones especiales, pagos), cambio de estado (activa / suspendida / archivada), estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión de usuarios) e **impersonación**. La impersonación emite un token de tenant marcado con `impersonated_by` y con TTL más corta, de modo que toda escritura durante el soporte queda auditada.
 
 ### Reglas de negocio críticas
 - Citas solo dentro de la disponibilidad del doctor, sin solapes, respetando las reglas de reserva.
@@ -108,11 +108,47 @@ Sesión separada (token de scope `platform`) que opera por encima del límite mu
 
 El control de acceso es **granular y personalizable por clínica** (`application/common/permissions.py`):
 
-- **Catálogo de 30 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (incluye `sign` y `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
+- **Catálogo de 31 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (incluye `sign` y `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `locations.manage`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — con un conjunto de permisos por defecto en `ROLE_PERMISSIONS`.
 - **Overrides por tenant**: cada clínica puede personalizar el set de un rol mediante una fila `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults vs. override (e intersecta con el catálogo vigente para tolerar permisos retirados).
 - En cada request, la capa de presentación coloca los permisos efectivos en `ActorContext.permissions`, de modo que toda comprobación `ensure_permission(...)` honra la personalización de la clínica.
+- **Excepciones por usuario** (planes con la función `user_permissions`, desde Clínica): una persona puede recibir algunos permisos extra o perder algunos de su rol. Se guardan como diferencia con el rol (`PermissionAdjustments` en `User`), así que los cambios posteriores del rol le siguen llegando. Se editan desde **Usuarios → Permisos** (`GET`/`PUT /users/{id}/permissions`). En un plan sin la función, las excepciones guardadas se conservan pero no se aplican.
+- **Los módulos contratados condicionan sus permisos**: una clínica sin vacunación, aplicaciones o procedimientos no recibe ninguno de sus permisos, digan lo que digan sus roles.
+- `granted(role, stored, modules, adjustments)` combina todo lo anterior; la capa de presentación coloca el resultado en `ActorContext.permissions`.
 - El frontend consume el mismo modelo: la UI se condiciona por los permisos efectivos del actor y la pantalla **Roles & Permisos** edita los overrides (router `role_permissions`: `GET`/`PUT`/`DELETE`).
+
+**Salvaguardas** (aplicadas en el backend y reflejadas en la UI):
+
+- El rol `admin` no es personalizable y siempre tiene acceso completo (salvo firmar/enmendar expedientes).
+- `records.sign` y `records.amend` son exclusivos de médicos: nunca se otorgan a otros roles o usuarios ni se les quitan a los médicos.
+- `permissions.manage` es exclusivo de administradores: no se puede delegar a un rol ni a un usuario.
+- Solo un admin actúa sobre cuentas de admin (editar, cambiar rol, desactivar, restablecer contraseña, cerrar sesiones) o nombra a alguien admin. Un `users.manage` delegado gestiona al resto del personal.
+- Nadie edita sus propios permisos.
+
+**Qué gestiona la clínica y qué gestiona el soporte de Medicore:**
+
+| | Admin de la clínica | Consola de plataforma |
+|---|---|---|
+| Razón social, NIT, versión CIE | ✅ (`organization.manage`) | ✅ |
+| Sedes (crear, renombrar) | ✅ dentro del límite del plan (`locations.manage`) | ✅ mismo límite |
+| Zona horaria | solo lectura | ✅ (mueve el "hoy", la agenda y los recordatorios de la clínica) |
+| Slug (identificador de inicio de sesión) | solo lectura | fijo desde la creación |
+| Plan, módulos, límites, periodo pagado, pagos | solo lectura | ✅ |
+| Usuarios, roles, permisos por usuario | ✅ (dentro de los cupos) | acciones de soporte (restablecer contraseña, desbloquear, desactivar) |
+
+---
+
+## Suscripciones y planes
+
+Cada clínica tiene una **suscripción** (value object `Subscription` en `Tenant`): plan, módulos opcionales, fecha de pago, indicador de prueba, días de gracia y condiciones especiales (límites a la medida, precio negociado). La activación es manual: las clínicas pagan por transferencia bancaria y el soporte lo registra desde la consola de plataforma.
+
+- **Catálogo de planes** (`plans`, editable en **Planes y precios**): Profesional independiente, Clínica, Clínica Plus y Empresarial (cotización). Cada uno fija límites de médicos, personal de apoyo (enfermería, recepción y administradores adicionales al primero), sedes y almacenamiento, además de funciones (`user_permissions`).
+- **Módulos opcionales** (`addon_pricing`): vacunación, aplicaciones y procedimientos, cada uno con precio mensual y un precio de paquete por los tres.
+- **Cupos** aplicados en los casos de uso (invitar, cambiar rol, reactivar, nueva sede): crecer por encima del límite se rechaza con `plan.quota_*`; una clínica que ya lo supera (tras bajar de plan) conserva lo que tiene.
+- **Pagos y renovación** (`subscription_payments`): registrar un pago extiende el periodo de 1 a 24 meses. Al vencer, la clínica sigue operando durante los días de gracia; después queda en **solo lectura** (`plan.read_only`: puede consultar pero no modificar hasta renovar). La app muestra avisos al acercarse el vencimiento.
+- Las clínicas ven su plan, uso e historial de pagos en **Ajustes → Organización**.
+
+La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con todos los módulos, y `centro-norte` en **Clínica** solo con vacunación (3 médicos, cupos de apoyo llenos), para probar también los módulos bloqueados y los mensajes de cupo.
 
 ---
 
@@ -216,6 +252,7 @@ medicore/
 | **12** | Módulo de vacunación (esquema nacional de El Salvador, carné del paciente, lista de trabajo) | ✅ Completada |
 | **13** | Aplicaciones en la clínica (órdenes desde la consulta o receta externa, observación, alerta de alergias) | ✅ Completada |
 | **14** | Procedimientos menores (catálogo por clínica, consentimiento en papel, nota firmada con enmiendas, muestra a patología, control) | ✅ Completada |
+| **15** | Suscripciones SaaS (catálogo de planes, módulos opcionales, cupos, pagos y renovación manuales, solo lectura tras la gracia, permisos por usuario) | ✅ Completada |
 | — | Política de contraseñas | ⏳ Pendiente |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
@@ -289,7 +326,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ## Base de datos
 
-**27 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
+**30 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
 
 | Tabla | Descripción |
 |---|---|
@@ -312,6 +349,8 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `application_orders` + `application_records` | Órdenes de aplicación en la clínica y las dosis aplicadas |
 | `procedure_types` + `procedures` | Catálogo de procedimientos por clínica y los procedimientos indicados/realizados |
 | `role_permission_overrides` | Personalización de permisos por rol y tenant |
+| `plans` + `addon_pricing` | Catálogo de planes y precios de módulos opcionales (global) |
+| `subscription_payments` | Pagos registrados por clínica (renovaciones) |
 | `diagnosis_codes` | Catálogo CIE-10/CIE-11 (global, para autocompletado) |
 | `platform_admins` | Superadmins de la plataforma |
 | `platform_audit_logs` | Auditoría global de operaciones de plataforma |

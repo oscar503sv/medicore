@@ -145,7 +145,7 @@ from medicore.domain.services.immunization import (
     add_months,
     applies_to,
 )
-from medicore.domain.services.plan_catalog import CLINICA_PLUS
+from medicore.domain.services.plan_catalog import CLINICA, CLINICA_PLUS
 from medicore.domain.shared.errors import DomainError
 from medicore.domain.shared.identifiers import (
     AvailabilityId,
@@ -330,17 +330,15 @@ STAFF = {
         ("Dra. Karla Henríquez", "karla.henriquez", Role.DOCTOR, "Pediatría", False),
         ("Dr. José Alfaro", "jose.alfaro", Role.DOCTOR, "Traumatología", True),
         ("Dr. Mauricio Cruz", "mauricio.cruz", Role.DOCTOR, "Medicina General", True),
-        ("Dra. Ana Lucía Portillo", "analucia.portillo", Role.DOCTOR, "Endocrinología", False),
-        ("Dr. Roberto Menjívar", "roberto.menjivar", Role.DOCTOR, "Cardiología", True),
         ("Marta Ayala", "marta.ayala", Role.NURSE, None, True),
         ("Jorge Pleitez", "jorge.pleitez", Role.RECEPTIONIST, None, True),
         ("Carolina Guevara", "carolina.guevara", Role.ADMIN, None, True),
     ],
 }
 # A user invited a few days ago by the second admin (as nurse, then corrected to reception).
+# Centro Norte has no free support seat on its plan, so nobody is invited there.
 INVITED = {
     "clinica-demo": ("Andrea Molina", "andrea.molina"),
-    "centro-norte": ("Gabriel Serrano", "gabriel.serrano"),
 }
 DOCUMENTS = [
     (DocumentKind.LAB, "Hemograma completo.pdf", "application/pdf"),
@@ -484,6 +482,10 @@ class Clinic:
     def tid(self) -> TenantId:
         return self.tenant.id
 
+    def has(self, module: AddonModule) -> bool:
+        """The clinic contracted this optional module (no data is made for the others)."""
+        return module in self.tenant.subscription.modules
+
     @property
     def today(self) -> date:
         return self.now.date()
@@ -536,8 +538,15 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
     )
 
 
-# The public demo clinics show every feature and never expire.
-DEMO_SUBSCRIPTION = Subscription(plan_code=CLINICA_PLUS, modules=frozenset(AddonModule))
+# The public demo clinics never expire. Clínica Demo shows every feature; Centro Norte shows
+# a smaller plan (Clínica: 3 doctors, 3 support seats, per-user permissions) with one module,
+# so the demo also shows locked modules and full seats.
+DEMO_SUBSCRIPTIONS = {
+    "clinica-demo": Subscription(plan_code=CLINICA_PLUS, modules=frozenset(AddonModule)),
+    "centro-norte": Subscription(
+        plan_code=CLINICA, modules=frozenset({AddonModule.VACCINATION})
+    ),
+}
 
 
 def get_or_create_tenant(
@@ -550,15 +559,15 @@ def get_or_create_tenant(
         uow = SqlAlchemyUnitOfWork(session, tid)
         with uow:
             tenant = uow.tenants.get_by_id(tid)
-            if tenant.subscription != DEMO_SUBSCRIPTION:
-                tenant.subscription = DEMO_SUBSCRIPTION
+            if tenant.subscription != DEMO_SUBSCRIPTIONS[slug]:
+                tenant.subscription = DEMO_SUBSCRIPTIONS[slug]
                 uow.tenants.save(tenant)
                 uow.commit()
         return tenant
     tid = TenantId.new()
     tenant = Tenant(
         id=tid, legal_name=legal_name, tax_id=tax_id, slug=Slug(slug), timezone=TIMEZONE,
-        subscription=DEMO_SUBSCRIPTION,
+        subscription=DEMO_SUBSCRIPTIONS[slug],
         locations=[Location(id=LocationId.new(), tenant_id=tid, name=location, is_primary=True)],
     )
     uow = SqlAlchemyUnitOfWork(session, tid)
@@ -954,7 +963,7 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
     item = RNG.choice(APPLICATIONS)
     # A doctor rarely orders what the patient is allergic to (one case shows the override).
     clash = allergy_conflicts(item[0], patient.allergies) and RNG.random() < 0.85
-    if RNG.random() < 0.09 and not clash:
+    if c.has(AddonModule.APPLICATIONS) and RNG.random() < 0.09 and not clash:
         drug, dose, route, n, every, obs, notes = item
         AddApplicationDraft(c.uow(), c.at(start + timedelta(minutes=15))).execute(
             me, consultation.id,
@@ -962,7 +971,7 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
                              interval_hours=every, observation_minutes=obs, instructions=notes),
         )
     orders = PROCEDURE_ORDERS.get(c.specialty[doctor.id])
-    if orders and RNG.random() < 0.12:
+    if orders and c.has(AddonModule.PROCEDURES) and RNG.random() < 0.12:
         name, indication = RNG.choice(orders)
         AddProcedureDraft(c.uow(), c.at(start + timedelta(minutes=16))).execute(
             me, consultation.id, c.procedure_types[name].id, indication)
@@ -1463,16 +1472,22 @@ def seed_tenant(session, slug: str, legal_name: str, tax_id: str, location: str)
         insurer_ids=insurer_ids,
     )
     seed_patients(c)
-    seed_vaccinations(c)
+    if c.has(AddonModule.VACCINATION):
+        seed_vaccinations(c)
     seed_exceptions(c)
-    seed_procedure_catalog(c)
+    if c.has(AddonModule.PROCEDURES):
+        seed_procedure_catalog(c)
     seed_agenda(c)
-    seed_procedure_appointments(c)
-    seed_applications(c)
-    seed_procedures(c)
+    if c.has(AddonModule.PROCEDURES):
+        seed_procedure_appointments(c)
+    if c.has(AddonModule.APPLICATIONS):
+        seed_applications(c)
+    if c.has(AddonModule.PROCEDURES):
+        seed_procedures(c)
     seed_amendments(c)
     seed_documents(c)
-    seed_users(c)
+    if str(c.tenant.slug) in INVITED:
+        seed_users(c)
     seed_logins(c)
     finish(c)
     print("    + " + ", ".join(f"{v} {k}" for k, v in c.stats.items()))

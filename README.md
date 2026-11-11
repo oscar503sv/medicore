@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings from .env (pydantic-settings) — dev-safe defaults
 │   ├── database/       # SQLAlchemy engine + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (27 tables; complex VOs as JSONB)
+│   │   ├── models/     # ORM models (30 tables; complex VOs as JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (keeps the domain clean)
 │   │   └── repositories/  # SQLAlchemy implementations of the ports
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, code generator, SystemClock
@@ -88,7 +88,7 @@ src/medicore/
 Every business entity carries a `tenant_id`. The filter is applied **in every repository**, not by the caller — isolation is enforced structurally. The `UnitOfWork` is tenant-scoped: `factory.for_tenant(tenant_id)`. Global operations (slug resolution, superadmin) use an unscoped `UnitOfWork` or read-only helpers.
 
 ### Platform (superadmin)
-A separate session (`platform`-scoped token) that operates above the multi-tenant boundary: clinic creation/editing, status changes (active / suspended / archived), global stats and audit, account support (password reset, unlock, user suspension) and **impersonation**. Impersonation issues a tenant token marked with `impersonated_by` and a shorter TTL, so every write made during support is audited.
+A separate session (`platform`-scoped token) that operates above the multi-tenant boundary: clinic creation/editing (including the timezone and sites), each clinic's **subscription** (plan, modules, paid period, special terms, payments), status changes (active / suspended / archived), global stats and audit, account support (password reset, unlock, user suspension) and **impersonation**. Impersonation issues a tenant token marked with `impersonated_by` and a shorter TTL, so every write made during support is audited.
 
 ### Critical business rules
 - Appointments only within the doctor's availability, with no overlaps, honoring the booking rules.
@@ -108,11 +108,47 @@ A separate session (`platform`-scoped token) that operates above the multi-tenan
 
 Access control is **granular and customizable per clinic** (`application/common/permissions.py`):
 
-- **Catalog of 30 permissions** (`Permission`, `StrEnum`) grouped by resource: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (including `sign` and `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
+- **Catalog of 31 permissions** (`Permission`, `StrEnum`) grouped by resource: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (including `sign` and `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `locations.manage`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — each with a default permission set in `ROLE_PERMISSIONS`.
 - **Per-tenant overrides**: each clinic can customize a role's set through a `RolePermissionOverride` row. `effective_permissions(role, stored)` resolves defaults vs. override (and intersects with the current catalog to tolerate retired permissions).
 - On every request, the presentation layer puts the effective permissions in `ActorContext.permissions`, so every `ensure_permission(...)` check honors the clinic's customization.
+- **Per-user exceptions** (plans with the `user_permissions` feature, Clínica and up): one person can get a few extra permissions or lose a few of their role's, stored as the difference from the role (`PermissionAdjustments` on `User`), so later changes to the role still reach them. Edited from **Users → Permissions** (`GET`/`PUT /users/{id}/permissions`). On a plan without the feature, stored exceptions are kept but not applied.
+- **Contracted modules gate their permissions**: a clinic without vaccination, applications or procedures gets none of their permissions, whatever its roles say.
+- `granted(role, stored, modules, adjustments)` combines all of the above; the presentation layer puts the result in `ActorContext.permissions`.
 - The frontend uses the same model: the UI adapts to the actor's effective permissions, and the **Roles & Permissions** screen edits the overrides (`role_permissions` router: `GET`/`PUT`/`DELETE`).
+
+**Guardrails** (enforced in the backend, mirrored in the UI):
+
+- The `admin` role is not customizable and always has full access (except signing/amending records).
+- `records.sign` and `records.amend` are doctor-only: never granted to other roles or users, never taken from doctors.
+- `permissions.manage` is admin-only: it can't be delegated to a role or a user.
+- Only an admin acts on admin accounts (edit, change role, suspend, reset password, close sessions) or makes someone an admin. A delegated `users.manage` manages the rest of the staff.
+- Nobody edits their own permissions.
+
+**What the clinic manages and what Medicore support manages:**
+
+| | Clinic admin | Platform console |
+|---|---|---|
+| Legal name, tax ID, ICD version | ✅ (`organization.manage`) | ✅ |
+| Sites (create, rename) | ✅ within the plan's limit (`locations.manage`) | ✅ same limit |
+| Timezone | read-only | ✅ (it moves the clinic's "today", agenda and reminders) |
+| Slug (sign-in identifier) | read-only | fixed at creation |
+| Plan, modules, limits, paid period, payments | read-only | ✅ |
+| Users, roles, per-user permissions | ✅ (within seat limits) | support actions (reset password, unlock, suspend) |
+
+---
+
+## Subscriptions and plans
+
+Each clinic has a **subscription** (`Subscription` value object on `Tenant`): plan, optional modules, paid-until date, trial flag, grace days and special terms (limit overrides, negotiated price). Activation is manual — clinics pay by bank transfer and support records it from the platform console.
+
+- **Plan catalog** (`plans`, editable in **Plans & pricing**): Profesional independiente, Clínica, Clínica Plus and Empresarial (custom quote). Each sets limits for doctors, support staff (nursing, reception and admins beyond the first), sites and storage, plus features (`user_permissions`).
+- **Optional modules** (`addon_pricing`): vaccination, applications and procedures, each with a monthly price and a bundle price for all three.
+- **Quotas** are enforced in the use cases (invite, role change, reactivation, new site): growing above a limit is refused with `plan.quota_*`; a clinic already above it (after a downgrade) keeps what it has.
+- **Payments and renewal** (`subscription_payments`): recording a payment extends the paid period by 1–24 months. After the period ends the clinic keeps working for the grace days; then it becomes **read-only** (`plan.read_only`: it can view but not change data until renewed). The app shows banners as expiry approaches.
+- Clinics see their plan, usage and payment history in **Settings → Organization**.
+
+The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every module, and `centro-norte` on **Clínica** with vaccination only (3 doctors, support seats full), so locked modules and quota messages can be tried too.
 
 ---
 
@@ -216,6 +252,7 @@ medicore/
 | **12** | Vaccination module (El Salvador national scheme, patient card, worklist) | ✅ Done |
 | **13** | In-clinic applications (orders from the consultation or an outside prescription, observation, allergy alert) | ✅ Done |
 | **14** | Minor procedures (per-clinic catalog, consent on paper, signed note with amendments, pathology specimen, follow-up) | ✅ Done |
+| **15** | SaaS subscriptions (plan catalog, optional modules, quotas, manual payments and renewal, read-only after grace, per-user permissions) | ✅ Done |
 | — | Password policy | ⏳ Pending |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
@@ -289,7 +326,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ## Database
 
-**27 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
+**30 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
 
 | Table | Description |
 |---|---|
@@ -312,6 +349,8 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `application_orders` + `application_records` | In-clinic application orders and the doses applied |
 | `procedure_types` + `procedures` | Per-clinic procedure catalog and the procedures ordered/performed |
 | `role_permission_overrides` | Per-role, per-tenant permission customization |
+| `plans` + `addon_pricing` | Plan catalog and optional-module pricing (global) |
+| `subscription_payments` | Payments recorded per clinic (renewals) |
 | `diagnosis_codes` | ICD-10/ICD-11 catalog (global, for autocomplete) |
 | `platform_admins` | Platform superadmins |
 | `platform_audit_logs` | Global audit of platform operations |
