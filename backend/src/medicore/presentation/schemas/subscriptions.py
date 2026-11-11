@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from medicore.domain.enums import AddonModule, PaymentMethod, PlanFeature
+from medicore.domain.enums import AddonModule, AnalyticsTier, PaymentMethod, PlanFeature
 from medicore.domain.value_objects.subscription import MAX_RENEWAL_MONTHS
 
 Price = Decimal  # input: number or numeric string, validated non-negative where used
@@ -33,6 +33,7 @@ class PlanResponse(BaseModel):
     features: list[str]
     active: bool
     sort_order: int
+    analytics_tier: AnalyticsTier
 
 
 class AddonPricingResponse(BaseModel):
@@ -51,6 +52,7 @@ class UpdatePlanRequest(BaseModel):
     limits: PlanLimitsSchema
     features: list[PlanFeature] = []
     active: bool = True
+    analytics_tier: AnalyticsTier | None = None  # omitted: keep the plan's
 
 
 class UpdateAddonPricingRequest(BaseModel):
@@ -93,6 +95,7 @@ class SubscriptionResponse(BaseModel):
     monthly_price: str | None
     usage: SeatUsageResponse
     addon_prices: AddonPricingResponse
+    analytics_tier: AnalyticsTier  # effective: the plan's, or operations with the add-on
 
 
 class TenantSubscriptionSummary(BaseModel):

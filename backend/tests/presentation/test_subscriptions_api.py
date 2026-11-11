@@ -56,12 +56,44 @@ def test_update_addon_pricing(client, platform_headers):
         "/api/v1/platform/addon-pricing",
         headers=platform_headers,
         json={
-            "prices": {"vaccination": "12", "applications": "15", "procedures": "15"},
+            "prices": {"vaccination": "12", "applications": "15", "procedures": "15",
+                       "analytics": "25"},
             "bundle_price": "30",
         },
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["prices"]["vaccination"] == "12.00"
+    assert resp.json()["prices"]["analytics"] == "25.00"
+
+
+def test_plan_carries_its_analytics_tier(client, platform_headers):
+    plans = client.get("/api/v1/platform/plans", headers=platform_headers).json()["plans"]
+    assert {p["code"]: p["analytics_tier"] for p in plans} == {
+        "independiente": "basic", "clinica": "clinic", "clinica_plus": "operations",
+        "empresarial": "operations",
+    }
+    clinica = next(p for p in plans if p["code"] == "clinica")
+    resp = client.put(
+        "/api/v1/platform/plans/clinica", headers=platform_headers,
+        json={"name": clinica["name"], "monthly_price": "79", "limits": clinica["limits"],
+              "features": clinica["features"], "analytics_tier": "operations"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["analytics_tier"] == "operations"
+
+
+def test_analytics_addon_raises_the_clinic_tier(seed, client, platform_headers):
+    body = {"plan_code": "independiente", "modules": ["analytics"], "period_end": None}
+    resp = client.put(_url(seed), headers=platform_headers, json=body)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["analytics_tier"] == "operations"
+    assert resp.json()["plan"]["analytics_tier"] == "basic"
+    assert resp.json()["monthly_price"] == "59.00"
+
+    body["plan_code"] = "clinica_plus"
+    resp = client.put(_url(seed), headers=platform_headers, json=body)
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "plan.analytics_included"
 
 
 def test_get_and_update_tenant_subscription(seed, client, platform_headers):

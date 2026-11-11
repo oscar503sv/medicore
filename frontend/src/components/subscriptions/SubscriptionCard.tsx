@@ -95,6 +95,9 @@ function SubscriptionForm({
   const [priceOverride, setPriceOverride] = useState(sub.price_override ?? '')
 
   const selectedPlan = plans.find((p) => p.code === planCode) ?? sub.plan
+  // A plan already at the operations tier gains nothing from the analytics add-on.
+  const analyticsIncluded = selectedPlan.analytics_tier === 'operations'
+  const contracted = analyticsIncluded ? modules.filter((m) => m !== 'analytics') : modules
   // An inactive plan is only offered to the clinic already on it.
   const choices = plans.filter((p) => p.active || p.code === sub.plan.code)
 
@@ -110,7 +113,7 @@ function SubscriptionForm({
       ) as unknown as PlanLimits
       return platformPlansApi.updateSubscription(tenantId, {
         plan_code: planCode,
-        modules,
+        modules: contracted,
         period_end: noExpiry || !periodEnd ? null : periodEnd,
         is_trial: isTrial,
         grace_days: Number(graceDays),
@@ -216,18 +219,30 @@ function SubscriptionForm({
               {t('sub.f_modules')}
             </span>
             <div className="space-y-1.5">
-              {ADDON_MODULES.map((m) => (
-                <label key={m} className="flex items-center gap-2 text-sm text-tx">
-                  <Checkbox
-                    checked={modules.includes(m)}
-                    onChange={(e) => toggleModule(m, e.target.checked)}
-                  />
-                  {t(`sub.module.${m}`)}
-                  <span className="font-mono text-xs text-tx-3">
-                    {fmtUsd(sub.addon_prices.prices[m])}
-                  </span>
-                </label>
-              ))}
+              {ADDON_MODULES.map((m) => {
+                const included = m === 'analytics' && analyticsIncluded
+                return (
+                  <label key={m} className="flex items-center gap-2 text-sm text-tx">
+                    <Checkbox
+                      checked={contracted.includes(m)}
+                      disabled={included}
+                      onChange={(e) => toggleModule(m, e.target.checked)}
+                    />
+                    {t(`sub.module.${m}`)}
+                    <span className="font-mono text-xs text-tx-3">
+                      {included
+                        ? t('sub.analytics_included')
+                        : fmtUsd(sub.addon_prices.prices[m])}
+                    </span>
+                  </label>
+                )
+              })}
+              <p className="pt-1 text-xs text-tx-3">
+                {t('sub.f_analytics')}:{' '}
+                {t(
+                  `sub.tier.${contracted.includes('analytics') ? 'operations' : selectedPlan.analytics_tier}`,
+                )}
+              </p>
             </div>
           </div>
         </div>

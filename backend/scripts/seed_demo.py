@@ -122,6 +122,7 @@ from medicore.domain.entities.procedure import Procedure, ProcedureProgress, Pro
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import (
+    CLINICAL_MODULES,
     AddonModule,
     ApplicationOrderSource,
     ApplicationOutcome,
@@ -571,9 +572,10 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
 
 # The public demo clinics never expire. Clínica Demo shows every feature; Centro Norte shows
 # a smaller plan (Clínica: 3 doctors, 3 support seats, per-user permissions) with one module,
-# so the demo also shows locked modules and full seats.
+# so the demo also shows locked modules, full seats and the clinic analytics tier (Clínica
+# Plus already includes operations, so the analytics add-on is not sold to it).
 DEMO_SUBSCRIPTIONS = {
-    "clinica-demo": Subscription(plan_code=CLINICA_PLUS, modules=frozenset(AddonModule)),
+    "clinica-demo": Subscription(plan_code=CLINICA_PLUS, modules=CLINICAL_MODULES),
     "centro-norte": Subscription(
         plan_code=CLINICA, modules=frozenset({AddonModule.VACCINATION})
     ),

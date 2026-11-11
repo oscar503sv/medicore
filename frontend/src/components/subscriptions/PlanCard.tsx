@@ -43,6 +43,9 @@ export function PlanCard() {
                 ? sub.modules.map((m) => t(`sub.module.${m}`)).join(' · ')
                 : t('sub.no_modules')}
             </p>
+            <p className="text-[13px] text-tx-3">
+              {t('sub.f_analytics')}: {t(`sub.tier.${sub.analytics_tier}`)}
+            </p>
           </div>
           <div className="text-right">
             {sub.monthly_price && (

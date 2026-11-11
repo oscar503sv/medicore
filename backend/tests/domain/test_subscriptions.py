@@ -10,12 +10,15 @@ import pytest
 from medicore.domain.entities.plan import AddonPricing, Plan
 from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.enums import (
+    CLINICAL_MODULES,
     AddonModule,
+    AnalyticsTier,
     PaymentMethod,
     PlanFeature,
     Role,
     SubscriptionStatus,
 )
+from medicore.domain.services.analytics_access import addon_adds_nothing, analytics_tier
 from medicore.domain.services.plan_catalog import (
     CLINICA,
     CLINICA_PLUS,
@@ -46,7 +49,7 @@ def plan(code: str) -> Plan:
     return next(p for p in default_plans() if p.code == code)
 
 
-ALL = frozenset(AddonModule)
+ALL = CLINICAL_MODULES
 TODAY = date(2026, 11, 10)
 
 
@@ -92,6 +95,11 @@ class TestAddonPricing:
         pricing = default_addon_pricing()
         pricing.update(pricing.prices, usd("100"))
         assert pricing.monthly_price(ALL) == usd("40")
+
+    def test_analytics_is_charged_apart_from_the_bundle(self):
+        pricing = default_addon_pricing()
+        assert pricing.monthly_price(frozenset(AddonModule)) == usd("49")
+        assert pricing.monthly_price(frozenset({AddonModule.ANALYTICS})) == usd("20")
 
     def test_every_module_needs_a_price(self):
         with pytest.raises(InvalidValueObject) as exc:
@@ -169,6 +177,42 @@ class TestSeatUsage:
         assert seat_usage({Role.ADMIN: 1}).support_users == 0
 
 
+class TestAnalyticsTier:
+    def test_tiers_per_published_plan(self):
+        assert {p.code: p.analytics_tier for p in default_plans()} == {
+            INDEPENDIENTE: AnalyticsTier.BASIC, CLINICA: AnalyticsTier.CLINIC,
+            CLINICA_PLUS: AnalyticsTier.OPERATIONS, EMPRESARIAL: AnalyticsTier.OPERATIONS,
+        }
+
+    def test_tiers_are_ordered(self):
+        assert AnalyticsTier.OPERATIONS.includes(AnalyticsTier.CLINIC)
+        assert AnalyticsTier.CLINIC.includes(AnalyticsTier.CLINIC)
+        assert not AnalyticsTier.BASIC.includes(AnalyticsTier.CLINIC)
+
+    @pytest.mark.parametrize("code", [INDEPENDIENTE, CLINICA])
+    def test_addon_raises_to_operations(self, code):
+        sub = Subscription(plan_code=code, modules=frozenset({AddonModule.ANALYTICS}))
+        assert analytics_tier(plan(code), sub) == AnalyticsTier.OPERATIONS
+        assert not addon_adds_nothing(plan(code))
+
+    def test_without_addon_the_plan_decides(self):
+        sub = Subscription(plan_code=CLINICA, modules=CLINICAL_MODULES)
+        assert analytics_tier(plan(CLINICA), sub) == AnalyticsTier.CLINIC
+
+    def test_operations_plans_gain_nothing_from_the_addon(self):
+        assert addon_adds_nothing(plan(CLINICA_PLUS))
+        assert addon_adds_nothing(plan(EMPRESARIAL))
+
+    def test_update_keeps_the_tier_unless_given(self):
+        p = plan(CLINICA)
+        p.update(name="Clínica", monthly_price=usd("79"), limits=p.limits,
+                 features=p.features, active=True)
+        assert p.analytics_tier == AnalyticsTier.CLINIC
+        p.update(name="Clínica", monthly_price=usd("79"), limits=p.limits,
+                 features=p.features, active=True, analytics_tier=AnalyticsTier.BASIC)
+        assert p.analytics_tier == AnalyticsTier.BASIC
+
+
 class TestQuote:
     def test_plan_plus_modules(self):
         sub = Subscription(plan_code=CLINICA, modules=frozenset({AddonModule.VACCINATION}))
@@ -177,6 +221,10 @@ class TestQuote:
     def test_plan_plus_bundle(self):
         sub = Subscription(plan_code=CLINICA_PLUS, modules=ALL)
         assert monthly_quote(sub, plan(CLINICA_PLUS), default_addon_pricing()) == usd("148")
+
+    def test_plan_plus_bundle_and_analytics(self):
+        sub = Subscription(plan_code=CLINICA, modules=frozenset(AddonModule))
+        assert monthly_quote(sub, plan(CLINICA), default_addon_pricing()) == usd("128")
 
     def test_custom_quote_plan_without_agreed_price(self):
         sub = Subscription(plan_code=EMPRESARIAL)

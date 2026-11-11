@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from medicore.domain.enums import AddonModule, PlanFeature
+from medicore.domain.enums import CLINICAL_MODULES, AddonModule, AnalyticsTier, PlanFeature
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import PlanLimits
@@ -35,6 +35,7 @@ class Plan:
     features: frozenset[PlanFeature] = frozenset()
     active: bool = True  # inactive plans can't be chosen for new subscriptions
     sort_order: int = 0
+    analytics_tier: AnalyticsTier = AnalyticsTier.BASIC
 
     def __post_init__(self) -> None:
         self._validate()
@@ -50,12 +51,15 @@ class Plan:
         limits: PlanLimits,
         features: frozenset[PlanFeature],
         active: bool,
+        analytics_tier: AnalyticsTier | None = None,
     ) -> None:
         self.name = name.strip()
         self.monthly_price = monthly_price
         self.limits = limits
         self.features = features
         self.active = active
+        if analytics_tier is not None:
+            self.analytics_tier = analytics_tier
         self._validate()
 
     def _validate(self) -> None:
@@ -67,7 +71,8 @@ class Plan:
 
 @dataclass(slots=True)
 class AddonPricing:
-    """Monthly price of each optional module, and of all of them together."""
+    """Monthly price of each optional module, and of the clinical modules together (the
+    bundle). The analytics add-on is always charged on its own."""
 
     prices: dict[AddonModule, Money] = field(default_factory=dict)
     bundle_price: Money = field(default_factory=lambda: Money(Decimal("0"), CURRENCY))
@@ -79,13 +84,18 @@ class AddonPricing:
         return self.prices[module]
 
     def monthly_price(self, modules: frozenset[AddonModule]) -> Money:
-        """What the given modules cost a month; all of them together get the bundle price
-        (or the plain sum, should the bundle ever be configured above it)."""
+        """What the given modules cost a month. All the clinical modules together get the
+        bundle price (or their plain sum, should the bundle ever be configured above it);
+        the others add their own price."""
+        clinical = self._sum(modules & CLINICAL_MODULES)
+        if modules >= CLINICAL_MODULES and self.bundle_price.amount < clinical.amount:
+            clinical = self.bundle_price
+        return clinical + self._sum(modules - CLINICAL_MODULES)
+
+    def _sum(self, modules: frozenset[AddonModule]) -> Money:
         total = Money(Decimal("0"), CURRENCY)
         for module in modules:
             total = total + self.prices[module]
-        if modules == frozenset(AddonModule) and self.bundle_price.amount < total.amount:
-            return self.bundle_price
         return total
 
     def update(self, prices: dict[AddonModule, Money], bundle_price: Money) -> None:

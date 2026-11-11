@@ -143,13 +143,13 @@ El control de acceso es **granular y personalizable por clínica** (`application
 
 Cada clínica tiene una **suscripción** (value object `Subscription` en `Tenant`): plan, módulos opcionales, fecha de pago, indicador de prueba, días de gracia y condiciones especiales (límites a la medida, precio negociado). La activación es manual: las clínicas pagan por transferencia bancaria y el soporte lo registra desde la consola de plataforma.
 
-- **Catálogo de planes** (`plans`, editable en **Planes y precios**): Profesional independiente, Clínica, Clínica Plus y Empresarial (cotización). Cada uno fija límites de médicos, personal de apoyo (enfermería, recepción y administradores adicionales al primero), sedes y almacenamiento, además de funciones (`user_permissions`).
-- **Módulos opcionales** (`addon_pricing`): vacunación, aplicaciones y procedimientos, cada uno con precio mensual y un precio de paquete por los tres.
+- **Catálogo de planes** (`plans`, editable en **Planes y precios**): Profesional independiente, Clínica, Clínica Plus y Empresarial (cotización). Cada uno fija límites de médicos, personal de apoyo (enfermería, recepción y administradores adicionales al primero), sedes y almacenamiento, además de funciones (`user_permissions`) y su **nivel de analítica** (`basic` < `clinic` < `operations`: panel básico, panel de la clínica, métricas operativas).
+- **Módulos opcionales** (`addon_pricing`): vacunación, aplicaciones y procedimientos, cada uno con precio mensual y un precio de paquete por los tres; y **analítica avanzada** ($20), que sube la clínica a métricas operativas, se cobra aparte del paquete y no se vende a planes que ya la incluyen (`plan.analytics_included`).
 - **Cupos** aplicados en los casos de uso (invitar, cambiar rol, reactivar, nueva sede): crecer por encima del límite se rechaza con `plan.quota_*`; una clínica que ya lo supera (tras bajar de plan) conserva lo que tiene.
 - **Pagos y renovación** (`subscription_payments`): registrar un pago extiende el periodo de 1 a 24 meses. Al vencer, la clínica sigue operando durante los días de gracia; después queda en **solo lectura** (`plan.read_only`: puede consultar pero no modificar hasta renovar). La app muestra avisos al acercarse el vencimiento.
 - Las clínicas ven su plan, uso e historial de pagos en **Ajustes → Organización**.
 
-La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con todos los módulos, y `centro-norte` en **Clínica** solo con vacunación (3 médicos, cupos de apoyo llenos), para probar también los módulos bloqueados y los mensajes de cupo.
+La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con todos los módulos clínicos (su plan ya incluye las métricas operativas), y `centro-norte` en **Clínica** solo con vacunación (3 médicos, cupos de apoyo llenos), para probar también los módulos bloqueados y los mensajes de cupo.
 
 ---
 
@@ -257,6 +257,7 @@ medicore/
 | **16** | Política de contraseñas (longitud, lista de bloqueo, nada personal, requisitos en vivo en la UI) | ✅ Completada |
 | **17** | Consola de plataforma: Negocio (MRR, cobros, vencimientos, adopción, cupos) y Monitoreo (salud, conexiones, errores 500 sin datos de pacientes con su commit y tendencia, accesos y bloqueos, accesos a la consola auditados, soporte abierto, tareas programadas, rendimiento por ruta con p50/p95 y tasas 4xx/5xx, `/health/ready`) | ✅ Completada |
 | **18** | Tarifas: precio por médico y tipo de cita, precio en el catálogo de procedimientos, copia del precio en cada cita y procedimiento, ajustes de cobro con motivo, procedimientos incluidos en la consulta, permisos `fees.manage_own` / `fees.manage_all` | ✅ Completada |
+| **19** | Niveles de analítica por plan (panel básico, de la clínica, métricas operativas) y complemento de analítica avanzada | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 | — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible, inventario y facturación | 🗓️ A futuro |

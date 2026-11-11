@@ -147,8 +147,16 @@ export interface Tenant {
 }
 
 // ── Subscriptions ─────────────────────────────────────────────────────────────
-export type AddonModule = 'vaccination' | 'applications' | 'procedures'
-export const ADDON_MODULES: AddonModule[] = ['vaccination', 'applications', 'procedures']
+export type AddonModule = 'vaccination' | 'applications' | 'procedures' | 'analytics'
+export const ADDON_MODULES: AddonModule[] = [
+  'vaccination',
+  'applications',
+  'procedures',
+  'analytics',
+]
+/** Dashboard and reports depth, least to most. The analytics add-on raises a clinic to operations. */
+export type AnalyticsTier = 'basic' | 'clinic' | 'operations'
+export const ANALYTICS_TIERS: AnalyticsTier[] = ['basic', 'clinic', 'operations']
 export type PlanFeature = 'user_permissions'
 export type SubscriptionStatus = 'trial' | 'active' | 'grace' | 'read_only'
 
@@ -169,6 +177,7 @@ export interface Plan {
   features: PlanFeature[]
   active: boolean
   sort_order: number
+  analytics_tier: AnalyticsTier
 }
 
 export interface AddonPricing {
@@ -196,6 +205,8 @@ export interface Subscription {
   monthly_price: string | null
   usage: { doctors: number; support_users: number; locations: number }
   addon_prices: AddonPricing
+  /** Effective: the plan's, or operations with the analytics add-on. */
+  analytics_tier: AnalyticsTier
 }
 
 export type PaymentMethod = 'bank_transfer' | 'cash' | 'card' | 'other'

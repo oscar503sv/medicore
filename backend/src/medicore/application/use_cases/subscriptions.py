@@ -26,7 +26,14 @@ from medicore.application.ports.unit_of_work import (
 from medicore.domain.entities.plan import CURRENCY, AddonPricing, Plan
 from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
-from medicore.domain.enums import AddonModule, PaymentMethod, PlanFeature, SubscriptionStatus
+from medicore.domain.enums import (
+    AddonModule,
+    AnalyticsTier,
+    PaymentMethod,
+    PlanFeature,
+    SubscriptionStatus,
+)
+from medicore.domain.services.analytics_access import addon_adds_nothing, analytics_tier
 from medicore.domain.services.seat_usage import SeatUsage, seat_usage
 from medicore.domain.services.subscription_pricing import monthly_quote
 from medicore.domain.shared.identifiers import SubscriptionPaymentId, TenantId
@@ -56,6 +63,7 @@ class SubscriptionView:
     locations_used: int
     monthly_price: Money | None
     addon_prices: AddonPricing
+    analytics_tier: AnalyticsTier  # the plan's, or operations with the add-on
 
 
 def build_view(uow: UnitOfWork, tenant: Tenant, clock: Clock) -> SubscriptionView:
@@ -77,6 +85,7 @@ def build_view(uow: UnitOfWork, tenant: Tenant, clock: Clock) -> SubscriptionVie
         locations_used=len(tenant.locations),
         monthly_price=monthly_quote(sub, plan, addons),
         addon_prices=addons,
+        analytics_tier=analytics_tier(plan, sub),
     )
 
 
@@ -124,6 +133,7 @@ class UpdatePlanCommand:
     limits: PlanLimits
     features: frozenset[PlanFeature]
     active: bool
+    analytics_tier: AnalyticsTier | None = None  # None: keep the plan's
 
 
 class UpdatePlan:
@@ -146,6 +156,7 @@ class UpdatePlan:
                 limits=cmd.limits,
                 features=cmd.features,
                 active=cmd.active,
+                analytics_tier=cmd.analytics_tier,
             )
             uow.plans.save(plan)
             uow.platform_audit.append(
@@ -168,6 +179,7 @@ def _plan_summary(plan: Plan) -> dict[str, object]:
         "storage_gb": plan.limits.storage_gb,
         "features": sorted(str(f) for f in plan.features),
         "active": plan.active,
+        "analytics_tier": str(plan.analytics_tier),
     }
 
 
@@ -236,12 +248,18 @@ def resolve_subscription(
     uow: UnitOfWork | PlatformUnitOfWork, cmd: SubscriptionCommand, current: str | None = None
 ) -> Subscription:
     """Validate a requested subscription against the catalog. An inactive plan can't be
-    chosen, except by the clinic already on it (editing its modules or dates)."""
+    chosen, except by the clinic already on it (editing its modules or dates). The analytics
+    add-on can't be sold to a plan that already includes what it gives."""
     plan = uow.plans.get(cmd.plan_code)
     if plan is None or (not plan.active and plan.code != current):
         raise ValidationError(
             f"unknown or inactive plan: {cmd.plan_code}", code="plan.unavailable",
             plan=cmd.plan_code,
+        )
+    if AddonModule.ANALYTICS in cmd.modules and addon_adds_nothing(plan):
+        raise ValidationError(
+            f"plan {plan.code} already includes advanced analytics",
+            code="plan.analytics_included", plan=plan.name,
         )
     return Subscription(
         plan_code=plan.code,

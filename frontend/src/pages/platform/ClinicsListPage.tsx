@@ -148,11 +148,17 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
     queryFn: platformPlansApi.catalog,
     enabled: open,
   })
+  // A plan already at the operations tier gains nothing from the analytics add-on.
+  const analyticsIncluded =
+    catalog?.plans.find((p) => p.code === form.plan_code)?.analytics_tier === 'operations'
+  const contracted = analyticsIncluded
+    ? form.modules.filter((m) => m !== 'analytics')
+    : form.modules
   const onTrial = form.trial_days !== null
   const set = (patch: Partial<CreateTenantPayload>) => setForm((f) => ({ ...f, ...patch }))
 
   const create = useMutation({
-    mutationFn: () => platformTenantsApi.create(form),
+    mutationFn: () => platformTenantsApi.create({ ...form, modules: contracted }),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['platform-tenants'] })
       toast(
@@ -259,7 +265,8 @@ function CreateClinicModal({ open, onClose }: { open: boolean; onClose: () => vo
                 {ADDON_MODULES.map((m) => (
                   <label key={m} className="flex items-center gap-2 text-sm text-tx">
                     <Checkbox
-                      checked={form.modules.includes(m)}
+                      checked={contracted.includes(m)}
+                      disabled={m === 'analytics' && analyticsIncluded}
                       onChange={(e) =>
                         set({
                           modules: e.target.checked

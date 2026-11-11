@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from medicore.domain.entities.plan import CURRENCY, AddonPricing, Plan
 from medicore.domain.entities.subscription_payment import SubscriptionPayment
-from medicore.domain.enums import AddonModule, PaymentMethod, PlanFeature
+from medicore.domain.enums import AddonModule, AnalyticsTier, PaymentMethod, PlanFeature
 from medicore.domain.shared.identifiers import PlatformAdminId, SubscriptionPaymentId, TenantId
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
@@ -38,6 +38,8 @@ def to_plan(row: PlanModel) -> Plan:
         features=frozenset(PlanFeature(f) for f in row.features if f in PlanFeature),
         active=row.active,
         sort_order=row.sort_order,
+        analytics_tier=AnalyticsTier(row.analytics_tier)
+        if row.analytics_tier in AnalyticsTier else AnalyticsTier.BASIC,
     )
 
 
@@ -51,6 +53,7 @@ def plan_to_row(plan: Plan, row: PlanModel) -> None:
     row.features = sorted(str(f) for f in plan.features)
     row.active = plan.active
     row.sort_order = plan.sort_order
+    row.analytics_tier = str(plan.analytics_tier)
 
 
 def to_addon_pricing(row: AddonPricingModel) -> AddonPricing:

@@ -500,6 +500,8 @@ const es: Dict = {
   'err.plan.invalid_grace': 'Los días de gracia no son válidos.',
   'err.plan.invalid_trial': 'La duración de la prueba no es válida.',
   'err.plan.unavailable': 'El plan {plan} no existe o no está activo.',
+  'err.plan.analytics_included':
+    'El plan {plan} ya incluye la analítica avanzada; no hace falta contratarla aparte.',
   'err.plan.period_required': 'Indica la fecha de vencimiento o inicia una prueba gratuita.',
   'err.plan.quota_exceeded': 'Tu plan no tiene espacio para esto. Contacta a soporte de Medicore para ampliarlo.',
   'err.plan.quota_doctors': 'Tu plan permite hasta {limit} médicos activos. Contacta a soporte de Medicore para ampliarlo.',
@@ -1470,6 +1472,8 @@ const en: Dict = {
   'err.plan.invalid_grace': 'The grace days are not valid.',
   'err.plan.invalid_trial': 'The trial length is not valid.',
   'err.plan.unavailable': 'Plan {plan} does not exist or is not active.',
+  'err.plan.analytics_included':
+    'Plan {plan} already includes advanced analytics; there is no need to add it.',
   'err.plan.period_required': 'Set an expiry date or start a free trial.',
   'err.plan.quota_exceeded': 'Your plan has no room for this. Contact Medicore support to upgrade.',
   'err.plan.quota_doctors': 'Your plan allows up to {limit} active doctors. Contact Medicore support to upgrade.',

@@ -71,6 +71,7 @@ def update_plan(
         limits=PlanLimits(**body.limits.model_dump()),
         features=frozenset(body.features),
         active=body.active,
+        analytics_tier=body.analytics_tier,
     )
     return ser_plan(UpdatePlan(factory, clock).execute(actor, code, cmd))
 

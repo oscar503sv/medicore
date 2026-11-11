@@ -143,13 +143,13 @@ Access control is **granular and customizable per clinic** (`application/common/
 
 Each clinic has a **subscription** (`Subscription` value object on `Tenant`): plan, optional modules, paid-until date, trial flag, grace days and special terms (limit overrides, negotiated price). Activation is manual — clinics pay by bank transfer and support records it from the platform console.
 
-- **Plan catalog** (`plans`, editable in **Plans & pricing**): Profesional independiente, Clínica, Clínica Plus and Empresarial (custom quote). Each sets limits for doctors, support staff (nursing, reception and admins beyond the first), sites and storage, plus features (`user_permissions`).
-- **Optional modules** (`addon_pricing`): vaccination, applications and procedures, each with a monthly price and a bundle price for all three.
+- **Plan catalog** (`plans`, editable in **Plans & pricing**): Profesional independiente, Clínica, Clínica Plus and Empresarial (custom quote). Each sets limits for doctors, support staff (nursing, reception and admins beyond the first), sites and storage, plus features (`user_permissions`) and its **analytics tier** (`basic` < `clinic` < `operations`: basic dashboard, clinic dashboard, operational metrics).
+- **Optional modules** (`addon_pricing`): vaccination, applications and procedures, each with a monthly price and a bundle price for all three; plus **advanced analytics** ($20), which raises the clinic to operational metrics, is charged apart from the bundle and is not sold to plans that already include it (`plan.analytics_included`).
 - **Quotas** are enforced in the use cases (invite, role change, reactivation, new site): growing above a limit is refused with `plan.quota_*`; a clinic already above it (after a downgrade) keeps what it has.
 - **Payments and renewal** (`subscription_payments`): recording a payment extends the paid period by 1–24 months. After the period ends the clinic keeps working for the grace days; then it becomes **read-only** (`plan.read_only`: it can view but not change data until renewed). The app shows banners as expiry approaches.
 - Clinics see their plan, usage and payment history in **Settings → Organization**.
 
-The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every module, and `centro-norte` on **Clínica** with vaccination only (3 doctors, support seats full), so locked modules and quota messages can be tried too.
+The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every clinical module (its plan already includes operational metrics), and `centro-norte` on **Clínica** with vaccination only (3 doctors, support seats full), so locked modules and quota messages can be tried too.
 
 ---
 
@@ -257,6 +257,7 @@ medicore/
 | **16** | Password policy (length, blocklist, nothing personal, live requirements in the UI) | ✅ Done |
 | **17** | Platform console: Business (MRR, collections, expirations, adoption, seats) and Monitoring (health, connections, 500 errors without patient data with their commit and trend, sign-ins and lockouts, audited console sign-ins, open support access, scheduled tasks, per-route performance with p50/p95 and 4xx/5xx rates, `/health/ready`) | ✅ Done |
 | **18** | Fees: price per doctor and appointment type, procedure catalog prices, the price copied onto each appointment and procedure, charge adjustments with a reason, procedures included in the consultation, `fees.manage_own` / `fees.manage_all` permissions | ✅ Done |
+| **19** | Analytics tiers per plan (basic dashboard, clinic dashboard, operational metrics) and the advanced-analytics add-on | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable record, inventory and billing | 🗓️ Future |

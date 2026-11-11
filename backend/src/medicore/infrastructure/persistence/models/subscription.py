@@ -28,6 +28,9 @@ class PlanModel(Base):
     features: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    analytics_tier: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="basic", server_default="basic"
+    )
 
 
 class AddonPricingModel(Base):

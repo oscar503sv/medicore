@@ -454,6 +454,7 @@ def ser_plan(p: Plan) -> dict:
         "features": sorted(str(f) for f in p.features),
         "active": p.active,
         "sort_order": p.sort_order,
+        "analytics_tier": str(p.analytics_tier),
     }
 
 
@@ -485,6 +486,7 @@ def ser_subscription(v: SubscriptionView) -> dict:
             "locations": v.locations_used,
         },
         "addon_prices": ser_addon_pricing(v.addon_prices),
+        "analytics_tier": str(v.analytics_tier),
     }
 
 

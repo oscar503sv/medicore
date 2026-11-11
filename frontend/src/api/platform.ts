@@ -2,6 +2,7 @@ import { api, platformApi } from './client'
 import type {
   AddonModule,
   AddonPricing,
+  AnalyticsTier,
   AuthSessionInfo,
   GlobalAuditEntry,
   BusinessOverview,
@@ -47,6 +48,7 @@ export interface UpdatePlanPayload {
   limits: PlanLimits
   features: PlanFeature[]
   active: boolean
+  analytics_tier: AnalyticsTier
 }
 
 export interface SubscriptionPayload {

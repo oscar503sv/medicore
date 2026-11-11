@@ -10,6 +10,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
+import { Select } from '@/components/ui/Select'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
@@ -24,8 +25,10 @@ import {
 } from '@/lib/subscriptions'
 import {
   ADDON_MODULES,
+  ANALYTICS_TIERS,
   type AddonModule,
   type AddonPricing,
+  type AnalyticsTier,
   type Plan,
   type PlanLimits,
 } from '@/types'
@@ -54,6 +57,7 @@ export function PlansPage() {
               <Th>{t('sub.col_support')}</Th>
               <Th>{t('sub.col_locations')}</Th>
               <Th>{t('sub.col_storage')}</Th>
+              <Th>{t('sub.col_analytics')}</Th>
               <Th>{t('sub.col_features')}</Th>
               <Th />
             </Tr>
@@ -74,6 +78,7 @@ export function PlansPage() {
                 <Td>{limitLabel(t, p.limits.support_users)}</Td>
                 <Td>{limitLabel(t, p.limits.locations)}</Td>
                 <Td>{limitLabel(t, p.limits.storage_gb, ' GB')}</Td>
+                <Td>{t(`sub.tier.${p.analytics_tier}`)}</Td>
                 <Td>
                   <div className="flex flex-wrap gap-1">
                     {p.features.map((f) => (
@@ -132,7 +137,7 @@ function AddonPricingCard({ pricing }: { pricing: AddonPricing }) {
         }}
       >
         <p className="text-[13px] text-tx-3">{t('sub.addons_desc')}</p>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
           {ADDON_MODULES.map((m) => (
             <Input
               key={m}
@@ -179,6 +184,7 @@ function PlanModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
   )
   const [userPermissions, setUserPermissions] = useState(plan.features.includes('user_permissions'))
   const [active, setActive] = useState(plan.active)
+  const [tier, setTier] = useState<AnalyticsTier>(plan.analytics_tier)
 
   const save = useMutation({
     mutationFn: () =>
@@ -190,6 +196,7 @@ function PlanModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
         ) as unknown as PlanLimits,
         features: userPermissions ? ['user_permissions'] : [],
         active,
+        analytics_tier: tier,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: CATALOG_KEY })
@@ -241,6 +248,20 @@ function PlanModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
           ))}
         </div>
         <p className="text-xs text-tx-3">{t('sub.limit_hint')}</p>
+        <div>
+          <Select
+            label={t('sub.f_analytics')}
+            value={tier}
+            onChange={(e) => setTier(e.target.value as AnalyticsTier)}
+          >
+            {ANALYTICS_TIERS.map((x) => (
+              <option key={x} value={x}>
+                {t(`sub.tier.${x}`)}
+              </option>
+            ))}
+          </Select>
+          <p className="mt-1 text-xs text-tx-3">{t(`sub.tier_desc.${tier}`)}</p>
+        </div>
         <label className="flex items-center gap-2 text-sm text-tx">
           <Checkbox
             checked={userPermissions}

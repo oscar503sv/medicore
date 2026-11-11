@@ -27,7 +27,14 @@ from medicore.application.use_cases.subscriptions import (
     UpdatePlanCommand,
     UpdateTenantSubscription,
 )
-from medicore.domain.enums import AddonModule, PaymentMethod, PlanFeature, SubscriptionStatus
+from medicore.domain.enums import (
+    CLINICAL_MODULES,
+    AddonModule,
+    AnalyticsTier,
+    PaymentMethod,
+    PlanFeature,
+    SubscriptionStatus,
+)
 from medicore.domain.services.plan_catalog import CLINICA, CLINICA_PLUS, EMPRESARIAL
 from medicore.domain.shared.errors import PermissionDenied, SubscriptionReadOnly
 from medicore.domain.value_objects.money import Money
@@ -105,7 +112,7 @@ class TestTenantSubscription:
         seed = seed_clinic()
         UpdateTenantSubscription(seed.factory, FixedClock()).execute(
             actor_for(seed), seed.tenant.id,
-            command(CLINICA_PLUS, modules=frozenset(AddonModule), period_end=None),
+            command(CLINICA_PLUS, modules=CLINICAL_MODULES, period_end=None),
         )
         view = GetTenantSubscription(seed.factory, FixedClock()).execute(
             actor_for(seed), seed.tenant.id
@@ -134,6 +141,31 @@ class TestTenantSubscription:
         stored = seed.factory.for_tenant(seed.tenant.id).tenants.get_by_id(seed.tenant.id)
         assert stored.subscription.modules == frozenset({AddonModule.VACCINATION})
         assert "tenant.subscription_updated" in actions(seed)
+
+    def test_analytics_addon_raises_the_tier(self):
+        seed = seed_clinic()
+        view = UpdateTenantSubscription(seed.factory, FixedClock()).execute(
+            actor_for(seed), seed.tenant.id,
+            command(CLINICA, modules=frozenset({AddonModule.ANALYTICS})),
+        )
+        assert view.analytics_tier == AnalyticsTier.OPERATIONS
+        assert view.monthly_price == Money(Decimal("99"), "USD")
+
+    def test_without_addon_the_view_has_the_plan_tier(self):
+        seed = seed_clinic()
+        view = UpdateTenantSubscription(seed.factory, FixedClock()).execute(
+            actor_for(seed), seed.tenant.id, command(CLINICA)
+        )
+        assert view.analytics_tier == AnalyticsTier.CLINIC
+
+    def test_analytics_addon_refused_on_a_plan_that_includes_it(self):
+        seed = seed_clinic()
+        with pytest.raises(ValidationError) as exc:
+            UpdateTenantSubscription(seed.factory, FixedClock()).execute(
+                actor_for(seed), seed.tenant.id,
+                command(CLINICA_PLUS, modules=frozenset({AddonModule.ANALYTICS})),
+            )
+        assert exc.value.code == "plan.analytics_included"
 
     def test_inactive_plan_cannot_be_chosen(self):
         seed = seed_clinic()

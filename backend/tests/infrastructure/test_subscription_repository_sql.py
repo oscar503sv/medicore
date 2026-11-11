@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 import medicore.infrastructure.persistence.models  # noqa: F401  (register all tables)
 from medicore.domain.entities.subscription_payment import SubscriptionPayment
-from medicore.domain.enums import AddonModule, PaymentMethod
+from medicore.domain.enums import AddonModule, AnalyticsTier, PaymentMethod
 from medicore.domain.services.plan_catalog import (
     CLINICA,
     EMPRESARIAL,
@@ -73,6 +73,7 @@ def test_migration_seeds_the_default_catalog(session):
         assert stored[plan.code].monthly_price == plan.monthly_price
         assert stored[plan.code].limits == plan.limits
         assert stored[plan.code].features == plan.features
+        assert stored[plan.code].analytics_tier == plan.analytics_tier
     pricing = SqlAddonPricingRepository(session).get()
     assert pricing.prices == default_addon_pricing().prices
     assert pricing.bundle_price == usd("29")
@@ -82,12 +83,13 @@ def test_plan_update_round_trips(session):
     repo = SqlPlanRepository(session)
     plan = repo.get(CLINICA)
     plan.update(name="Clínica 2", monthly_price=usd("85.50"), limits=plan.limits,
-                features=plan.features, active=False)
+                features=plan.features, active=False, analytics_tier=AnalyticsTier.OPERATIONS)
     repo.save(plan)
     session.flush()
     session.expire_all()
     stored = repo.get(CLINICA)
     assert (stored.name, stored.monthly_price, stored.active) == ("Clínica 2", usd("85.50"), False)
+    assert stored.analytics_tier == AnalyticsTier.OPERATIONS
     assert CLINICA not in [p.code for p in repo.list(include_inactive=False)]
 
 

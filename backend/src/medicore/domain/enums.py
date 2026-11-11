@@ -233,6 +233,31 @@ class AddonModule(StrEnum):
     VACCINATION = "vaccination"
     APPLICATIONS = "applications"
     PROCEDURES = "procedures"
+    # Advanced analytics: raises the clinic to the operations tier. Not a clinical module,
+    # so it is not part of the clinical-modules bundle.
+    ANALYTICS = "analytics"
+
+
+# The clinical modules, sold together at the bundle price.
+CLINICAL_MODULES = frozenset(
+    {AddonModule.VACCINATION, AddonModule.APPLICATIONS, AddonModule.PROCEDURES}
+)
+
+
+class AnalyticsTier(StrEnum):
+    """How much of the dashboard and reports a clinic gets, from least to most: its plan
+    decides, and the analytics add-on raises it to operations."""
+
+    BASIC = "basic"  # the doctor's own figures: agenda, patients, attendance
+    CLINIC = "clinic"  # the whole clinic: per doctor, estimated income, trends
+    OPERATIONS = "operations"  # operational metrics: occupancy, no-shows, waits, modules
+
+    @property
+    def rank(self) -> int:
+        return list(AnalyticsTier).index(self)
+
+    def includes(self, other: AnalyticsTier) -> bool:
+        return self.rank >= other.rank
 
 
 class PlanFeature(StrEnum):
