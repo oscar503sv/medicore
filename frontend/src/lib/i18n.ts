@@ -1,6 +1,7 @@
 import { useUIStore } from '@/stores/ui'
 import { aplEn, aplEs } from './i18n-applications'
 import { bizEn, bizEs } from './i18n-business'
+import { monEn, monEs } from './i18n-monitoring'
 import { obEn, obEs } from './i18n-onboarding'
 import { subEn, subEs } from './i18n-subscriptions'
 import { prcEn, prcEs } from './i18n-procedures'
@@ -15,6 +16,7 @@ const es: Dict = {
   ...obEs,
   ...subEs,
   ...bizEs,
+  ...monEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -981,6 +983,7 @@ const en: Dict = {
   ...obEn,
   ...subEn,
   ...bizEn,
+  ...monEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.update_available': 'A new version of Medicore is available.',

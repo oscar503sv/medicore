@@ -15,6 +15,7 @@ from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
+from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.notification import Notification
@@ -27,12 +28,18 @@ from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.enums import AppointmentStatus, ProcedureStatus
 from medicore.domain.repositories._support import (
+    ActiveImpersonation,
     AuditFilter,
+    DatabaseStatus,
+    ErrorGroup,
     GlobalAuditRow,
+    LockedLogin,
+    LoginPressure,
     Page,
     Paging,
     PatientFilter,
     RecordFilter,
+    TableSize,
     TenantFilter,
     UserFilter,
 )
@@ -918,3 +925,105 @@ class InMemorySubscriptionPaymentRepository(_Scoped):
 
     def save(self, payment) -> None:
         self._store.subscription_payments[payment.id.value] = payment
+
+
+class InMemoryMonitoringReadModel:
+    """Same contract as the SQL read model; the database facts are fixed test values."""
+
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def ping(self) -> None:
+        if self._store.database_down:
+            raise ConnectionError("database unreachable")
+
+    def database(self) -> DatabaseStatus:
+        return DatabaseStatus(version="16.0 (in-memory)", size_bytes=0, revision="head")
+
+    def largest_tables(self, limit: int) -> list[TableSize]:
+        return []
+
+    def login_pressure(self, since: datetime, now: datetime) -> LoginPressure:
+        recent = [
+            (ident, count, locked)
+            for ident, (count, last, locked) in self._store.login_attempts.items()
+            if last >= since
+        ]
+        locked = []
+        for ident, (count, _, until) in self._store.login_attempts.items():
+            if until is not None and until > now:
+                scope, _, rest = ident.partition(":")
+                slug, email = rest.split(":", 1) if scope == "tenant" else (None, rest)
+                locked.append(LockedLogin(scope, slug, email, count, until))
+        locked.sort(key=lambda lk: lk.locked_until, reverse=True)
+        return LoginPressure(
+            failing_accounts=len(recent),
+            failed_attempts=sum(count for _, count, _ in recent),
+            locked=locked,
+        )
+
+    def lockouts_since(self, since: datetime) -> int:
+        return sum(
+            1 for a in self._store.audit.values()
+            if a.action == "auth.login_locked" and a.timestamp >= since
+        )
+
+    def sessions_by_kind(self, now: datetime) -> dict[str, int]:
+        out = {"tenant": 0, "support": 0, "platform": 0}
+        for s in self._store.sessions.values():
+            if s.is_active(now):
+                out["support" if s.impersonator_id else s.scope] += 1
+        return out
+
+    def active_impersonations(self, now: datetime) -> list[ActiveImpersonation]:
+        rows = []
+        for s in self._store.sessions.values():
+            if not s.impersonator_id or not s.is_active(now):
+                continue
+            admin = self._store.platform_admins.get(s.impersonator_id)
+            tenant = self._store.tenants.get(s.tenant_id.value) if s.tenant_id else None
+            rows.append(ActiveImpersonation(
+                session_id=str(s.id),
+                admin_name=admin.name if admin else None,
+                tenant_id=str(s.tenant_id) if s.tenant_id else None,
+                clinic_name=tenant.legal_name if tenant else None,
+                started_at=s.created_at,
+                expires_at=s.expires_at,
+                ip_address=s.ip_address,
+            ))
+        return sorted(rows, key=lambda r: r.started_at, reverse=True)
+
+    def errors_since(self, since: datetime) -> int:
+        return sum(1 for e in self._store.error_events.values() if e.occurred_at >= since)
+
+    def error_groups(self, since: datetime, limit: int) -> list[ErrorGroup]:
+        groups: dict[tuple, list[ErrorEvent]] = {}
+        for e in self._store.error_events.values():
+            if e.occurred_at >= since:
+                groups.setdefault((e.method, e.route, e.error_type, e.location), []).append(e)
+        out = [
+            ErrorGroup(*key, count=len(evs), last_at=max(e.occurred_at for e in evs))
+            for key, evs in groups.items()
+        ]
+        out.sort(key=lambda g: (g.count, g.last_at), reverse=True)
+        return out[:limit]
+
+    def recent_errors(self, limit: int, offset: int) -> Page[ErrorEvent]:
+        items = sorted(
+            self._store.error_events.values(), key=lambda e: e.occurred_at, reverse=True
+        )
+        return Page(items=items[offset:offset + limit], total=len(items), offset=offset,
+                    limit=limit)
+
+
+class InMemoryErrorLogRepository:
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def record(self, event: ErrorEvent) -> None:
+        self._store.error_events[event.id] = event
+
+    def purge_before(self, cutoff: datetime) -> None:
+        for key, e in list(self._store.error_events.items()):
+            if e.occurred_at < cutoff:
+                del self._store.error_events[key]

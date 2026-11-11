@@ -102,3 +102,57 @@ class PaymentSummary:
     tenant_id: str
     amount: Decimal
     paid_on: date
+
+
+# ── Platform monitoring (read-model rows) ──────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class DatabaseStatus:
+    version: str
+    size_bytes: int
+    revision: str | None  # applied Alembic migration
+
+
+@dataclass(frozen=True, slots=True)
+class TableSize:
+    name: str
+    size_bytes: int  # table + indexes + TOAST
+    rows: int  # planner estimate
+
+
+@dataclass(frozen=True, slots=True)
+class LockedLogin:
+    scope: str  # "tenant" | "platform"
+    clinic_slug: str | None
+    email: str
+    failed_count: int
+    locked_until: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class LoginPressure:
+    failing_accounts: int  # identifiers with failures since the cutoff and no later success
+    failed_attempts: int  # those failures, summed
+    locked: list[LockedLogin] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveImpersonation:
+    session_id: str
+    admin_name: str | None
+    tenant_id: str | None
+    clinic_name: str | None
+    started_at: datetime
+    expires_at: datetime
+    ip_address: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ErrorGroup:
+    method: str
+    route: str
+    error_type: str
+    location: str
+    count: int
+    last_at: datetime

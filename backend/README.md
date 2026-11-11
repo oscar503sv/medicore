@@ -192,8 +192,9 @@ python -m venv .venv
 .venv/bin/uvicorn medicore.presentation.main:app --reload
 ```
 
-- API at `http://localhost:8000/api/v1`, interactive docs at `/api/v1/docs`, health check at
-  `/health`.
+- API at `http://localhost:8000/api/v1`, interactive docs at `/api/v1/docs`, liveness check at
+  `/health` and readiness (database reachable, `503` otherwise) at `/health/ready`, also served
+  as `/api/v1/health/ready` so an external uptime monitor can reach it through nginx.
 - After running the seed, every demo user has the password from `DEMO_PASSWORD` (**`demo1234`**
   in development when unset) and the clinic admins the one from `DEMO_ADMIN_PASSWORD` (the same
   `DEMO_PASSWORD` when unset). In production both are required: the seed refuses the default and

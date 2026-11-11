@@ -28,6 +28,8 @@ class AuthSession:
     revoked_at: datetime | None = None
     ip_address: str | None = None
     user_agent: str | None = None
+    # Support access: the superadmin acting as this clinic user (None for a normal login).
+    impersonator_id: UUID | None = None
 
     def is_active(self, now: datetime) -> bool:
         return self.revoked_at is None and self.expires_at > now

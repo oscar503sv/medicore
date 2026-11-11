@@ -649,3 +649,66 @@ export interface ProcedureDraft {
   indication: string
   follow_up_days: number | null
 }
+
+// ── Platform monitoring ──────────────────────────────────────────────────────
+
+export interface LockedLogin {
+  scope: 'tenant' | 'platform'
+  clinic_slug: string | null
+  email: string
+  failed_count: number
+  locked_until: string
+}
+
+export interface ActiveImpersonation {
+  session_id: string
+  admin_name: string | null
+  tenant_id: string | null
+  clinic_name: string | null
+  started_at: string
+  expires_at: string
+  ip_address: string | null
+}
+
+export interface ErrorGroup {
+  method: string
+  route: string
+  error_type: string
+  location: string
+  count: number
+  last_at: string
+}
+
+export interface SystemStatus {
+  now: string
+  runtime: {
+    version: string
+    commit: string | null
+    environment: string
+    python: string
+    started_at: string
+    uptime_seconds: number
+  }
+  database: { version: string; size_bytes: number; revision: string | null; latency_ms: number }
+  largest_tables: { name: string; size_bytes: number; rows: number }[]
+  logins: {
+    failing_accounts: number
+    failed_attempts: number
+    lockouts_24h: number
+    locked: LockedLogin[]
+  }
+  sessions: { tenant: number; support: number; platform: number }
+  impersonations: ActiveImpersonation[]
+  errors: { last_24h: number; last_7d: number; retention_days: number; groups: ErrorGroup[] }
+}
+
+export interface ErrorEvent {
+  id: string
+  occurred_at: string
+  method: string
+  route: string
+  status: number
+  error_type: string
+  location: string
+}
+

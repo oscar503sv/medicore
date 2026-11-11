@@ -7,6 +7,11 @@ from fastapi import APIRouter, Query, Request, Response
 from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock as ClockPort
 from medicore.application.use_cases.business import GetBusinessOverview
+from medicore.application.use_cases.monitoring import (
+    ERROR_RETENTION_DAYS,
+    GetSystemStatus,
+    ListServerErrors,
+)
 from medicore.application.use_cases.platform import (
     AddTenantLocation,
     AuthenticatePlatformAdmin,
@@ -49,12 +54,18 @@ from medicore.presentation.dependencies import (
     Hasher,
     JwtIssuer,
     PlatformActor,
+    Runtime,
     UoWFactory,
+    _client_ip,
     revoke_session_token,
 )
 from medicore.presentation.routers.role_permissions import parse_role, ser_matrix
 from medicore.presentation.schemas.auth import SessionListResponse
 from medicore.presentation.schemas.business import BusinessOverviewResponse
+from medicore.presentation.schemas.monitoring import (
+    ErrorEventListResponse,
+    SystemStatusResponse,
+)
 from medicore.presentation.schemas.platform import (
     AddTenantLocationRequest,
     CreateTenantRequest,
@@ -80,9 +91,11 @@ from medicore.presentation.schemas.role_permissions import (
 from medicore.presentation.schemas.users import UserListResponse
 from medicore.presentation.serializers import (
     ser_business_overview,
+    ser_error_event,
     ser_global_audit_row,
     ser_platform_admin,
     ser_session_info,
+    ser_system_status,
     ser_tenant,
     ser_tenant_stats,
     ser_user,
@@ -97,10 +110,11 @@ def _ser(tenant: Tenant, clock: ClockPort) -> dict:
 
 
 @router.post("/login", response_model=PlatformSessionResponse)
-def login(body: PlatformLoginRequest, response: Response, factory: UoWFactory, hasher: Hasher,
-          issuer: JwtIssuer, clock: Clock):
+def login(body: PlatformLoginRequest, request: Request, response: Response, factory: UoWFactory,
+          hasher: Hasher, issuer: JwtIssuer, clock: Clock):
     session = AuthenticatePlatformAdmin(factory, hasher, issuer, clock).execute(
-        body.email, body.password
+        body.email, body.password,
+        ip_address=_client_ip(request), user_agent=request.headers.get("user-agent"),
     )
     set_session_cookies(
         response,
@@ -219,6 +233,28 @@ def set_tenant_status(tenant_id: str, body: SetTenantStatusRequest, actor: Platf
 @router.get("/business", response_model=BusinessOverviewResponse)
 def business_overview(actor: PlatformActor, factory: UoWFactory, clock: Clock):
     return ser_business_overview(GetBusinessOverview(factory, clock).execute(actor))
+
+
+@router.get("/monitoring", response_model=SystemStatusResponse)
+def system_status(actor: PlatformActor, factory: UoWFactory, clock: Clock, runtime: Runtime):
+    dto = GetSystemStatus(factory, clock, runtime).execute(actor)
+    return ser_system_status(dto, ERROR_RETENTION_DAYS)
+
+
+@router.get("/monitoring/errors", response_model=ErrorEventListResponse)
+def list_server_errors(
+    actor: PlatformActor,
+    factory: UoWFactory,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+):
+    page = ListServerErrors(factory).execute(actor, limit=limit, offset=offset)
+    return ErrorEventListResponse(
+        items=[ser_error_event(e) for e in page.items],
+        total=page.total,
+        offset=page.offset,
+        limit=page.limit,
+    )
 
 
 @router.get("/tenants/{tenant_id}/stats", response_model=TenantStatsResponse)

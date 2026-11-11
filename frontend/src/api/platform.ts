@@ -5,6 +5,7 @@ import type {
   AuthSessionInfo,
   GlobalAuditEntry,
   BusinessOverview,
+  ErrorEvent,
   PaginatedResponse,
   Permission,
   PaymentMethod,
@@ -18,6 +19,7 @@ import type {
   Role,
   Subscription,
   SubscriptionPayment,
+  SystemStatus,
   Tenant,
   TenantStats,
   User,
@@ -148,6 +150,15 @@ export const platformTenantsApi = {
       .then((r) => r.data),
 
   business: () => platformApi.get<BusinessOverview>('/platform/business').then((r) => r.data),
+
+  monitoring: () => platformApi.get<SystemStatus>('/platform/monitoring').then((r) => r.data),
+
+  serverErrors: (offset = 0, limit = 20) =>
+    platformApi
+      .get<PaginatedResponse<ErrorEvent>>('/platform/monitoring/errors', {
+        params: { offset, limit },
+      })
+      .then((r) => r.data),
 
   tenantStats: (id: string) =>
     platformApi.get<TenantStats>(`/platform/tenants/${id}/stats`).then((r) => r.data),

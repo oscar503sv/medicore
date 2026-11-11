@@ -13,6 +13,7 @@ from datetime import date, datetime
 from types import TracebackType
 from typing import Protocol, runtime_checkable
 
+from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.repositories import (
     AddonPricingRepository,
     ApplicationRepository,
@@ -38,7 +39,16 @@ from medicore.domain.repositories import (
     UserRepository,
     VaccinationRecordRepository,
 )
-from medicore.domain.repositories._support import PaymentSummary, TenantActivity
+from medicore.domain.repositories._support import (
+    ActiveImpersonation,
+    DatabaseStatus,
+    ErrorGroup,
+    LoginPressure,
+    Page,
+    PaymentSummary,
+    TableSize,
+    TenantActivity,
+)
 from medicore.domain.shared.identifiers import TenantId
 
 
@@ -176,6 +186,52 @@ class LoginThrottleRepository(Protocol):
         ...
 
 
+class MonitoringReadModel(Protocol):
+    """System health for the platform console: database, sign-in pressure, live sessions
+    and recorded server errors. Read-only, global (not tenant-scoped)."""
+
+    def ping(self) -> None:
+        """Round-trip to the database; raises when it is unreachable."""
+        ...
+
+    def database(self) -> DatabaseStatus: ...
+
+    def largest_tables(self, limit: int) -> list[TableSize]: ...
+
+    def login_pressure(self, since: datetime, now: datetime) -> LoginPressure:
+        """Accounts failing to sign in since ``since`` and the lockouts active at ``now``."""
+        ...
+
+    def lockouts_since(self, since: datetime) -> int:
+        """``auth.login_locked`` events recorded since ``since``."""
+        ...
+
+    def sessions_by_kind(self, now: datetime) -> dict[str, int]:
+        """Live sessions per kind: ``tenant``, ``support`` (impersonation) and ``platform``."""
+        ...
+
+    def active_impersonations(self, now: datetime) -> list[ActiveImpersonation]: ...
+
+    def errors_since(self, since: datetime) -> int: ...
+
+    def error_groups(self, since: datetime, limit: int) -> list[ErrorGroup]:
+        """Errors since ``since`` grouped by route, type and location, most frequent first."""
+        ...
+
+    def recent_errors(self, limit: int, offset: int) -> Page[ErrorEvent]: ...
+
+
+class ErrorLogRepository(Protocol):
+    """Store of unexpected server errors. Each mutation commits on its own: it runs from the
+    error handler, outside any request transaction (which has just failed)."""
+
+    def record(self, event: ErrorEvent) -> None: ...
+
+    def purge_before(self, cutoff: datetime) -> None:
+        """Drop events older than ``cutoff`` (retention)."""
+        ...
+
+
 class UnitOfWorkFactory(Protocol):
     def for_tenant(self, tenant_id: TenantId) -> UnitOfWork:
         """Build a UnitOfWork scoped to ``tenant_id``."""
@@ -200,4 +256,12 @@ class UnitOfWorkFactory(Protocol):
 
     def login_throttle(self) -> AbstractContextManager[LoginThrottleRepository]:
         """Context-managed global login-attempt throttle used by the login use cases."""
+        ...
+
+    def monitoring_reads(self) -> AbstractContextManager[MonitoringReadModel]:
+        """Context-managed system-health read model for the platform console."""
+        ...
+
+    def error_log(self) -> AbstractContextManager[ErrorLogRepository]:
+        """Context-managed store of unexpected server errors."""
         ...

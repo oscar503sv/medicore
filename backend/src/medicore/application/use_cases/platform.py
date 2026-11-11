@@ -94,7 +94,13 @@ class AuthenticatePlatformAdmin:
             self._dummy_hash = self._hasher.hash("medicore.invalid-user.dummy")
         return self._dummy_hash
 
-    def execute(self, email: str, password: str) -> PlatformSessionDTO:
+    def execute(
+        self,
+        email: str,
+        password: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> PlatformSessionDTO:
         identifier = platform_login_identifier(email)
         now = self._clock.now()
         with self._factory.login_throttle() as throttle:
@@ -102,7 +108,7 @@ class AuthenticatePlatformAdmin:
             if locked is not None:
                 raise TooManyLoginAttempts(locked, now)
             try:
-                session = self._authenticate(email, password)
+                session = self._authenticate(email, password, ip_address, user_agent)
             except AuthenticationFailed:
                 # Counted for non-existent accounts too, so the lockout does not reveal
                 # which accounts exist (complements the dummy-hash timing defense).
@@ -112,7 +118,9 @@ class AuthenticatePlatformAdmin:
             throttle.purge_stale(now)
             return session
 
-    def _authenticate(self, email: str, password: str) -> PlatformSessionDTO:
+    def _authenticate(
+        self, email: str, password: str, ip_address: str | None, user_agent: str | None
+    ) -> PlatformSessionDTO:
         with self._factory.platform_uow() as uow:
             admin = uow.platform_admins.get_by_email(email)
             password_ok = self._hasher.verify(
@@ -134,6 +142,8 @@ class AuthenticatePlatformAdmin:
                     user_id=admin.id.value,
                     created_at=now,
                     expires_at=now + timedelta(minutes=self._tokens.ttl_minutes()),
+                    ip_address=ip_address,
+                    user_agent=(user_agent or "")[:400] or None,
                 )
             )
             uow.commit()
@@ -561,6 +571,7 @@ class ImpersonateTenant:
                     + timedelta(minutes=self._tokens.ttl_minutes(impersonated=True)),
                     ip_address=actor.ip_address,
                     user_agent=actor.user_agent,
+                    impersonator_id=actor.admin_id.value,
                 )
             )
             uow.platform_audit.append(

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from medicore.application.use_cases.monitoring import CheckReadiness
 from medicore.infrastructure.config import get_settings
+from medicore.presentation.dependencies import get_uow_factory
 from medicore.presentation.error_handlers import register_error_handlers
 from medicore.presentation.routers import (
     applications,
@@ -98,6 +101,23 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["health"])
     def health():
+        """Liveness: the process answers (no dependencies checked)."""
         return {"status": "ok"}
+
+    # Also under the API prefix: the frontend's nginx only forwards /api/, so this is the
+    # URL an external uptime monitor reaches (https://<domain>/api/v1/health/ready).
+    @app.get("/health/ready", tags=["health"])
+    @app.get(f"{API_PREFIX}/health/ready", tags=["health"], include_in_schema=False)
+    def ready(request: Request):
+        """Readiness: the API can serve requests, i.e. the database answers. For uptime
+        monitors; 503 when the database is unreachable."""
+        try:
+            factory = request.app.dependency_overrides.get(get_uow_factory, get_uow_factory)()
+            CheckReadiness(factory).execute()
+        except Exception:
+            return JSONResponse(
+                status_code=503, content={"status": "unavailable", "database": "down"}
+            )
+        return {"status": "ok", "database": "ok"}
 
     return app

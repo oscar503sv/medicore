@@ -13,6 +13,7 @@ from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.diagnosis_catalog import CatalogDiagnosis
+from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.entities.insurer import Insurer
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
@@ -66,12 +67,17 @@ class InMemoryStore:
     login_attempts: dict[str, tuple] = field(default_factory=dict)
     # Global revocable sessions (tenant and platform scopes share the store).
     sessions: dict[UUID, AuthSession] = field(default_factory=dict)
+    # Recorded server errors (platform monitoring).
+    error_events: dict[UUID, ErrorEvent] = field(default_factory=dict)
     # Global subscription catalog, starting from the published price list.
     subscription_payments: dict[UUID, SubscriptionPayment] = field(default_factory=dict)
     plans: dict[str, Plan] = field(default_factory=lambda: {p.code: p for p in default_plans()})
     addon_pricing: dict[str, AddonPricing] = field(
         default_factory=lambda: {"current": default_addon_pricing()}
     )
+
+    # Simulated outage for readiness tests (not transactional state).
+    database_down = False
 
     def snapshot(self) -> dict[str, dict]:
         return {f.name: copy.deepcopy(getattr(self, f.name)) for f in fields(self)}

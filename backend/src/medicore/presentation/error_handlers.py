@@ -9,9 +9,12 @@ Every error body is ``{"detail": str, "code": str, "params": {...}}``:
 from __future__ import annotations
 
 import logging
+import traceback
+from pathlib import PurePath
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -24,6 +27,10 @@ from medicore.application.common.errors import (
     TooManyLoginAttempts,
     ValidationError,
 )
+from medicore.application.use_cases.monitoring import (
+    RecordServerError,
+    RecordServerErrorCommand,
+)
 from medicore.domain.shared.errors import (
     CodedError,
     ConsultationNotSignable,
@@ -35,6 +42,7 @@ from medicore.domain.shared.errors import (
     RecordAlreadySigned,
     SlotUnavailable,
 )
+from medicore.presentation.dependencies import get_clock, get_uow_factory
 
 logger = logging.getLogger("medicore")
 
@@ -53,6 +61,49 @@ def _body(detail: Any, code: str, params: dict[str, Any] | None = None) -> dict[
 
 def _json(status: int, exc: CodedError) -> JSONResponse:
     return JSONResponse(status_code=status, content=_body(str(exc), exc.code, exc.params))
+
+
+def describe_exception(exc: BaseException) -> tuple[str, str]:
+    """Exception class and innermost project frame ("use_cases/records.py:142 in execute"),
+    falling back to the innermost frame when the error was raised outside the project.
+    Only names and line numbers: the message may carry patient data."""
+    kind = type(exc)
+    error_type = kind.__qualname__ if kind.__module__ == "builtins" else (
+        f"{kind.__module__}.{kind.__qualname__}"
+    )
+    frames = traceback.extract_tb(exc.__traceback__)
+    ours = [f for f in frames if "medicore" in PurePath(f.filename).parts]
+    frame = (ours or frames)[-1] if frames else None
+    if frame is None:
+        return error_type, "unknown"
+    parts = PurePath(frame.filename).parts
+    if "medicore" in parts:
+        parts = parts[len(parts) - parts[::-1].index("medicore"):]
+    else:
+        parts = parts[-2:]
+    return error_type, f"{'/'.join(parts)}:{frame.lineno} in {frame.name}"
+
+
+def _record_server_error(request: Request, exc: BaseException) -> None:
+    """Keep the error for the platform console. Never raises: the database may be the
+    very thing that failed, and the client must still get its 500."""
+    route = request.scope.get("route")
+    error_type, location = describe_exception(exc)
+    overrides = request.app.dependency_overrides
+    try:
+        factory = overrides.get(get_uow_factory, get_uow_factory)()
+        clock = overrides.get(get_clock, get_clock)()
+        RecordServerError(factory, clock).execute(
+            RecordServerErrorCommand(
+                method=request.method,
+                route=getattr(route, "path", None) or request.url.path,
+                status=500,
+                error_type=error_type,
+                location=location,
+            )
+        )
+    except Exception:
+        logger.warning("Could not record the server error", exc_info=True)
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -139,4 +190,5 @@ def register_error_handlers(app: FastAPI) -> None:
         # so internal details never leak to the client. Specific handlers above and FastAPI's
         # HTTPException/validation handling take precedence over this catch-all.
         logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+        await run_in_threadpool(_record_server_error, request, exc)
         return JSONResponse(status_code=500, content=_body("Internal server error", "internal"))

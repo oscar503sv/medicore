@@ -14,6 +14,7 @@ from medicore.infrastructure.persistence.models.availability import (
 from medicore.infrastructure.persistence.models.consultation import ConsultationModel
 from medicore.infrastructure.persistence.models.counters import TenantCounterModel
 from medicore.infrastructure.persistence.models.diagnosis_code import DiagnosisCodeModel
+from medicore.infrastructure.persistence.models.error_event import ErrorEventModel
 from medicore.infrastructure.persistence.models.insurer import InsurerModel
 from medicore.infrastructure.persistence.models.login_attempt import LoginAttemptModel
 from medicore.infrastructure.persistence.models.medical_document import MedicalDocumentModel
@@ -47,6 +48,7 @@ __all__ = [
     "AppointmentModel",
     "AuditLogModel",
     "AuthSessionModel",
+    "ErrorEventModel",
     "AvailabilityExceptionModel",
     "ConsultationModel",
     "DiagnosisCodeModel",

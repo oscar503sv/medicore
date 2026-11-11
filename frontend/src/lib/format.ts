@@ -1,4 +1,4 @@
-import { format, formatDistanceToNowStrict, parseISO } from 'date-fns'
+import { format, formatDistanceStrict, formatDistanceToNowStrict, parseISO } from 'date-fns'
 import { enUS, es } from 'date-fns/locale'
 import { formatInTimeZone } from 'date-fns-tz'
 import { useAuthStore } from '@/stores/auth'
@@ -65,6 +65,23 @@ export function fmtTimeTz(iso: string | null | undefined): string {
 export function fmtRelative(iso: string | null | undefined): string {
   if (!iso) return '—'
   return formatDistanceToNowStrict(parseISO(iso), { addSuffix: true, locale: locale() })
+}
+
+/** A span of time in words ("3 días" / "3 days"), e.g. a process uptime. */
+export function fmtDuration(seconds: number): string {
+  return formatDistanceStrict(0, seconds * 1000, { locale: locale() })
+}
+
+/** Bytes in the largest fitting unit ("12.4 MB"). */
+export function fmtBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  return `${value.toFixed(unit === 0 || value >= 100 ? 0 : 1)} ${units[unit]}`
 }
 
 /** Today's date (yyyy-MM-dd) in the clinic's timezone — for agenda/day defaults. */

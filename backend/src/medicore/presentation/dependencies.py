@@ -29,6 +29,7 @@ from medicore.infrastructure.persistence.unit_of_work import (
     SqlAlchemyUnitOfWork,
     SqlAlchemyUnitOfWorkFactory,
 )
+from medicore.infrastructure.runtime import ProcessRuntimeInfo
 from medicore.presentation.client_ip import resolve_client_ip
 from medicore.presentation.cookies import (
     CSRF_COOKIE,
@@ -55,6 +56,10 @@ def get_clock() -> SystemClock:
 
 def get_uow_factory() -> SqlAlchemyUnitOfWorkFactory:
     return SqlAlchemyUnitOfWorkFactory(get_session_factory())
+
+
+def get_runtime() -> ProcessRuntimeInfo:
+    return ProcessRuntimeInfo()
 
 
 # ── Authentication ─────────────────────────────────────────────────────────────
@@ -280,3 +285,4 @@ Codes = Annotated[DbSequentialCodeGenerator, Depends(get_codes)]
 UoWFactory = Annotated[SqlAlchemyUnitOfWorkFactory, Depends(get_uow_factory)]
 Hasher = Annotated[BcryptPasswordHasher, Depends(get_hasher)]
 JwtIssuer = Annotated[JwtTokenIssuer, Depends(get_jwt_issuer)]
+Runtime = Annotated[ProcessRuntimeInfo, Depends(get_runtime)]

@@ -17,10 +17,12 @@ from tests.support.repositories import (
     InMemoryDiagnosisCatalogRepository,
     InMemoryDoctorAvailabilityRepository,
     InMemoryDoctorProfileRepository,
+    InMemoryErrorLogRepository,
     InMemoryInsurerRepository,
     InMemoryLoginThrottleRepository,
     InMemoryMedicalDocumentRepository,
     InMemoryMedicalRecordRepository,
+    InMemoryMonitoringReadModel,
     InMemoryNotificationRepository,
     InMemoryPatientRepository,
     InMemoryPlanRepository,
@@ -163,3 +165,11 @@ class InMemoryUnitOfWorkFactory:
     @contextmanager
     def login_throttle(self) -> Iterator[InMemoryLoginThrottleRepository]:
         yield InMemoryLoginThrottleRepository(self.store)
+
+    @contextmanager
+    def monitoring_reads(self) -> Iterator[InMemoryMonitoringReadModel]:
+        yield InMemoryMonitoringReadModel(self.store)
+
+    @contextmanager
+    def error_log(self) -> Iterator[InMemoryErrorLogRepository]:
+        yield InMemoryErrorLogRepository(self.store)

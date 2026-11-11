@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # Reverse proxies whose X-Forwarded-For we honor (comma-separated IPs/CIDRs).
     # Empty (default) means the header is ignored and the socket peer is the client IP.
     trusted_proxies: str = ""
+    # Deployed git commit, shown in the platform console (Coolify can inject SOURCE_COMMIT).
+    source_commit: str = ""
 
     @property
     def is_production(self) -> bool:

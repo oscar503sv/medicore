@@ -6,7 +6,7 @@ Sistema de gestión clínica **multi-tenant** construido con **Clean Architectur
 
 Cubre el ciclo completo de atención: autenticación por organización, dashboard con métricas reales, gestión de pacientes, agenda y citas, consulta en curso (bitácora SOAP) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app**, **vacunación según el esquema nacional de El Salvador**, **aplicaciones de medicamentos en la clínica**, **procedimientos menores**, ajustes de organización y una **guía de primeros pasos** para médicos y administradores que se marca sola con los datos reales. La interfaz está disponible en **español e inglés**, incluidos los mensajes de error del backend.
 
-Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión) e **impersonación auditada** de una clínica para dar soporte.
+Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, un panel de **Negocio** (MRR, cobros, vencimientos, adopción y cupos por clínica), **Monitoreo** (salud de la API y la base de datos, errores del servidor, intentos fallidos y bloqueos, sesiones y accesos de soporte abiertos), auditoría global, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión) e **impersonación auditada** de una clínica para dar soporte.
 
 ---
 
@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings desde .env (pydantic-settings) — dev-safe por defecto
 │   ├── database/       # Engine SQLAlchemy + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (30 tablas; VOs complejos como JSONB)
+│   │   ├── models/     # ORM models (31 tablas; VOs complejos como JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (sin contaminar el dominio)
 │   │   └── repositories/  # Implementaciones SQLAlchemy de los puertos
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, generador de códigos, SystemClock
@@ -255,6 +255,7 @@ medicore/
 | **14** | Procedimientos menores (catálogo por clínica, consentimiento en papel, nota firmada con enmiendas, muestra a patología, control) | ✅ Completada |
 | **15** | Suscripciones SaaS (catálogo de planes, módulos opcionales, cupos, pagos y renovación manuales, solo lectura tras la gracia, permisos por usuario) | ✅ Completada |
 | **16** | Política de contraseñas (longitud, lista de bloqueo, nada personal, requisitos en vivo en la UI) | ✅ Completada |
+| **17** | Consola de plataforma: Negocio (MRR, cobros, vencimientos, adopción, cupos) y Monitoreo (salud, errores 500 sin datos de pacientes, accesos, soporte abierto, `/health/ready`) | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 | — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible, inventario y facturación | 🗓️ A futuro |
@@ -292,7 +293,7 @@ cp .env.example .env
 
 # 5. Levantar la API
 .venv/bin/uvicorn medicore.presentation.main:app --reload
-# API en http://localhost:8000/api/v1/ · docs en /api/v1/docs · health en /health
+# API en http://localhost:8000/api/v1/ · docs en /api/v1/docs · health en /health (vida) y /health/ready (BD)
 ```
 
 El seed reproduce ~8 semanas de actividad de la clínica y las próximas 4 semanas de agenda respecto al día en que se ejecuta (vuelve a correrlo con `--reset` para actualizar las fechas). Los usuarios demo usan la contraseña de `DEMO_PASSWORD` (en desarrollo, si no se define, **`demo1234`**) y los admins de clínica la de `DEMO_ADMIN_PASSWORD` (la misma `DEMO_PASSWORD` si no se define); en producción ambas son obligatorias y deben ser distintas. Ver detalles en
@@ -327,7 +328,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ## Base de datos
 
-**30 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
+**31 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
 
 | Tabla | Descripción |
 |---|---|
@@ -355,6 +356,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `diagnosis_codes` | Catálogo CIE-10/CIE-11 (global, para autocompletado) |
 | `platform_admins` | Superadmins de la plataforma |
 | `platform_audit_logs` | Auditoría global de operaciones de plataforma |
+| `error_events` | Errores inesperados del servidor (ruta, tipo y ubicación; sin datos de pacientes; 30 días) |
 
 ---
 
@@ -395,6 +397,7 @@ Los tests verifican, entre otras cosas:
 | `CORS_ORIGINS` | Orígenes permitidos (coma-separados); `*` solo en desarrollo | `*` |
 | `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` (dev) / `false` (prod) |
 | `TRUSTED_PROXIES` | IPs/CIDRs de reverse-proxies cuyo `X-Forwarded-For` se honra; vacío → IP del socket | vacío |
+| `SOURCE_COMMIT` | Commit desplegado, que muestra la página de Monitoreo | vacío |
 | `DEMO_PASSWORD` | Contraseña de los usuarios demo que crea `scripts/seed_demo.py` (≥ 8 caracteres). **Obligatoria en producción**, donde se rechaza la contraseña pública por defecto | `demo1234` (solo dev) |
 | `DEMO_ADMIN_PASSWORD` | Contraseña de los admins de clínica de la demo (≥ 8 caracteres), privada para que la contraseña compartida no abra la administración. **Obligatoria en producción** y distinta de `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
@@ -425,6 +428,8 @@ El [`docker-compose.yml`](docker-compose.yml) de la raíz levanta todo el stack 
 Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migraciones nuevas al arrancar.
 
 Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma.
+
+**Monitoreo.** La página *Monitoreo* de la consola solo carga si la API responde, así que para enterarte de una caída configura un monitor externo (UptimeRobot, Better Stack…) contra `https://<tu-dominio>/api/v1/health/ready`: responde `200` si la API y la base de datos están bien y `503` si la base de datos no responde. Para que la página muestre el commit desplegado, el compose pasa `SOURCE_COMMIT` al backend (Coolify ofrece esa variable predefinida; si no llega, la página lo indica).
 
 ---
 

@@ -548,3 +548,87 @@ def ser_business_overview(dto) -> dict:
         "expiring": [_ser_clinic_business(r) for r in dto.expiring],
         "clinics": [_ser_clinic_business(r) for r in dto.clinics],
     }
+
+
+# ── Platform monitoring ────────────────────────────────────────────────────────
+
+
+def ser_system_status(dto, retention_days: int) -> dict:
+    rt = dto.runtime
+    return {
+        "now": dto.now,
+        "runtime": {
+            "version": rt.version,
+            "commit": rt.commit,
+            "environment": rt.environment,
+            "python": rt.python,
+            "started_at": rt.started_at,
+            "uptime_seconds": dto.uptime_seconds,
+        },
+        "database": {
+            "version": dto.database.version,
+            "size_bytes": dto.database.size_bytes,
+            "revision": dto.database.revision,
+            "latency_ms": dto.database_latency_ms,
+        },
+        "largest_tables": [
+            {"name": t.name, "size_bytes": t.size_bytes, "rows": t.rows}
+            for t in dto.largest_tables
+        ],
+        "logins": {
+            "failing_accounts": dto.logins.failing_accounts,
+            "failed_attempts": dto.logins.failed_attempts,
+            "lockouts_24h": dto.lockouts_24h,
+            "locked": [
+                {
+                    "scope": lk.scope,
+                    "clinic_slug": lk.clinic_slug,
+                    "email": lk.email,
+                    "failed_count": lk.failed_count,
+                    "locked_until": lk.locked_until,
+                }
+                for lk in dto.logins.locked
+            ],
+        },
+        "sessions": dto.sessions,
+        "impersonations": [
+            {
+                "session_id": i.session_id,
+                "admin_name": i.admin_name,
+                "tenant_id": i.tenant_id,
+                "clinic_name": i.clinic_name,
+                "started_at": i.started_at,
+                "expires_at": i.expires_at,
+                "ip_address": i.ip_address,
+            }
+            for i in dto.impersonations
+        ],
+        "errors": {
+            "last_24h": dto.errors_24h,
+            "last_7d": dto.errors_7d,
+            "retention_days": retention_days,
+            "groups": [
+                {
+                    "method": g.method,
+                    "route": g.route,
+                    "error_type": g.error_type,
+                    "location": g.location,
+                    "count": g.count,
+                    "last_at": g.last_at,
+                }
+                for g in dto.error_groups
+            ],
+        },
+    }
+
+
+def ser_error_event(e) -> dict:
+    return {
+        "id": str(e.id),
+        "occurred_at": e.occurred_at,
+        "method": e.method,
+        "route": e.route,
+        "status": e.status,
+        "error_type": e.error_type,
+        "location": e.location,
+    }

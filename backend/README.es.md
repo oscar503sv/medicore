@@ -195,7 +195,8 @@ python -m venv .venv
 ```
 
 - API en `http://localhost:8000/api/v1`, documentación interactiva en `/api/v1/docs`,
-  health-check en `/health`.
+  liveness en `/health` y readiness (base de datos accesible, `503` si no) en `/health/ready`,
+  también servida como `/api/v1/health/ready` para que un monitor externo la alcance vía nginx.
 - Tras correr el seed, todos los usuarios demo usan la contraseña de `DEMO_PASSWORD`
   (**`demo1234`** en desarrollo si no se define) y los admins de clínica la de
   `DEMO_ADMIN_PASSWORD` (la misma `DEMO_PASSWORD` si no se define). En producción ambas son

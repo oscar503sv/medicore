@@ -6,7 +6,7 @@ A **multi-tenant** clinic management system built with **Clean Architecture**.
 
 It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (SOAP notes) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications**, **vaccination following El Salvador's national scheme**, **in-clinic medication applications**, **minor procedures**, organization settings and a **getting-started guide** for doctors and admins that ticks itself off from real data. The interface is available in **Spanish and English**, including the backend's error messages.
 
-It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, global stats and audit, account support (password reset, unlock, suspension) and **audited impersonation** of a clinic for support.
+It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, a **Business** overview (MRR, collections, expirations, adoption and seats per clinic), **Monitoring** (API and database health, server errors, failed sign-ins and lockouts, open sessions and support access), global audit, account support (password reset, unlock, suspension) and **audited impersonation** of a clinic for support.
 
 ---
 
@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings from .env (pydantic-settings) — dev-safe defaults
 │   ├── database/       # SQLAlchemy engine + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (30 tables; complex VOs as JSONB)
+│   │   ├── models/     # ORM models (31 tables; complex VOs as JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (keeps the domain clean)
 │   │   └── repositories/  # SQLAlchemy implementations of the ports
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, code generator, SystemClock
@@ -255,6 +255,7 @@ medicore/
 | **14** | Minor procedures (per-clinic catalog, consent on paper, signed note with amendments, pathology specimen, follow-up) | ✅ Done |
 | **15** | SaaS subscriptions (plan catalog, optional modules, quotas, manual payments and renewal, read-only after grace, per-user permissions) | ✅ Done |
 | **16** | Password policy (length, blocklist, nothing personal, live requirements in the UI) | ✅ Done |
+| **17** | Platform console: Business (MRR, collections, expirations, adoption, seats) and Monitoring (health, 500 errors without patient data, sign-ins, open support access, `/health/ready`) | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable record, inventory and billing | 🗓️ Future |
@@ -292,7 +293,7 @@ cp .env.example .env
 
 # 5. Start the API
 .venv/bin/uvicorn medicore.presentation.main:app --reload
-# API at http://localhost:8000/api/v1/ · docs at /api/v1/docs · health at /health
+# API at http://localhost:8000/api/v1/ · docs at /api/v1/docs · health at /health (liveness) and /health/ready (database)
 ```
 
 The seed replays ~8 weeks of clinic activity and the next 4 weeks of agenda relative to the day it runs (re-run it with `--reset` to refresh the dates). Demo users get the password from `DEMO_PASSWORD` (**`demo1234`** in development when it isn't set) and the clinic admins the one from `DEMO_ADMIN_PASSWORD` (the same `DEMO_PASSWORD` when unset); in production both are required and must differ. See
@@ -327,7 +328,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ## Database
 
-**30 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
+**31 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
 
 | Table | Description |
 |---|---|
@@ -355,6 +356,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `diagnosis_codes` | ICD-10/ICD-11 catalog (global, for autocomplete) |
 | `platform_admins` | Platform superadmins |
 | `platform_audit_logs` | Global audit of platform operations |
+| `error_events` | Unexpected server errors (route, type and location; no patient data; 30 days) |
 
 ---
 
@@ -395,6 +397,7 @@ Among other things, the tests verify:
 | `CORS_ORIGINS` | Allowed origins (comma-separated); `*` only in development | `*` |
 | `ENABLE_DOCS` | Expose Swagger/OpenAPI at `/api/v1/docs` | `true` (dev) / `false` (prod) |
 | `TRUSTED_PROXIES` | IPs/CIDRs of reverse proxies whose `X-Forwarded-For` is honored; empty → socket IP | empty |
+| `SOURCE_COMMIT` | Deployed commit, shown on the Monitoring page | empty |
 | `DEMO_PASSWORD` | Password for the demo users created by `scripts/seed_demo.py` (≥ 8 chars). **Required in production**, where the public default is rejected | `demo1234` (dev only) |
 | `DEMO_ADMIN_PASSWORD` | Password for the demo clinic admins (≥ 8 chars), kept private so the shared demo password doesn't open the administration. **Required in production** and different from `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
@@ -425,6 +428,8 @@ The root [`docker-compose.yml`](docker-compose.yml) runs the whole stack on a **
 Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on start.
 
 For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched.
+
+**Monitoring.** The console's *Monitoring* page only loads while the API answers, so to hear about an outage point an external monitor (UptimeRobot, Better Stack…) at `https://<your-domain>/api/v1/health/ready`: it answers `200` when the API and the database are fine and `503` when the database does not respond. To show the deployed commit on that page, the compose file passes `SOURCE_COMMIT` to the backend (Coolify provides that predefined variable; if it does not arrive, the page says so).
 
 ---
 

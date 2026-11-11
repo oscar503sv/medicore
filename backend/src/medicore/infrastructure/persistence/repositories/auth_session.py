@@ -26,6 +26,7 @@ def _to_entity(row: AuthSessionModel) -> AuthSession:
         revoked_at=row.revoked_at,
         ip_address=row.ip_address,
         user_agent=row.user_agent,
+        impersonator_id=row.impersonator_id,
     )
 
 
@@ -49,6 +50,7 @@ class SqlAuthSessionRepository:
                 revoked_at=session.revoked_at,
                 ip_address=session.ip_address,
                 user_agent=session.user_agent,
+                impersonator_id=session.impersonator_id,
             )
         )
 
