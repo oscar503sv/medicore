@@ -8,12 +8,18 @@ from decimal import Decimal
 import pytest
 
 from medicore.application.common.context import PlatformActorContext
+from medicore.application.common.entitlements import ensure_writable
 from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.use_cases.platform import CreateTenantCommand, CreateTenantWithAdmin
 from medicore.application.use_cases.subscriptions import (
     GetCatalog,
+    GetMyPayments,
     GetMySubscription,
+    GetSubscriptionNotice,
     GetTenantSubscription,
+    ListTenantPayments,
+    RecordPayment,
+    RecordPaymentCommand,
     StartTrial,
     SubscriptionCommand,
     UpdateAddonPricing,
@@ -21,11 +27,12 @@ from medicore.application.use_cases.subscriptions import (
     UpdatePlanCommand,
     UpdateTenantSubscription,
 )
-from medicore.domain.enums import AddonModule, PlanFeature, SubscriptionStatus
+from medicore.domain.enums import AddonModule, PaymentMethod, PlanFeature, SubscriptionStatus
 from medicore.domain.services.plan_catalog import CLINICA, CLINICA_PLUS, EMPRESARIAL
-from medicore.domain.shared.errors import PermissionDenied
+from medicore.domain.shared.errors import PermissionDenied, SubscriptionReadOnly
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
+from medicore.domain.value_objects.subscription import Subscription
 from tests.support.builders import seed_clinic
 from tests.support.fakes import FixedClock, PlainPasswordHasher
 
@@ -225,3 +232,65 @@ class TestMySubscription:
         uow = seed.factory.for_tenant(seed.tenant.id)
         with pytest.raises(PermissionDenied):
             GetMySubscription(uow, FixedClock()).execute(seed.doctor_actor)
+
+
+class TestPayments:
+    def _record(self, seed, **kw):
+        cmd = RecordPaymentCommand(
+            amount=kw.pop("amount", Decimal("79")), paid_on=TODAY, months=kw.pop("months", 1),
+            method=PaymentMethod.BANK_TRANSFER, **kw,
+        )
+        return RecordPayment(seed.factory, FixedClock()).execute(
+            actor_for(seed), seed.tenant.id, cmd
+        )
+
+    def test_payment_renews_and_is_kept(self):
+        seed = seed_clinic()
+        StartTrial(seed.factory, FixedClock()).execute(actor_for(seed), seed.tenant.id)
+        result = self._record(seed, reference="  TRF-123  ", notes="")
+        assert result.view.status == SubscriptionStatus.ACTIVE
+        assert result.view.subscription.period_end == date(2026, 7, 6)  # trial end 6 jun + 1m
+        assert result.payment.period_end == date(2026, 7, 6)
+        assert (result.payment.reference, result.payment.notes) == ("TRF-123", None)
+        payments = ListTenantPayments(seed.factory).execute(actor_for(seed), seed.tenant.id)
+        assert [p.id for p in payments] == [result.payment.id]
+        assert "tenant.payment_recorded" in actions(seed)
+
+    def test_payment_lifts_read_only(self):
+        seed = seed_clinic()
+        UpdateTenantSubscription(seed.factory, FixedClock()).execute(
+            actor_for(seed), seed.tenant.id, command(period_end=date(2026, 4, 30), grace_days=7)
+        )
+        result = self._record(seed, months=3, amount=Decimal("237"))
+        assert result.view.status == SubscriptionStatus.ACTIVE
+        assert result.view.subscription.period_end == date(2026, 8, 30)  # from today (31 may)
+
+    def test_clinic_admin_reads_own_payments_doctor_cannot(self):
+        seed = seed_clinic()
+        self._record(seed)
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        assert len(GetMyPayments(uow).execute(seed.actor(seed.admin))) == 1
+        with pytest.raises(PermissionDenied):
+            GetMyPayments(uow).execute(seed.doctor_actor)
+
+    def test_any_user_reads_the_notice(self):
+        seed = seed_clinic()
+        UpdateTenantSubscription(seed.factory, FixedClock()).execute(
+            actor_for(seed), seed.tenant.id, command(period_end=date(2026, 5, 28), grace_days=7)
+        )
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        notice = GetSubscriptionNotice(uow, FixedClock()).execute(seed.doctor_actor)
+        assert notice.status == SubscriptionStatus.GRACE
+        assert (notice.grace_until, notice.days_left) == (date(2026, 6, 4), -3)
+
+
+class TestReadOnlyPolicy:
+    def test_only_a_lapsed_clinic_is_read_only(self):
+        seed = seed_clinic()
+        tenant = seed.tenant
+        tenant.subscription = Subscription(plan_code=CLINICA, period_end=date(2026, 5, 20),
+                                           grace_days=7)
+        with pytest.raises(SubscriptionReadOnly) as exc:
+            ensure_writable(tenant, TODAY)
+        assert exc.value.code == "plan.read_only"
+        ensure_writable(tenant, date(2026, 5, 27))  # last grace day

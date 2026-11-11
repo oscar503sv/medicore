@@ -9,6 +9,7 @@ import type { Permission, PermissionsMatrix, Role, User } from '@/types'
 import { PageHeader } from '@/components/PageHeader'
 import { PermissionsMatrixTable } from '@/components/permissions/PermissionsMatrixTable'
 import { StatCard } from '@/components/StatCard'
+import { PaymentsCard } from '@/components/subscriptions/PaymentsCard'
 import { SubscriptionCard } from '@/components/subscriptions/SubscriptionCard'
 import { Badge } from '@/components/ui/Badge'
 import { statusTone } from '@/components/ui/badgeTone'
@@ -261,6 +262,7 @@ export function ClinicDetailPage() {
       </Card>
 
       <SubscriptionCard tenantId={id} onSaved={invalidate} />
+      <PaymentsCard tenantId={id} onRecorded={invalidate} />
 
       <Card>
         <CardHeader title={t('platform.status_actions')} />

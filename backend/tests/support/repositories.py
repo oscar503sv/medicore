@@ -868,3 +868,15 @@ class InMemoryAuditLogRepository(_Scoped):
         total = len(entries)
         window = entries[paging.offset : paging.offset + paging.limit]
         return Page(items=window, total=total, offset=paging.offset, limit=paging.limit)
+
+
+class InMemorySubscriptionPaymentRepository(_Scoped):
+    def list(self) -> list:
+        return sorted(
+            self._mine(self._store.subscription_payments.values()),
+            key=lambda p: (p.paid_on, p.recorded_at),
+            reverse=True,
+        )
+
+    def save(self, payment) -> None:
+        self._store.subscription_payments[payment.id.value] = payment

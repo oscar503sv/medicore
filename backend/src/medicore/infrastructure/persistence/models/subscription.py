@@ -1,11 +1,13 @@
-"""ORM models for the subscription catalog (platform-level)."""
+"""ORM models for the subscription catalog (platform-level) and clinic payments."""
 
 from __future__ import annotations
 
+import uuid
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Integer, Numeric, String
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from medicore.infrastructure.database.base import Base
@@ -35,3 +37,23 @@ class AddonPricingModel(Base):
     # {"vaccination": "10.00", ...} in USD.
     prices: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     bundle_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+
+
+class SubscriptionPaymentModel(Base):
+    __tablename__ = "subscription_payments"
+    __table_args__ = (Index("ix_subscription_payments_tenant", "tenant_id", "paid_on"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)  # USD
+    paid_on: Mapped[date] = mapped_column(Date, nullable=False)
+    months: Mapped[int] = mapped_column(Integer, nullable=False)
+    plan_code: Mapped[str] = mapped_column(String(30), nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    method: Mapped[str] = mapped_column(String(20), nullable=False)
+    reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

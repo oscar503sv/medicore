@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
 
 from medicore.domain.entities.plan import AddonPricing, Plan
-from medicore.domain.enums import AddonModule, PlanFeature, Role, SubscriptionStatus
+from medicore.domain.entities.subscription_payment import SubscriptionPayment
+from medicore.domain.enums import (
+    AddonModule,
+    PaymentMethod,
+    PlanFeature,
+    Role,
+    SubscriptionStatus,
+)
 from medicore.domain.services.plan_catalog import (
     CLINICA,
     CLINICA_PLUS,
@@ -25,9 +32,10 @@ from medicore.domain.services.seat_usage import (
 )
 from medicore.domain.services.subscription_pricing import monthly_quote
 from medicore.domain.shared.errors import InvalidValueObject, QuotaExceeded
+from medicore.domain.shared.identifiers import PlatformAdminId, SubscriptionPaymentId, TenantId
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
-from medicore.domain.value_objects.subscription import Subscription
+from medicore.domain.value_objects.subscription import Subscription, add_months
 
 
 def usd(amount: str) -> Money:
@@ -202,3 +210,70 @@ class TestQuotaRule:
         with pytest.raises(QuotaExceeded) as exc:
             ensure_seats(limits, before, seat_usage({Role.ADMIN: 2, Role.NURSE: 1}))
         assert exc.value.code == "plan.quota_support_users"
+
+
+class TestRenewal:
+    def test_add_months_clamps_to_the_month_end(self):
+        assert add_months(date(2026, 1, 31), 1) == date(2026, 2, 28)
+        assert add_months(date(2026, 11, 30), 3) == date(2027, 2, 28)
+        assert add_months(date(2026, 12, 15), 1) == date(2027, 1, 15)
+
+    def test_up_to_date_clinic_continues_from_its_paid_until(self):
+        sub = Subscription(plan_code=CLINICA, period_end=date(2026, 11, 30))
+        assert sub.renew(TODAY, 1).period_end == date(2026, 12, 30)
+
+    def test_clinic_in_grace_continues_from_its_paid_until(self):
+        sub = Subscription(plan_code=CLINICA, period_end=date(2026, 11, 5), grace_days=7)
+        assert sub.status(TODAY) == SubscriptionStatus.GRACE
+        assert sub.renew(TODAY, 1).period_end == date(2026, 12, 5)
+
+    def test_lapsed_clinic_starts_from_today(self):
+        sub = Subscription(plan_code=CLINICA, period_end=date(2026, 9, 30), grace_days=7)
+        assert sub.renew(TODAY, 1).period_end == date(2026, 12, 9)  # 10 nov → 9 dic
+
+    def test_paying_during_a_trial_leaves_the_trial(self):
+        sub = Subscription(plan_code=CLINICA).start_trial(TODAY)  # until 16 nov
+        renewed = sub.renew(TODAY, 1)
+        assert (renewed.is_trial, renewed.period_end) == (False, date(2026, 12, 16))
+
+    def test_open_ended_starts_from_today(self):
+        assert Subscription(plan_code=CLINICA).renew(TODAY, 12).period_end == date(2027, 11, 9)
+
+    def test_months_are_bounded(self):
+        with pytest.raises(InvalidValueObject) as exc:
+            Subscription(plan_code=CLINICA).renew(TODAY, 0)
+        assert exc.value.code == "payment.invalid_months"
+
+    def test_grace_until(self):
+        assert Subscription(plan_code=CLINICA, period_end=TODAY, grace_days=7).grace_until == (
+            date(2026, 11, 17)
+        )
+        assert Subscription(plan_code=CLINICA).start_trial(TODAY).grace_until == date(2026, 11, 16)
+        assert Subscription(plan_code=CLINICA).grace_until is None
+
+
+class TestPayment:
+    def _payment(self, **kw):
+        defaults = dict(
+            id=SubscriptionPaymentId.new(), tenant_id=TenantId.new(), amount=usd("79"),
+            paid_on=TODAY, months=1, plan_code=CLINICA, period_end=date(2026, 12, 9),
+            method=PaymentMethod.BANK_TRANSFER, recorded_by=PlatformAdminId.new(),
+            recorded_at=datetime(2026, 11, 10, 12, 0),
+        )
+        return SubscriptionPayment(**(defaults | kw))
+
+    def test_valid_payment(self):
+        assert self._payment().amount == usd("79")
+
+    @pytest.mark.parametrize(
+        ("kw", "code"),
+        [
+            ({"amount": usd("-1")}, "payment.invalid_amount"),
+            ({"amount": Money(Decimal("79"), "EUR")}, "payment.invalid_amount"),
+            ({"months": 0}, "payment.invalid_months"),
+        ],
+    )
+    def test_invalid_payment(self, kw, code):
+        with pytest.raises(InvalidValueObject) as exc:
+            self._payment(**kw)
+        assert exc.value.code == code

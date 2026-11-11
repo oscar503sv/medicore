@@ -15,7 +15,8 @@ import jwt
 from fastapi import Depends, Header, Request, status
 
 from medicore.application.common.context import ActorContext, PlatformActorContext
-from medicore.application.common.entitlements import granted_permissions
+from medicore.application.common.entitlements import ensure_writable, granted_permissions
+from medicore.application.common.timezone import tenant_today
 from medicore.domain.enums import Role
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import PlatformAdminId, SessionId, TenantId, UserId
@@ -146,6 +147,15 @@ def _decode_or_401(issuer: JwtTokenIssuer, token: str):
         ) from exc
 
 
+# Still allowed when the clinic is read-only: signing out, changing one's password or
+# preferences, and marking notifications as read never touch clinical data.
+_WRITABLE_WHEN_READ_ONLY = ("/api/v1/auth/", "/api/v1/notifications")
+
+
+def _always_writable(path: str) -> bool:
+    return path.startswith(_WRITABLE_WHEN_READ_ONLY)
+
+
 def get_actor(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
@@ -180,6 +190,8 @@ def get_actor(
         raise ApiError(
             status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
         )
+    if is_mutating(request.method) and not _always_writable(request.url.path):
+        ensure_writable(tenant, tenant_today(tenant, clock))
 
     return ActorContext(
         user_id=UserId.parse(claims.user_id),

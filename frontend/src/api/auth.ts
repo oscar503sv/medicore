@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { AuthSessionInfo, MyProfile, Session } from '@/types'
+import type { AuthSessionInfo, MyProfile, Session, SubscriptionNotice } from '@/types'
 
 export interface LoginPayload {
   slug: string
@@ -45,6 +45,9 @@ export const authApi = {
   revokeSession: (sessionId: string) => api.delete(`/auth/me/sessions/${sessionId}`),
 
   onboarding: () => api.get<Onboarding>('/auth/me/onboarding').then((r) => r.data),
+
+  subscriptionNotice: () =>
+    api.get<SubscriptionNotice>('/auth/me/subscription').then((r) => r.data),
 
   updateOnboarding: (payload: { welcome_seen?: boolean; dismissed?: boolean }) =>
     api.patch('/auth/me/onboarding', payload),

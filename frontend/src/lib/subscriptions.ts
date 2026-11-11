@@ -1,6 +1,6 @@
-import { addMonths, format, parseISO } from 'date-fns'
+import { addMonths, format, parseISO, subDays } from 'date-fns'
 import type { Tone } from '@/components/ui/badgeTone'
-import type { PlanLimits, SubscriptionStatus } from '@/types'
+import type { PlanLimits, Subscription, SubscriptionStatus } from '@/types'
 
 type T = (key: string) => string
 
@@ -52,3 +52,11 @@ export const LIMIT_LABEL: Record<keyof PlanLimits, string> = {
 /** Text field ↔ limit: empty means null (unlimited / use the plan's). */
 export const limitToText = (n: number | null) => (n === null ? '' : String(n))
 export const textToLimit = (s: string): number | null => (s.trim() === '' ? null : Number(s))
+
+/** Paid-until date a payment of `months` would leave (mirrors Subscription.renew): an
+ * up-to-date clinic (or one in grace) continues from its date; otherwise from today. */
+export function renewedUntil(sub: Subscription, months: number): string {
+  const continuing = sub.period_end !== null && sub.status !== 'read_only'
+  const base = continuing ? parseISO(sub.period_end!) : subDays(parseISO(sub.today), 1)
+  return format(addMonths(base, months), 'yyyy-MM-dd')
+}

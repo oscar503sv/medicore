@@ -196,3 +196,66 @@ def test_matrix_lists_locked_permissions(seed, client, platform_headers, admin_h
     matrix = client.get("/api/v1/permissions", headers=admin_headers).json()
     assert "vaccinations.record" in matrix["locked"]
     assert "patients.view" not in matrix["locked"]
+
+
+def _patient_payload() -> dict:
+    return {
+        "first_name": "Carlos", "last_name": "Martínez", "sex": "male",
+        "date_of_birth": "1990-03-15",
+    }
+
+
+def test_record_payment_renews_and_lists(seed, client, platform_headers, admin_headers):
+    resp = client.post(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/payments",
+        headers=platform_headers,
+        json={"amount": "79", "paid_on": "2026-11-10", "months": 1, "reference": "TRF-1"},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["payment"]["amount"] == "79.00"
+    assert body["payment"]["method"] == "bank_transfer"
+    assert body["subscription"]["period_end"] == body["payment"]["period_end"]
+    listed = client.get(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/payments", headers=platform_headers
+    ).json()
+    assert [p["reference"] for p in listed] == ["TRF-1"]
+    mine = client.get("/api/v1/organization/subscription/payments", headers=admin_headers)
+    assert [p["id"] for p in mine.json()] == [body["payment"]["id"]]
+
+
+def test_payment_months_are_validated(seed, client, platform_headers):
+    resp = client.post(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/payments",
+        headers=platform_headers,
+        json={"amount": "79", "paid_on": "2026-11-10", "months": 0},
+    )
+    assert resp.status_code == 422
+
+
+def test_read_only_clinic_reads_but_cannot_write(seed, client, platform_headers, auth_headers):
+    client.put(
+        _url(seed),
+        headers=platform_headers,
+        json={"plan_code": "empresarial", "period_end": "2020-01-31", "grace_days": 0,
+              "modules": ["vaccination", "applications", "procedures"]},
+    )
+    assert client.get("/api/v1/patients", headers=auth_headers).status_code == 200
+    resp = client.post("/api/v1/patients", json=_patient_payload(), headers=auth_headers)
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "plan.read_only"
+    # signing out, preferences and notifications still work
+    assert client.post("/api/v1/notifications/read-all", headers=auth_headers).status_code == 200
+    assert client.post(
+        "/api/v1/auth/theme", json={"theme": "dark"}, headers=auth_headers
+    ).status_code == 204
+    notice = client.get("/api/v1/auth/me/subscription", headers=auth_headers).json()
+    assert notice["status"] == "read_only"
+    # renewing from the console lifts it at once
+    client.post(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/payments",
+        headers=platform_headers,
+        json={"amount": "79", "paid_on": "2026-11-10", "months": 1},
+    )
+    resp = client.post("/api/v1/patients", json=_patient_payload(), headers=auth_headers)
+    assert resp.status_code == 201

@@ -24,6 +24,7 @@ from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.procedure import Procedure, ProcedureType
 from medicore.domain.entities.role_permission_override import RolePermissionOverride
+from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.entities.vaccination_record import VaccinationRecord
@@ -66,6 +67,7 @@ class InMemoryStore:
     # Global revocable sessions (tenant and platform scopes share the store).
     sessions: dict[UUID, AuthSession] = field(default_factory=dict)
     # Global subscription catalog, starting from the published price list.
+    subscription_payments: dict[UUID, SubscriptionPayment] = field(default_factory=dict)
     plans: dict[str, Plan] = field(default_factory=lambda: {p.code: p for p in default_plans()})
     addon_pricing: dict[str, AddonPricing] = field(
         default_factory=lambda: {"current": default_addon_pricing()}

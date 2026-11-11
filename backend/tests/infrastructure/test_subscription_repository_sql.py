@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 import pytest
@@ -17,13 +17,15 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 import medicore.infrastructure.persistence.models  # noqa: F401  (register all tables)
-from medicore.domain.enums import AddonModule
+from medicore.domain.entities.subscription_payment import SubscriptionPayment
+from medicore.domain.enums import AddonModule, PaymentMethod
 from medicore.domain.services.plan_catalog import (
     CLINICA,
     EMPRESARIAL,
     default_addon_pricing,
     default_plans,
 )
+from medicore.domain.shared.identifiers import PlatformAdminId, SubscriptionPaymentId
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides
 from medicore.domain.value_objects.subscription import Subscription
@@ -31,6 +33,7 @@ from medicore.infrastructure.config import get_settings
 from medicore.infrastructure.persistence.repositories.subscription import (
     SqlAddonPricingRepository,
     SqlPlanRepository,
+    SqlSubscriptionPaymentRepository,
 )
 from medicore.infrastructure.persistence.repositories.tenant import SqlTenantRepository
 from tests.support.builders import build_tenant
@@ -126,3 +129,27 @@ def test_trial_subscription_round_trips(session):
     session.expire_all()
     stored = repo.get_by_id(tenant.id).subscription
     assert stored == sub and stored.limit_overrides is None and stored.price_override is None
+
+
+def test_payments_round_trip_newest_first(session):
+    tenant = build_tenant(f"pay-{uuid.uuid4().hex[:10]}")
+    SqlTenantRepository(session).save(tenant)
+    session.flush()
+    repo = SqlSubscriptionPaymentRepository(session, tenant.id)
+
+    def payment(paid_on: date, reference: str) -> SubscriptionPayment:
+        return SubscriptionPayment(
+            id=SubscriptionPaymentId.new(), tenant_id=tenant.id, amount=usd("79.50"),
+            paid_on=paid_on, months=1, plan_code=CLINICA, period_end=date(2026, 12, 31),
+            method=PaymentMethod.BANK_TRANSFER, recorded_by=PlatformAdminId.new(),
+            recorded_at=datetime(2026, 11, 10, 12, 0, tzinfo=UTC), reference=reference,
+        )
+
+    older, newer = payment(date(2026, 10, 1), "A"), payment(date(2026, 11, 1), "B")
+    repo.save(older)
+    repo.save(newer)
+    session.flush()
+    session.expire_all()
+    assert repo.list() == [newer, older]
+    other = SqlSubscriptionPaymentRepository(session, build_tenant("x-unused").id)
+    assert other.list() == []

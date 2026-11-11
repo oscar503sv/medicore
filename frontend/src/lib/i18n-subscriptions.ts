@@ -79,6 +79,38 @@ export const subEs: Record<string, string> = {
     'Tu suscripción venció. Tienes hasta el {date} para renovar antes de que la clínica pase a solo lectura.',
   'sub.read_only_notice':
     'Tu suscripción venció. La clínica está en solo lectura hasta que se renueve.',
+  'sub.payments_title': 'Pagos',
+  'sub.record_payment': 'Registrar pago',
+  'sub.f_amount': 'Monto (USD)',
+  'sub.f_paid_on': 'Fecha de pago',
+  'sub.f_months': 'Meses que cubre',
+  'sub.months_n': '{n} meses',
+  'sub.month_1': '1 mes',
+  'sub.f_method': 'Método',
+  'sub.method.bank_transfer': 'Transferencia',
+  'sub.method.cash': 'Efectivo',
+  'sub.method.card': 'Tarjeta',
+  'sub.method.other': 'Otro',
+  'sub.f_reference': 'Referencia',
+  'sub.f_notes': 'Notas',
+  'sub.payment_hint': 'Al registrar el pago se renueva la suscripción por los meses indicados.',
+  'sub.new_period_end': 'Quedará pagado hasta el {date}.',
+  'sub.payment_ok': 'Pago registrado. Pagado hasta el {date}.',
+  'sub.no_payments': 'Aún no hay pagos registrados.',
+  'sub.col_paid_on': 'Fecha',
+  'sub.col_amount': 'Monto',
+  'sub.col_covers': 'Cubre',
+  'sub.col_until': 'Pagado hasta',
+  'sub.banner_read_only_admin':
+    'La suscripción venció el {date} y la clínica está en solo lectura. Contacta a soporte de Medicore para renovarla.',
+  'sub.banner_read_only_staff':
+    'La suscripción de la clínica venció: puedes consultar, pero no hacer cambios. Avísale al administrador.',
+  'sub.banner_grace':
+    'La suscripción venció el {date}. La clínica sigue funcionando hasta el {until}; después quedará en solo lectura.',
+  'sub.banner_trial':
+    'Tu prueba gratuita termina el {date}. Contacta a soporte de Medicore para contratar tu plan.',
+  'sub.banner_expiring':
+    'Tu suscripción vence el {date}. Recuerda renovarla para no interrumpir el servicio.',
 }
 
 export const subEn: Record<string, string> = {
@@ -155,4 +187,35 @@ export const subEn: Record<string, string> = {
   'sub.grace_notice':
     'Your subscription has expired. Renew by {date} before the clinic turns read-only.',
   'sub.read_only_notice': 'Your subscription has expired. The clinic is read-only until renewed.',
+  'sub.payments_title': 'Payments',
+  'sub.record_payment': 'Record payment',
+  'sub.f_amount': 'Amount (USD)',
+  'sub.f_paid_on': 'Payment date',
+  'sub.f_months': 'Months covered',
+  'sub.months_n': '{n} months',
+  'sub.month_1': '1 month',
+  'sub.f_method': 'Method',
+  'sub.method.bank_transfer': 'Bank transfer',
+  'sub.method.cash': 'Cash',
+  'sub.method.card': 'Card',
+  'sub.method.other': 'Other',
+  'sub.f_reference': 'Reference',
+  'sub.f_notes': 'Notes',
+  'sub.payment_hint': 'Recording the payment renews the subscription for the months given.',
+  'sub.new_period_end': 'It will be paid until {date}.',
+  'sub.payment_ok': 'Payment recorded. Paid until {date}.',
+  'sub.no_payments': 'No payments recorded yet.',
+  'sub.col_paid_on': 'Date',
+  'sub.col_amount': 'Amount',
+  'sub.col_covers': 'Covers',
+  'sub.col_until': 'Paid until',
+  'sub.banner_read_only_admin':
+    'The subscription expired on {date} and the clinic is read-only. Contact Medicore support to renew it.',
+  'sub.banner_read_only_staff':
+    "The clinic's subscription has expired: you can view but not make changes. Let your admin know.",
+  'sub.banner_grace':
+    'The subscription expired on {date}. The clinic keeps working until {until}; then it turns read-only.',
+  'sub.banner_trial':
+    'Your free trial ends on {date}. Contact Medicore support to choose your plan.',
+  'sub.banner_expiring': 'Your subscription expires on {date}. Renew it to avoid any interruption.',
 }

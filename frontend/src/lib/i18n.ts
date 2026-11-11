@@ -495,6 +495,10 @@ const es: Dict = {
   'err.plan.quota_support_users':
     'Tu plan permite hasta {limit} usuarios de apoyo activos (enfermería, recepción y administradores adicionales). Contacta a soporte de Medicore para ampliarlo.',
   'err.plan.quota_locations': 'Tu plan permite hasta {limit} sedes. Contacta a soporte de Medicore para ampliarlo.',
+  'err.plan.read_only':
+    'La suscripción de la clínica venció: puedes consultar la información, pero no hacer cambios hasta que se renueve.',
+  'err.payment.invalid_amount': 'El monto del pago no es válido.',
+  'err.payment.invalid_months': 'Un pago cubre de 1 a {max} meses.',
   'err.application_error': 'No se pudo completar la operación.',
   'err.validation_error': 'Los datos enviados no son válidos.',
   'err.domain_error': 'La operación no está permitida.',
@@ -1417,6 +1421,10 @@ const en: Dict = {
   'err.plan.quota_support_users':
     'Your plan allows up to {limit} active support users (nursing, reception and additional admins). Contact Medicore support to upgrade.',
   'err.plan.quota_locations': 'Your plan allows up to {limit} sites. Contact Medicore support to upgrade.',
+  'err.plan.read_only':
+    "The clinic's subscription has expired: you can view information but not make changes until it's renewed.",
+  'err.payment.invalid_amount': 'The payment amount is not valid.',
+  'err.payment.invalid_months': 'A payment covers 1 to {max} months.',
   'err.application_error': 'The operation could not be completed.',
   'err.validation_error': 'The submitted data is not valid.',
   'err.domain_error': 'This operation is not allowed.',

@@ -24,11 +24,12 @@ from medicore.application.ports.unit_of_work import (
     UnitOfWorkFactory,
 )
 from medicore.domain.entities.plan import CURRENCY, AddonPricing, Plan
+from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
-from medicore.domain.enums import AddonModule, PlanFeature, SubscriptionStatus
+from medicore.domain.enums import AddonModule, PaymentMethod, PlanFeature, SubscriptionStatus
 from medicore.domain.services.seat_usage import SeatUsage, seat_usage
 from medicore.domain.services.subscription_pricing import monthly_quote
-from medicore.domain.shared.identifiers import TenantId
+from medicore.domain.shared.identifiers import SubscriptionPaymentId, TenantId
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
 from medicore.domain.value_objects.subscription import DEFAULT_TRIAL_DAYS, Subscription
@@ -329,3 +330,131 @@ class GetMySubscription:
             if tenant is None:
                 raise EntityNotFound("Tenant", actor.tenant_id)
             return build_view(self._uow, tenant, self._clock)
+
+
+# ── Payments and renewal ──────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class RecordPaymentCommand:
+    amount: Decimal
+    paid_on: date
+    months: int
+    method: PaymentMethod
+    reference: str | None = None
+    notes: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentRecorded:
+    payment: SubscriptionPayment
+    view: SubscriptionView
+
+
+class RecordPayment:
+    """Record a clinic's payment (bank transfer, cash…) and renew its subscription for the
+    months paid, in one step. The clinic leaves trial, grace or read-only right away."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(
+        self, actor: PlatformActorContext, tenant_id: TenantId, cmd: RecordPaymentCommand
+    ) -> PaymentRecorded:
+        with self._factory.for_tenant(tenant_id) as uow:
+            tenant = uow.tenants.get_by_id(tenant_id)
+            if tenant is None:
+                raise EntityNotFound("Tenant", tenant_id)
+            before = tenant.subscription
+            tenant.subscription = before.renew(tenant_today(tenant, self._clock), cmd.months)
+            now = self._clock.now()
+            payment = SubscriptionPayment(
+                id=SubscriptionPaymentId.new(),
+                tenant_id=tenant_id,
+                amount=Money(cmd.amount, CURRENCY),
+                paid_on=cmd.paid_on,
+                months=cmd.months,
+                plan_code=before.plan_code,
+                period_end=tenant.subscription.period_end,
+                method=cmd.method,
+                recorded_by=actor.admin_id,
+                recorded_at=now,
+                reference=(cmd.reference or "").strip() or None,
+                notes=(cmd.notes or "").strip() or None,
+            )
+            uow.subscription_payments.save(payment)
+            uow.tenants.save(tenant)
+            uow.platform_audit.append(
+                platform_audit_entry(
+                    actor, now, "tenant.payment_recorded", "SubscriptionPayment",
+                    str(payment.id), tenant_id=tenant_id, subject=tenant.legal_name,
+                    amount=str(payment.amount.amount), months=payment.months,
+                    method=str(payment.method), paid_on=payment.paid_on.isoformat(),
+                    previous_period_end=before.period_end.isoformat()
+                    if before.period_end else None,
+                    period_end=payment.period_end.isoformat(),
+                )
+            )
+            uow.commit()
+            return PaymentRecorded(payment=payment, view=build_view(uow, tenant, self._clock))
+
+
+class ListTenantPayments:
+    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+        self._factory = uow_factory
+
+    def execute(
+        self, actor: PlatformActorContext, tenant_id: TenantId
+    ) -> list[SubscriptionPayment]:
+        with self._factory.for_tenant(tenant_id) as uow:
+            if uow.tenants.get_by_id(tenant_id) is None:
+                raise EntityNotFound("Tenant", tenant_id)
+            return uow.subscription_payments.list()
+
+
+class GetMyPayments:
+    """The clinic admin's payment history (Settings → Organization)."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self._uow = uow
+
+    def execute(self, actor: ActorContext) -> list[SubscriptionPayment]:
+        ensure_permission(actor, Permission.ORGANIZATION_VIEW)
+        with self._uow:
+            return self._uow.subscription_payments.list()
+
+
+# ── Notice for every user (banner) ────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class SubscriptionNotice:
+    """What the app banner needs: no prices or limits, so any user may read it."""
+
+    status: SubscriptionStatus
+    is_trial: bool
+    period_end: date | None
+    grace_until: date | None
+    days_left: int | None
+
+
+class GetSubscriptionNotice:
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(self, actor: ActorContext) -> SubscriptionNotice:
+        with self._uow:
+            tenant = self._uow.tenants.get_by_id(actor.tenant_id)
+            if tenant is None:
+                raise EntityNotFound("Tenant", actor.tenant_id)
+            sub = tenant.subscription
+            today = tenant_today(tenant, self._clock)
+            return SubscriptionNotice(
+                status=sub.status(today),
+                is_trial=sub.is_trial,
+                period_end=sub.period_end,
+                grace_until=sub.grace_until,
+                days_left=sub.days_left(today),
+            )

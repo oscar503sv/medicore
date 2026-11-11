@@ -82,3 +82,9 @@ class PermissionDenied(DomainError):
     """The actor's role does not allow the requested operation."""
 
     code = "permission_denied"
+
+
+class SubscriptionReadOnly(PermissionDenied):
+    """The clinic's subscription lapsed past its grace days: it can read, not write."""
+
+    code = "plan.read_only"

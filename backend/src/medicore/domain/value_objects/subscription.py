@@ -3,6 +3,7 @@ trial) until. Activation and renewal are manual (bank transfer), done from the c
 
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
@@ -13,6 +14,14 @@ from medicore.domain.value_objects.plan_limits import LimitOverrides
 
 DEFAULT_GRACE_DAYS = 7
 DEFAULT_TRIAL_DAYS = 7
+MAX_RENEWAL_MONTHS = 24
+
+
+def add_months(day: date, months: int) -> date:
+    """Same day ``months`` later, clamped to the month's end (31 Jan + 1 → 28/29 Feb)."""
+    index = day.month - 1 + months
+    year, month = day.year + index // 12, index % 12 + 1
+    return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +55,29 @@ class Subscription:
         if today <= self.period_end + timedelta(days=grace):
             return SubscriptionStatus.GRACE
         return SubscriptionStatus.READ_ONLY
+
+    @property
+    def grace_until(self) -> date | None:
+        """Last day the clinic keeps working after the period ends (a trial gets no grace)."""
+        if self.period_end is None:
+            return None
+        return self.period_end + timedelta(days=0 if self.is_trial else self.grace_days)
+
+    def renew(self, today: date, months: int) -> Subscription:
+        """A paid renewal of ``months`` months. A clinic that is up to date (or within its
+        grace days, which it used) continues from its paid-until date; a lapsed clinic, a
+        trial that ended or an open-ended one starts from today."""
+        if not 1 <= months <= MAX_RENEWAL_MONTHS:
+            raise InvalidValueObject(
+                f"a renewal covers 1 to {MAX_RENEWAL_MONTHS} months", code="payment.invalid_months",
+                max=MAX_RENEWAL_MONTHS,
+            )
+        continuing = self.period_end is not None and self.status(today) in (
+            SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIAL, SubscriptionStatus.GRACE,
+        )
+        # period_end is the last covered day, so a fresh period starts "after yesterday".
+        base = self.period_end if continuing else today - timedelta(days=1)
+        return replace(self, is_trial=False, period_end=add_months(base, months))
 
     def days_left(self, today: date) -> int | None:
         """Days until the period ends (negative once it has); None when open-ended."""

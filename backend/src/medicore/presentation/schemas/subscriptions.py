@@ -5,12 +5,13 @@ Money travels as a decimal string ("39.00", USD) so no amount goes through a flo
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
-from medicore.domain.enums import AddonModule, PlanFeature
+from medicore.domain.enums import AddonModule, PaymentMethod, PlanFeature
+from medicore.domain.value_objects.subscription import MAX_RENEWAL_MONTHS
 
 Price = Decimal  # input: number or numeric string, validated non-negative where used
 
@@ -102,4 +103,39 @@ class TenantSubscriptionSummary(BaseModel):
     period_end: date | None
     is_trial: bool
     status: str
+    days_left: int | None
+
+
+class RecordPaymentRequest(BaseModel):
+    amount: Price = Field(ge=0)
+    paid_on: date
+    months: int = Field(ge=1, le=MAX_RENEWAL_MONTHS)
+    method: PaymentMethod = PaymentMethod.BANK_TRANSFER
+    reference: str | None = Field(default=None, max_length=100)
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class PaymentResponse(BaseModel):
+    id: str
+    amount: str
+    paid_on: date
+    months: int
+    plan_code: str
+    period_end: date
+    method: str
+    reference: str | None
+    notes: str | None
+    recorded_at: datetime
+
+
+class PaymentRecordedResponse(BaseModel):
+    payment: PaymentResponse
+    subscription: SubscriptionResponse
+
+
+class SubscriptionNoticeResponse(BaseModel):
+    status: str
+    is_trial: bool
+    period_end: date | None
+    grace_until: date | None
     days_left: int | None

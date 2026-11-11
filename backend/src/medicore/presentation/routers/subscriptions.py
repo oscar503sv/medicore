@@ -7,8 +7,13 @@ from fastapi import APIRouter
 
 from medicore.application.use_cases.subscriptions import (
     GetCatalog,
+    GetMyPayments,
     GetMySubscription,
+    GetSubscriptionNotice,
     GetTenantSubscription,
+    ListTenantPayments,
+    RecordPayment,
+    RecordPaymentCommand,
     StartTrial,
     SubscriptionCommand,
     UpdateAddonPricing,
@@ -22,14 +27,24 @@ from medicore.presentation.dependencies import Actor, Clock, PlatformActor, UoW,
 from medicore.presentation.schemas.subscriptions import (
     AddonPricingResponse,
     CatalogResponse,
+    PaymentRecordedResponse,
+    PaymentResponse,
     PlanResponse,
+    RecordPaymentRequest,
     StartTrialRequest,
+    SubscriptionNoticeResponse,
     SubscriptionRequest,
     SubscriptionResponse,
     UpdateAddonPricingRequest,
     UpdatePlanRequest,
 )
-from medicore.presentation.serializers import ser_addon_pricing, ser_plan, ser_subscription
+from medicore.presentation.serializers import (
+    ser_addon_pricing,
+    ser_payment,
+    ser_plan,
+    ser_subscription,
+    ser_subscription_notice,
+)
 
 router = APIRouter(tags=["subscriptions"])
 
@@ -117,9 +132,50 @@ def start_trial(
     return ser_subscription(view)
 
 
+@router.get("/platform/tenants/{tenant_id}/payments", response_model=list[PaymentResponse])
+def list_tenant_payments(tenant_id: str, actor: PlatformActor, factory: UoWFactory):
+    payments = ListTenantPayments(factory).execute(actor, TenantId.parse(tenant_id))
+    return [ser_payment(p) for p in payments]
+
+
+@router.post(
+    "/platform/tenants/{tenant_id}/payments",
+    response_model=PaymentRecordedResponse,
+    status_code=201,
+)
+def record_payment(
+    tenant_id: str,
+    body: RecordPaymentRequest,
+    actor: PlatformActor,
+    factory: UoWFactory,
+    clock: Clock,
+):
+    cmd = RecordPaymentCommand(
+        amount=body.amount,
+        paid_on=body.paid_on,
+        months=body.months,
+        method=body.method,
+        reference=body.reference,
+        notes=body.notes,
+    )
+    result = RecordPayment(factory, clock).execute(actor, TenantId.parse(tenant_id), cmd)
+    return {"payment": ser_payment(result.payment), "subscription": ser_subscription(result.view)}
+
+
 # ── The clinic's own plan ─────────────────────────────────────────────────────
 
 
 @router.get("/organization/subscription", response_model=SubscriptionResponse)
 def get_my_subscription(actor: Actor, uow: UoW, clock: Clock):
     return ser_subscription(GetMySubscription(uow, clock).execute(actor))
+
+
+@router.get("/organization/subscription/payments", response_model=list[PaymentResponse])
+def get_my_payments(actor: Actor, uow: UoW):
+    return [ser_payment(p) for p in GetMyPayments(uow).execute(actor)]
+
+
+@router.get("/auth/me/subscription", response_model=SubscriptionNoticeResponse)
+def get_subscription_notice(actor: Actor, uow: UoW, clock: Clock):
+    """Any user: the subscription status for the app banner (no prices or limits)."""
+    return ser_subscription_notice(GetSubscriptionNotice(uow, clock).execute(actor))

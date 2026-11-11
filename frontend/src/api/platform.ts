@@ -7,6 +7,7 @@ import type {
   GlobalStats,
   PaginatedResponse,
   Permission,
+  PaymentMethod,
   PermissionsMatrix,
   Plan,
   PlanCatalog,
@@ -16,6 +17,7 @@ import type {
   PlatformSession,
   Role,
   Subscription,
+  SubscriptionPayment,
   Tenant,
   TenantStats,
   User,
@@ -55,6 +57,15 @@ export interface SubscriptionPayload {
   price_override: string | null
 }
 
+export interface RecordPaymentPayload {
+  amount: string
+  paid_on: string
+  months: number
+  method: PaymentMethod
+  reference: string | null
+  notes: string | null
+}
+
 export const platformPlansApi = {
   catalog: () => platformApi.get<PlanCatalog>('/platform/plans').then((r) => r.data),
 
@@ -72,6 +83,19 @@ export const platformPlansApi = {
   updateSubscription: (tenantId: string, payload: SubscriptionPayload) =>
     platformApi
       .put<Subscription>(`/platform/tenants/${tenantId}/subscription`, payload)
+      .then((r) => r.data),
+
+  payments: (tenantId: string) =>
+    platformApi
+      .get<SubscriptionPayment[]>(`/platform/tenants/${tenantId}/payments`)
+      .then((r) => r.data),
+
+  recordPayment: (tenantId: string, payload: RecordPaymentPayload) =>
+    platformApi
+      .post<{ payment: SubscriptionPayment; subscription: Subscription }>(
+        `/platform/tenants/${tenantId}/payments`,
+        payload,
+      )
       .then((r) => r.data),
 
   startTrial: (tenantId: string, days = 7) =>

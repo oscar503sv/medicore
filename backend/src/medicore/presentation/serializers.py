@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 from medicore.application.use_cases.auth import MyProfileDTO
 from medicore.application.use_cases.sessions import SessionInfoDTO
-from medicore.application.use_cases.subscriptions import SubscriptionView
+from medicore.application.use_cases.subscriptions import SubscriptionNotice, SubscriptionView
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.availability import DoctorAvailability
 from medicore.domain.entities.consultation import Consultation
@@ -17,6 +17,7 @@ from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.plan import AddonPricing, Plan
 from medicore.domain.entities.prescription import Prescription
+from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.services.slot_resolver import Slot
@@ -474,4 +475,29 @@ def ser_subscription(v: SubscriptionView) -> dict:
             "locations": v.locations_used,
         },
         "addon_prices": ser_addon_pricing(v.addon_prices),
+    }
+
+
+def ser_payment(p: SubscriptionPayment) -> dict:
+    return {
+        "id": str(p.id),
+        "amount": ser_money(p.amount),
+        "paid_on": p.paid_on,
+        "months": p.months,
+        "plan_code": p.plan_code,
+        "period_end": p.period_end,
+        "method": str(p.method),
+        "reference": p.reference,
+        "notes": p.notes,
+        "recorded_at": p.recorded_at,
+    }
+
+
+def ser_subscription_notice(n: SubscriptionNotice) -> dict:
+    return {
+        "status": str(n.status),
+        "is_trial": n.is_trial,
+        "period_end": n.period_end,
+        "grace_until": n.grace_until,
+        "days_left": n.days_left,
     }

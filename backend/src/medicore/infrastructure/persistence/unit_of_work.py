@@ -47,6 +47,7 @@ from medicore.infrastructure.persistence.repositories.role_permission_override i
 from medicore.infrastructure.persistence.repositories.subscription import (
     SqlAddonPricingRepository,
     SqlPlanRepository,
+    SqlSubscriptionPaymentRepository,
 )
 from medicore.infrastructure.persistence.repositories.tenant import SqlTenantRepository
 from medicore.infrastructure.persistence.repositories.user import (
@@ -83,6 +84,7 @@ class SqlAlchemyUnitOfWork:
         self.vaccinations = SqlVaccinationRecordRepository(session, tenant_id)
         self.applications = SqlApplicationRepository(session, tenant_id)
         self.procedures = SqlProcedureRepository(session, tenant_id)
+        self.subscription_payments = SqlSubscriptionPaymentRepository(session, tenant_id)
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
         self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
         self.sessions = SqlAuthSessionRepository(session)  # global (non-scoped)

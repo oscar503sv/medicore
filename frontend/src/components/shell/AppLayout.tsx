@@ -4,6 +4,7 @@ import { Outlet } from 'react-router-dom'
 import { authApi } from '@/api/auth'
 import { impersonationApi } from '@/api/platform'
 import { useT } from '@/lib/i18n'
+import { SubscriptionBanner } from '@/components/subscriptions/SubscriptionBanner'
 import { useAuthStore } from '@/stores/auth'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
@@ -59,6 +60,7 @@ export function AppLayout() {
             </button>
           </div>
         )}
+        <SubscriptionBanner />
         <Topbar />
         <main className="flex-1 overflow-y-auto">
           <Outlet />

@@ -4,6 +4,7 @@ import { Card, CardHeader } from '@/components/ui/Card'
 import { fmtDate } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { expiryLabel, fmtUsd, limitLabel } from '@/lib/subscriptions'
+import { PaymentsTable } from './PaymentsCard'
 import { SubscriptionBadge } from './SubscriptionBadge'
 
 /** Settings → Organization: the clinic's plan, read-only (changes go through Medicore). */
@@ -12,6 +13,10 @@ export function PlanCard() {
   const { data: sub } = useQuery({
     queryKey: ['organization-subscription'],
     queryFn: organizationApi.subscription,
+  })
+  const { data: payments } = useQuery({
+    queryKey: ['organization-payments'],
+    queryFn: organizationApi.payments,
   })
   if (!sub) return null
 
@@ -64,6 +69,12 @@ export function PlanCard() {
           {t('sub.support_hint')} {t('sub.your_plan_desc')}
         </p>
       </div>
+      {payments && payments.length > 0 && (
+        <div className="border-t border-line">
+          <p className="px-5 pt-4 text-[13px] font-semibold text-tx">{t('sub.payments_title')}</p>
+          <PaymentsTable payments={payments} />
+        </div>
+      )}
     </Card>
   )
 }

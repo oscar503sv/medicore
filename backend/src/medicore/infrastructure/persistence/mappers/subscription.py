@@ -5,11 +5,17 @@ from __future__ import annotations
 from decimal import Decimal
 
 from medicore.domain.entities.plan import CURRENCY, AddonPricing, Plan
-from medicore.domain.enums import AddonModule, PlanFeature
+from medicore.domain.entities.subscription_payment import SubscriptionPayment
+from medicore.domain.enums import AddonModule, PaymentMethod, PlanFeature
+from medicore.domain.shared.identifiers import PlatformAdminId, SubscriptionPaymentId, TenantId
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
 from medicore.domain.value_objects.subscription import Subscription
-from medicore.infrastructure.persistence.models.subscription import AddonPricingModel, PlanModel
+from medicore.infrastructure.persistence.models.subscription import (
+    AddonPricingModel,
+    PlanModel,
+    SubscriptionPaymentModel,
+)
 from medicore.infrastructure.persistence.models.tenant import TenantModel
 
 
@@ -88,3 +94,34 @@ def subscription_to_row(sub: Subscription, row: TenantModel) -> None:
     row.limit_locations = overrides.locations
     row.limit_storage_gb = overrides.storage_gb
     row.price_override = sub.price_override.amount if sub.price_override else None
+
+
+def to_payment(row: SubscriptionPaymentModel) -> SubscriptionPayment:
+    return SubscriptionPayment(
+        id=SubscriptionPaymentId(row.id),
+        tenant_id=TenantId(row.tenant_id),
+        amount=Money(Decimal(row.amount), CURRENCY),
+        paid_on=row.paid_on,
+        months=row.months,
+        plan_code=row.plan_code,
+        period_end=row.period_end,
+        method=PaymentMethod(row.method),
+        recorded_by=PlatformAdminId(row.recorded_by),
+        recorded_at=row.recorded_at,
+        reference=row.reference,
+        notes=row.notes,
+    )
+
+
+def payment_to_row(p: SubscriptionPayment, row: SubscriptionPaymentModel) -> None:
+    row.tenant_id = p.tenant_id.value
+    row.amount = p.amount.amount
+    row.paid_on = p.paid_on
+    row.months = p.months
+    row.plan_code = p.plan_code
+    row.period_end = p.period_end
+    row.method = str(p.method)
+    row.reference = p.reference
+    row.notes = p.notes
+    row.recorded_by = p.recorded_by.value
+    row.recorded_at = p.recorded_at

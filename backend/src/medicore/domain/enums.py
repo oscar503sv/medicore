@@ -241,6 +241,15 @@ class PlanFeature(StrEnum):
     USER_PERMISSIONS = "user_permissions"  # per-user permission overrides
 
 
+class PaymentMethod(StrEnum):
+    """How a clinic paid its subscription (recorded by hand from the console)."""
+
+    BANK_TRANSFER = "bank_transfer"
+    CASH = "cash"
+    CARD = "card"
+    OTHER = "other"
+
+
 class SubscriptionStatus(StrEnum):
     """Derived from the paid/trial period and the grace days, never stored."""
 

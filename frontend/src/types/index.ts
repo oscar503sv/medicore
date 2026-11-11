@@ -195,6 +195,31 @@ export interface Subscription {
   addon_prices: AddonPricing
 }
 
+export type PaymentMethod = 'bank_transfer' | 'cash' | 'card' | 'other'
+export const PAYMENT_METHODS: PaymentMethod[] = ['bank_transfer', 'cash', 'card', 'other']
+
+export interface SubscriptionPayment {
+  id: string
+  amount: string
+  paid_on: string
+  months: number
+  plan_code: string
+  period_end: string // paid-until date this payment left the clinic with
+  method: PaymentMethod
+  reference: string | null
+  notes: string | null
+  recorded_at: string
+}
+
+/** Any user's view of the subscription, for the app banner. */
+export interface SubscriptionNotice {
+  status: SubscriptionStatus
+  is_trial: boolean
+  period_end: string | null
+  grace_until: string | null
+  days_left: number | null
+}
+
 export interface TenantSubscriptionSummary {
   plan_code: string
   modules: AddonModule[]

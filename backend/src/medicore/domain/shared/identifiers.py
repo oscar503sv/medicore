@@ -163,3 +163,8 @@ class ProcedureTypeId(Identifier):
 @dataclass(frozen=True, slots=True)
 class ProcedureId(Identifier):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class SubscriptionPaymentId(Identifier):
+    pass

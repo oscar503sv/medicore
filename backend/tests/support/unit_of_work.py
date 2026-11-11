@@ -30,6 +30,7 @@ from tests.support.repositories import (
     InMemoryPrescriptionRepository,
     InMemoryProcedureRepository,
     InMemoryRolePermissionOverrideRepository,
+    InMemorySubscriptionPaymentRepository,
     InMemoryTenantRepository,
     InMemoryUserRepository,
     InMemoryVaccinationRecordRepository,
@@ -60,6 +61,7 @@ class InMemoryUnitOfWork:
         self.vaccinations = InMemoryVaccinationRecordRepository(store, tenant_id)
         self.applications = InMemoryApplicationRepository(store, tenant_id)
         self.procedures = InMemoryProcedureRepository(store, tenant_id)
+        self.subscription_payments = InMemorySubscriptionPaymentRepository(store, tenant_id)
         self.tenants = InMemoryTenantRepository(store)
         self.platform_audit = InMemoryPlatformAuditLogRepository(store)
         self.sessions = InMemoryAuthSessionRepository(store)
