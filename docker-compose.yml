@@ -46,10 +46,6 @@ services:
       DEMO_PASSWORD: ${DEMO_PASSWORD:-}
       # Private password for the clinic admins of the demo (required in production).
       DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}
-      # Deployed git commit, shown on the console's Monitoring page. Coolify predefined var:
-      # no ":-" default on purpose, or Coolify creates an empty UI variable that shadows it
-      # (plain docker compose just warns that it is unset and leaves it blank).
-      SOURCE_COMMIT: ${SOURCE_COMMIT}
       # uvicorn worker processes (one per CPU core is a good start; each holds a DB pool
       # of up to 15 connections, so keep workers × 15 well under Postgres' max_connections).
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
