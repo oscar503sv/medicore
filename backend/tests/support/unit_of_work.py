@@ -32,6 +32,7 @@ from tests.support.repositories import (
     InMemoryPlatformReadModel,
     InMemoryPrescriptionRepository,
     InMemoryProcedureRepository,
+    InMemoryRequestStatsRepository,
     InMemoryRolePermissionOverrideRepository,
     InMemorySubscriptionPaymentRepository,
     InMemoryTenantRepository,
@@ -178,3 +179,7 @@ class InMemoryUnitOfWorkFactory:
     @contextmanager
     def job_log(self) -> Iterator[InMemoryJobLogRepository]:
         yield InMemoryJobLogRepository(self.store)
+
+    @contextmanager
+    def request_stats(self) -> Iterator[InMemoryRequestStatsRepository]:
+        yield InMemoryRequestStatsRepository(self.store)

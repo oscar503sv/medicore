@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
+  Activity,
   Copy,
   Database,
   KeyRound,
@@ -10,6 +11,7 @@ import {
   Server,
   ServerCrash,
   ShieldAlert,
+  Timer,
   Users,
 } from 'lucide-react'
 import { errorMessage } from '@/api/client'
@@ -27,7 +29,7 @@ import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { fmtBytes, fmtDate, fmtDateTime, fmtDuration, fmtRelative, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-import type { ConsoleLogin, JobState, ScheduledJob, SystemStatus } from '@/types'
+import type { ConsoleLogin, JobState, Performance, ScheduledJob, SystemStatus } from '@/types'
 import type { Tone } from '@/components/ui/badgeTone'
 
 const REFRESH_MS = 60_000
@@ -218,6 +220,106 @@ function ScheduledJobs({ jobs }: { jobs: ScheduledJob[] }) {
         ))}
       </ul>
     </Card>
+  )
+}
+
+const fmtMs = (ms: number | null) => (ms === null ? '—' : `${Math.round(ms).toLocaleString()} ms`)
+const fmtPct = (part: number, whole: number) =>
+  whole ? `${((part / whole) * 100).toFixed(part && part / whole < 0.001 ? 2 : 1)}%` : '—'
+
+/** Request volume, latency percentiles, error rates and the slowest routes of the last day. */
+function PerformanceSection({ perf }: { perf: Performance }) {
+  const t = useT()
+  return (
+    <div className="space-y-5">
+      <h2 className="pt-2 text-sm font-semibold text-tx">{t('mon.perf')}</h2>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div>
+          <StatCard
+            icon={Activity}
+            label={t('mon.perf_requests')}
+            value={perf.requests.toLocaleString()}
+          />
+        </div>
+        <div>
+          <StatCard icon={Timer} label={t('mon.perf_p50')} value={fmtMs(perf.p50_ms)} />
+        </div>
+        <div>
+          <StatCard icon={Timer} label={t('mon.perf_p95')} value={fmtMs(perf.p95_ms)} />
+          <p className="mt-1 px-1 text-xs text-tx-3">{t('mon.perf_p95_hint')}</p>
+        </div>
+        <div>
+          <StatCard
+            icon={ServerCrash}
+            label={t('mon.perf_5xx')}
+            value={fmtPct(perf.server_errors, perf.requests)}
+            unit={`(${perf.server_errors})`}
+          />
+          <p className="mt-1 px-1 text-xs text-tx-3">
+            {t('mon.perf_4xx').replace('{pct}', fmtPct(perf.client_errors, perf.requests))}
+          </p>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader title={t('mon.perf_volume')} />
+        <div className="p-5 pt-8">
+          <TrendBars
+            axisFormat="HH:mm"
+            points={perf.hourly.map((h) => ({
+              date: h.hour,
+              count: h.count,
+              label: t('mon.perf_hour')
+                .replace('{time}', fmtTime(h.hour))
+                .replace('{n}', h.count.toLocaleString())
+                .replace('{e}', String(h.server_errors)),
+            }))}
+          />
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader title={t('mon.perf_slowest')} />
+        {perf.slowest.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-tx-3">{t('mon.perf_empty')}</p>
+        ) : (
+          <Table>
+            <thead>
+              <Tr>
+                <Th>{t('mon.col_route')}</Th>
+                <Th className="text-right">{t('mon.col_requests')}</Th>
+                <Th className="text-right">{t('mon.col_avg')}</Th>
+                <Th className="text-right">{t('mon.col_p95')}</Th>
+                <Th className="text-right">{t('mon.col_max')}</Th>
+                <Th className="text-right">{t('mon.col_errors')}</Th>
+              </Tr>
+            </thead>
+            <tbody>
+              {perf.slowest.map((r) => (
+                <Tr key={`${r.method} ${r.route}`}>
+                  <Td className="font-mono text-xs text-tx-2">
+                    <span className="text-tx-3">{r.method}</span> {r.route}
+                  </Td>
+                  <Td className="text-right font-mono text-sm">{r.count.toLocaleString()}</Td>
+                  <Td className="text-right font-mono text-sm">{fmtMs(r.avg_ms)}</Td>
+                  <Td className="text-right font-mono text-sm text-tx">{fmtMs(r.p95_ms)}</Td>
+                  <Td className="text-right font-mono text-sm text-tx-3">{fmtMs(r.max_ms)}</Td>
+                  <Td
+                    className={cn(
+                      'text-right font-mono text-sm',
+                      r.server_errors ? 'text-danger' : 'text-tx-3',
+                    )}
+                  >
+                    {r.client_errors} / {r.server_errors}
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        )}
+        <p className="border-t border-line px-5 py-3 text-xs text-tx-3">{t('mon.perf_note')}</p>
+      </Card>
+    </div>
   )
 }
 
@@ -499,6 +601,8 @@ export function MonitoringPage() {
       </Card>
 
       <ErrorList retentionDays={errors.retention_days} />
+
+      <PerformanceSection perf={data.performance} />
 
       <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
         <Card>

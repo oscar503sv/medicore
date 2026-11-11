@@ -50,6 +50,7 @@ from medicore.domain.repositories._support import (
     LoginPressure,
     Page,
     PaymentSummary,
+    RequestStatsRow,
     TableSize,
     TenantActivity,
 )
@@ -240,6 +241,10 @@ class MonitoringReadModel(Protocol):
         """Latest run and latest success of every scheduled task that has ever run."""
         ...
 
+    def request_stats_since(self, since: datetime) -> list[RequestStatsRow]:
+        """Hourly request metrics per route from ``since`` on (summed across workers)."""
+        ...
+
 
 class ErrorLogRepository(Protocol):
     """Store of unexpected server errors. Each mutation commits on its own: it runs from the
@@ -257,6 +262,15 @@ class JobLogRepository(Protocol):
     when the task itself failed and rolled back)."""
 
     def record(self, run: JobRun) -> None: ...
+
+    def purge_before(self, cutoff: datetime) -> None: ...
+
+
+class RequestStatsRepository(Protocol):
+    """Hourly request metrics per route. ``add`` sums a batch into the stored rows (several
+    workers flush into the same hour); each mutation commits on its own."""
+
+    def add(self, rows: list[RequestStatsRow]) -> None: ...
 
     def purge_before(self, cutoff: datetime) -> None: ...
 
@@ -297,4 +311,8 @@ class UnitOfWorkFactory(Protocol):
 
     def job_log(self) -> AbstractContextManager[JobLogRepository]:
         """Context-managed store of scheduled-task runs."""
+        ...
+
+    def request_stats(self) -> AbstractContextManager[RequestStatsRepository]:
+        """Context-managed store of hourly request metrics."""
         ...

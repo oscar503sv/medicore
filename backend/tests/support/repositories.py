@@ -43,6 +43,7 @@ from medicore.domain.repositories._support import (
     Paging,
     PatientFilter,
     RecordFilter,
+    RequestStatsRow,
     TableSize,
     TenantFilter,
     UserFilter,
@@ -1060,6 +1061,9 @@ class InMemoryMonitoringReadModel:
         out.sort(key=lambda g: (g.count, g.last_at), reverse=True)
         return out[:limit]
 
+    def request_stats_since(self, since: datetime) -> list[RequestStatsRow]:
+        return [r for r in self._store.request_stats.values() if r.hour >= since]
+
     def recent_errors(self, limit: int, offset: int) -> Page[ErrorEvent]:
         items = sorted(
             self._store.error_events.values(), key=lambda e: e.occurred_at, reverse=True
@@ -1092,4 +1096,29 @@ class InMemoryJobLogRepository:
         for key, run in list(self._store.job_runs.items()):
             if run.finished_at < cutoff:
                 del self._store.job_runs[key]
+
+
+class InMemoryRequestStatsRepository:
+    """Same summing contract as the SQL upsert."""
+
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def add(self, rows: list[RequestStatsRow]) -> None:
+        for r in rows:
+            key = (r.hour, r.method, r.route)
+            old = self._store.request_stats.get(key)
+            if old is not None:
+                r = RequestStatsRow(
+                    hour=r.hour, method=r.method, route=r.route, count=old.count + r.count,
+                    client_errors=old.client_errors + r.client_errors,
+                    server_errors=old.server_errors + r.server_errors,
+                    total_ms=old.total_ms + r.total_ms, max_ms=max(old.max_ms, r.max_ms),
+                    buckets=tuple(a + b for a, b in zip(old.buckets, r.buckets, strict=True)),
+                )
+            self._store.request_stats[key] = r
+
+    def purge_before(self, cutoff: datetime) -> None:
+        for key in [k for k in self._store.request_stats if k[0] < cutoff]:
+            del self._store.request_stats[key]
 

@@ -24,6 +24,7 @@ from medicore.domain.repositories._support import (
     LockedLogin,
     LoginPressure,
     Page,
+    RequestStatsRow,
     TableSize,
 )
 from medicore.infrastructure.persistence.models.audit_log import AuditLogModel
@@ -34,6 +35,7 @@ from medicore.infrastructure.persistence.models.platform import (
     PlatformAdminModel,
     PlatformAuditLogModel,
 )
+from medicore.infrastructure.persistence.models.request_stats import RequestStatsModel
 from medicore.infrastructure.persistence.models.tenant import TenantModel
 
 MAX_LOCKED = 20
@@ -259,6 +261,9 @@ class SqlMonitoringReadModel:
             for r in latest
         ]
 
+    def request_stats_since(self, since: datetime) -> list[RequestStatsRow]:
+        return _read_request_stats(self._s, since)
+
     def recent_errors(self, limit: int, offset: int) -> Page[ErrorEvent]:
         total = self._s.query(func.count()).select_from(ErrorEventModel).scalar()
         rows = (
@@ -269,6 +274,19 @@ class SqlMonitoringReadModel:
             .all()
         )
         return Page(items=[_event(r) for r in rows], total=total, offset=offset, limit=limit)
+
+
+def _read_request_stats(session: Session, since: datetime) -> list[RequestStatsRow]:
+    rows = session.query(RequestStatsModel).filter(RequestStatsModel.hour >= since).all()
+    return [_stats_row(r) for r in rows]
+
+
+def _stats_row(r: RequestStatsModel) -> RequestStatsRow:
+    return RequestStatsRow(
+        hour=r.hour, method=r.method, route=r.route, count=r.count,
+        client_errors=r.client_errors, server_errors=r.server_errors, total_ms=r.total_ms,
+        max_ms=r.max_ms, buckets=tuple(r.buckets),
+    )
 
 
 class SqlErrorLogRepository:
@@ -317,6 +335,57 @@ class SqlJobLogRepository:
 
     def purge_before(self, cutoff: datetime) -> None:
         self._s.query(JobRunModel).filter(JobRunModel.finished_at < cutoff).delete(
+            synchronize_session=False
+        )
+        self._s.commit()
+
+
+class SqlRequestStatsRepository:
+    """Upserts add each batch into the stored hour (bucket arrays added element-wise), so any
+    number of workers can flush into the same row. Commits on its own."""
+
+    _UPSERT = text(
+        """
+        INSERT INTO request_stats
+            (hour, method, route, count, client_errors, server_errors, total_ms, max_ms, buckets)
+        VALUES
+            (:hour, :method, :route, :count, :client_errors, :server_errors, :total_ms,
+             :max_ms, :buckets)
+        ON CONFLICT (hour, method, route) DO UPDATE SET
+            count = request_stats.count + EXCLUDED.count,
+            client_errors = request_stats.client_errors + EXCLUDED.client_errors,
+            server_errors = request_stats.server_errors + EXCLUDED.server_errors,
+            total_ms = request_stats.total_ms + EXCLUDED.total_ms,
+            max_ms = GREATEST(request_stats.max_ms, EXCLUDED.max_ms),
+            buckets = ARRAY(
+                SELECT a + b
+                FROM unnest(request_stats.buckets, EXCLUDED.buckets) WITH ORDINALITY AS t(a, b, i)
+                ORDER BY i
+            )
+        """
+    )
+
+    def __init__(self, session: Session) -> None:
+        self._s = session
+
+    def add(self, rows: list[RequestStatsRow]) -> None:
+        if not rows:
+            return
+        self._s.execute(
+            self._UPSERT,
+            [
+                {
+                    "hour": r.hour, "method": r.method, "route": r.route, "count": r.count,
+                    "client_errors": r.client_errors, "server_errors": r.server_errors,
+                    "total_ms": r.total_ms, "max_ms": r.max_ms, "buckets": list(r.buckets),
+                }
+                for r in rows
+            ],
+        )
+        self._s.commit()
+
+    def purge_before(self, cutoff: datetime) -> None:
+        self._s.query(RequestStatsModel).filter(RequestStatsModel.hour < cutoff).delete(
             synchronize_session=False
         )
         self._s.commit()

@@ -6,7 +6,7 @@ A **multi-tenant** clinic management system built with **Clean Architecture**.
 
 It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (SOAP notes) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications**, **vaccination following El Salvador's national scheme**, **in-clinic medication applications**, **minor procedures**, organization settings and a **getting-started guide** for doctors and admins that ticks itself off from real data. The interface is available in **Spanish and English**, including the backend's error messages.
 
-It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, a **Business** overview (MRR, collections, expirations, adoption and seats per clinic), **Monitoring** (API and database health, server errors, failed sign-ins and lockouts, open sessions and support access), global audit, account support (password reset, unlock, suspension) and **audited impersonation** of a clinic for support.
+It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, a **Business** overview (MRR, collections, expirations, adoption and seats per clinic), **Monitoring** (API and database health, server errors, failed sign-ins and lockouts, open sessions and support access, per-route API performance), global audit, account support (password reset, unlock, suspension) and **audited impersonation** of a clinic for support.
 
 ---
 
@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings from .env (pydantic-settings) — dev-safe defaults
 │   ├── database/       # SQLAlchemy engine + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (32 tables; complex VOs as JSONB)
+│   │   ├── models/     # ORM models (33 tables; complex VOs as JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (keeps the domain clean)
 │   │   └── repositories/  # SQLAlchemy implementations of the ports
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, code generator, SystemClock
@@ -255,7 +255,7 @@ medicore/
 | **14** | Minor procedures (per-clinic catalog, consent on paper, signed note with amendments, pathology specimen, follow-up) | ✅ Done |
 | **15** | SaaS subscriptions (plan catalog, optional modules, quotas, manual payments and renewal, read-only after grace, per-user permissions) | ✅ Done |
 | **16** | Password policy (length, blocklist, nothing personal, live requirements in the UI) | ✅ Done |
-| **17** | Platform console: Business (MRR, collections, expirations, adoption, seats) and Monitoring (health, connections, 500 errors without patient data with their commit and trend, sign-ins and lockouts, audited console sign-ins, open support access, scheduled tasks, `/health/ready`) | ✅ Done |
+| **17** | Platform console: Business (MRR, collections, expirations, adoption, seats) and Monitoring (health, connections, 500 errors without patient data with their commit and trend, sign-ins and lockouts, audited console sign-ins, open support access, scheduled tasks, per-route performance with p50/p95 and 4xx/5xx rates, `/health/ready`) | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable record, inventory and billing | 🗓️ Future |
@@ -328,7 +328,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ## Database
 
-**32 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
+**33 tables**, created by the initial migration (`a622afdfaa21`) and extended by later migrations:
 
 | Table | Description |
 |---|---|
@@ -358,6 +358,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `platform_audit_logs` | Global audit of platform operations |
 | `error_events` | Unexpected server errors (route, type, location and commit; no patient data; 30 days) |
 | `job_runs` | Runs of scheduled tasks (e.g. the nightly demo reset) and their outcome |
+| `request_stats` | API requests per hour and route template: volume, 4xx/5xx and a latency histogram (30 days) |
 
 ---
 

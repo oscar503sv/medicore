@@ -108,6 +108,34 @@ class JobResponse(BaseModel):
     last_success_at: datetime | None
 
 
+class RoutePerformanceResponse(BaseModel):
+    method: str
+    route: str
+    count: int
+    client_errors: int
+    server_errors: int
+    avg_ms: float
+    p95_ms: float | None
+    max_ms: float
+
+
+class HourVolumeResponse(BaseModel):
+    hour: datetime
+    count: int
+    server_errors: int
+
+
+class PerformanceResponse(BaseModel):
+    window_hours: int
+    requests: int
+    client_errors: int
+    server_errors: int
+    p50_ms: float | None
+    p95_ms: float | None
+    slowest: list[RoutePerformanceResponse]
+    hourly: list[HourVolumeResponse]
+
+
 class SystemStatusResponse(BaseModel):
     now: datetime
     runtime: RuntimeResponse
@@ -118,6 +146,7 @@ class SystemStatusResponse(BaseModel):
     impersonations: list[ImpersonationResponse]
     errors: ErrorsResponse
     jobs: list[JobResponse]
+    performance: PerformanceResponse
 
 
 class ErrorEventResponse(BaseModel):

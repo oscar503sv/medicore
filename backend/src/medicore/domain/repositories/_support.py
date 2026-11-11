@@ -187,3 +187,18 @@ class JobSummary:
     last_ok: bool
     last_detail: str
     last_success_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class RequestStatsRow:
+    """Requests of one route in one hour, as recorded (and summed across workers)."""
+
+    hour: datetime
+    method: str
+    route: str
+    count: int
+    client_errors: int  # 4xx
+    server_errors: int  # 5xx
+    total_ms: float
+    max_ms: float
+    buckets: tuple[int, ...]  # LatencyHistogram counts

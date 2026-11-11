@@ -30,6 +30,7 @@ from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.entities.vaccination_record import VaccinationRecord
+from medicore.domain.repositories._support import RequestStatsRow
 from medicore.domain.services.plan_catalog import default_addon_pricing, default_plans
 
 
@@ -71,6 +72,8 @@ class InMemoryStore:
     # Recorded server errors (platform monitoring).
     error_events: dict[UUID, ErrorEvent] = field(default_factory=dict)
     job_runs: dict[UUID, JobRun] = field(default_factory=dict)
+    # Hourly request metrics keyed by (hour, method, route).
+    request_stats: dict[tuple, RequestStatsRow] = field(default_factory=dict)
     # Global subscription catalog, starting from the published price list.
     subscription_payments: dict[UUID, SubscriptionPayment] = field(default_factory=dict)
     plans: dict[str, Plan] = field(default_factory=lambda: {p.code: p for p in default_plans()})

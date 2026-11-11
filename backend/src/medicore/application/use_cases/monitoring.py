@@ -21,6 +21,7 @@ from medicore.application.common.context import PlatformActorContext
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.runtime import RuntimeFacts, RuntimeInfo
 from medicore.application.ports.unit_of_work import UnitOfWorkFactory
+from medicore.application.use_cases.performance import PerformanceDTO, summarize, window_start
 from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.entities.job_run import JobRun
 from medicore.domain.repositories._support import (
@@ -102,6 +103,7 @@ class SystemStatusDTO:
     errors_7d: int
     errors_daily: list[tuple[date, int]]
     jobs: list[JobStatus]
+    performance: PerformanceDTO
     error_groups: list[ErrorGroup] = field(default_factory=list)
 
 
@@ -140,6 +142,7 @@ class GetSystemStatus:
                 errors_7d=reads.errors_since(week_ago),
                 errors_daily=_daily(now.date(), reads.errors_per_day(trend_since)),
                 jobs=job_statuses(reads.job_summaries(), now),
+                performance=summarize(reads.request_stats_since(window_start(now)), now),
                 error_groups=reads.error_groups(week_ago, TOP_ERROR_GROUPS),
             )
 

@@ -641,6 +641,35 @@ def ser_system_status(dto, retention_days: int) -> dict:
             "daily": [{"day": d, "count": n} for d, n in dto.errors_daily],
         },
         "jobs": [_ser_job(j) for j in dto.jobs],
+        "performance": _ser_performance(dto.performance),
+    }
+
+
+def _ser_performance(p) -> dict:
+    return {
+        "window_hours": p.window_hours,
+        "requests": p.requests,
+        "client_errors": p.client_errors,
+        "server_errors": p.server_errors,
+        "p50_ms": p.p50_ms,
+        "p95_ms": p.p95_ms,
+        "slowest": [
+            {
+                "method": r.method,
+                "route": r.route,
+                "count": r.count,
+                "client_errors": r.client_errors,
+                "server_errors": r.server_errors,
+                "avg_ms": r.avg_ms,
+                "p95_ms": r.p95_ms,
+                "max_ms": r.max_ms,
+            }
+            for r in p.slowest
+        ],
+        "hourly": [
+            {"hour": h.hour, "count": h.count, "server_errors": h.server_errors}
+            for h in p.hourly
+        ],
     }
 
 

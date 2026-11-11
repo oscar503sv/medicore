@@ -22,7 +22,9 @@ from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.entities.job_run import JobRun
 from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.enums import Role
+from medicore.domain.repositories._support import RequestStatsRow
 from medicore.domain.shared.identifiers import AuditLogId, PlatformAdminId, SessionId
+from medicore.domain.value_objects.latency_histogram import LatencyHistogram
 from medicore.infrastructure.config import get_settings
 from medicore.infrastructure.persistence.models.login_attempt import LoginAttemptModel
 from medicore.infrastructure.persistence.models.platform import PlatformAuditLogModel
@@ -33,6 +35,7 @@ from medicore.infrastructure.persistence.repositories.monitoring import (
     SqlErrorLogRepository,
     SqlJobLogRepository,
     SqlMonitoringReadModel,
+    SqlRequestStatsRepository,
 )
 from medicore.infrastructure.persistence.repositories.platform import (
     SqlPlatformAdminRepository,
@@ -197,3 +200,32 @@ def test_job_summaries(session):
     assert summary.last_ok is False
     assert summary.last_finished_at == FUTURE - timedelta(hours=1)
     assert summary.last_success_at == FUTURE - timedelta(hours=3)
+
+
+def test_request_stats_upsert_sums_batches(session):
+    store = SqlRequestStatsRepository(session)
+    route = f"/api/v1/zz-{uuid.uuid4().hex[:6]}"
+
+    def row(*durations, server=0):
+        return RequestStatsRow(
+            hour=FUTURE, method="GET", route=route, count=len(durations), client_errors=0,
+            server_errors=server, total_ms=float(sum(durations)), max_ms=float(max(durations)),
+            buckets=LatencyHistogram.of(*durations).counts,
+        )
+
+    store.add([row(20, 40)])
+    store.add([row(6000, server=1)])  # a second worker flushing into the same hour
+
+    [stored] = [
+        r for r in SqlMonitoringReadModel(session).request_stats_since(FUTURE)
+        if r.route == route
+    ]
+    assert (stored.count, stored.server_errors, stored.max_ms) == (3, 1, 6000)
+    assert stored.total_ms == 6060
+    assert stored.buckets == LatencyHistogram.of(20, 40, 6000).counts
+
+    store.purge_before(FUTURE + timedelta(hours=1))
+    assert not [
+        r for r in SqlMonitoringReadModel(session).request_stats_since(FUTURE)
+        if r.route == route
+    ]

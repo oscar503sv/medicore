@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn'
 import { fmtDate } from '@/lib/format'
 
 export interface TrendPoint {
-  /** ISO date of the period (day or week start): key and axis label. */
+  /** ISO date of the period (hour, day or week start): key and axis label. */
   date: string
   count: number
   /** Tooltip and accessible label of the bar. */
@@ -15,9 +15,12 @@ export interface TrendPoint {
 export function TrendBars({
   points,
   barClassName = 'bg-accent',
+  axisFormat = 'd MMM',
 }: {
   points: TrendPoint[]
   barClassName?: string
+  /** date-fns pattern of the first and last axis labels ('HH:mm' for hourly series). */
+  axisFormat?: string
 }) {
   const [hover, setHover] = useState<number | null>(null)
   const max = Math.max(1, ...points.map((p) => p.count))
@@ -60,8 +63,8 @@ export function TrendBars({
         ))}
       </div>
       <div className="mt-1.5 flex justify-between text-[11px] text-tx-4">
-        <span>{points.length ? fmtDate(points[0].date, 'd MMM') : ''}</span>
-        <span>{points.length ? fmtDate(points[last].date, 'd MMM') : ''}</span>
+        <span>{points.length ? fmtDate(points[0].date, axisFormat) : ''}</span>
+        <span>{points.length ? fmtDate(points[last].date, axisFormat) : ''}</span>
       </div>
     </div>
   )

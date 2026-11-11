@@ -6,10 +6,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from medicore.application.common.request_stats import RequestRecorder
 from medicore.application.use_cases.monitoring import CheckReadiness
 from medicore.infrastructure.config import get_settings
 from medicore.presentation.dependencies import get_uow_factory
 from medicore.presentation.error_handlers import register_error_handlers
+from medicore.presentation.request_metrics import RequestMetricsMiddleware
 from medicore.presentation.routers import (
     applications,
     appointments,
@@ -62,6 +64,11 @@ def create_app() -> FastAPI:
     )
 
     register_error_handlers(app)
+
+    # Per-route request metrics for the console's Monitoring page (added last: outermost,
+    # so the timing covers CORS and the error handlers too).
+    app.state.request_recorder = RequestRecorder()
+    app.add_middleware(RequestMetricsMiddleware, recorder=app.state.request_recorder)
 
     hsts = settings.is_production
 

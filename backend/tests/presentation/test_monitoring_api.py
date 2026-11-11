@@ -97,3 +97,26 @@ def test_platform_login_records_where_the_session_comes_from(seed, client):
     assert session.scope == "platform"
     assert session.user_agent == "Firefox/140"
     assert session.ip_address
+
+
+def test_api_requests_are_measured_per_route_template(seed, client, platform_headers):
+    client.app.state.request_recorder.flush_every = 0  # flush after every request
+    client.app.dependency_overrides[get_runtime] = StaticRuntime
+    client.get("/api/v1/platform/tenants", headers=platform_headers)
+    client.get(f"/api/v1/platform/tenants/{seed.tenant.id}", headers=platform_headers)
+    client.get("/api/v1/does-not-exist", headers=platform_headers)
+    client.get("/health/ready")  # probes are not measured
+
+    stats = seed.factory.store.request_stats.values()
+    routes = {(r.method, r.route): r for r in stats}
+    assert ("GET", "/api/v1/platform/tenants/{tenant_id}") in routes
+    assert ("GET", "(unmatched)") in routes
+    assert routes[("GET", "(unmatched)")].client_errors == 1
+    assert not any("health" in r.route for r in stats)
+
+    perf = client.get("/api/v1/platform/monitoring", headers=platform_headers).json()[
+        "performance"
+    ]
+    assert perf["requests"] >= 4  # the platform login and the calls above
+    assert len(perf["hourly"]) == 24
+    assert perf["p95_ms"] is not None

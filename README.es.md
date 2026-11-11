@@ -6,7 +6,7 @@ Sistema de gestión clínica **multi-tenant** construido con **Clean Architectur
 
 Cubre el ciclo completo de atención: autenticación por organización, dashboard con métricas reales, gestión de pacientes, agenda y citas, consulta en curso (bitácora SOAP) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app**, **vacunación según el esquema nacional de El Salvador**, **aplicaciones de medicamentos en la clínica**, **procedimientos menores**, ajustes de organización y una **guía de primeros pasos** para médicos y administradores que se marca sola con los datos reales. La interfaz está disponible en **español e inglés**, incluidos los mensajes de error del backend.
 
-Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, un panel de **Negocio** (MRR, cobros, vencimientos, adopción y cupos por clínica), **Monitoreo** (salud de la API y la base de datos, errores del servidor, intentos fallidos y bloqueos, sesiones y accesos de soporte abiertos), auditoría global, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión) e **impersonación auditada** de una clínica para dar soporte.
+Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, un panel de **Negocio** (MRR, cobros, vencimientos, adopción y cupos por clínica), **Monitoreo** (salud de la API y la base de datos, errores del servidor, intentos fallidos y bloqueos, sesiones y accesos de soporte abiertos, rendimiento de la API por ruta), auditoría global, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión) e **impersonación auditada** de una clínica para dar soporte.
 
 ---
 
@@ -65,7 +65,7 @@ src/medicore/
 │   ├── config.py       # Settings desde .env (pydantic-settings) — dev-safe por defecto
 │   ├── database/       # Engine SQLAlchemy + session factory
 │   ├── persistence/
-│   │   ├── models/     # ORM models (32 tablas; VOs complejos como JSONB)
+│   │   ├── models/     # ORM models (33 tablas; VOs complejos como JSONB)
 │   │   ├── mappers/    # ORM ↔ domain entity (sin contaminar el dominio)
 │   │   └── repositories/  # Implementaciones SQLAlchemy de los puertos
 │   └── auth/           # JwtTokenIssuer, BcryptPasswordHasher, generador de códigos, SystemClock
@@ -255,7 +255,7 @@ medicore/
 | **14** | Procedimientos menores (catálogo por clínica, consentimiento en papel, nota firmada con enmiendas, muestra a patología, control) | ✅ Completada |
 | **15** | Suscripciones SaaS (catálogo de planes, módulos opcionales, cupos, pagos y renovación manuales, solo lectura tras la gracia, permisos por usuario) | ✅ Completada |
 | **16** | Política de contraseñas (longitud, lista de bloqueo, nada personal, requisitos en vivo en la UI) | ✅ Completada |
-| **17** | Consola de plataforma: Negocio (MRR, cobros, vencimientos, adopción, cupos) y Monitoreo (salud, conexiones, errores 500 sin datos de pacientes con su commit y tendencia, accesos y bloqueos, accesos a la consola auditados, soporte abierto, tareas programadas, `/health/ready`) | ✅ Completada |
+| **17** | Consola de plataforma: Negocio (MRR, cobros, vencimientos, adopción, cupos) y Monitoreo (salud, conexiones, errores 500 sin datos de pacientes con su commit y tendencia, accesos y bloqueos, accesos a la consola auditados, soporte abierto, tareas programadas, rendimiento por ruta con p50/p95 y tasas 4xx/5xx, `/health/ready`) | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 | — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible, inventario y facturación | 🗓️ A futuro |
@@ -328,7 +328,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ## Base de datos
 
-**32 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
+**33 tablas**, creadas por la migración inicial (`a622afdfaa21`) y ampliadas por las migraciones posteriores:
 
 | Tabla | Descripción |
 |---|---|
@@ -358,6 +358,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `platform_audit_logs` | Auditoría global de operaciones de plataforma |
 | `error_events` | Errores inesperados del servidor (ruta, tipo, ubicación y commit; sin datos de pacientes; 30 días) |
 | `job_runs` | Ejecuciones de tareas programadas (p. ej. el reset nocturno de la demo) y su resultado |
+| `request_stats` | Peticiones a la API por hora y plantilla de ruta: volumen, 4xx/5xx e histograma de latencia (30 días) |
 
 ---
 

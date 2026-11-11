@@ -744,6 +744,29 @@ export interface SystemStatus {
     daily: { day: string; count: number }[]
   }
   jobs: ScheduledJob[]
+  performance: Performance
+}
+
+export interface RoutePerformance {
+  method: string
+  route: string
+  count: number
+  client_errors: number
+  server_errors: number
+  avg_ms: number
+  p95_ms: number | null
+  max_ms: number
+}
+
+export interface Performance {
+  window_hours: number
+  requests: number
+  client_errors: number
+  server_errors: number
+  p50_ms: number | null
+  p95_ms: number | null
+  slowest: RoutePerformance[]
+  hourly: { hour: string; count: number; server_errors: number }[]
 }
 
 export interface ErrorEvent {
