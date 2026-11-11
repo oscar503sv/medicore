@@ -2,6 +2,20 @@
 // spread into the main dictionaries in i18n.ts.
 
 export const subEs: Record<string, string> = {
+  'uperm.title': 'Permisos',
+  'uperm.action': 'Permisos',
+  'uperm.desc':
+    'Parte de los permisos del rol {role}. Marca o desmarca para hacer excepciones solo para esta persona; los cambios futuros del rol le seguirán llegando.',
+  'uperm.not_in_plan':
+    'Los permisos por usuario están disponibles desde el plan Clínica. Contacta a soporte de Medicore para ampliarlo.',
+  'uperm.count': '{n} de {total} permisos',
+  'uperm.extra_count': '{n} adicionales',
+  'uperm.removed_count': '{n} retirados',
+  'uperm.extra': 'Adicional',
+  'uperm.removed': 'Retirado',
+  'uperm.reset': 'Restablecer al rol',
+  'uperm.saved_ok': 'Permisos actualizados. Aplican desde la siguiente acción del usuario.',
+  'uperm.customized': 'Permisos personalizados',
   'sub.nav_plans': 'Planes y precios',
   'sub.plans_title': 'Planes y precios',
   'sub.plans_desc':
@@ -114,6 +128,20 @@ export const subEs: Record<string, string> = {
 }
 
 export const subEn: Record<string, string> = {
+  'uperm.title': 'Permissions',
+  'uperm.action': 'Permissions',
+  'uperm.desc':
+    "Starts from the {role} role's permissions. Check or uncheck to make exceptions for this person only; future changes to the role still reach them.",
+  'uperm.not_in_plan':
+    'Per-user permissions are available from the Clínica plan. Contact Medicore support to upgrade.',
+  'uperm.count': '{n} of {total} permissions',
+  'uperm.extra_count': '{n} extra',
+  'uperm.removed_count': '{n} removed',
+  'uperm.extra': 'Extra',
+  'uperm.removed': 'Removed',
+  'uperm.reset': 'Reset to role',
+  'uperm.saved_ok': "Permissions updated. They apply from the user's next action.",
+  'uperm.customized': 'Custom permissions',
   'sub.nav_plans': 'Plans & pricing',
   'sub.plans_title': 'Plans & pricing',
   'sub.plans_desc':

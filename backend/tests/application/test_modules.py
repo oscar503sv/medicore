@@ -67,7 +67,7 @@ class TestEntitlements:
     def test_granted_permissions_follow_the_subscription(self):
         seed = seed_clinic()
         uow, tenant = with_modules(seed, VACCINATION_ONLY)
-        perms = granted_permissions(uow, tenant, Role.NURSE)
+        perms = granted_permissions(uow, tenant, seed.nurse)
         assert Permission.VACCINATIONS_RECORD in perms
         assert Permission.APPLICATIONS_ADMINISTER not in perms
 
@@ -91,7 +91,7 @@ class TestEntitlements:
 class TestConsultationIndications:
     def _doctor_without_modules(self, seed):
         uow, tenant = with_modules(seed, frozenset())
-        perms = granted_permissions(uow, tenant, Role.DOCTOR)
+        perms = granted_permissions(uow, tenant, seed.doctor)
         actor = dataclasses.replace(
             seed.doctor_actor, permissions=frozenset(str(p) for p in perms)
         )

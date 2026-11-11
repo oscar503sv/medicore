@@ -12,6 +12,7 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
 from medicore.domain.value_objects.user_preferences import UserPreferences
 
 
@@ -41,6 +42,8 @@ class User:
     phone: str | None = None
     must_change_password: bool = False
     preferences: UserPreferences = field(default_factory=UserPreferences)
+    # Exceptions to the role's permissions (only honored on plans with per-user permissions).
+    permission_adjustments: PermissionAdjustments = field(default_factory=PermissionAdjustments)
     last_seen_at: datetime | None = None
     joined_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -60,6 +63,9 @@ class User:
 
     def change_role(self, role: Role) -> None:
         self.role = role
+
+    def adjust_permissions(self, adjustments: PermissionAdjustments) -> None:
+        self.permission_adjustments = adjustments
 
     def change_password(self, new_hash: str) -> None:
         """Set a new password hash and clear any pending forced-change flag."""

@@ -48,6 +48,20 @@ def ser_user(u: User) -> dict:
         "avatar_initials": u.avatar_initials,
         "last_seen_at": u.last_seen_at,
         "joined_at": u.joined_at,
+        "permissions_customized": not u.permission_adjustments.is_empty,
+    }
+
+
+def ser_user_permissions(dto) -> dict:
+    return {
+        "user": ser_user(dto.user),
+        "available": dto.available,
+        "catalog": list(dto.catalog),
+        "role_permissions": list(dto.role_permissions),
+        "granted": list(dto.granted),
+        "revoked": list(dto.revoked),
+        "effective": list(dto.effective),
+        "locked": list(dto.locked),
     }
 
 

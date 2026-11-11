@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.repositories._support import Page, Paging, UserFilter
 from medicore.domain.shared.identifiers import TenantId, UserId
-from medicore.infrastructure.persistence.mappers.entities import to_doctor_profile, to_user
+from medicore.infrastructure.persistence.mappers.entities import (
+    adjustments_to_json,
+    to_doctor_profile,
+    to_user,
+)
 from medicore.infrastructure.persistence.models.user import DoctorProfileModel, UserModel
 
 
@@ -72,6 +76,7 @@ class SqlUserRepository:
         row.phone = user.phone
         row.must_change_password = user.must_change_password
         row.preferences = _prefs_to_json(user)
+        row.permission_adjustments = adjustments_to_json(user.permission_adjustments)
         row.last_seen_at = user.last_seen_at
         row.joined_at = user.joined_at
 

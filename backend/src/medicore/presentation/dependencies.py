@@ -17,7 +17,6 @@ from fastapi import Depends, Header, Request, status
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.entitlements import ensure_writable, granted_permissions
 from medicore.application.common.timezone import tenant_today
-from medicore.domain.enums import Role
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import PlatformAdminId, SessionId, TenantId, UserId
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
@@ -181,12 +180,12 @@ def get_actor(
 
     session_id = _session_id_or_401(claims)
     tenant_id = TenantId.parse(claims.tenant_id)
-    role = Role(claims.role)
     with factory.for_tenant(tenant_id) as uow:
         session = uow.sessions.get(session_id)
         tenant = uow.tenants.get_by_id(tenant_id)
-        effective = granted_permissions(uow, tenant, role) if tenant else frozenset()
-    if session is None or tenant is None or not session.is_active(clock.now()):
+        user = uow.users.get_by_id(UserId.parse(claims.user_id))
+        effective = granted_permissions(uow, tenant, user) if tenant and user else frozenset()
+    if session is None or tenant is None or user is None or not session.is_active(clock.now()):
         raise ApiError(
             status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
         )
@@ -194,9 +193,11 @@ def get_actor(
         ensure_writable(tenant, tenant_today(tenant, clock))
 
     return ActorContext(
-        user_id=UserId.parse(claims.user_id),
+        user_id=user.id,
         tenant_id=tenant_id,
-        role=role,
+        # The stored role, not the token's: a role change applies on the next request,
+        # consistent with the permissions resolved above.
+        role=user.role,
         impersonated_by=(
             PlatformAdminId.parse(claims.impersonator) if claims.impersonator else None
         ),

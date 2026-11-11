@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ConciergeBell, HeartPulse, KeyRound, Monitor, MonitorSmartphone, Pencil, Plus, Search, ShieldCheck, Smartphone, Stethoscope } from 'lucide-react'
+import { ConciergeBell, HeartPulse, KeyRound, LockKeyhole, Monitor, MonitorSmartphone, Pencil, Plus, Search, ShieldCheck, Smartphone, Stethoscope } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { usersApi } from '@/api/users'
 import { PageHeader } from '@/components/PageHeader'
+import { UserPermissionsModal } from '@/components/permissions/UserPermissionsModal'
 import { StatCard } from '@/components/StatCard'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
@@ -20,6 +21,7 @@ import { toast } from '@/components/ui/Toast'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { describeUserAgent, deviceLabel } from '@/lib/userAgent'
+import { useAuthStore } from '@/stores/auth'
 import type { Role, User } from '@/types'
 
 /** "miembro" / "miembros" depending on the count. */
@@ -49,6 +51,9 @@ export function UsersPage() {
   const [resetTarget, setResetTarget] = useState<User | null>(null)
   const [sessionsTarget, setSessionsTarget] = useState<User | null>(null)
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null)
+  const [permissionsTarget, setPermissionsTarget] = useState<User | null>(null)
+  const canManagePermissions = useAuthStore((s) => s.can('permissions.manage'))
+  const myId = useAuthStore((s) => s.session?.user_id)
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
   const [q, setQ] = useState('')
   const [offset, setOffset] = useState(0)
@@ -165,7 +170,14 @@ export function UsersPage() {
                       </div>
                     </div>
                   </Td>
-                  <Td>{t(`role.${u.role}`)}</Td>
+                  <Td>
+                    {t(`role.${u.role}`)}
+                    {u.permissions_customized && (
+                      <Badge tone="accent" className="ml-1.5">
+                        {t('uperm.customized')}
+                      </Badge>
+                    )}
+                  </Td>
                   <Td>{u.specialty ?? '—'}</Td>
                   <Td>
                     <Badge tone={statusTone(u.status)}>{t(`status.${u.status}`)}</Badge>
@@ -181,6 +193,12 @@ export function UsersPage() {
                         <KeyRound className="h-3.5 w-3.5" />
                         {t('users.reset_password')}
                       </Button>
+                      {canManagePermissions && u.role !== 'admin' && u.id !== myId && (
+                        <Button variant="ghost" size="sm" onClick={() => setPermissionsTarget(u)}>
+                          <LockKeyhole className="h-3.5 w-3.5" />
+                          {t('uperm.action')}
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" onClick={() => setSessionsTarget(u)}>
                         <MonitorSmartphone className="h-3.5 w-3.5" />
                         {t('users.view_sessions')}
@@ -221,6 +239,7 @@ export function UsersPage() {
       <EditUserModal user={editTarget} onClose={() => setEditTarget(null)} onDone={invalidate} />
       <ResetPasswordModal user={resetTarget} onClose={() => setResetTarget(null)} />
       <SessionsModal user={sessionsTarget} onClose={() => setSessionsTarget(null)} />
+      <UserPermissionsModal user={permissionsTarget} onClose={() => setPermissionsTarget(null)} />
 
       <Modal
         open={!!deactivateTarget}

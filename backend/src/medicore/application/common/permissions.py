@@ -25,6 +25,7 @@ from enum import StrEnum
 from medicore.application.common.context import ActorContext
 from medicore.domain.enums import AddonModule, Role
 from medicore.domain.shared.errors import PermissionDenied
+from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
 
 
 class Permission(StrEnum):
@@ -186,11 +187,26 @@ def locked_permissions(modules: Iterable[AddonModule]) -> frozenset[Permission]:
     )
 
 
+# Clinical acts only a doctor may perform, whatever a role or user customization says.
+DOCTOR_ONLY = frozenset({Permission.RECORDS_SIGN, Permission.RECORDS_AMEND})
+
+
 def granted(
-    role: Role, stored: Iterable[str] | None, modules: Iterable[AddonModule]
+    role: Role,
+    stored: Iterable[str] | None,
+    modules: Iterable[AddonModule],
+    adjustments: PermissionAdjustments | None = None,
 ) -> frozenset[Permission]:
-    """What a role may actually do in a clinic: its effective set minus locked modules."""
-    return effective_permissions(role, stored) - locked_permissions(modules)
+    """What a user may actually do in a clinic: the role's effective set, with the user's
+    own adjustments when given, minus the permissions of uncontracted modules."""
+    perms = effective_permissions(role, stored)
+    if adjustments is not None and not adjustments.is_empty:
+        catalog = {str(p): p for p in Permission}
+        wanted = adjustments.apply(str(p) for p in perms)
+        perms = frozenset(catalog[s] for s in wanted if s in catalog)
+    if role != Role.DOCTOR:
+        perms -= DOCTOR_ONLY
+    return perms - locked_permissions(modules)
 
 
 def has_permission(actor: ActorContext, permission: Permission) -> bool:

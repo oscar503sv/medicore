@@ -34,6 +34,8 @@ class UserModel(Base):
         Boolean, nullable=False, server_default=text("false")
     )
     preferences: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # {"granted": [...], "revoked": [...]}: exceptions to the role's permissions.
+    permission_adjustments: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

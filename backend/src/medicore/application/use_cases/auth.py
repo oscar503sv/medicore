@@ -162,7 +162,7 @@ class AuthenticateUser:
                 )
             if user.status != UserStatus.ACTIVE:
                 raise AuthenticationFailed("account is not active", code="auth.account_inactive")
-            permissions = granted_permissions(uow, tenant, user.role)
+            permissions = granted_permissions(uow, tenant, user)
             now = self._clock.now()
             user.last_seen_at = now
             uow.users.save(user)
@@ -311,7 +311,7 @@ def _build_profile(uow: UnitOfWork, user_id: UserId) -> MyProfileDTO:
     tenant = uow.tenants.get_by_id(user.tenant_id)
     if tenant is None:
         raise EntityNotFound("Tenant", user.tenant_id)
-    permissions = granted_permissions(uow, tenant, user.role)
+    permissions = granted_permissions(uow, tenant, user)
     return MyProfileDTO(
         name=user.name,
         email=user.email,

@@ -316,6 +316,21 @@ export interface User {
   avatar_initials: string
   last_seen_at: string | null
   joined_at: string
+  /** Has per-user exceptions to their role's permissions. */
+  permissions_customized: boolean
+}
+
+/** One person's permissions: their role's set plus exceptions (plans with per-user permissions). */
+export interface UserPermissions {
+  user: User
+  /** The clinic's plan includes per-user permissions. */
+  available: boolean
+  catalog: Permission[]
+  role_permissions: Permission[]
+  granted: Permission[]
+  revoked: Permission[]
+  effective: Permission[]
+  locked: Permission[]
 }
 
 // ── Patients ──────────────────────────────────────────────────────────────────

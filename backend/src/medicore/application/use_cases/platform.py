@@ -555,7 +555,7 @@ class ImpersonateTenant:
                     "clinic has no active admin to impersonate", code="support.no_active_admin"
                 )
             target = admins[0]
-            permissions = granted_permissions(uow, tenant, target.role)
+            permissions = granted_permissions(uow, tenant, target)
             now = self._clock.now()
             session_id = SessionId.new()
             uow.sessions.add(

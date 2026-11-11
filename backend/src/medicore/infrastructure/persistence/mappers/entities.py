@@ -50,6 +50,7 @@ from medicore.domain.shared.identifiers import (
 )
 from medicore.domain.value_objects.blood_type import BloodType
 from medicore.domain.value_objects.contact_info import ContactInfo
+from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.user_preferences import (
     NotificationPreferences,
@@ -126,6 +127,16 @@ def _prefs_from_json(d: dict) -> UserPreferences:
     )
 
 
+def adjustments_from_json(d: dict) -> PermissionAdjustments:
+    return PermissionAdjustments(
+        granted=frozenset(d.get("granted", [])), revoked=frozenset(d.get("revoked", []))
+    )
+
+
+def adjustments_to_json(a: PermissionAdjustments) -> dict:
+    return {"granted": sorted(a.granted), "revoked": sorted(a.revoked)} if not a.is_empty else {}
+
+
 def to_user(row: UserModel) -> User:
     return User(
         id=UserId.parse(row.id),
@@ -140,6 +151,7 @@ def to_user(row: UserModel) -> User:
         phone=row.phone,
         must_change_password=row.must_change_password,
         preferences=_prefs_from_json(row.preferences or {}),
+        permission_adjustments=adjustments_from_json(row.permission_adjustments or {}),
         last_seen_at=row.last_seen_at,
         joined_at=row.joined_at,
     )

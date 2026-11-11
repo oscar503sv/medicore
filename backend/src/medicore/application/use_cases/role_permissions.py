@@ -18,6 +18,7 @@ from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.permissions import (
+    DOCTOR_ONLY,
     ROLE_PERMISSIONS,
     Permission,
     effective_permissions,
@@ -29,8 +30,6 @@ from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.role_permission_override import RolePermissionOverride
 from medicore.domain.enums import Role
 from medicore.domain.shared.identifiers import RolePermissionOverrideId, TenantId
-
-DOCTOR_ONLY = frozenset({Permission.RECORDS_SIGN, Permission.RECORDS_AMEND})
 
 
 @dataclass(frozen=True, slots=True)

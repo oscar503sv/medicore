@@ -9,6 +9,10 @@ from medicore.application.use_cases.sessions import (
     RevokeAllUserSessions,
     RevokeUserSession,
 )
+from medicore.application.use_cases.user_permissions import (
+    GetUserPermissions,
+    UpdateUserPermissions,
+)
 from medicore.application.use_cases.users import (
     InviteUser,
     InviteUserCommand,
@@ -28,11 +32,13 @@ from medicore.presentation.schemas.users import (
     InviteUserRequest,
     ResetPasswordRequest,
     UpdateRoleRequest,
+    UpdateUserPermissionsRequest,
     UpdateUserRequest,
     UserListResponse,
+    UserPermissionsResponse,
     UserResponse,
 )
-from medicore.presentation.serializers import ser_session_info, ser_user
+from medicore.presentation.serializers import ser_session_info, ser_user, ser_user_permissions
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -83,6 +89,21 @@ def update_user(user_id: str, body: UpdateUserRequest, actor: Actor, uow: UoW, c
 def update_role(user_id: str, body: UpdateRoleRequest, actor: Actor, uow: UoW, clock: Clock):
     user = UpdateUserRole(uow, clock).execute(actor, UserId.parse(user_id), body.role)
     return ser_user(user)
+
+
+@router.get("/{user_id}/permissions", response_model=UserPermissionsResponse)
+def get_user_permissions(user_id: str, actor: Actor, uow: UoW):
+    return ser_user_permissions(GetUserPermissions(uow).execute(actor, UserId.parse(user_id)))
+
+
+@router.put("/{user_id}/permissions", response_model=UserPermissionsResponse)
+def update_user_permissions(
+    user_id: str, body: UpdateUserPermissionsRequest, actor: Actor, uow: UoW, clock: Clock
+):
+    dto = UpdateUserPermissions(uow, clock).execute(
+        actor, UserId.parse(user_id), body.permissions
+    )
+    return ser_user_permissions(dto)
 
 
 @router.post("/{user_id}/suspend", response_model=UserResponse)

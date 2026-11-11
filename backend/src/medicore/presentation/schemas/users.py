@@ -48,6 +48,7 @@ class UserResponse(BaseModel):
     avatar_initials: str
     last_seen_at: datetime | None
     joined_at: datetime
+    permissions_customized: bool = False
 
 
 class UserListResponse(BaseModel):
@@ -55,3 +56,18 @@ class UserListResponse(BaseModel):
     total: int
     offset: int
     limit: int
+
+
+class UpdateUserPermissionsRequest(BaseModel):
+    permissions: list[str]  # the full set wanted; the role's own set clears every exception
+
+
+class UserPermissionsResponse(BaseModel):
+    user: UserResponse
+    available: bool
+    catalog: list[str]
+    role_permissions: list[str]
+    granted: list[str]
+    revoked: list[str]
+    effective: list[str]
+    locked: list[str]

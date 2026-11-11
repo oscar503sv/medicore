@@ -1,54 +1,16 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import {
-  Activity,
-  Building2,
-  CalendarDays,
-  Check,
-  Clock,
-  FileText,
-  KeyRound,
-  Lock,
-  Pill,
-  RotateCcw,
-  ScrollText,
-  ShieldCheck,
-  Stethoscope,
-  Syringe,
-  UserCog,
-  Users,
-} from 'lucide-react'
+import { Check, KeyRound, Lock, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
+import { DOCTOR_ONLY, GROUP_ICONS, groupByResource, sameSet } from '@/lib/permissions'
 import type { Permission, PermissionsMatrix, Role } from '@/types'
 
 // Column order: admin first (locked reference), then clinical roles.
 const ROLES: Role[] = ['admin', 'doctor', 'nurse', 'receptionist']
-
-// Clinical/legal guardrail mirrored from the backend: only doctors may hold these,
-// and they cannot be taken away from them. Rendered locked in every column.
-const DOCTOR_ONLY: Permission[] = ['records.sign', 'records.amend']
-
-const GROUP_ICONS: Record<string, typeof Users> = {
-  patients: Users,
-  appointments: CalendarDays,
-  availability: Clock,
-  consultations: Stethoscope,
-  records: FileText,
-  prescriptions: Pill,
-  diagnoses: Activity,
-  insurers: ShieldCheck,
-  users: UserCog,
-  organization: Building2,
-  audit: ScrollText,
-  permissions: KeyRound,
-  vaccinations: Syringe,
-  applications: Pill,
-  procedures: Activity,
-}
 
 interface Props {
   matrix: PermissionsMatrix
@@ -65,10 +27,6 @@ function draftFrom(matrix: PermissionsMatrix): Draft {
   ) as Draft
 }
 
-function sameSet(a: Permission[], b: Permission[]) {
-  return a.length === b.length && a.every((p) => b.includes(p))
-}
-
 export function PermissionsMatrixTable({ matrix, onSaveRole, onResetRole, busy }: Props) {
   const t = useT()
   const [draft, setDraft] = useState<Draft>(() => draftFrom(matrix))
@@ -76,14 +34,7 @@ export function PermissionsMatrixTable({ matrix, onSaveRole, onResetRole, busy }
   // Re-sync local edits whenever the server matrix changes (save/reset round-trips).
   useEffect(() => setDraft(draftFrom(matrix)), [matrix])
 
-  const groups = useMemo(() => {
-    const byResource = new Map<string, Permission[]>()
-    for (const p of matrix.catalog) {
-      const resource = p.split('.')[0]
-      byResource.set(resource, [...(byResource.get(resource) ?? []), p])
-    }
-    return [...byResource.entries()]
-  }, [matrix.catalog])
+  const groups = useMemo(() => groupByResource(matrix.catalog), [matrix.catalog])
 
   const total = matrix.catalog.length
 
