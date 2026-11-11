@@ -86,6 +86,11 @@ class UpdateTenantRequest(BaseModel):
     location_name: str | None = None  # renames the clinic's primary location
 
 
+class AddTenantLocationRequest(BaseModel):
+    name: str
+    address: str | None = None
+
+
 class SetTenantStatusRequest(BaseModel):
     status: TenantStatus
 

@@ -9,7 +9,7 @@ export const organizationApi = {
   payments: () =>
     api.get<SubscriptionPayment[]>('/organization/subscription/payments').then((r) => r.data),
 
-  update: (payload: Partial<Pick<Organization, 'legal_name' | 'tax_id' | 'timezone'>>) =>
+  update: (payload: Partial<Pick<Organization, 'legal_name' | 'tax_id'>>) =>
     api.patch<Organization>('/organization', payload).then((r) => r.data),
 
   addLocation: (payload: { name: string; address?: string; is_primary?: boolean }) =>

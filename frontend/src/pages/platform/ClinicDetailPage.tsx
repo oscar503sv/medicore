@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { Permission, PermissionsMatrix, Role, User } from '@/types'
 import { PageHeader } from '@/components/PageHeader'
 import { PermissionsMatrixTable } from '@/components/permissions/PermissionsMatrixTable'
+import { ClinicLocationsCard } from '@/components/platform/ClinicLocationsCard'
 import { StatCard } from '@/components/StatCard'
 import { PaymentsCard } from '@/components/subscriptions/PaymentsCard'
 import { SubscriptionCard } from '@/components/subscriptions/SubscriptionCard'
@@ -260,6 +261,8 @@ export function ClinicDetailPage() {
           </div>
         </form>
       </Card>
+
+      <ClinicLocationsCard tenantId={id} locations={clinic.locations} onSaved={invalidate} />
 
       <SubscriptionCard tenantId={id} onSaved={invalidate} />
       <PaymentsCard tenantId={id} onRecorded={invalidate} />

@@ -20,6 +20,7 @@ export function OrganizationSection() {
   const t = useT()
   const qc = useQueryClient()
   const canManage = useAuthStore((s) => s.can('organization.manage'))
+  const canManageLocations = useAuthStore((s) => s.can('locations.manage'))
 
   const { data: org, isLoading } = useQuery({
     queryKey: ['organization'],
@@ -28,7 +29,6 @@ export function OrganizationSection() {
 
   const [legalName, setLegalName] = useState('')
   const [taxId, setTaxId] = useState('')
-  const [timezone, setTimezone] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Location | null>(null)
 
@@ -36,7 +36,6 @@ export function OrganizationSection() {
     if (org) {
       setLegalName(org.legal_name)
       setTaxId(org.tax_id)
-      setTimezone(org.timezone)
     }
   }, [org])
 
@@ -44,7 +43,7 @@ export function OrganizationSection() {
 
   const save = useMutation({
     mutationFn: () =>
-      organizationApi.update({ legal_name: legalName, tax_id: taxId, timezone }),
+      organizationApi.update({ legal_name: legalName, tax_id: taxId }),
     onSuccess: (data) => {
       applyResult(data)
       toast(t('org.saved_ok'))
@@ -54,8 +53,7 @@ export function OrganizationSection() {
 
   if (isLoading || !org) return <PageLoader />
 
-  const dirty =
-    legalName !== org.legal_name || taxId !== org.tax_id || timezone !== org.timezone
+  const dirty = legalName !== org.legal_name || taxId !== org.tax_id
 
   return (
     <div className="space-y-6">
@@ -78,14 +76,14 @@ export function OrganizationSection() {
               disabled={!canManage}
               onChange={(e) => setTaxId(e.target.value)}
             />
-            <Input
-              label={t('org.timezone')}
-              value={timezone}
-              disabled={!canManage}
-              placeholder="America/Mexico_City"
-              onChange={(e) => setTimezone(e.target.value)}
-            />
-            <Input label={t('org.slug')} value={org.slug} disabled />
+            <div>
+              <Input label={t('org.timezone')} value={org.timezone} disabled />
+              <p className="mt-1 text-xs text-tx-3">{t('org.support_managed')}</p>
+            </div>
+            <div>
+              <Input label={t('org.slug')} value={org.slug} disabled />
+              <p className="mt-1 text-xs text-tx-3">{t('org.slug_fixed')}</p>
+            </div>
           </div>
           {canManage && (
             <div className="flex justify-end">
@@ -105,7 +103,7 @@ export function OrganizationSection() {
         <CardHeader
           title={t('org.locations')}
           action={
-            canManage ? (
+            canManageLocations ? (
               <Button size="sm" variant="outline" onClick={() => setAddOpen(true)}>
                 <Plus className="h-3.5 w-3.5" />
                 {t('org.add_location')}
@@ -126,7 +124,7 @@ export function OrganizationSection() {
                   {loc.address && <p className="text-xs text-tx-3">{loc.address}</p>}
                 </div>
               </div>
-              {canManage && (
+              {canManageLocations && (
                 <Button size="sm" variant="ghost" onClick={() => setEditTarget(loc)}>
                   <Pencil className="h-3.5 w-3.5" />
                   {t('app.edit')}

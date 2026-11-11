@@ -28,6 +28,7 @@ from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
 from medicore.application.ports.unit_of_work import UnitOfWorkFactory
 from medicore.application.use_cases import role_permissions
+from medicore.application.use_cases.organization import open_location
 from medicore.application.use_cases.subscriptions import (
     SubscriptionCommand,
     resolve_subscription,
@@ -328,6 +329,33 @@ class UpdateTenant:
                 _audit(
                     actor, self._clock.now(), "tenant.updated", "Tenant", str(tenant_id),
                     tenant_id=tenant_id,
+                )
+            )
+            uow.commit()
+        return tenant
+
+
+class AddTenantLocation:
+    """The console opens a site for a clinic (same plan limit as the clinic itself)."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(
+        self, actor: PlatformActorContext, tenant_id: TenantId, name: str,
+        address: str | None = None,
+    ) -> Tenant:
+        with self._factory.for_tenant(tenant_id) as uow:
+            tenant = uow.tenants.get_by_id(tenant_id)
+            if tenant is None:
+                raise EntityNotFound("Tenant", tenant_id)
+            location = open_location(uow, tenant, name, address)
+            uow.tenants.save(tenant)
+            uow.platform_audit.append(
+                _audit(
+                    actor, self._clock.now(), "location.added", "Location", str(location.id),
+                    tenant_id=tenant_id, name=location.name,
                 )
             )
             uow.commit()

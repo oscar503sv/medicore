@@ -3,8 +3,9 @@
 
 The clinic edits the user's full permission set; it is stored as the difference from the
 role (grants and revocations), so later changes to the role still reach the user except
-where an exception was made. Same guardrails as role customization: admins aren't
-customizable and signing/amending records stays with doctors. Nobody edits their own.
+where an exception was made. Same guardrails as role customization (see ``validate_for_role``):
+admins aren't customizable, signing/amending records stays with doctors and handing out
+permissions stays with admins. Nobody edits their own.
 """
 
 from __future__ import annotations
@@ -16,11 +17,11 @@ from medicore.application.common.context import ActorContext
 from medicore.application.common.entitlements import granted_permissions, has_feature
 from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.permissions import (
-    DOCTOR_ONLY,
     Permission,
     effective_permissions,
     ensure_permission,
     locked_permissions,
+    validate_for_role,
 )
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -87,31 +88,6 @@ class GetUserPermissions:
             return _dto(self._uow, tenant, user)
 
 
-def _parse(user: User, permissions: list[str]) -> frozenset[Permission]:
-    catalog = {str(p): p for p in Permission}
-    unknown = sorted(s for s in permissions if s not in catalog)
-    if unknown:
-        raise ValidationError(
-            f"unknown permissions: {', '.join(unknown)}",
-            code="roles.unknown_permissions", permissions=",".join(unknown),
-        )
-    wanted = frozenset(catalog[s] for s in permissions)
-    if user.role == Role.DOCTOR:
-        missing = DOCTOR_ONLY - wanted
-        if missing:
-            raise ValidationError(
-                "a doctor must keep: " + ", ".join(_sorted(missing)),
-                code="roles.doctor_must_keep", permissions=",".join(_sorted(missing)),
-            )
-    elif DOCTOR_ONLY & wanted:
-        forbidden = _sorted(DOCTOR_ONLY & wanted)
-        raise ValidationError(
-            "only doctors may hold: " + ", ".join(forbidden),
-            code="roles.doctor_only", permissions=",".join(forbidden),
-        )
-    return wanted
-
-
 class UpdateUserPermissions:
     """Set a user's permissions. ``permissions`` is the full set wanted; sending exactly
     the role's set (or calling with ``reset``) removes every exception."""
@@ -139,7 +115,7 @@ class UpdateUserPermissions:
                 raise ValidationError(
                     "administrators always have full access", code="user_permissions.admin"
                 )
-            wanted = _parse(user, permissions)
+            wanted = validate_for_role(user.role, permissions)
             before = granted_permissions(self._uow, tenant, user)
             role_set = _role_set(self._uow, user.role)
             user.adjust_permissions(

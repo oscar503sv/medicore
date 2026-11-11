@@ -14,7 +14,11 @@ from datetime import datetime
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.errors import EntityNotFound
-from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.permissions import (
+    Permission,
+    ensure_acts_on_admins,
+    ensure_permission,
+)
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork, UnitOfWorkFactory
 from medicore.domain.entities.auth_session import AuthSession
@@ -117,6 +121,7 @@ class RevokeUserSession:
         ensure_permission(actor, Permission.USERS_MANAGE)
         with self._uow:
             user = _require_tenant_user(self._uow, user_id)
+            ensure_acts_on_admins(actor, user.role)
             session = self._uow.sessions.get(session_id)
             if session is None or session.user_id != user_id.value:
                 raise EntityNotFound("Session", session_id)
@@ -142,6 +147,7 @@ class RevokeAllUserSessions:
         ensure_permission(actor, Permission.USERS_MANAGE)
         with self._uow:
             user = _require_tenant_user(self._uow, user_id)
+            ensure_acts_on_admins(actor, user.role)
             now = self._clock.now()
             self._uow.sessions.revoke_all_for_user(user_id.value, now)
             self._uow.audit.append(

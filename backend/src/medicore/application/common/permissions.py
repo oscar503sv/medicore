@@ -12,6 +12,7 @@ Summary of the DOMAIN_MODEL rules the defaults encode:
                    records; NOT book appointments, NOT edit patients, NOT start/sign.
   * doctor       → all clinical work for their patients + their own availability.
   * admin        → user & organization management; full access except sign/amend.
+                   Only admins act on other admins and hand out permissions.
 
 Ownership checks (e.g. doctors only edit their own consultations) stay next to the use
 cases — they answer "may they do it to *this* object", not "may the role do it at all".
@@ -23,6 +24,7 @@ from collections.abc import Iterable
 from enum import StrEnum
 
 from medicore.application.common.context import ActorContext
+from medicore.application.common.errors import ValidationError
 from medicore.domain.enums import AddonModule, Role
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
@@ -57,6 +59,7 @@ class Permission(StrEnum):
     USERS_MANAGE = "users.manage"
     ORGANIZATION_VIEW = "organization.view"
     ORGANIZATION_MANAGE = "organization.manage"
+    LOCATIONS_MANAGE = "locations.manage"
     AUDIT_VIEW = "audit.view"
     PERMISSIONS_MANAGE = "permissions.manage"
 
@@ -85,6 +88,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.USERS_MANAGE,
         Permission.ORGANIZATION_VIEW,
         Permission.ORGANIZATION_MANAGE,
+        Permission.LOCATIONS_MANAGE,
         Permission.AUDIT_VIEW,
         Permission.PERMISSIONS_MANAGE,
     }),
@@ -190,6 +194,47 @@ def locked_permissions(modules: Iterable[AddonModule]) -> frozenset[Permission]:
 # Clinical acts only a doctor may perform, whatever a role or user customization says.
 DOCTOR_ONLY = frozenset({Permission.RECORDS_SIGN, Permission.RECORDS_AMEND})
 
+# Handing out permissions stays with administrators: delegating it would let anyone who
+# holds it grant themselves (through a colleague) everything else.
+ADMIN_ONLY = frozenset({Permission.PERMISSIONS_MANAGE})
+
+
+def _names(perms: Iterable[Permission]) -> str:
+    return ",".join(sorted(str(p) for p in perms))
+
+
+def validate_for_role(role: Role, permissions: Iterable[str]) -> frozenset[Permission]:
+    """Parse a permission set meant for someone of ``role`` (a role customization or one
+    user's set) and apply the guardrails: known permissions only, doctors keep signing and
+    amending and nobody else gets them, administration of permissions stays with admins."""
+    catalog = {str(p): p for p in Permission}
+    wanted = list(permissions)
+    unknown = sorted(s for s in wanted if s not in catalog)
+    if unknown:
+        raise ValidationError(
+            f"unknown permissions: {', '.join(unknown)}",
+            code="roles.unknown_permissions", permissions=",".join(unknown),
+        )
+    parsed = frozenset(catalog[s] for s in wanted)
+    if role == Role.DOCTOR:
+        missing = DOCTOR_ONLY - parsed
+        if missing:
+            raise ValidationError(
+                "a doctor must keep: " + _names(missing),
+                code="roles.doctor_must_keep", permissions=_names(missing),
+            )
+    elif DOCTOR_ONLY & parsed:
+        raise ValidationError(
+            "only doctors may hold: " + _names(DOCTOR_ONLY & parsed),
+            code="roles.doctor_only", permissions=_names(DOCTOR_ONLY & parsed),
+        )
+    if role != Role.ADMIN and ADMIN_ONLY & parsed:
+        raise ValidationError(
+            "only administrators may hold: " + _names(ADMIN_ONLY & parsed),
+            code="roles.admin_only", permissions=_names(ADMIN_ONLY & parsed),
+        )
+    return parsed
+
 
 def granted(
     role: Role,
@@ -206,6 +251,8 @@ def granted(
         perms = frozenset(catalog[s] for s in wanted if s in catalog)
     if role != Role.DOCTOR:
         perms -= DOCTOR_ONLY
+    if role != Role.ADMIN:
+        perms -= ADMIN_ONLY
     return perms - locked_permissions(modules)
 
 
@@ -215,6 +262,16 @@ def has_permission(actor: ActorContext, permission: Permission) -> bool:
     if actor.permissions is not None:
         return str(permission) in actor.permissions
     return permission in ROLE_PERMISSIONS[actor.role]
+
+
+def ensure_acts_on_admins(actor: ActorContext, *roles: Role) -> None:
+    """Only an administrator may act on an administrator account (edit, suspend, reset its
+    password, close its sessions) or make someone an administrator. Someone else holding
+    ``users.manage`` still manages the rest of the staff."""
+    if Role.ADMIN in roles and actor.role != Role.ADMIN:
+        raise PermissionDenied(
+            "only administrators may manage administrator accounts", code="users.admin_only"
+        )
 
 
 def ensure_permission(actor: ActorContext, permission: Permission) -> None:

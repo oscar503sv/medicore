@@ -41,6 +41,7 @@ EXPECTED_MATRIX: dict[Role, set[str]] = {
         "insurers.view", "insurers.manage",
         "users.view", "users.manage",
         "organization.view", "organization.manage",
+        "locations.manage",
         "audit.view",
         "permissions.manage",
     },

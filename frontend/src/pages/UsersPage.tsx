@@ -54,6 +54,8 @@ export function UsersPage() {
   const [permissionsTarget, setPermissionsTarget] = useState<User | null>(null)
   const canManagePermissions = useAuthStore((s) => s.can('permissions.manage'))
   const myId = useAuthStore((s) => s.session?.user_id)
+  // Only an administrator acts on administrator accounts (enforced by the API too).
+  const isAdmin = useAuthStore((s) => s.hasRole('admin'))
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
   const [q, setQ] = useState('')
   const [offset, setOffset] = useState(0)
@@ -184,6 +186,9 @@ export function UsersPage() {
                   </Td>
                   <Td>{fmtDateTimeTz(u.last_seen_at)}</Td>
                   <Td>
+                    {u.role === 'admin' && !isAdmin ? (
+                      <span className="text-xs text-tx-4">{t('users.admin_only_hint')}</span>
+                    ) : (
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="sm" onClick={() => setEditTarget(u)}>
                         <Pencil className="h-3.5 w-3.5" />
@@ -223,6 +228,7 @@ export function UsersPage() {
                         </Button>
                       )}
                     </div>
+                    )}
                   </Td>
                 </Tr>
               ))}
@@ -275,6 +281,7 @@ function UserFields({
   onChange: (next: UserFieldsState) => void
 }) {
   const t = useT()
+  const isAdmin = useAuthStore((s) => s.hasRole('admin'))
   const set = (patch: Partial<UserFieldsState>) => onChange({ ...value, ...patch })
   return (
     <>
@@ -284,7 +291,7 @@ function UserFields({
           <option value="doctor">{t('role.doctor')}</option>
           <option value="nurse">{t('role.nurse')}</option>
           <option value="receptionist">{t('role.receptionist')}</option>
-          <option value="admin">{t('role.admin')}</option>
+          {isAdmin && <option value="admin">{t('role.admin')}</option>}
         </Select>
         <Select label={t('users.sex')} value={value.sex} onChange={(e) => set({ sex: e.target.value })}>
           <option value="female">{t('sex.female')}</option>

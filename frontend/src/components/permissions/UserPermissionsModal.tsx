@@ -11,7 +11,7 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
-import { DOCTOR_ONLY, GROUP_ICONS, groupByResource, sameSet } from '@/lib/permissions'
+import { DOCTOR_ONLY, GROUP_ICONS, groupByResource, isFixedFor, sameSet } from '@/lib/permissions'
 import type { Permission, User, UserPermissions } from '@/types'
 
 /** A user's permissions as their role's set plus exceptions. Saving the role's exact set
@@ -116,8 +116,9 @@ function PermissionsForm({ data, onClose }: { data: UserPermissions; onClose: ()
               </h4>
               <ul>
                 {permissions.map((p) => {
-                  const fixed = DOCTOR_ONLY.includes(p)
-                  const checked = fixed ? isDoctor : draft.includes(p)
+                  const doctorOnly = DOCTOR_ONLY.includes(p)
+                  const fixed = isFixedFor(data.user.role, p)
+                  const checked = fixed ? doctorOnly && isDoctor : draft.includes(p)
                   const inRole = data.role_permissions.includes(p)
                   const locked = data.locked.includes(p)
                   return (
@@ -128,7 +129,13 @@ function PermissionsForm({ data, onClose }: { data: UserPermissions; onClose: ()
                           locked && 'opacity-60',
                           fixed || !editable ? 'cursor-default' : 'cursor-pointer',
                         )}
-                        title={fixed ? t('permissions.doctor_only') : undefined}
+                        title={
+                          !fixed
+                            ? undefined
+                            : doctorOnly
+                              ? t('permissions.doctor_only')
+                              : t('permissions.admin_only')
+                        }
                       >
                         {fixed ? (
                           <Lock className="h-3.5 w-3.5 shrink-0 text-tx-4" />

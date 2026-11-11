@@ -1,6 +1,7 @@
 import {
   Activity,
   Building2,
+  MapPin,
   CalendarDays,
   Clock,
   FileText,
@@ -19,6 +20,14 @@ import type { Permission } from '@/types'
 // and they cannot be taken away from them.
 export const DOCTOR_ONLY: Permission[] = ['records.sign', 'records.amend']
 
+// Mirrored from the backend: handing out permissions stays with administrators.
+export const ADMIN_ONLY: Permission[] = ['permissions.manage']
+
+/** Fixed for this role: neither granted nor removed by a customization. */
+export function isFixedFor(role: string, permission: Permission): boolean {
+  return DOCTOR_ONLY.includes(permission) || (role !== 'admin' && ADMIN_ONLY.includes(permission))
+}
+
 export const GROUP_ICONS: Record<string, typeof Users> = {
   patients: Users,
   appointments: CalendarDays,
@@ -30,6 +39,7 @@ export const GROUP_ICONS: Record<string, typeof Users> = {
   insurers: ShieldCheck,
   users: UserCog,
   organization: Building2,
+  locations: MapPin,
   audit: ScrollText,
   permissions: KeyRound,
   vaccinations: Syringe,

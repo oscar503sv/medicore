@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query, Request, Response
 from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock as ClockPort
 from medicore.application.use_cases.platform import (
+    AddTenantLocation,
     AuthenticatePlatformAdmin,
     CreateTenantCommand,
     CreateTenantWithAdmin,
@@ -54,6 +55,7 @@ from medicore.presentation.dependencies import (
 from medicore.presentation.routers.role_permissions import parse_role, ser_matrix
 from medicore.presentation.schemas.auth import SessionListResponse
 from medicore.presentation.schemas.platform import (
+    AddTenantLocationRequest,
     CreateTenantRequest,
     CreateTenantResponse,
     GlobalAuditListResponse,
@@ -190,6 +192,15 @@ def update_tenant(tenant_id: str, body: UpdateTenantRequest, actor: PlatformActo
                   factory: UoWFactory, clock: Clock):
     changes = body.model_dump(exclude_none=True)
     tenant = UpdateTenant(factory, clock).execute(actor, TenantId.parse(tenant_id), **changes)
+    return _ser(tenant, clock)
+
+
+@router.post("/tenants/{tenant_id}/locations", response_model=TenantResponse, status_code=201)
+def add_tenant_location(tenant_id: str, body: AddTenantLocationRequest, actor: PlatformActor,
+                        factory: UoWFactory, clock: Clock):
+    tenant = AddTenantLocation(factory, clock).execute(
+        actor, TenantId.parse(tenant_id), name=body.name, address=body.address
+    )
     return _ser(tenant, clock)
 
 

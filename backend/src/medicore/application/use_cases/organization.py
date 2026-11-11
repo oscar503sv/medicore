@@ -1,4 +1,9 @@
-"""Organization (tenant) use cases (admin)."""
+"""Organization (tenant) use cases (admin).
+
+What stays with the platform console: the slug (never changes), the subscription and the
+timezone — changing it moves the clinic's "today", agenda and reminders, so it is set once
+with Medicore support. Sites are self-service within the plan's limit (``locations.manage``).
+"""
 
 from __future__ import annotations
 
@@ -11,6 +16,7 @@ from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.enums import IcdVersion
+from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import LocationId
 
 
@@ -27,9 +33,9 @@ class GetOrganization:
 
 
 class UpdateOrganization:
-    # The subscription (plan, limits) is not the clinic's to change: only the platform
-    # console sets it, so it is deliberately absent here.
-    _EDITABLE = {"legal_name", "tax_id", "timezone", "icd_version"}
+    # The subscription (plan, limits) and the timezone are not the clinic's to change: only
+    # the platform console sets them, so they are deliberately absent here.
+    _EDITABLE = {"legal_name", "tax_id", "icd_version"}
 
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
@@ -38,6 +44,12 @@ class UpdateOrganization:
     def execute(self, actor: ActorContext, **changes: object) -> Tenant:
         ensure_permission(actor, Permission.ORGANIZATION_MANAGE)
         tenant = self._require()
+        timezone = changes.get("timezone")
+        if timezone is not None and timezone != tenant.timezone:
+            raise PermissionDenied(
+                "the clinic's timezone is changed by Medicore support",
+                code="organization.timezone_locked",
+            )
         with self._uow:
             for key, value in changes.items():
                 if key in self._EDITABLE:
@@ -61,6 +73,22 @@ class UpdateOrganization:
         return tenant
 
 
+def open_location(
+    uow: UnitOfWork, tenant: Tenant, name: str, address: str | None, is_primary: bool = False
+) -> Location:
+    """Add a site to the clinic within its plan's site limit (shared with the console)."""
+    ensure_location_for(uow, tenant)
+    location = Location(
+        id=LocationId.new(),
+        tenant_id=tenant.id,
+        name=name,
+        address=address,
+        is_primary=is_primary,
+    )
+    tenant.add_location(location)
+    return location
+
+
 class AddLocation:
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
@@ -69,20 +97,12 @@ class AddLocation:
     def execute(
         self, actor: ActorContext, name: str, address: str | None = None, is_primary: bool = False
     ) -> Tenant:
-        ensure_permission(actor, Permission.ORGANIZATION_MANAGE)
+        ensure_permission(actor, Permission.LOCATIONS_MANAGE)
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", actor.tenant_id)
-        location = Location(
-            id=LocationId.new(),
-            tenant_id=tenant.id,
-            name=name,
-            address=address,
-            is_primary=is_primary,
-        )
         with self._uow:
-            ensure_location_for(self._uow, tenant)
-            tenant.add_location(location)
+            location = open_location(self._uow, tenant, name, address, is_primary)
             self._uow.tenants.save(tenant)
             self._uow.audit.append(
                 audit_entry(
@@ -102,7 +122,7 @@ class UpdateLocation:
     def execute(
         self, actor: ActorContext, location_id: LocationId, **changes: object
     ) -> Tenant:
-        ensure_permission(actor, Permission.ORGANIZATION_MANAGE)
+        ensure_permission(actor, Permission.LOCATIONS_MANAGE)
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", actor.tenant_id)

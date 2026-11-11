@@ -139,6 +139,9 @@ export const platformTenantsApi = {
     }>,
   ) => platformApi.patch<Tenant>(`/platform/tenants/${id}`, payload).then((r) => r.data),
 
+  addLocation: (id: string, payload: { name: string; address: string | null }) =>
+    platformApi.post<Tenant>(`/platform/tenants/${id}/locations`, payload).then((r) => r.data),
+
   setStatus: (id: string, status: string) =>
     platformApi
       .post<Tenant>(`/platform/tenants/${id}/status`, { status })

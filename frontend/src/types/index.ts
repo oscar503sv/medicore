@@ -22,6 +22,7 @@ export type Permission =
   | 'users.manage'
   | 'organization.view'
   | 'organization.manage'
+  | 'locations.manage'
   | 'audit.view'
   | 'permissions.manage'
   | 'vaccinations.view'
