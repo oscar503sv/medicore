@@ -6,6 +6,7 @@ import {
   MapPin,
   CalendarDays,
   Clock,
+  FileSpreadsheet,
   FileText,
   KeyRound,
   Pill,
@@ -49,6 +50,7 @@ export const GROUP_ICONS: Record<string, typeof Users> = {
   applications: Pill,
   procedures: Activity,
   analytics: BarChart3,
+  reports: FileSpreadsheet,
 }
 
 /** The catalog grouped by resource (the part before the dot), in catalog order. */

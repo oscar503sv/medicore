@@ -11,6 +11,7 @@ import { AuditPage } from '@/pages/AuditPage'
 import { AvailabilityPage } from '@/pages/AvailabilityPage'
 import { FeesPage } from '@/pages/FeesPage'
 import { AnalyticsPage } from '@/pages/AnalyticsPage'
+import { ReportsPage } from '@/pages/ReportsPage'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage'
 import { ApplicationsPage } from '@/pages/ApplicationsPage'
 import { ProcedureDetailPage } from '@/pages/ProcedureDetailPage'
@@ -129,6 +130,7 @@ export function App() {
           <Route path="/availability" element={<AvailabilityPage />} />
           <Route path="/fees" element={<FeesPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/permissions" element={<PermissionsPage />} />
           <Route path="/insurers" element={<InsurersPage />} />

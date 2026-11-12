@@ -52,6 +52,7 @@ from medicore.infrastructure.persistence.repositories.platform import (
 )
 from medicore.infrastructure.persistence.repositories.platform_reads import SqlPlatformReadModel
 from medicore.infrastructure.persistence.repositories.procedure import SqlProcedureRepository
+from medicore.infrastructure.persistence.repositories.reports import SqlReportReadModel
 from medicore.infrastructure.persistence.repositories.role_permission_override import (
     SqlRolePermissionOverrideRepository,
 )
@@ -99,6 +100,7 @@ class SqlAlchemyUnitOfWork:
         self.procedures = SqlProcedureRepository(session, tenant_id)
         self.subscription_payments = SqlSubscriptionPaymentRepository(session, tenant_id)
         self.analytics = SqlAnalyticsReadModel(session, tenant_id)
+        self.reports = SqlReportReadModel(session, tenant_id)
         self.tenants = SqlTenantRepository(session)  # global (non-scoped)
         self.platform_audit = SqlPlatformAuditLogRepository(session)  # global (non-scoped)
         self.sessions = SqlAuthSessionRepository(session)  # global (non-scoped)

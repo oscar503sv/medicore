@@ -37,6 +37,7 @@ export type Permission =
   | 'analytics.own'
   | 'analytics.clinic'
   | 'analytics.money'
+  | 'reports.export'
 
 export interface RolePermissionsEntry {
   defaults: Permission[]

@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException with a translatable code
     ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
     ├── schemas/         # Pydantic request + response models per resource
-    └── routers/         # 24 routers, 167 endpoints under /api/v1/
+    └── routers/         # 25 routers, 169 endpoints under /api/v1/
 ```
 
 ### Multi-tenancy
@@ -184,6 +184,22 @@ Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 - **Who sees what**: `analytics.own` (a doctor's own appointments), `analytics.clinic` (the whole clinic) and `analytics.money` (income in the metrics one can see). Income is the charge recorded on attended visits and performed procedures — not money received.
 - **The clinic's practice model** (`tenants.practice_model`, set in **Roles & permissions**): *associated doctors* (default — each doctor sets their prices and sees their income; the administration sees the clinic's activity without money) or *employed doctors* (the administration sets prices and sees income; doctors see their metrics without money). Switching moves only the fee and income defaults; the rest of a customized role is kept, and the change is audited (`organization.practice_model_changed`).
 
+### Reports
+
+`GET /reports/{kind}?start=&end=` returns the rows behind the metrics as two tables (a summary and the detail), under the same scope and money rules; `GET /reports/{kind}/csv` downloads either one (`part=detail|summary`) in Spanish or English (UTF-8 with BOM, ISO dates, plain amounts, text that looks like a formula is neutralized). Downloading needs `reports.export` (admins and doctors by default) and is audited as `report.exported` with the report, period and row count — never the rows.
+
+| Report | Summary | Detail |
+|---|---|---|
+| **Appointments** | Per status | Every appointment in the period (never the reason) |
+| **Income** (needs `analytics.money`) | Per doctor: visits, procedures, income | Attended visits and performed procedures with listed price, charge and note |
+| **Insurers** | Attended visits (and income) per insurer, out-of-pocket last | Insured visits, to bill each insurer |
+| **No-shows and cancellations** | Per doctor: booked, no-shows, cancelled | Missed appointments with the patient's phone |
+| **Vaccination** (module) | Doses per vaccine and dose by MINSAL age band | Doses given at the clinic (not records of doses given elsewhere) |
+| **Procedures** (module) | Per procedure type | Performed procedures, flagging those included in the visit |
+| **Applications** (module) | Doses per drug | Doses applied (refused or voided ones excluded) |
+
+The basic tier reports on the current or the previous month; from the clinic tier on, any range up to a year.
+
 ---
 
 ## Printable documents
@@ -256,7 +272,7 @@ medicore/
         │                     # + records/ + settings/ + vaccination/ + applications/
         │                     # + procedures/ + analytics/
         │                     # + guards (RequireAuth…)
-        └── pages/            # 24 clinic screens (Login, Dashboard, Analytics,
+        └── pages/            # 25 clinic screens (Login, Dashboard, Analytics, Reports,
                               # Patients, PatientDetail, Appointments, Schedule,
                               # Consultation, Records, Availability, Insurers, Fees,
                               # Users, Settings, Audit, Permissions, Notifications,
@@ -292,6 +308,7 @@ medicore/
 | **19** | Analytics tiers per plan (basic dashboard, clinic dashboard, operational metrics) and the advanced-analytics add-on | ✅ Done |
 | **20** | Practice metrics per tier (period comparison, per doctor, weekly trend, types, insurers, heatmap, lead time, returning patients, modules), `analytics.*` permissions and the clinic's practice model (associated or employed doctors) | ✅ Done |
 | **21** | Printing: prescription (with general instructions), exam orders, medical certificates (rest/attendance, voidable), record copy, procedure documents, vaccination card, appointment slip without price and daily agenda; half-letter or letter, letterhead, doctor JVPM, every print audited | ✅ Done |
+| **22** | Reports with CSV export (appointments, income, insurers, no-shows, vaccination by MINSAL age band, procedures, applications), `reports.export` permission, audited exports | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable application record, inventory and billing | 🗓️ Future |
@@ -351,7 +368,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (945 tests)
+.venv/bin/pytest                          # full suite (985 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -404,14 +421,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-945 passing tests
+985 passing tests
    242  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   399  — application (auth, sessions, appointments, consultations, records, notifications,
+   417  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   222  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   242  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    82  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    84  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

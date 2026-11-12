@@ -44,7 +44,9 @@ from medicore.domain.repositories import (
 )
 from medicore.domain.repositories._support import (
     ActiveImpersonation,
+    ApplicationReportRow,
     AppointmentFact,
+    AppointmentReportRow,
     ConnectionStats,
     ConsoleLogin,
     DatabaseStatus,
@@ -54,9 +56,11 @@ from medicore.domain.repositories._support import (
     Page,
     PaymentSummary,
     ProcedureFact,
+    ProcedureReportRow,
     RequestStatsRow,
     TableSize,
     TenantActivity,
+    VaccinationReportRow,
 )
 from medicore.domain.shared.identifiers import PatientId, TenantId, UserId
 
@@ -90,6 +94,7 @@ class UnitOfWork(Protocol):
     plans: PlanRepository  # global subscription catalog
     addon_pricing: AddonPricingRepository  # global subscription catalog
     analytics: AnalyticsReadModel  # practice metrics (read-only)
+    reports: ReportReadModel  # exportable reports (read-only)
 
     def __enter__(self) -> UnitOfWork: ...
 
@@ -138,6 +143,39 @@ class AnalyticsReadModel(Protocol):
         self, since: datetime, until: datetime, user_id: UserId | None = None
     ) -> int:
         """Doses applied in ``[since, until)`` (instants), voided or refused ones excluded."""
+        ...
+
+
+class ReportReadModel(Protocol):
+    """Tenant-scoped rows behind the clinic's reports. ``user_id`` narrows each report to
+    one person: the appointment's doctor, the procedure's ordering doctor, or whoever
+    recorded the dose (None: the whole clinic)."""
+
+    def appointment_rows(
+        self, start: datetime, end: datetime, user_id: UserId | None = None
+    ) -> list[AppointmentReportRow]:
+        """Appointments starting in ``[start, end)`` (clinic wall-clock), any status,
+        oldest first."""
+        ...
+
+    def procedure_rows(
+        self, since: datetime, until: datetime, user_id: UserId | None = None
+    ) -> list[ProcedureReportRow]:
+        """Completed procedures performed in ``[since, until)`` (instants), oldest first."""
+        ...
+
+    def vaccination_rows(
+        self, first: date, last: date, user_id: UserId | None = None
+    ) -> list[VaccinationReportRow]:
+        """Doses administered at the clinic between ``first`` and ``last`` (inclusive),
+        voided ones and records of doses given elsewhere excluded, oldest first."""
+        ...
+
+    def application_rows(
+        self, since: datetime, until: datetime, user_id: UserId | None = None
+    ) -> list[ApplicationReportRow]:
+        """Doses applied in ``[since, until)`` (instants), voided or refused ones excluded,
+        oldest first."""
         ...
 
 

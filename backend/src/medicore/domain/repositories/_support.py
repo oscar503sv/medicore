@@ -228,3 +228,62 @@ class ProcedureFact:
     doctor_id: str
     performed_at: datetime  # instant (UTC)
     charged: Decimal | None  # None or zero when included in the consultation
+
+
+# ── Reports (tenant-scoped read model) ───────────────────────────────────────
+# Rows a clinic exports: who and when, never the visit's reason, notes or anything clinical.
+
+
+@dataclass(frozen=True, slots=True)
+class AppointmentReportRow:
+    code: str
+    scheduled_start: datetime  # clinic wall-clock (naive)
+    patient_code: str
+    patient_name: str
+    patient_phone: str | None
+    doctor_id: str
+    type: str
+    status: str
+    insurer_id: str | None
+    listed: Decimal | None
+    charged: Decimal | None
+    fee_note: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ProcedureReportRow:
+    type_name: str
+    performed_at: datetime  # instant (UTC)
+    patient_code: str
+    patient_name: str
+    ordered_by_id: str
+    performed_by_id: str | None
+    listed: Decimal | None
+    charged: Decimal | None
+    included: bool  # included in the consultation it was indicated in (charged $0)
+
+
+@dataclass(frozen=True, slots=True)
+class VaccinationReportRow:
+    occurred_on: date
+    patient_code: str
+    patient_name: str
+    patient_sex: str
+    date_of_birth: date
+    vaccine_code: str
+    dose_key: str | None
+    lot: str | None
+    recorded_by_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationReportRow:
+    recorded_at: datetime  # instant (UTC)
+    patient_code: str
+    patient_name: str
+    drug: str
+    dose: str
+    route: str
+    dose_number: int
+    lot: str | None
+    recorded_by_id: str

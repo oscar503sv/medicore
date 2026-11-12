@@ -5,6 +5,7 @@ import {
   Calendar,
   CalendarDays,
   ClipboardList,
+  FileSpreadsheet,
   FileText,
   KeyRound,
   LayoutDashboard,
@@ -43,6 +44,7 @@ export const NAV_ITEMS: NavItem[] = [
   // General
   { to: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard, group: 'general' },
   { to: '/analytics', labelKey: 'nav.analytics', icon: BarChart3, anyPermission: ['analytics.own', 'analytics.clinic'], group: 'general' },
+  { to: '/reports', labelKey: 'nav.reports', icon: FileSpreadsheet, anyPermission: ['analytics.own', 'analytics.clinic'], group: 'general' },
   // Clínico
   { to: '/patients', labelKey: 'nav.patients', icon: Users, permission: 'patients.view', group: 'clinical' },
   { to: '/appointments', labelKey: 'nav.appointments', icon: Calendar, permission: 'appointments.view', group: 'clinical' },

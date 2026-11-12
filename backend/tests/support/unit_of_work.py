@@ -35,6 +35,7 @@ from tests.support.repositories import (
     InMemoryPlatformReadModel,
     InMemoryPrescriptionRepository,
     InMemoryProcedureRepository,
+    InMemoryReportReadModel,
     InMemoryRequestStatsRepository,
     InMemoryRolePermissionOverrideRepository,
     InMemorySubscriptionPaymentRepository,
@@ -72,6 +73,7 @@ class InMemoryUnitOfWork:
         self.procedures = InMemoryProcedureRepository(store, tenant_id)
         self.subscription_payments = InMemorySubscriptionPaymentRepository(store, tenant_id)
         self.analytics = InMemoryAnalyticsReadModel(store, tenant_id)
+        self.reports = InMemoryReportReadModel(store, tenant_id)
         self.tenants = InMemoryTenantRepository(store)
         self.platform_audit = InMemoryPlatformAuditLogRepository(store)
         self.sessions = InMemoryAuthSessionRepository(store)

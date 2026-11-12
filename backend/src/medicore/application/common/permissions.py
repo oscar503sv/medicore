@@ -75,6 +75,7 @@ class Permission(StrEnum):
     ANALYTICS_OWN = "analytics.own"
     ANALYTICS_CLINIC = "analytics.clinic"
     ANALYTICS_MONEY = "analytics.money"
+    REPORTS_EXPORT = "reports.export"
 
 
 ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
@@ -106,6 +107,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.AUDIT_VIEW,
         Permission.PERMISSIONS_MANAGE,
         Permission.ANALYTICS_CLINIC,
+        Permission.REPORTS_EXPORT,
     }),
     Role.DOCTOR: frozenset({
         Permission.PATIENTS_VIEW,
@@ -133,6 +135,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.INSURERS_VIEW,
         Permission.ANALYTICS_OWN,
         Permission.ANALYTICS_MONEY,
+        Permission.REPORTS_EXPORT,
     }),
     Role.NURSE: frozenset({
         Permission.PATIENTS_VIEW,

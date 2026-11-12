@@ -7,6 +7,7 @@ import { subEn, subEs } from './i18n-subscriptions'
 import { feeEn, feeEs } from './i18n-fees'
 import { analyticsEn, analyticsEs } from './i18n-analytics'
 import { printingEn, printingEs } from './i18n-printing'
+import { reportsEn, reportsEs } from './i18n-reports'
 import { prcEn, prcEs } from './i18n-procedures'
 import { vaxEn, vaxEs } from './i18n-vaccination'
 
@@ -23,6 +24,7 @@ const es: Dict = {
   ...feeEs,
   ...analyticsEs,
   ...printingEs,
+  ...reportsEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -516,6 +518,13 @@ const es: Dict = {
   'err.print.certificate_voided': 'La constancia está anulada y no se imprime.',
   'err.print.doctor_required': 'Elige el médico cuya agenda quieres imprimir.',
   'err.analytics.not_allowed': 'No tienes acceso a las métricas.',
+  'err.report.not_allowed': 'No tienes acceso a los reportes.',
+  'err.report.unknown': 'Ese reporte no existe.',
+  'err.report.money_required': 'El reporte de ingresos requiere permiso para ver ingresos.',
+  'err.report.invalid_range': 'Elige un periodo válido de hasta {max} días.',
+  'err.report.range_not_in_plan':
+    'Tu plan genera reportes del mes en curso o del anterior. Desde el plan Clínica, cualquier periodo.',
+  'err.report.module_required': 'Este reporte viene con su módulo, que la clínica no tiene contratado.',
   'err.analytics.invalid_range':
     'Revisa el periodo: necesita una fecha de inicio y una de fin posterior, de hasta {max} días.',
   'err.plan.analytics_included':
@@ -1026,6 +1035,7 @@ const en: Dict = {
   ...feeEn,
   ...analyticsEn,
   ...printingEn,
+  ...reportsEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.update_available': 'A new version of Medicore is available.',
@@ -1504,6 +1514,13 @@ const en: Dict = {
   'err.print.certificate_voided': 'The certificate is voided and is not printed.',
   'err.print.doctor_required': 'Choose the doctor whose agenda to print.',
   'err.analytics.not_allowed': "You don't have access to metrics.",
+  'err.report.not_allowed': "You don't have access to reports.",
+  'err.report.unknown': "That report doesn't exist.",
+  'err.report.money_required': 'The income report needs permission to see income.',
+  'err.report.invalid_range': 'Pick a valid period of up to {max} days.',
+  'err.report.range_not_in_plan':
+    'Your plan reports on the current or the previous month. From the Clínica plan on, any period.',
+  'err.report.module_required': "This report comes with its module, which the clinic hasn't contracted.",
   'err.analytics.invalid_range':
     'Check the period: it needs a start date and a later end date, up to {max} days.',
   'err.plan.analytics_included':

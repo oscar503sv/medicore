@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 24 routers, 167 endpoints bajo /api/v1/
+    └── routers/         # 25 routers, 169 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -184,6 +184,22 @@ Los hallazgos pendientes están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).
 - **Quién ve qué**: `analytics.own` (las citas propias de un médico), `analytics.clinic` (toda la clínica) y `analytics.money` (ingresos en las métricas que puede ver). El ingreso es el cobro registrado en consultas atendidas y procedimientos realizados, no dinero recibido.
 - **Modelo de la clínica** (`tenants.practice_model`, en **Roles y permisos**): *médicos asociados* (por defecto: cada médico pone sus precios y ve sus ingresos; la administración ve la actividad sin dinero) o *médicos empleados* (la administración pone los precios y ve los ingresos; los médicos ven sus métricas sin dinero). Cambiarlo solo mueve los valores por defecto de tarifas e ingresos; el resto de un rol personalizado se conserva, y el cambio queda auditado (`organization.practice_model_changed`).
 
+### Reportes
+
+`GET /reports/{kind}?start=&end=` devuelve las filas detrás de las métricas en dos tablas (resumen y detalle), con las mismas reglas de alcance y dinero; `GET /reports/{kind}/csv` descarga cualquiera de las dos (`part=detail|summary`) en español o inglés (UTF-8 con BOM, fechas ISO, montos simples; el texto que parece una fórmula se neutraliza). Descargar requiere `reports.export` (administradores y médicos por defecto) y queda auditado como `report.exported` con el reporte, el periodo y el número de filas, nunca las filas.
+
+| Reporte | Resumen | Detalle |
+|---|---|---|
+| **Citas** | Por estado | Todas las citas del periodo (nunca el motivo) |
+| **Ingresos** (requiere `analytics.money`) | Por médico: consultas, procedimientos, ingreso | Consultas atendidas y procedimientos realizados con precio de lista, cobro y nota |
+| **Aseguradoras** | Consultas atendidas (e ingreso) por aseguradora, particulares al final | Consultas con seguro, para cobrar a cada aseguradora |
+| **Inasistencias y cancelaciones** | Por médico: agendadas, no asistió, canceladas | Citas perdidas con el teléfono del paciente |
+| **Vacunación** (módulo) | Dosis por vacuna y dosis según grupos de edad del MINSAL | Dosis aplicadas en la clínica (no los registros de dosis aplicadas en otro lugar) |
+| **Procedimientos** (módulo) | Por tipo de procedimiento | Procedimientos realizados, marcando los incluidos en la consulta |
+| **Aplicaciones** (módulo) | Dosis por medicamento | Dosis aplicadas (sin las rechazadas o anuladas) |
+
+El nivel básico genera reportes del mes en curso o del anterior; desde el nivel clínica, cualquier periodo de hasta un año.
+
 ---
 
 ## Documentos imprimibles
@@ -256,7 +272,7 @@ medicore/
         │                     # + records/ + settings/ + vaccination/ + applications/
         │                     # + procedures/ + analytics/
         │                     # + guards (RequireAuth…)
-        └── pages/            # 24 pantallas de clínica (Login, Dashboard, Analytics,
+        └── pages/            # 25 pantallas de clínica (Login, Dashboard, Analytics, Reports,
                               # Patients, PatientDetail, Appointments, Schedule,
                               # Consultation, Records, Availability, Insurers, Fees,
                               # Users, Settings, Audit, Permissions, Notifications,
@@ -292,6 +308,7 @@ medicore/
 | **19** | Niveles de analítica por plan (panel básico, de la clínica, métricas operativas) y complemento de analítica avanzada | ✅ Completada |
 | **20** | Métricas de la práctica por nivel (comparación de periodos, por médico, tendencia semanal, tipos, aseguradoras, mapa de calor, anticipación, pacientes que regresan, módulos), permisos `analytics.*` y modelo de la clínica (médicos asociados o empleados) | ✅ Completada |
 | **21** | Impresión: receta (con indicaciones generales), órdenes de exámenes, constancias médicas (reposo/asistencia, anulables), copia de expediente, documentos de procedimientos, carné de vacunación, comprobante de cita sin precio y agenda del día; media carta o carta, papel membretado, JVPM del médico, cada impresión auditada | ✅ Completada |
+| **22** | Reportes con exportación CSV (citas, ingresos, aseguradoras, inasistencias, vacunación por grupos de edad del MINSAL, procedimientos, aplicaciones), permiso `reports.export`, exportaciones auditadas | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 | — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible de la aplicación, inventario y facturación | 🗓️ A futuro |
@@ -351,7 +368,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (945 tests)
+.venv/bin/pytest                          # suite completa (985 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -404,14 +421,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-945 tests en verde
+985 tests en verde
    242  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   399  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   417  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   222  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   242  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    82  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    84  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

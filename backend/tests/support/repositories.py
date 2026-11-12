@@ -29,10 +29,18 @@ from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
-from medicore.domain.enums import ApplicationOutcome, AppointmentStatus, ProcedureStatus
+from medicore.domain.enums import (
+    ApplicationOutcome,
+    AppointmentStatus,
+    ProcedureStatus,
+    VaccinationOutcome,
+    VaccinationSource,
+)
 from medicore.domain.repositories._support import (
     ActiveImpersonation,
+    ApplicationReportRow,
     AppointmentFact,
+    AppointmentReportRow,
     AuditFilter,
     ConnectionStats,
     ConsoleLogin,
@@ -46,11 +54,13 @@ from medicore.domain.repositories._support import (
     Paging,
     PatientFilter,
     ProcedureFact,
+    ProcedureReportRow,
     RecordFilter,
     RequestStatsRow,
     TableSize,
     TenantFilter,
     UserFilter,
+    VaccinationReportRow,
 )
 from medicore.domain.shared.identifiers import (
     AppointmentId,
@@ -1215,6 +1225,99 @@ class InMemoryAnalyticsReadModel(_Scoped):
             and _naive(since) <= _naive(r.recorded_at) < _naive(until)
             and (user_id is None or r.recorded_by_id == user_id)
         )
+
+
+class InMemoryReportReadModel(_Scoped):
+    """Same rows as the SQL adapter; instants compared without tzinfo (naive test clocks)."""
+
+    def _patient(self, patient_id: PatientId) -> Patient:
+        return self._store.patients[patient_id.value]
+
+    def appointment_rows(
+        self, start: datetime, end: datetime, user_id: UserId | None = None
+    ) -> list[AppointmentReportRow]:
+        rows = []
+        for a in sorted(self._mine(self._store.appointments.values()),
+                        key=lambda a: (a.scheduled_start, a.code)):
+            if not (start <= a.scheduled_start < end) or (
+                user_id is not None and a.doctor_id != user_id
+            ):
+                continue
+            p = self._patient(a.patient_id)
+            rows.append(AppointmentReportRow(
+                code=a.code, scheduled_start=a.scheduled_start, patient_code=p.code,
+                patient_name=p.full_name, patient_phone=p.contact.phone,
+                doctor_id=str(a.doctor_id), type=str(a.type), status=str(a.status),
+                insurer_id=str(a.insurance_id) if a.insurance_id else None,
+                listed=a.charge.listed.amount if a.charge.listed else None,
+                charged=a.charge.charged.amount if a.charge.charged else None,
+                fee_note=a.charge.note,
+            ))
+        return rows
+
+    def procedure_rows(
+        self, since: datetime, until: datetime, user_id: UserId | None = None
+    ) -> list[ProcedureReportRow]:
+        done = [
+            p for p in self._mine(self._store.procedures.values())
+            if p.status == ProcedureStatus.COMPLETED and p.performed_at is not None
+            and _naive(since) <= _naive(p.performed_at) < _naive(until)
+            and (user_id is None or p.ordered_by_id == user_id)
+        ]
+        rows = []
+        for pr in sorted(done, key=lambda p: _naive(p.performed_at)):
+            patient = self._patient(pr.patient_id)
+            rows.append(ProcedureReportRow(
+                type_name=pr.type_name, performed_at=pr.performed_at,
+                patient_code=patient.code, patient_name=patient.full_name,
+                ordered_by_id=str(pr.ordered_by_id),
+                performed_by_id=str(pr.performed_by_id) if pr.performed_by_id else None,
+                listed=pr.charge.listed.amount if pr.charge.listed else None,
+                charged=None if pr.fee_included or pr.charge.charged is None
+                else pr.charge.charged.amount,
+                included=pr.fee_included,
+            ))
+        return rows
+
+    def vaccination_rows(
+        self, first: date, last: date, user_id: UserId | None = None
+    ) -> list[VaccinationReportRow]:
+        given = [
+            v for v in self._mine(self._store.vaccinations.values())
+            if v.voided_at is None and v.outcome == VaccinationOutcome.ADMINISTERED
+            and v.source == VaccinationSource.CLINIC and first <= v.occurred_on <= last
+            and (user_id is None or v.recorded_by_id == user_id)
+        ]
+        rows = []
+        for v in sorted(given, key=lambda v: (v.occurred_on, _naive(v.created_at))):
+            p = self._patient(v.patient_id)
+            rows.append(VaccinationReportRow(
+                occurred_on=v.occurred_on, patient_code=p.code, patient_name=p.full_name,
+                patient_sex=str(p.sex), date_of_birth=p.date_of_birth,
+                vaccine_code=v.vaccine_code, dose_key=v.dose_key, lot=v.lot,
+                recorded_by_id=str(v.recorded_by_id),
+            ))
+        return rows
+
+    def application_rows(
+        self, since: datetime, until: datetime, user_id: UserId | None = None
+    ) -> list[ApplicationReportRow]:
+        applied = [
+            r for r in self._mine(self._store.application_records.values())
+            if r.voided_at is None and r.outcome == ApplicationOutcome.APPLIED
+            and _naive(since) <= _naive(r.recorded_at) < _naive(until)
+            and (user_id is None or r.recorded_by_id == user_id)
+        ]
+        rows = []
+        for r in sorted(applied, key=lambda r: _naive(r.recorded_at)):
+            order = self._store.application_orders[r.order_id.value]
+            p = self._patient(r.patient_id)
+            rows.append(ApplicationReportRow(
+                recorded_at=r.recorded_at, patient_code=p.code, patient_name=p.full_name,
+                drug=order.drug, dose=order.dose, route=str(order.route),
+                dose_number=r.dose_number, lot=r.lot, recorded_by_id=str(r.recorded_by_id),
+            ))
+        return rows
 
 
 class InMemoryMedicalCertificateRepository(_Scoped):
