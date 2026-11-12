@@ -5,6 +5,7 @@ import { Monitor, Moon, Smartphone, Sun } from 'lucide-react'
 import { authApi } from '@/api/auth'
 import { errorMessage } from '@/api/client'
 import { PageHeader } from '@/components/PageHeader'
+import { NoteTemplatesSection } from '@/components/settings/NoteTemplatesSection'
 import { OrganizationSection } from '@/components/settings/OrganizationSection'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
@@ -21,15 +22,21 @@ import { formatPhone, isValidPhone } from '@/lib/validation'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore, type Lang, type Theme } from '@/stores/ui'
 
-type Section = 'profile' | 'appearance' | 'sessions' | 'organization'
+type Section = 'profile' | 'appearance' | 'sessions' | 'organization' | 'notes'
 
 export function SettingsPage() {
   const t = useT()
   const canViewOrg = useAuthStore((s) => s.can('organization.view'))
+  // Doctors pick their preferred note format; the admin configures the clinic's.
+  const canNotes = useAuthStore((s) => s.hasRole('doctor') || s.can('organization.manage'))
   // Deep links (e.g. from the getting-started checklist) may open a given section.
   const [params] = useSearchParams()
   const [section, setSection] = useState<Section>(
-    params.get('section') === 'organization' && canViewOrg ? 'organization' : 'profile',
+    params.get('section') === 'organization' && canViewOrg
+      ? 'organization'
+      : params.get('section') === 'notes' && canNotes
+        ? 'notes'
+        : 'profile',
   )
   const { theme, setTheme, lang, setLang } = useUIStore()
 
@@ -40,6 +47,7 @@ export function SettingsPage() {
     ...(canViewOrg
       ? [{ id: 'organization' as const, label: t('settings.organization') }]
       : []),
+    ...(canNotes ? [{ id: 'notes' as const, label: t('note.settings.title') }] : []),
   ]
 
   const themes: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -128,6 +136,8 @@ export function SettingsPage() {
           {section === 'sessions' && <SessionsSection />}
 
           {section === 'organization' && <OrganizationSection />}
+
+          {section === 'notes' && <NoteTemplatesSection />}
 
         </div>
       </div>

@@ -13,6 +13,7 @@ import { PatientStrip, PrintSheet, SignatureLine } from '@/components/print/Prin
 import { VITAL_COLS, unitLabel } from '@/components/patients/vitalsData'
 import { fmtDate, fmtDateTz, fmtTime, fmtTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { sectionTitle } from '@/lib/notes'
 import { useFill } from '@/lib/printing'
 import { doseLabel, vaccineName } from '@/lib/vaccination'
 import type { ExamKind, PaperSize } from '@/types'
@@ -183,17 +184,10 @@ export function RecordCopyDoc({ doc }: { doc: RecordPrint }) {
           </div>
         </Section>
       )}
-      {(
-        [
-          ['subjective', 'consult.subjective'],
-          ['objective', 'consult.objective'],
-          ['assessment', 'consult.assessment'],
-          ['plan', 'consult.plan'],
-        ] as const
-      ).map(([key, label]) =>
-        r.soap[key]?.trim() ? (
-          <Section key={key} title={t(label)}>
-            <Paragraphs text={r.soap[key]} />
+      {r.note.sections.map((s) =>
+        s.text.trim() ? (
+          <Section key={s.key} title={sectionTitle(t, r.note.template, s)}>
+            <Paragraphs text={s.text} />
           </Section>
         ) : null,
       )}

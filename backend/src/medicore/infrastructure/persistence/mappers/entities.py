@@ -34,6 +34,7 @@ from medicore.domain.enums import (
     ThemePref,
     UserStatus,
 )
+from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     AuditLogId,
@@ -52,6 +53,7 @@ from medicore.domain.shared.identifiers import (
 )
 from medicore.domain.value_objects.blood_type import BloodType
 from medicore.domain.value_objects.contact_info import ContactInfo
+from medicore.domain.value_objects.note_settings import DEFAULT_TEMPLATE, NoteSettings
 from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
 from medicore.domain.value_objects.print_settings import PrintSettings
 from medicore.domain.value_objects.slug import Slug
@@ -65,9 +67,9 @@ from medicore.infrastructure.persistence.mappers._json import (
     dict_to_diagnoses,
     dict_to_draft,
     dict_to_exam,
+    dict_to_note,
     dict_to_procedure_draft,
     dict_to_snapshot,
-    dict_to_soap,
     dict_to_vaccine,
     dict_to_vitals,
 )
@@ -100,6 +102,21 @@ def to_location(row: LocationModel) -> Location:
     )
 
 
+def note_settings_to_json(n: NoteSettings) -> dict:
+    return {"enabled": list(n.enabled), "default": n.default, "rules": dict(n.rules),
+            "locked": n.locked}
+
+
+def note_settings_from_json(d: dict) -> NoteSettings:
+    try:
+        return NoteSettings(
+            enabled=tuple(d.get("enabled") or ()), default=d.get("default") or DEFAULT_TEMPLATE,
+            rules=dict(d.get("rules") or {}), locked=bool(d.get("locked", False)),
+        )
+    except InvalidValueObject:  # a stored value no longer valid falls back to the default
+        return NoteSettings()
+
+
 def to_tenant(row: TenantModel) -> Tenant:
     locations = [to_location(loc) for loc in (row.locations or [])]
     return Tenant(
@@ -119,6 +136,7 @@ def to_tenant(row: TenantModel) -> Tenant:
             else PaperSize.HALF_LETTER,
             letterhead=row.print_letterhead,
         ),
+        note_settings=note_settings_from_json(row.note_settings or {}),
         created_at=row.created_at,
     )
 
@@ -137,6 +155,7 @@ def _prefs_from_json(d: dict) -> UserPreferences:
         ),
         welcome_seen=bool(d.get("welcome_seen", False)),
         onboarding_dismissed=bool(d.get("onboarding_dismissed", False)),
+        note_template=d.get("note_template") or None,
     )
 
 
@@ -273,7 +292,7 @@ def to_consultation(row: ConsultationModel) -> Consultation:
         started_at=row.started_at,
         ended_at=row.ended_at,
         vitals=dict_to_vitals(row.vitals or {}),
-        soap=dict_to_soap(row.soap or {}),
+        note=dict_to_note(row.note or {}),
         diagnoses=[d for d in dict_to_diagnoses(row.diagnoses or [])],  # list for mutability
         draft_prescriptions=[dict_to_draft(d) for d in (row.draft_prescriptions or [])],
         draft_applications=[
@@ -304,7 +323,7 @@ def to_medical_record(row: MedicalRecordModel) -> MedicalRecord:
         location_name=row.location_name,
         insurer_name=row.insurer_name,
         chief_complaint=row.chief_complaint,
-        soap=dict_to_soap(row.soap or {}),
+        note=dict_to_note(row.note or {}),
         vitals=dict_to_vitals(row.vitals or {}),
         diagnoses=dict_to_diagnoses(row.diagnoses or []),
         prescriptions=tuple(dict_to_snapshot(p) for p in (row.prescriptions or [])),

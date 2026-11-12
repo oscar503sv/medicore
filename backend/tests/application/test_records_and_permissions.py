@@ -38,9 +38,8 @@ from medicore.domain.enums import AppointmentType, DocumentKind, RecordStatus, S
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import PatientId
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
-from tests.support.builders import build_tenant, build_user, seed_clinic
+from tests.support.builders import build_tenant, build_user, seed_clinic, soap_note
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
 MONDAY_9AM = datetime(2026, 6, 1, 9, 0)
@@ -64,7 +63,8 @@ def _sign_a_record(seed, uow):
         seed.doctor_actor,
         consultation.id,
         ConsultationPatch(
-            soap=SoapNote("s", "o", "a", "p"), vitals=Vitals(heart_rate=70, weight=Decimal("68"))
+            note=soap_note("s", "o", "a", "p").texts(),
+            vitals=Vitals(heart_rate=70, weight=Decimal("68")),
         ),
     )
     AddDiagnosis(uow, FixedClock()).execute(

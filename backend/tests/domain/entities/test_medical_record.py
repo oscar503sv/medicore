@@ -16,8 +16,8 @@ from medicore.domain.shared.identifiers import (
     UserId,
 )
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
+from tests.support.builders import soap_note
 
 
 def make_record() -> MedicalRecord:
@@ -31,7 +31,7 @@ def make_record() -> MedicalRecord:
         encounter_at=datetime(2026, 5, 12, 9, 0),
         location_name="Madrid · Atocha",
         chief_complaint="Cefalea",
-        soap=SoapNote("s", "o", "a", "p"),
+        note=soap_note("s", "o", "a", "p"),
         vitals=Vitals(),
         signed_at=datetime(2026, 5, 12, 9, 30),
         signed_by_id=UserId.new(),

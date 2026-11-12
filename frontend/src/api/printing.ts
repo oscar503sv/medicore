@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { ExamRequest, PaperSize, PrescriptionSnapshot, Soap, Vitals } from '@/types'
+import type { ClinicalNote, ExamRequest, PaperSize, PrescriptionSnapshot, Vitals } from '@/types'
 
 export interface PrintContext {
   clinic: {
@@ -40,7 +40,7 @@ export interface RecordPrint {
     location_name: string
     insurer_name: string | null
     chief_complaint: string
-    soap: Soap
+    note: ClinicalNote
     vitals: Vitals
     diagnoses: { code: string; label: string }[]
     prescriptions: PrescriptionSnapshot[]

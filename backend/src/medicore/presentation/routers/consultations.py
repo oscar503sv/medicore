@@ -13,6 +13,7 @@ from medicore.application.use_cases.consultations import (
     AddPrescriptionDraft,
     AddProcedureDraft,
     AutosaveConsultation,
+    ChangeNoteTemplate,
     ConsultationPatch,
     GetConsultation,
     RemoveApplicationDraft,
@@ -29,7 +30,6 @@ from medicore.domain.entities.prescription import PrescriptionDraft
 from medicore.domain.shared.identifiers import AppointmentId, ConsultationId, ProcedureTypeId
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
 from medicore.presentation.dependencies import Actor, Clock, Codes, UoW
 from medicore.presentation.schemas.consultations import (
@@ -38,6 +38,7 @@ from medicore.presentation.schemas.consultations import (
     ConsultationResponse,
     DiagnosisRequest,
     ExamRequestSchema,
+    NoteTemplateRequest,
     PrescriptionDraftRequest,
     ProcedureDraftRequest,
     SignRequest,
@@ -74,17 +75,19 @@ def autosave(consultation_id: str, body: AutosaveRequest, actor: Actor, uow: UoW
             height=Decimal(v.height) if v.height else None,
             fetal_heart_rate=v.fetal_heart_rate,
         )
-    soap = None
-    if body.soap:
-        s = body.soap
-        soap = SoapNote(
-            subjective=s.subjective,
-            objective=s.objective,
-            assessment=s.assessment,
-            plan=s.plan,
-        )
     c = AutosaveConsultation(uow, clock).execute(
-        actor, ConsultationId.parse(consultation_id), ConsultationPatch(vitals=vitals, soap=soap)
+        actor, ConsultationId.parse(consultation_id),
+        ConsultationPatch(vitals=vitals, note=body.note),
+    )
+    return ser_consultation(c, uow)
+
+
+@router.post("/{consultation_id}/note-template", response_model=ConsultationResponse)
+def change_note_template(
+    consultation_id: str, body: NoteTemplateRequest, actor: Actor, uow: UoW, clock: Clock
+):
+    c = ChangeNoteTemplate(uow, clock).execute(
+        actor, ConsultationId.parse(consultation_id), body.template
     )
     return ser_consultation(c, uow)
 

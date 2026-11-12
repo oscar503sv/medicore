@@ -97,52 +97,60 @@ export function ConsultationExams({
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px_1fr]">
-          <div>
-            <label className="eyebrow mb-1 block">{t('exam.name')}</label>
-            <input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={t('exam.name_ph')}
-              className={INPUT}
-            />
-          </div>
-          <div>
-            <label className="eyebrow mb-1 block">{t('exam.kind')}</label>
-            <select
-              value={form.kind}
-              onChange={(e) => setForm({ ...form, kind: e.target.value as ExamKind })}
-              className={INPUT}
-            >
-              {KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {t(`exam.kind.${k}`)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="eyebrow mb-1 block">{t('exam.notes')}</label>
-            <input
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder={t('exam.notes_ph')}
-              className={INPUT}
-            />
-          </div>
-        </div>
-        <Button
-          size="sm"
-          className="mt-3"
-          disabled={!form.name.trim()}
-          loading={add.isPending}
-          onClick={() =>
-            add.mutate({ name: form.name, kind: form.kind, notes: form.notes || null })
-          }
+        {/* Enter in any field adds the exam */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (form.name.trim() && !add.isPending) {
+              add.mutate({ name: form.name, kind: form.kind, notes: form.notes || null })
+            }
+          }}
         >
-          <Plus className="h-4 w-4" />
-          {t('exam.add')}
-        </Button>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px_1fr]">
+            <div>
+              <label className="eyebrow mb-1 block">{t('exam.name')}</label>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder={t('exam.name_ph')}
+                className={INPUT}
+              />
+            </div>
+            <div>
+              <label className="eyebrow mb-1 block">{t('exam.kind')}</label>
+              <select
+                value={form.kind}
+                onChange={(e) => setForm({ ...form, kind: e.target.value as ExamKind })}
+                className={INPUT}
+              >
+                {KINDS.map((k) => (
+                  <option key={k} value={k}>
+                    {t(`exam.kind.${k}`)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="eyebrow mb-1 block">{t('exam.notes')}</label>
+              <input
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder={t('exam.notes_ph')}
+                className={INPUT}
+              />
+            </div>
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            className="mt-3"
+            disabled={!form.name.trim()}
+            loading={add.isPending}
+          >
+            <Plus className="h-4 w-4" />
+            {t('exam.add')}
+          </Button>
+        </form>
       </div>
     </section>
   )

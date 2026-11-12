@@ -22,9 +22,9 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.clinical_note import ClinicalNote
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
 
 
@@ -56,7 +56,7 @@ class MedicalRecord:
     encounter_at: datetime
     location_name: str
     chief_complaint: str
-    soap: SoapNote
+    note: ClinicalNote
     vitals: Vitals
     signed_at: datetime
     signed_by_id: UserId

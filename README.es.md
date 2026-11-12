@@ -4,7 +4,7 @@
 
 Sistema de gestión clínica **multi-tenant** construido con **Clean Architecture**.
 
-Cubre el ciclo completo de atención: autenticación por organización, dashboard con métricas reales, gestión de pacientes, agenda y citas, consulta en curso (bitácora SOAP) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app**, **vacunación según el esquema nacional de El Salvador**, **aplicaciones de medicamentos en la clínica**, **procedimientos menores**, ajustes de organización y una **guía de primeros pasos** para médicos y administradores que se marca sola con los datos reales. La interfaz está disponible en **español e inglés**, incluidos los mensajes de error del backend.
+Cubre el ciclo completo de atención: autenticación por organización, dashboard con métricas reales, gestión de pacientes, agenda y citas, consulta en curso (**plantillas de nota clínica**: SOAP, P-SOAP, historia completa, evolución, narrativa) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app**, **vacunación según el esquema nacional de El Salvador**, **aplicaciones de medicamentos en la clínica**, **procedimientos menores**, ajustes de organización y una **guía de primeros pasos** para médicos y administradores que se marca sola con los datos reales. La interfaz está disponible en **español e inglés**, incluidos los mensajes de error del backend.
 
 Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, un panel de **Negocio** (MRR, cobros, vencimientos, adopción y cupos por clínica), **Monitoreo** (salud de la API y la base de datos, errores del servidor, intentos fallidos y bloqueos, sesiones y accesos de soporte abiertos, rendimiento de la API por ruta), auditoría global, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión) e **impersonación auditada** de una clínica para dar soporte.
 
@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 25 routers, 169 endpoints bajo /api/v1/
+    └── routers/         # 26 routers, 173 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -202,16 +202,24 @@ El nivel básico genera reportes del mes en curso o del anterior; desde el nivel
 
 ---
 
+## Notas clínicas
+
+La nota de la consulta se escribe con una **plantilla**, no con un SOAP fijo. Incluidas: **SOAP**, **P-SOAP** (orientada a problemas, criterio de auditoría del ISSS; su sección *Problemas* parte de las condiciones del paciente), **Historia clínica completa** (primera consulta), **Nota de evolución** (controles) y **Narrativa** (texto libre). Cada sección tiene un *rol* (subjetivo, objetivo, análisis, plan, antecedentes, problemas, libre): al cambiar de plantilla en plena consulta el texto se conserva —lo que no tiene sección equivalente queda bajo su título anterior— y el rol *plan* alimenta las indicaciones generales de la receta, se llame como se llame la sección.
+
+En **Ajustes → Notas clínicas** el administrador habilita plantillas, elige la predeterminada, define una por tipo de cita y para la **primera consulta** del paciente en la clínica, y puede hacer el formato **obligatorio**. La consulta se abre con: regla de primera consulta → regla del tipo de cita → **formato preferido** del médico (si no es obligatorio) → predeterminado de la clínica. En el plan de médico independiente lo configura el propio médico. El expediente firmado guarda la plantilla y los títulos con que se escribió, y las enmiendas editan sus secciones. La completitud (y el mínimo de 60% para firmar) cuenta las secciones obligatorias de la plantilla.
+
+---
+
 ## Documentos imprimibles
 
 Todo documento se imprime desde el navegador (`/print/:kind/:id`; "Guardar como PDF" también funciona) con el encabezado de la clínica, los datos del paciente y el nombre y número de **JVPM** del médico. El tamaño de papel (**media carta** por defecto, o carta) y el papel membretado (el encabezado se deja en blanco) se configuran en **Ajustes → Organización → Impresión** y se pueden cambiar al imprimir.
 
 | Documento | Dónde | Notas |
 |---|---|---|
-| **Receta** | Consulta firmada (al firmar, en el expediente, en las recetas del paciente) | Incluye el *Plan* del SOAP como "Indicaciones generales" solo si el médico lo escribió (se puede omitir al imprimir) |
+| **Receta** | Consulta firmada (al firmar, en el expediente, en las recetas del paciente) | Incluye el *plan* de la nota como "Indicaciones generales" solo si el médico lo escribió (se puede omitir al imprimir) |
 | **Orden de exámenes** | Consulta firmada | Exámenes indicados en la consulta (laboratorio, imagen, otros) con atajos de los más comunes |
 | **Constancia médica** | Consulta firmada — solo la emite el médico que la firmó | Reposo/incapacidad (hasta 90 días, con fechas) o asistencia (horario de la consulta); diagnóstico solo si el paciente lo autoriza; código `CM-{año}-{n}`, reimprimible y anulable con motivo |
-| **Copia de expediente** | Consulta firmada | Signos vitales, SOAP, diagnósticos, recetas, vacunas y exámenes |
+| **Copia de expediente** | Consulta firmada | Signos vitales, la nota clínica en su plantilla, diagnósticos, recetas, vacunas y exámenes |
 | **Procedimiento** | Detalle del procedimiento | Indicaciones de cuidado, consentimiento para firmar en papel, solicitud de patología |
 | **Carné de vacunación** | Paciente → Vacunas | Dosis aplicadas y próximas |
 | **Comprobante de cita** | Citas | Fecha, médico, tipo y lugar — **nunca el precio** |
@@ -309,6 +317,7 @@ medicore/
 | **20** | Métricas de la práctica por nivel (comparación de periodos, por médico, tendencia semanal, tipos, aseguradoras, mapa de calor, anticipación, pacientes que regresan, módulos), permisos `analytics.*` y modelo de la clínica (médicos asociados o empleados) | ✅ Completada |
 | **21** | Impresión: receta (con indicaciones generales), órdenes de exámenes, constancias médicas (reposo/asistencia, anulables), copia de expediente, documentos de procedimientos, carné de vacunación, comprobante de cita sin precio y agenda del día; media carta o carta, papel membretado, JVPM del médico, cada impresión auditada | ✅ Completada |
 | **22** | Reportes con exportación CSV (citas, ingresos, aseguradoras, inasistencias, vacunación por grupos de edad del MINSAL, procedimientos, aplicaciones), permiso `reports.export`, exportaciones auditadas | ✅ Completada |
+| **23** | Plantillas de nota clínica (SOAP, P-SOAP con problemas desde las condiciones del paciente, historia completa, evolución, narrativa), reglas de la clínica por tipo de cita y primera consulta, formato obligatorio, formato preferido del médico, el texto se conserva al cambiar; pantalla de consulta con completitud en vivo, lo que falta para firmar, contexto del paciente y autoguardado seguro | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 | — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible de la aplicación, inventario y facturación | 🗓️ A futuro |
@@ -368,7 +377,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (985 tests)
+.venv/bin/pytest                          # suite completa (1004 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -421,14 +430,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-985 tests en verde
-   242  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1004 tests en verde
+   249  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   417  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   425  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   242  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   245  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    84  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    85  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

@@ -22,7 +22,7 @@ from medicore.domain.shared.identifiers import (
 )
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.soap_note import SoapNote
+from tests.support.builders import soap_note
 
 NOW = datetime(2026, 5, 20, 10, 0)
 
@@ -86,7 +86,7 @@ class TestExamRequest:
     def test_signing_freezes_the_exams_into_the_record(self):
         c = Consultation(id=ConsultationId.new(), tenant_id=TenantId.new(),
                          appointment_id=AppointmentId.new(), patient_id=PatientId.new(),
-                         doctor_id=UserId.new(), soap=SoapNote("s", "o", "a", "p"),
+                         doctor_id=UserId.new(), note=soap_note("s", "o", "a", "p"),
                          diagnoses=[IcdCode("J06.9", "IRA")])
         c.add_exam(ExamRequest("Hemograma completo"))
         c.add_exam(ExamRequest("Ultrasonografía pélvica", ExamKind.IMAGING))

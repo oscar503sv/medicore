@@ -14,7 +14,6 @@ from medicore.application.use_cases.records import (
 )
 from medicore.domain.repositories._support import RecordFilter
 from medicore.domain.shared.identifiers import PatientId, RecordId
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.presentation.dependencies import Actor, Clock, UoW
 from medicore.presentation.schemas.records import (
     AmendRequest,
@@ -66,9 +65,9 @@ def amend_record(record_id: str, body: AmendRequest, actor: Actor, uow: UoW, clo
     changes: dict = {}
     if body.chief_complaint is not None:
         changes["chief_complaint"] = body.chief_complaint
-    if body.soap is not None:
-        changes["soap"] = SoapNote(**body.soap)
-    amendment = AmendMedicalRecord(uow, clock).execute(actor, RecordId.parse(record_id), **changes)
+    amendment = AmendMedicalRecord(uow, clock).execute(
+        actor, RecordId.parse(record_id), note=body.note, **changes
+    )
     return ser_record(amendment)
 
 

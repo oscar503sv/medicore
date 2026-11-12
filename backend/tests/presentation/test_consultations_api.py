@@ -52,20 +52,20 @@ def test_get_consultation(seed, client, auth_headers):
     assert resp.json()["id"] == cid
 
 
-def test_autosave_vitals_and_soap(seed, client, auth_headers):
+def test_autosave_vitals_and_note(seed, client, auth_headers):
     _, cid = _book_and_start(seed, client, auth_headers)
     resp = client.patch(
         f"/api/v1/consultations/{cid}/autosave",
         json={
             "vitals": {"heart_rate": 72, "blood_pressure": "120/80"},
-            "soap": {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"},
+            "note": {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"},
         },
         headers=auth_headers,
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["vitals"]["heart_rate"] == 72
-    assert data["completion_percent"] == 80  # soap=60% + vitals(heart_rate)=20%, no dx
+    assert data["completion_percent"] == 80  # note=60% + vitals(heart_rate)=20%, no dx
 
 
 def test_sign_complete_consultation(seed, client, auth_headers):
@@ -75,7 +75,7 @@ def test_sign_complete_consultation(seed, client, auth_headers):
         f"/api/v1/consultations/{cid}/autosave",
         json={
             "vitals": {"heart_rate": 72, "weight": "70"},
-            "soap": {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"},
+            "note": {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"},
         },
         headers=auth_headers,
     )
@@ -101,7 +101,7 @@ def test_records_list_includes_patient_name_and_chosen_type(seed, client, auth_h
         f"/api/v1/consultations/{cid}/autosave",
         json={
             "vitals": {"heart_rate": 72, "weight": "70"},
-            "soap": {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"},
+            "note": {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"},
         },
         headers=auth_headers,
     )

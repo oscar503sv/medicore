@@ -16,6 +16,7 @@ from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import AddonModule, Role, Sex, UserStatus
+from medicore.domain.services.note_templates import SOAP
 from medicore.domain.services.plan_catalog import EMPRESARIAL
 from medicore.domain.shared.identifiers import (
     AvailabilityId,
@@ -25,6 +26,7 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.clinical_note import ClinicalNote
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.subscription import Subscription
 from medicore.domain.value_objects.time_range import TimeRange
@@ -37,6 +39,16 @@ PASSWORD = "s3cret-pass"
 def full_subscription() -> Subscription:
     """Unlimited plan, every module, no expiry: tests outside billing aren't limited by it."""
     return Subscription(plan_code=EMPRESARIAL, modules=frozenset(AddonModule))
+
+
+def soap_note(
+    subjective: str = "", objective: str = "", assessment: str = "", plan: str = ""
+) -> ClinicalNote:
+    """A note in the built-in SOAP template."""
+    return ClinicalNote.blank(SOAP).with_texts({
+        "subjective": subjective, "objective": objective, "assessment": assessment,
+        "plan": plan,
+    })
 
 
 def build_tenant(slug: str = "clinica-norte", subscription: Subscription | None = None) -> Tenant:

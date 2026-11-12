@@ -8,8 +8,8 @@ from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.prescription import PrescriptionSnapshot
 from medicore.domain.enums import ClinicalRecordType
 from medicore.domain.shared.identifiers import RecordId
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
+from tests.support.builders import soap_note
 
 
 def _record(seed):
@@ -17,7 +17,7 @@ def _record(seed):
         id=RecordId.new(), tenant_id=seed.tenant.id, code="REC-1", patient_id=seed.patient.id,
         author_id=seed.doctor.id, type=ClinicalRecordType.CONSULTATION,
         encounter_at=datetime(2026, 5, 20, 9), location_name="Sede", chief_complaint="Fiebre",
-        soap=SoapNote(plan="Líquidos"), vitals=Vitals(), signed_at=datetime(2026, 5, 20, 9, 30),
+        note=soap_note(plan="Líquidos"), vitals=Vitals(), signed_at=datetime(2026, 5, 20, 9, 30),
         signed_by_id=seed.doctor.id,
         prescriptions=(PrescriptionSnapshot("Paracetamol", "500 mg", "c/8 h",
                                             date(2026, 5, 20)),),

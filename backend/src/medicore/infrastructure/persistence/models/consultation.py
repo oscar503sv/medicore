@@ -30,7 +30,7 @@ class ConsultationModel(Base):
     )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     vitals: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
-    soap: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    note: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     diagnoses: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     draft_prescriptions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     draft_applications: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)

@@ -26,9 +26,9 @@ from medicore.infrastructure.persistence.mappers._json import (
     diagnoses_to_list,
     draft_to_dict,
     exam_to_dict,
+    note_to_dict,
     procedure_draft_to_dict,
     snapshot_to_dict,
-    soap_to_dict,
     vaccine_to_dict,
     vitals_to_dict,
 )
@@ -73,7 +73,7 @@ class SqlConsultationRepository:
         row.started_at = c.started_at
         row.ended_at = c.ended_at
         row.vitals = vitals_to_dict(c.vitals)
-        row.soap = soap_to_dict(c.soap)
+        row.note = note_to_dict(c.note)
         row.diagnoses = diagnoses_to_list(c.diagnoses)
         row.draft_prescriptions = [draft_to_dict(d) for d in c.draft_prescriptions]
         row.draft_applications = [application_draft_to_dict(d) for d in c.draft_applications]
@@ -136,7 +136,7 @@ class SqlMedicalRecordRepository:
         row.location_name = record.location_name
         row.insurer_name = record.insurer_name
         row.chief_complaint = record.chief_complaint
-        row.soap = soap_to_dict(record.soap)
+        row.note = note_to_dict(record.note)
         row.vitals = vitals_to_dict(record.vitals)
         row.diagnoses = diagnoses_to_list(record.diagnoses)
         row.prescriptions = [snapshot_to_dict(p) for p in record.prescriptions]

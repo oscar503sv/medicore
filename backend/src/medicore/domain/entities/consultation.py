@@ -1,7 +1,7 @@
 """Consultation aggregate — the live, mutable encounter log ("consulta en curso").
 
-While the doctor attends, the Consultation holds the editable draft (vitals, SOAP,
-diagnoses, prescription drafts, attachments). Signing it produces an immutable
+While the doctor attends, the Consultation holds the editable draft (vitals, the
+clinical note, diagnoses, prescription drafts, attachments). Signing it produces an immutable
 ``MedicalRecord`` plus issued ``Prescription`` objects and marks the appointment completed.
 
 The actual atomic persistence (record + prescriptions + appointment status, all-or-nothing)
@@ -24,6 +24,7 @@ from medicore.domain.enums import (
     ClinicalRecordType,
     ConsultationStatus,
 )
+from medicore.domain.services.note_templates import SOAP
 from medicore.domain.shared.errors import ConsultationNotSignable
 from medicore.domain.shared.identifiers import (
     ApplicationOrderId,
@@ -35,13 +36,13 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.clinical_note import ClinicalNote, NoteTemplate
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
 
 # A note is considered sign-ready at or above this completeness; below it the application
-# layer should warn (the UI also warns under 80%). The hard floor for signing is here.
+# layer should warn. The hard floor for signing is here.
 MIN_COMPLETION_TO_SIGN = 60
 
 
@@ -67,7 +68,7 @@ class Consultation:
     started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     ended_at: datetime | None = None
     vitals: Vitals = field(default_factory=Vitals)
-    soap: SoapNote = field(default_factory=SoapNote)
+    note: ClinicalNote = field(default_factory=lambda: ClinicalNote.blank(SOAP))
     diagnoses: list[IcdCode] = field(default_factory=list)
     draft_prescriptions: list[PrescriptionDraft] = field(default_factory=list)
     draft_applications: list[ApplicationDraft] = field(default_factory=list)
@@ -82,16 +83,24 @@ class Consultation:
         self,
         *,
         vitals: Vitals | None = None,
-        soap: SoapNote | None = None,
+        note: dict[str, str] | None = None,
         when: datetime | None = None,
     ) -> None:
-        """Persist a draft patch (idempotent). Only allowed while in draft."""
+        """Persist a draft patch (idempotent): vitals and the text of note sections by
+        key. Only allowed while in draft."""
         self._assert_draft()
         if vitals is not None:
             self.vitals = vitals
-        if soap is not None:
-            self.soap = soap
+        if note:
+            self.note = self.note.with_texts(note)
         self.last_saved_at = when or datetime.now(UTC)
+
+    def change_template(self, template: NoteTemplate, when: datetime | None = None) -> None:
+        """Rewrite the note in another template, carrying the text over by role."""
+        self._assert_draft()
+        if template.key != self.note.template:
+            self.note = self.note.switch_to(template)
+            self.last_saved_at = when or datetime.now(UTC)
 
     def add_diagnosis(self, diagnosis: IcdCode) -> None:
         self._assert_draft()
@@ -142,12 +151,23 @@ class Consultation:
     def compute_completion(self) -> int:
         """Heuristic completeness percentage (0..100) used by the UI ring and sign guard.
 
-        Weights: SOAP sections (60%), at least one diagnosis (20%), any vitals (20%).
+        Weights: the note's required sections (60%), at least one diagnosis (20%), any
+        vitals (20%).
         """
-        soap_score = (self.soap.filled_sections() / 4) * 60
+        note_score = self.note.completion_ratio() * 60
         dx_score = 20 if self.diagnoses else 0
         vitals_score = 20 if not self.vitals.is_empty() else 0
-        return int(round(soap_score + dx_score + vitals_score))
+        return int(round(note_score + dx_score + vitals_score))
+
+    def missing_for_sign(self) -> tuple[str, ...]:
+        """What still counts against completion: blank required note sections (by key),
+        then ``diagnosis`` and ``vitals``."""
+        missing = list(self.note.missing_required())
+        if not self.diagnoses:
+            missing.append("diagnosis")
+        if self.vitals.is_empty():
+            missing.append("vitals")
+        return tuple(missing)
 
     # ── signing ──
     def sign(
@@ -219,7 +239,7 @@ class Consultation:
             location_name=location_name,
             insurer_name=insurer_name,
             chief_complaint=chief_complaint,
-            soap=self.soap,
+            note=self.note,
             vitals=self.vitals,
             signed_at=now,
             signed_by_id=signed_by_id,
@@ -274,3 +294,4 @@ class Consultation:
                 "Consultation is already signed and cannot be modified",
                 code="consultation.already_signed",
             )
+

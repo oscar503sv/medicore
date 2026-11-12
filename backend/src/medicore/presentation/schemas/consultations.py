@@ -21,16 +21,13 @@ class VitalsSchema(BaseModel):
     fetal_heart_rate: int | None = None
 
 
-class SoapSchema(BaseModel):
-    subjective: str = ""
-    objective: str = ""
-    assessment: str = ""
-    plan: str = ""
-
-
 class AutosaveRequest(BaseModel):
     vitals: VitalsSchema | None = None
-    soap: SoapSchema | None = None
+    note: dict[str, str] | None = None  # section key -> text
+
+
+class NoteTemplateRequest(BaseModel):
+    template: str = Field(min_length=1, max_length=40)
 
 
 class DiagnosisRequest(BaseModel):
@@ -81,7 +78,8 @@ class ConsultationResponse(BaseModel):
     started_at: datetime
     ended_at: datetime | None
     vitals: dict[str, Any]
-    soap: dict[str, Any]
+    note: dict[str, Any]
+    missing: list[str]
     diagnoses: list[dict[str, Any]]
     draft_prescriptions: list[dict[str, Any]]
     draft_applications: list[dict[str, Any]] = []

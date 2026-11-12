@@ -29,3 +29,5 @@ class UserPreferences:
     # checklist was dismissed for good.
     welcome_seen: bool = False
     onboarding_dismissed: bool = False
+    # The note template the doctor prefers when the clinic sets no rule for the visit.
+    note_template: str | None = None

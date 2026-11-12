@@ -8,7 +8,10 @@ from medicore.domain.entities.tenant import Tenant
 from medicore.domain.repositories._support import Page, Paging, TenantFilter
 from medicore.domain.shared.identifiers import TenantId
 from medicore.domain.value_objects.slug import Slug
-from medicore.infrastructure.persistence.mappers.entities import to_tenant
+from medicore.infrastructure.persistence.mappers.entities import (
+    note_settings_to_json,
+    to_tenant,
+)
 from medicore.infrastructure.persistence.mappers.subscription import subscription_to_row
 from medicore.infrastructure.persistence.models.tenant import LocationModel, TenantModel
 
@@ -55,6 +58,7 @@ class SqlTenantRepository:
         row.practice_model = str(tenant.practice_model)
         row.print_paper = str(tenant.print_settings.paper)
         row.print_letterhead = tenant.print_settings.letterhead
+        row.note_settings = note_settings_to_json(tenant.note_settings)
         row.created_at = tenant.created_at
 
         # Sync locations

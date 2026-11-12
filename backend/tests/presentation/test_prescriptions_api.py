@@ -24,7 +24,7 @@ def _sign_with_prescription(seed, client, headers):
         f"/api/v1/consultations/{cid}/autosave",
         json={
             "vitals": {"heart_rate": 72, "weight": "70"},
-            "soap": {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"},
+            "note": {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"},
         },
         headers=headers,
     )

@@ -32,7 +32,7 @@ class MedicalRecordModel(Base):
     # Insurer name frozen at sign time; NULL = self-pay ("Particular").
     insurer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     chief_complaint: Mapped[str] = mapped_column(String(500), nullable=False)
-    soap: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    note: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     vitals: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     diagnoses: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     prescriptions: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)

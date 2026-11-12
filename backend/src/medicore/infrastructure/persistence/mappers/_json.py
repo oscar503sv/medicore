@@ -10,13 +10,20 @@ from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import VaccineAdministration
 from medicore.domain.entities.prescription import PrescriptionDraft, PrescriptionSnapshot
 from medicore.domain.entities.procedure import ProcedureDraft
-from medicore.domain.enums import ApplicationRoute, DocumentKind, ExamKind, ProcedurePerformer
+from medicore.domain.enums import (
+    ApplicationRoute,
+    DocumentKind,
+    ExamKind,
+    NoteRole,
+    ProcedurePerformer,
+)
+from medicore.domain.services.note_templates import SOAP
 from medicore.domain.shared.identifiers import DocumentId, ProcedureTypeId
+from medicore.domain.value_objects.clinical_note import ClinicalNote, NoteSection
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.fee import FEE_CURRENCY
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.money import Money
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.time_range import TimeRange
 from medicore.domain.value_objects.vitals import Vitals
 
@@ -50,24 +57,36 @@ def dict_to_vitals(d: dict) -> Vitals:
     )
 
 
-# ── SoapNote ──────────────────────────────────────────────────────────────────
-def soap_to_dict(s: SoapNote) -> dict:
+# ── ClinicalNote ──────────────────────────────────────────────────────────────
+def note_to_dict(n: ClinicalNote) -> dict:
     return {
-        "subjective": s.subjective,
-        "objective": s.objective,
-        "assessment": s.assessment,
-        "plan": s.plan,
+        "template": n.template,
+        "name": n.name,
+        "sections": [
+            {"key": s.key, "role": str(s.role), "title": s.title, "required": s.required,
+             "text": s.text}
+            for s in n.sections
+        ],
     }
 
 
-def dict_to_soap(d: dict) -> SoapNote:
-    if not d:
-        return SoapNote()
-    return SoapNote(
-        subjective=d.get("subjective", ""),
-        objective=d.get("objective", ""),
-        assessment=d.get("assessment", ""),
-        plan=d.get("plan", ""),
+_NOTE_ROLES = {r.value: r for r in NoteRole}
+
+
+def dict_to_note(d: dict) -> ClinicalNote:
+    if not d or not d.get("sections"):
+        return ClinicalNote.blank(SOAP)
+    return ClinicalNote(
+        template=d.get("template", ""),
+        name=d.get("name", ""),
+        sections=tuple(
+            NoteSection(
+                key=s["key"], role=_NOTE_ROLES.get(s.get("role", ""), NoteRole.FREE),
+                title=s.get("title", ""), required=bool(s.get("required", False)),
+                text=s.get("text", ""),
+            )
+            for s in d["sections"]
+        ),
     )
 
 

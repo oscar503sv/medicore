@@ -4,7 +4,7 @@
 
 A **multi-tenant** clinic management system built with **Clean Architecture**.
 
-It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (SOAP notes) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications**, **vaccination following El Salvador's national scheme**, **in-clinic medication applications**, **minor procedures**, organization settings and a **getting-started guide** for doctors and admins that ticks itself off from real data. The interface is available in **Spanish and English**, including the backend's error messages.
+It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (**clinical note templates**: SOAP, P-SOAP, full history, progress, narrative) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications**, **vaccination following El Salvador's national scheme**, **in-clinic medication applications**, **minor procedures**, organization settings and a **getting-started guide** for doctors and admins that ticks itself off from real data. The interface is available in **Spanish and English**, including the backend's error messages.
 
 It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, a **Business** overview (MRR, collections, expirations, adoption and seats per clinic), **Monitoring** (API and database health, server errors, failed sign-ins and lockouts, open sessions and support access, per-route API performance), global audit, account support (password reset, unlock, suspension) and **audited impersonation** of a clinic for support.
 
@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException with a translatable code
     ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
     ├── schemas/         # Pydantic request + response models per resource
-    └── routers/         # 25 routers, 169 endpoints under /api/v1/
+    └── routers/         # 26 routers, 173 endpoints under /api/v1/
 ```
 
 ### Multi-tenancy
@@ -202,16 +202,24 @@ The basic tier reports on the current or the previous month; from the clinic tie
 
 ---
 
+## Clinical notes
+
+The consultation note is written in a **template**, not a fixed SOAP form. Built in: **SOAP**, **P-SOAP** (problem-oriented, an ISSS audit criterion; its *Problems* section starts from the patient's conditions), **Full clinical history** (first visit), **Progress note** (follow-ups) and **Narrative** (free text). Each section has a *role* (subjective, objective, assessment, plan, history, problems, free), so switching templates mid-visit carries the text over — text without a matching section is kept under its old title — and the *plan* role feeds the prescription's general instructions whatever the template calls it.
+
+In **Settings → Clinical notes** the clinic admin enables templates, picks the default, sets a template per appointment type and for the patient's **first visit** to the clinic, and can make the format **mandatory**. A consultation opens with: first-visit rule → appointment-type rule → the doctor's **preferred template** (unless mandatory) → the clinic default. In the single-doctor plan the doctor configures it. A signed record keeps the template and section titles it was written with, and amendments edit its sections. Completion (and the 60% floor to sign) counts the template's required sections.
+
+---
+
 ## Printable documents
 
 Every document prints from the browser (`/print/:kind/:id`, "Save as PDF" works too) with the clinic's header, the patient strip and the doctor's name and **JVPM** number. Paper size (**half-letter** by default, or letter) and pre-printed letterhead (the header is left blank) are set in **Settings → Organization → Printing** and can be switched per print.
 
 | Document | Where | Notes |
 |---|---|---|
-| **Prescription** | Signed visit (after signing, the record, the patient's prescriptions) | Includes the SOAP *Plan* as "General instructions" only when the doctor wrote one (it can be left out per print) |
+| **Prescription** | Signed visit (after signing, the record, the patient's prescriptions) | Includes the note's *plan* as "General instructions" only when the doctor wrote one (it can be left out per print) |
 | **Exam order** | Signed visit | Exams ordered during the consultation (lab, imaging, other) with one-click common picks |
 | **Medical certificate** | Signed visit — issued only by the doctor who signed it | Rest (up to 90 days, with dates) or attendance (visit hours); diagnosis only if the patient agrees; coded `CM-{year}-{n}`, reprintable and voidable with a reason |
-| **Record copy** | Signed visit | Vitals, SOAP, diagnoses, prescriptions, vaccines and exams |
+| **Record copy** | Signed visit | Vitals, the clinical note in its template, diagnoses, prescriptions, vaccines and exams |
 | **Procedure** | Procedure detail | Care instructions, consent form to sign on paper, pathology request |
 | **Vaccination card** | Patient → Vaccines | Doses given and upcoming |
 | **Appointment slip** | Appointments | Date, doctor, type and location — **never the price** |
@@ -309,6 +317,7 @@ medicore/
 | **20** | Practice metrics per tier (period comparison, per doctor, weekly trend, types, insurers, heatmap, lead time, returning patients, modules), `analytics.*` permissions and the clinic's practice model (associated or employed doctors) | ✅ Done |
 | **21** | Printing: prescription (with general instructions), exam orders, medical certificates (rest/attendance, voidable), record copy, procedure documents, vaccination card, appointment slip without price and daily agenda; half-letter or letter, letterhead, doctor JVPM, every print audited | ✅ Done |
 | **22** | Reports with CSV export (appointments, income, insurers, no-shows, vaccination by MINSAL age band, procedures, applications), `reports.export` permission, audited exports | ✅ Done |
+| **23** | Clinical note templates (SOAP, P-SOAP with problems from the patient's conditions, full history, progress, narrative), clinic rules per appointment type and first visit, mandatory format, doctor's preferred template, text carried over when switching; consultation screen with live completion, what is missing to sign, patient context and safe autosave | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable application record, inventory and billing | 🗓️ Future |
@@ -368,7 +377,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (985 tests)
+.venv/bin/pytest                          # full suite (1004 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -421,14 +430,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-985 passing tests
-   242  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1004 passing tests
+   249  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   417  — application (auth, sessions, appointments, consultations, records, notifications,
+   425  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   242  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   245  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    84  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    85  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

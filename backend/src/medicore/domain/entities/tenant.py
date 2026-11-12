@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from medicore.domain.enums import IcdVersion, PracticeModel, TenantStatus
 from medicore.domain.shared.errors import DomainError, InvalidValueObject
 from medicore.domain.shared.identifiers import LocationId, TenantId
+from medicore.domain.value_objects.note_settings import NoteSettings
 from medicore.domain.value_objects.print_settings import PrintSettings
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.subscription import Subscription
@@ -42,6 +43,8 @@ class Tenant:
     # Decides the default permissions on fees and income (see PracticeModel).
     practice_model: PracticeModel = PracticeModel.ASSOCIATED
     print_settings: PrintSettings = field(default_factory=PrintSettings)
+    # Which clinical note templates doctors use and when.
+    note_settings: NoteSettings = field(default_factory=NoteSettings)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:

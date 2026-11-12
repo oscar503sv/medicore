@@ -41,11 +41,10 @@ from medicore.domain.shared.identifiers import RecordId
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.print_settings import PrintSettings
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
 from tests.application.test_consultations import booked
 from tests.application.test_procedures import _create
-from tests.support.builders import build_user, seed_clinic
+from tests.support.builders import build_user, seed_clinic, soap_note
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
 NOW = datetime(2026, 5, 20, 12, 0)
@@ -61,7 +60,7 @@ def _record(seed, *, plan="Reposo relativo, abundantes líquidos.", prescription
         id=RecordId.new(), tenant_id=seed.tenant.id, code="REC-2026-0520-CO-1",
         patient_id=seed.patient.id, author_id=seed.doctor.id,
         type=ClinicalRecordType.CONSULTATION, encounter_at=datetime(2026, 5, 20, 9),
-        location_name="Sede", chief_complaint="Fiebre", soap=SoapNote("s", "o", "a", plan),
+        location_name="Sede", chief_complaint="Fiebre", note=soap_note("s", "o", "a", plan),
         vitals=Vitals(), signed_at=datetime(2026, 5, 20, 9, 30), signed_by_id=seed.doctor.id,
         diagnoses=(IcdCode("J06.9", "Infección aguda de vías respiratorias"),),
         prescriptions=(PrescriptionSnapshot("Paracetamol", "500 mg", "c/8 h",

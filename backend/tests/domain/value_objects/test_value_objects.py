@@ -13,7 +13,6 @@ from medicore.domain.value_objects.date_range import DateRange
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.slug import Slug
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.time_range import TimeRange
 from medicore.domain.value_objects.vitals import Vitals
 
@@ -115,10 +114,3 @@ class TestMoney:
     def test_rejects_mixed_currency(self):
         with pytest.raises(InvalidValueObject):
             Money(Decimal("10"), "EUR") + Money(Decimal("5"), "USD")
-
-
-class TestSoapNote:
-    def test_completion_counts(self):
-        assert SoapNote().filled_sections() == 0
-        assert SoapNote(subjective="x", plan="y").filled_sections() == 2
-        assert SoapNote("a", "b", "c", "d").is_complete()

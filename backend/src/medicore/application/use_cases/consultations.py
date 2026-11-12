@@ -13,13 +13,21 @@ from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
+from medicore.application.use_cases.note_templates import (
+    available_templates,
+    find_template,
+    problems_prefill,
+)
 from medicore.domain.entities.application import ApplicationDraft
+from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import MedicalRecord, VaccineAdministration
+from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.prescription import PrescriptionDraft
 from medicore.domain.entities.procedure import ProcedureDraft
 from medicore.domain.enums import ClinicalRecordType, Role
+from medicore.domain.services.note_templates import resolve_template
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import (
     AppointmentId,
@@ -29,9 +37,10 @@ from medicore.domain.shared.identifiers import (
     ProcedureTypeId,
     RecordId,
 )
+from medicore.domain.value_objects.clinical_note import ClinicalNote
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.soap_note import SoapNote
+from medicore.domain.value_objects.note_settings import NoteSettings
 from medicore.domain.value_objects.vitals import Vitals
 
 
@@ -47,7 +56,7 @@ class ConsultationPatch:
     """An idempotent autosave patch for the live consultation."""
 
     vitals: Vitals | None = None
-    soap: SoapNote | None = None
+    note: dict[str, str] | None = None  # section key -> text
 
 
 def _owns(actor: ActorContext, doctor_id: object) -> bool:
@@ -75,6 +84,7 @@ class StartConsultation:
         if existing is not None:
             return existing
 
+        patient = self._uow.patients.get_by_id(appointment.patient_id)
         consultation = Consultation(
             id=ConsultationId.new(),
             tenant_id=actor.tenant_id,
@@ -82,8 +92,8 @@ class StartConsultation:
             patient_id=appointment.patient_id,
             doctor_id=appointment.doctor_id,
             started_at=self._clock.now(),
+            note=self._opening_note(actor, appointment, patient),
         )
-        patient = self._uow.patients.get_by_id(appointment.patient_id)
         with self._uow:
             appointment.start()
             self._uow.appointments.save(appointment)
@@ -97,6 +107,22 @@ class StartConsultation:
             )
             self._uow.commit()
         return consultation
+
+
+    def _opening_note(self, actor: ActorContext, appointment: Appointment,
+                      patient: Patient | None) -> ClinicalNote:
+        """A blank note in the template the clinic's rules (or the doctor) pick."""
+        tenant = self._uow.tenants.get_by_id(actor.tenant_id)
+        doctor = self._uow.users.get_by_id(appointment.doctor_id)
+        templates = available_templates(self._uow)
+        key = resolve_template(
+            tenant.note_settings if tenant else NoteSettings(),
+            appointment_type=appointment.type,
+            first_visit=not self._uow.medical_records.list_by_patient(appointment.patient_id),
+            favourite=doctor.preferences.note_template if doctor else None,
+            available=templates,
+        )
+        return problems_prefill(ClinicalNote.blank(templates[key]), patient.tags if patient else [])
 
 
 class GetConsultation:
@@ -147,7 +173,35 @@ class AutosaveConsultation(_ConsultationEditor):
         self, actor: ActorContext, consultation_id: ConsultationId, patch: ConsultationPatch
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
-        consultation.autosave(vitals=patch.vitals, soap=patch.soap, when=self._clock.now())
+        consultation.autosave(vitals=patch.vitals, note=patch.note, when=self._clock.now())
+        self._save(consultation)
+        return consultation
+
+
+class ChangeNoteTemplate(_ConsultationEditor):
+    """Rewrite the draft note in another template the clinic allows (text follows its
+    role). Refused when the clinic made its format mandatory."""
+
+    def execute(
+        self, actor: ActorContext, consultation_id: ConsultationId, template_key: str
+    ) -> Consultation:
+        consultation = self._load(actor, consultation_id)
+        template = find_template(self._uow, template_key)
+        tenant = self._uow.tenants.get_by_id(actor.tenant_id)
+        settings = tenant.note_settings if tenant else NoteSettings()
+        if template.key != consultation.note.template:
+            if settings.locked:
+                raise PermissionDenied(
+                    "the clinic made its note format mandatory", code="note.template_locked"
+                )
+            if not settings.allows(template.key):
+                raise ValidationError(
+                    "the clinic has not enabled this template", code="note.template_not_enabled"
+                )
+        consultation.change_template(template, when=self._clock.now())
+        patient = self._uow.patients.get_by_id(consultation.patient_id)
+        if patient is not None:
+            consultation.note = problems_prefill(consultation.note, patient.tags)
         self._save(consultation)
         return consultation
 

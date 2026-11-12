@@ -7,14 +7,8 @@ import { Input, Textarea } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
-import type { MedicalRecord, Soap } from '@/types'
-
-const SOAP_ORDER: { key: keyof Soap; labelKey: string }[] = [
-  { key: 'subjective', labelKey: 'consult.subjective' },
-  { key: 'objective', labelKey: 'consult.objective' },
-  { key: 'assessment', labelKey: 'consult.assessment' },
-  { key: 'plan', labelKey: 'consult.plan' },
-]
+import { sectionTitle } from '@/lib/notes'
+import type { MedicalRecord } from '@/types'
 
 export function AmendRecordModal({
   record,
@@ -26,19 +20,20 @@ export function AmendRecordModal({
   const t = useT()
   const qc = useQueryClient()
   const [chiefComplaint, setChiefComplaint] = useState('')
-  const [soap, setSoap] = useState<Soap>({ subjective: '', objective: '', assessment: '', plan: '' })
+  // Section key → text, in the template the record was signed with.
+  const [note, setNote] = useState<Record<string, string>>({})
 
   // Prefill from the record being amended each time the modal opens.
   useEffect(() => {
     if (record) {
       setChiefComplaint(record.chief_complaint)
-      setSoap({ ...record.soap })
+      setNote(Object.fromEntries(record.note.sections.map((s) => [s.key, s.text])))
     }
   }, [record])
 
   const amend = useMutation({
     mutationFn: () =>
-      recordsApi.amend(record!.id, { chief_complaint: chiefComplaint, soap: { ...soap } }),
+      recordsApi.amend(record!.id, { chief_complaint: chiefComplaint, note: { ...note } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['records'] })
       qc.invalidateQueries({ queryKey: ['record', record!.id] })
@@ -57,13 +52,13 @@ export function AmendRecordModal({
           value={chiefComplaint}
           onChange={(e) => setChiefComplaint(e.target.value)}
         />
-        {SOAP_ORDER.map((f) => (
+        {record?.note.sections.map((s) => (
           <Textarea
-            key={f.key}
-            label={t(f.labelKey)}
-            rows={3}
-            value={soap[f.key]}
-            onChange={(e) => setSoap((s) => ({ ...s, [f.key]: e.target.value }))}
+            key={s.key}
+            label={sectionTitle(t, record.note.template, s)}
+            rows={s.role === 'free' ? 8 : 3}
+            value={note[s.key] ?? ''}
+            onChange={(e) => setNote((n) => ({ ...n, [s.key]: e.target.value }))}
           />
         ))}
         <div className="flex justify-end gap-2">

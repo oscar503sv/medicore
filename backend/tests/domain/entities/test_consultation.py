@@ -25,8 +25,8 @@ from medicore.domain.shared.identifiers import (
     UserId,
 )
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
+from tests.support.builders import soap_note
 
 
 def make_consultation() -> Consultation:
@@ -42,7 +42,7 @@ def make_consultation() -> Consultation:
 
 def fill_for_signing(c: Consultation) -> None:
     c.autosave(
-        soap=SoapNote("s", "o", "a", "p"),
+        note=soap_note("s", "o", "a", "p").texts(),
         vitals=Vitals(heart_rate=72, weight=Decimal("70")),
     )
     c.add_diagnosis(IcdCode("I10", "Hipertensión"))
@@ -59,7 +59,7 @@ class TestCompletion:
 
     def test_partial_below_threshold(self):
         c = make_consultation()
-        c.autosave(soap=SoapNote(subjective="only subjective"))
+        c.autosave(note={"subjective": "only subjective"})
         # 1/4 SOAP = 15%, no dx, no vitals
         assert c.compute_completion() == 15
 
@@ -81,7 +81,7 @@ class TestEditingGuards:
 class TestSigning:
     def test_blocks_when_incomplete(self):
         c = make_consultation()
-        c.autosave(soap=SoapNote(subjective="x"))
+        c.autosave(note={"subjective": "x"})
         with pytest.raises(ConsultationNotSignable):
             c.sign(
                 record_id=RecordId.new(),

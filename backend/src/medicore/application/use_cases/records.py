@@ -81,12 +81,21 @@ class AmendMedicalRecord:
         self._clock = clock
 
     def execute(
-        self, actor: ActorContext, record_id: RecordId, **changes: object
+        self,
+        actor: ActorContext,
+        record_id: RecordId,
+        *,
+        note: dict[str, str] | None = None,
+        **changes: object,
     ) -> MedicalRecord:
+        """``note`` rewrites sections of the note by key, in the template it was signed
+        with."""
         ensure_permission(actor, Permission.RECORDS_AMEND)
         original = self._uow.medical_records.get_by_id(record_id)
         if original is None:
             raise EntityNotFound("MedicalRecord", record_id)
+        if note:
+            changes["note"] = original.note.with_texts(note)
         patient = self._uow.patients.get_by_id(original.patient_id)
 
         with self._uow:

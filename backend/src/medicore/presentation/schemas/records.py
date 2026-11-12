@@ -12,7 +12,7 @@ from medicore.domain.enums import DocumentKind
 
 class AmendRequest(BaseModel):
     chief_complaint: str | None = None
-    soap: dict[str, str] | None = None
+    note: dict[str, str] | None = None  # section key -> text
 
 
 class UploadDocumentRequest(BaseModel):
@@ -39,7 +39,7 @@ class RecordResponse(BaseModel):
     location_name: str
     insurer_name: str | None = None
     chief_complaint: str
-    soap: dict[str, Any]
+    note: dict[str, Any]
     vitals: dict[str, Any]
     diagnoses: list[dict[str, Any]]
     prescriptions: list[dict[str, Any]]

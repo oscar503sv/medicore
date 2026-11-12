@@ -30,6 +30,7 @@ def _prefs_to_json(user: User) -> dict:
         },
         "welcome_seen": p.welcome_seen,
         "onboarding_dismissed": p.onboarding_dismissed,
+        "note_template": p.note_template,
     }
 
 

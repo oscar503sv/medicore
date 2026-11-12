@@ -30,9 +30,8 @@ from medicore.domain.enums import (
 )
 from medicore.domain.shared.errors import ConsultationNotSignable, PermissionDenied
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.vitals import Vitals
-from tests.support.builders import seed_clinic
+from tests.support.builders import seed_clinic, soap_note
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
 MONDAY_9AM = datetime(2026, 6, 1, 9, 0)
@@ -60,7 +59,7 @@ def fill(seed, uow, consultation):
         seed.doctor_actor,
         consultation.id,
         ConsultationPatch(
-            soap=SoapNote("subjetivo", "objetivo", "evaluación", "plan"),
+            note=soap_note("subjetivo", "objetivo", "evaluación", "plan").texts(),
             vitals=Vitals(heart_rate=72, weight=Decimal("70")),
         ),
     )
@@ -132,7 +131,7 @@ def test_sign_incomplete_consultation_rolls_back_everything():
     consultation = StartConsultation(uow, FixedClock()).execute(seed.doctor_actor, appt.id)
     # only a tiny bit of content → below the sign threshold
     AutosaveConsultation(uow, FixedClock()).execute(
-        seed.doctor_actor, consultation.id, ConsultationPatch(soap=SoapNote(subjective="x"))
+        seed.doctor_actor, consultation.id, ConsultationPatch(note={"subjective": "x"})
     )
 
     with pytest.raises(ConsultationNotSignable):

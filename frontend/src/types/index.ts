@@ -515,11 +515,52 @@ export interface Vitals {
   fetal_heart_rate: number | null
 }
 
-export interface Soap {
-  subjective: string
-  objective: string
-  assessment: string
-  plan: string
+export type NoteRole =
+  | 'problems'
+  | 'subjective'
+  | 'history'
+  | 'objective'
+  | 'assessment'
+  | 'plan'
+  | 'free'
+
+/** One section of a clinical note: the template's section plus what was written in it. */
+export interface NoteSection {
+  key: string
+  role: NoteRole
+  title: string
+  required: boolean
+  text: string
+}
+
+/** A clinical note: the template it was written with (frozen) and its sections. */
+export interface ClinicalNote {
+  template: string
+  name: string
+  sections: NoteSection[]
+}
+
+export interface NoteTemplate {
+  key: string
+  name: string
+  system: boolean
+  sections: Omit<NoteSection, 'text'>[]
+}
+
+/** When each template is used: rules map an appointment type or `first_visit` to one. */
+export interface NoteSettings {
+  enabled: string[] // empty: every template
+  default: string
+  rules: Record<string, string>
+  locked: boolean
+}
+
+export interface NoteCatalog {
+  templates: NoteTemplate[]
+  settings: NoteSettings
+  allowed: string[]
+  favourite: string | null
+  can_configure: boolean
 }
 
 export interface Diagnosis {
@@ -571,7 +612,10 @@ export interface Consultation {
   started_at: string
   ended_at: string | null
   vitals: Vitals
-  soap: Soap
+  note: ClinicalNote
+  // What still counts against completion: blank required section keys, then
+  // `diagnosis` and `vitals`.
+  missing: string[]
   diagnoses: Diagnosis[]
   draft_prescriptions: PrescriptionDraft[]
   draft_applications: ApplicationDraft[]
@@ -600,7 +644,7 @@ export interface MedicalRecord {
   location_name: string
   insurer_name: string | null
   chief_complaint: string
-  soap: Soap
+  note: ClinicalNote
   vitals: Vitals
   diagnoses: Diagnosis[]
   prescriptions: PrescriptionSnapshot[]

@@ -114,6 +114,11 @@ class User:
 
         self.preferences = replace(self.preferences, welcome_seen=True, onboarding_dismissed=True)
 
+    def set_note_template(self, template: str | None) -> None:
+        from dataclasses import replace
+
+        self.preferences = replace(self.preferences, note_template=template)
+
 
 @dataclass(slots=True)
 class DoctorProfile:

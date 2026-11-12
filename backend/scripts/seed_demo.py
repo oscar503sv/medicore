@@ -168,12 +168,13 @@ from medicore.domain.shared.identifiers import (
     UserId,
 )
 from medicore.domain.value_objects.blood_type import BloodType
+from medicore.domain.value_objects.clinical_note import ClinicalNote
 from medicore.domain.value_objects.contact_info import ContactInfo
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.fee import fee
 from medicore.domain.value_objects.icd_code import IcdCode
+from medicore.domain.value_objects.note_settings import NoteSettings
 from medicore.domain.value_objects.slug import Slug
-from medicore.domain.value_objects.soap_note import SoapNote
 from medicore.domain.value_objects.subscription import Subscription
 from medicore.domain.value_objects.time_range import TimeRange
 from medicore.domain.value_objects.user_preferences import UserPreferences
@@ -627,6 +628,14 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
 
 # How each demo clinic's doctors work: Clínica Demo shows associated doctors (each sets their
 # prices and sees their income), Centro Norte employed ones (the administration does).
+# Clínica Demo opens first visits as a full clinical history and follow-ups as an
+# evolution note; Centro Norte uses the problem-oriented SOAP (P-SOAP) as its mandatory
+# format, like institutions audited on it.
+DEMO_NOTE_SETTINGS = {
+    "clinica-demo": NoteSettings(rules={"first_visit": "history", "follow_up": "evolution"}),
+    "centro-norte": NoteSettings(enabled=("psoap",), default="psoap", locked=True),
+}
+
 DEMO_PRACTICE_MODELS = {
     "clinica-demo": PracticeModel.ASSOCIATED,
     "centro-norte": PracticeModel.EMPLOYED,
@@ -663,6 +672,7 @@ def get_or_create_tenant(
     tenant = Tenant(
         id=tid, legal_name=legal_name, tax_id=tax_id, slug=Slug(slug), timezone=TIMEZONE,
         subscription=DEMO_SUBSCRIPTIONS[slug], practice_model=DEMO_PRACTICE_MODELS[slug],
+        note_settings=DEMO_NOTE_SETTINGS[slug],
         locations=[Location(id=LocationId.new(), tenant_id=tid, name=location, is_primary=True,
                             phone=f"2{RNG.randint(200, 299)}-{RNG.randint(1000, 9999)}")],
     )
@@ -979,10 +989,15 @@ def book(c: Clinic, doctor: User, start: datetime):
     booked = booked.replace(hour=RNG.randint(8, 17), minute=RNG.choice([0, 10, 25, 40, 55]))
     booked = min(booked, latest)
     booked = booked.replace(second=0, microsecond=0)
+    # Half the visits of patients already seen are booked as follow-ups (so clinics with a
+    # follow-up note rule show evolution notes).
+    returning = any(r.patient_id == patient.id for r in c.signed)
+    kind = (AppointmentType.FOLLOW_UP if returning and RNG.random() < 0.5
+            else AppointmentType.CONSULT)
     cmd = CreateAppointmentCommand(
         patient_id=patient.id, doctor_id=doctor.id,
         location_id=c.tenant.primary_location.id,
-        type=AppointmentType.CONSULT, scheduled_start=start,
+        type=kind, scheduled_start=start,
         reason=RNG.choice(SPECIALTIES[c.specialty[doctor.id]].reasons),
         insurance_id=insurer_for(c, patient),
     )
@@ -1014,25 +1029,42 @@ def vitals_for(patient: Patient, on: date) -> Vitals:
     )
 
 
-def soap_for(reason: str, dx_label: str) -> SoapNote:
-    return SoapNote(
-        subjective=RNG.choice([
+def note_for(note: ClinicalNote, reason: str, dx_label: str) -> dict[str, str]:
+    """Plausible text for each section of the note the consultation opened with, by role."""
+    by_role = {
+        "problems": f"- {reason}",
+        "subjective": RNG.choice([
             f"Acude por {reason.lower()}. Evolución de {RNG.randint(2, 14)} días.",
             f"Refiere {reason.lower()}; sin otros síntomas asociados.",
             f"Consulta por {reason.lower()}. Niega fiebre ni pérdida de peso.",
         ]),
-        objective=RNG.choice([
+        "history": RNG.choice([
+            "Niega antecedentes médicos y quirúrgicos de importancia. No fuma.",
+            "Antecedentes familiares de hipertensión. Sin alergias conocidas a alimentos.",
+            "Apendicectomía en la infancia. Consumo social de alcohol.",
+        ]),
+        "objective": RNG.choice([
             "Buen estado general. Constantes estables. Exploración sin hallazgos de alarma.",
             "Consciente y orientado. Auscultación normal. Abdomen blando y depresible.",
             "Paciente colaborador, hidratado. Exploración física dentro de la normalidad.",
         ]),
-        assessment=f"Cuadro compatible con {dx_label.lower()}.",
-        plan=RNG.choice([
+        "assessment": f"Cuadro compatible con {dx_label.lower()}.",
+        "plan": RNG.choice([
             "Tratamiento indicado y control en 2 semanas. Signos de alarma explicados.",
             "Se solicitan análisis de control. Revisión con resultados.",
             "Medidas higiénico-dietéticas, tratamiento pautado y seguimiento en 1 mes.",
         ]),
-    )
+    }
+    texts: dict[str, str] = {}
+    for section in note.sections:
+        if section.filled:  # e.g. P-SOAP problems prefilled from the patient's conditions
+            continue
+        if section.role == "free":
+            texts[section.key] = " ".join(
+                by_role[r] for r in ("subjective", "objective", "assessment", "plan"))
+        elif section.role in by_role:
+            texts[section.key] = by_role.pop(section.role)
+    return texts
 
 
 def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
@@ -1044,8 +1076,8 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
     dx = RNG.sample(spec.diagnoses, 1 if RNG.random() < 0.75 else 2)
     AutosaveConsultation(c.uow(), c.at(start + timedelta(minutes=6))).execute(
         me, consultation.id,
-        ConsultationPatch(vitals=vitals_for(patient, start.date()), soap=soap_for(
-            appt.reason, dx[0][1])),
+        ConsultationPatch(vitals=vitals_for(patient, start.date()), note=note_for(
+            consultation.note, appt.reason, dx[0][1])),
     )
     for code, label in dx:
         AddDiagnosis(c.uow(), c.at(start + timedelta(minutes=10))).execute(
@@ -1511,17 +1543,17 @@ def seed_amendments(c: Clinic) -> None:
         when_utc = record.signed_at + timedelta(days=RNG.randint(1, 4), hours=RNG.randint(1, 5))
         when = min(when_utc.astimezone(c.clock.tz).replace(tzinfo=None),
                    c.now - timedelta(hours=1))
-        soap = SoapNote(
-            subjective=record.soap.subjective, objective=record.soap.objective,
-            assessment=record.soap.assessment,
-            plan=record.soap.plan + " Adenda: " + RNG.choice([
-                "resultados de laboratorio dentro de la normalidad.",
-                "se ajusta la dosis según evolución telefónica.",
-                "paciente refiere mejoría; se mantiene el tratamiento.",
-                "se añade derivación a especialista.",
-            ]),
-        )
-        AmendMedicalRecord(c.uow(), c.at(when)).execute(actor(c, amender), record.id, soap=soap)
+        # The addendum goes at the end of the plan (or of the only section, if narrative).
+        last = next((s for s in record.note.sections if s.role == "plan"),
+                    record.note.sections[-1])
+        addendum = last.text + " Adenda: " + RNG.choice([
+            "resultados de laboratorio dentro de la normalidad.",
+            "se ajusta la dosis según evolución telefónica.",
+            "paciente refiere mejoría; se mantiene el tratamiento.",
+            "se añade derivación a especialista.",
+        ])
+        AmendMedicalRecord(c.uow(), c.at(when)).execute(
+            actor(c, amender), record.id, note={last.key: addendum})
         c.count("enmiendas")
 
 

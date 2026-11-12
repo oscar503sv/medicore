@@ -315,3 +315,16 @@ class CertificateKind(StrEnum):
 
     ATTENDANCE = "attendance"
     REST = "rest"
+
+
+class NoteRole(StrEnum):
+    """What a section of a clinical note is for, whatever its title. Text follows its role
+    when the doctor switches templates, and the plan role feeds printed indications."""
+
+    PROBLEMS = "problems"
+    SUBJECTIVE = "subjective"
+    HISTORY = "history"
+    OBJECTIVE = "objective"
+    ASSESSMENT = "assessment"
+    PLAN = "plan"
+    FREE = "free"

@@ -11,15 +11,8 @@ import { Drawer } from '@/components/ui/Drawer'
 import { Spinner } from '@/components/ui/Spinner'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { sectionTitle, templateName } from '@/lib/notes'
 import { useAuthStore } from '@/stores/auth'
-import type { Soap } from '@/types'
-
-const SOAP_ORDER: { key: keyof Soap; labelKey: string }[] = [
-  { key: 'subjective', labelKey: 'consult.subjective' },
-  { key: 'objective', labelKey: 'consult.objective' },
-  { key: 'assessment', labelKey: 'consult.assessment' },
-  { key: 'plan', labelKey: 'consult.plan' },
-]
 
 export function RecordDrawer({
   recordId,
@@ -92,17 +85,19 @@ export function RecordDrawer({
             </section>
           )}
 
-          {/* SOAP */}
+          {/* Clinical note, in the template it was signed with */}
           <section className="mt-6 space-y-4">
-            {SOAP_ORDER.map(
-              (f) =>
-                record.soap[f.key] && (
-                  <div key={f.key}>
-                    <p className="eyebrow mb-1">{t(f.labelKey)}</p>
-                    <p className="whitespace-pre-wrap text-sm text-tx">{record.soap[f.key]}</p>
-                  </div>
-                ),
-            )}
+            <p className="text-xs text-tx-3">
+              {t('note.title')} · {templateName(t, record.note.template, record.note.name)}
+            </p>
+            {record.note.sections
+              .filter((s) => s.text.trim())
+              .map((s) => (
+                <div key={s.key}>
+                  <p className="eyebrow mb-1">{sectionTitle(t, record.note.template, s)}</p>
+                  <p className="whitespace-pre-wrap text-sm text-tx">{s.text}</p>
+                </div>
+              ))}
           </section>
 
           {/* Diagnoses */}

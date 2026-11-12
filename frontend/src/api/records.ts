@@ -7,7 +7,7 @@ export const recordsApi = {
 
   get: (id: string) => api.get<MedicalRecord>(`/records/${id}`).then((r) => r.data),
 
-  amend: (id: string, payload: { chief_complaint?: string; soap?: Record<string, string> }) =>
+  amend: (id: string, payload: { chief_complaint?: string; note?: Record<string, string> }) =>
     api.post<MedicalRecord>(`/records/${id}/amend`, payload).then((r) => r.data),
 
   listDocuments: (patientId: string) =>

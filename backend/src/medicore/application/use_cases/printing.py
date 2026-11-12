@@ -25,7 +25,7 @@ from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.procedure import Procedure
 from medicore.domain.entities.tenant import Location, Tenant
-from medicore.domain.enums import PaperSize, Role
+from medicore.domain.enums import NoteRole, PaperSize, Role
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     CertificateId,
@@ -220,7 +220,7 @@ class PrintRecordDocument(_Printer):
         )
         self._audit(actor, document, "MedicalRecord", str(record.id), record.code, patient)
         return RecordPrint(
-            context=context, record=record, indications=record.soap.plan.strip() or None,
+            context=context, record=record, indications=record.note.text_for(NoteRole.PLAN) or None,
             amends_code=amends_code,
         )
 

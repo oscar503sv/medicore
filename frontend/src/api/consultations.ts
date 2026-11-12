@@ -4,7 +4,6 @@ import type {
   Consultation,
   ExamKind,
   MedicalRecord,
-  Soap,
   Vitals,
 } from '@/types'
 
@@ -17,8 +16,14 @@ export const consultationsApi = {
       .post<Consultation>(`/consultations/start/${appointmentId}`)
       .then((r) => r.data),
 
-  autosave: (id: string, patch: { vitals?: Partial<Vitals>; soap?: Partial<Soap> }) =>
+  /** `note` maps section keys to their text. */
+  autosave: (id: string, patch: { vitals?: Partial<Vitals>; note?: Record<string, string> }) =>
     api.patch<Consultation>(`/consultations/${id}/autosave`, patch).then((r) => r.data),
+
+  changeTemplate: (id: string, template: string) =>
+    api
+      .post<Consultation>(`/consultations/${id}/note-template`, { template })
+      .then((r) => r.data),
 
   addDiagnosis: (id: string, code: string, label: string) =>
     api
