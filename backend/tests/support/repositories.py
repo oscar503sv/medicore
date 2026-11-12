@@ -719,6 +719,21 @@ class InMemoryInsurerRepository(_Scoped):
         self._store.insurers[insurer.id.value] = insurer
 
 
+class InMemoryNoteTemplateRepository(_Scoped):
+    def get_by_id(self, template_id) -> object | None:
+        t = self._store.note_templates.get(template_id.value)
+        return t if t and t.tenant_id == self._tenant else None
+
+    def list(self, include_archived: bool = False) -> list:
+        result = [t for t in self._mine(self._store.note_templates.values())
+                  if include_archived or not t.archived]
+        result.sort(key=lambda t: t.created_at)
+        return result
+
+    def save(self, template) -> None:
+        self._store.note_templates[template.id.value] = template
+
+
 class InMemoryRolePermissionOverrideRepository(_Scoped):
     def get_by_role(self, role) -> object | None:
         return next(

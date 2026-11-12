@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 26 routers, 173 endpoints bajo /api/v1/
+    └── routers/         # 26 routers, 176 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -143,7 +143,7 @@ El control de acceso es **granular y personalizable por clínica** (`application
 
 Cada clínica tiene una **suscripción** (value object `Subscription` en `Tenant`): plan, módulos opcionales, fecha de pago, indicador de prueba, días de gracia y condiciones especiales (límites a la medida, precio negociado). La activación es manual: las clínicas pagan por transferencia bancaria y el soporte lo registra desde la consola de plataforma.
 
-- **Catálogo de planes** (`plans`, editable en **Planes y precios**): Profesional independiente, Clínica, Clínica Plus y Empresarial (cotización). Cada uno fija límites de médicos, personal de apoyo (enfermería, recepción y administradores adicionales al primero), sedes y almacenamiento, además de funciones (`user_permissions`) y su **nivel de analítica** (`basic` < `clinic` < `operations`: panel básico, panel de la clínica, métricas operativas).
+- **Catálogo de planes** (`plans`, editable en **Planes y precios**): Profesional independiente, Clínica, Clínica Plus y Empresarial (cotización). Cada uno fija límites de médicos, personal de apoyo (enfermería, recepción y administradores adicionales al primero), sedes y almacenamiento, además de funciones (`user_permissions`; `custom_note_templates` desde Clínica Plus) y su **nivel de analítica** (`basic` < `clinic` < `operations`: panel básico, panel de la clínica, métricas operativas).
 - **Módulos opcionales** (`addon_pricing`): vacunación, aplicaciones y procedimientos, cada uno con precio mensual y un precio de paquete por los tres; y **analítica avanzada** ($20), que sube la clínica a métricas operativas, se cobra aparte del paquete y no se vende a planes que ya la incluyen (`plan.analytics_included`).
 - **Cupos** aplicados en los casos de uso (invitar, cambiar rol, reactivar, nueva sede): crecer por encima del límite se rechaza con `plan.quota_*`; una clínica que ya lo supera (tras bajar de plan) conserva lo que tiene.
 - **Pagos y renovación** (`subscription_payments`): registrar un pago extiende el periodo de 1 a 24 meses. Al vencer, la clínica sigue operando durante los días de gracia; después queda en **solo lectura** (`plan.read_only`: puede consultar pero no modificar hasta renovar). La app muestra avisos al acercarse el vencimiento.
@@ -207,6 +207,8 @@ El nivel básico genera reportes del mes en curso o del anterior; desde el nivel
 La nota de la consulta se escribe con una **plantilla**, no con un SOAP fijo. Incluidas: **SOAP**, **P-SOAP** (orientada a problemas, criterio de auditoría del ISSS; su sección *Problemas* parte de las condiciones del paciente), **Historia clínica completa** (primera consulta), **Nota de evolución** (controles) y **Narrativa** (texto libre). Cada sección tiene un *rol* (subjetivo, objetivo, análisis, plan, antecedentes, problemas, libre): al cambiar de plantilla en plena consulta el texto se conserva —lo que no tiene sección equivalente queda bajo su título anterior— y el rol *plan* alimenta las indicaciones generales de la receta, se llame como se llame la sección.
 
 En **Ajustes → Notas clínicas** el administrador habilita plantillas, elige la predeterminada, define una por tipo de cita y para la **primera consulta** del paciente en la clínica, y puede hacer el formato **obligatorio**. La consulta se abre con: regla de primera consulta → regla del tipo de cita → **formato preferido** del médico (si no es obligatorio) → predeterminado de la clínica. En el plan de médico independiente lo configura el propio médico. El expediente firmado guarda la plantilla y los títulos con que se escribió, y las enmiendas editan sus secciones. La completitud (y el mínimo de 60% para firmar) cuenta las secciones obligatorias de la plantilla.
+
+Desde **Clínica Plus**, la clínica puede crear **plantillas propias** (hasta 12 secciones, cada una con título, rol y si es obligatoria). Aparecen junto a las incluidas en los formatos habilitados, las reglas y el preferido del médico. Editarlas no cambia las notas ya escritas, que guardan su versión; eliminarlas las retira de los ajustes sin tocar expedientes ni consultas en curso. Si la clínica baja de plan, dejan de ofrecerse.
 
 ---
 
@@ -318,6 +320,7 @@ medicore/
 | **21** | Impresión: receta (con indicaciones generales), órdenes de exámenes, constancias médicas (reposo/asistencia, anulables), copia de expediente, documentos de procedimientos, carné de vacunación, comprobante de cita sin precio y agenda del día; media carta o carta, papel membretado, JVPM del médico, cada impresión auditada | ✅ Completada |
 | **22** | Reportes con exportación CSV (citas, ingresos, aseguradoras, inasistencias, vacunación por grupos de edad del MINSAL, procedimientos, aplicaciones), permiso `reports.export`, exportaciones auditadas | ✅ Completada |
 | **23** | Plantillas de nota clínica (SOAP, P-SOAP con problemas desde las condiciones del paciente, historia completa, evolución, narrativa), reglas de la clínica por tipo de cita y primera consulta, formato obligatorio, formato preferido del médico, el texto se conserva al cambiar; pantalla de consulta con completitud en vivo, lo que falta para firmar, contexto del paciente y autoguardado seguro | ✅ Completada |
+| **24** | Plantillas de nota propias de la clínica (Clínica Plus y superiores): editor de secciones con rol y obligatoriedad, versiones conservadas en las notas escritas, auditoría, característica de plan editable desde la plataforma | ✅ Completada |
 | — | Notificaciones por email/SMS y recordatorios de citas | 🗓️ A futuro |
 | — | Inventario de lotes de vacunas y recordatorios de vacunación | 🗓️ A futuro |
 | — | Aplicaciones: catálogo de medicamentos frecuentes, constancia imprimible de la aplicación, inventario y facturación | 🗓️ A futuro |
@@ -377,7 +380,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1004 tests)
+.venv/bin/pytest                          # suite completa (1012 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -430,14 +433,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1004 tests en verde
+1012 tests en verde
    249  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   425  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   431  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   245  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   246  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    85  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    86  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from medicore.domain.enums import NoteRole
+
 
 class NoteSectionResponse(BaseModel):
     key: str
@@ -32,7 +34,19 @@ class NoteCatalogResponse(BaseModel):
     allowed: list[str]
     favourite: str | None
     can_configure: bool
+    custom_allowed: bool
 
 
 class FavouriteTemplateRequest(BaseModel):
     template: str | None = Field(None, max_length=40)
+
+
+class SectionInput(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
+    role: NoteRole
+    required: bool = True
+
+
+class CustomTemplateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    sections: list[SectionInput] = Field(min_length=1, max_length=12)

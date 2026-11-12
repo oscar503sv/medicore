@@ -40,6 +40,9 @@ from medicore.infrastructure.persistence.repositories.monitoring import (
     SqlMonitoringReadModel,
     SqlRequestStatsRepository,
 )
+from medicore.infrastructure.persistence.repositories.note_template import (
+    SqlNoteTemplateRepository,
+)
 from medicore.infrastructure.persistence.repositories.other import (
     SqlAuditLogRepository,
     SqlDoctorAvailabilityRepository,
@@ -82,6 +85,7 @@ class SqlAlchemyUnitOfWork:
 
         self.patients = SqlPatientRepository(session, tenant_id)
         self.insurers = SqlInsurerRepository(session, tenant_id)
+        self.note_templates = SqlNoteTemplateRepository(session, tenant_id)
         self.appointments = SqlAppointmentRepository(session, tenant_id)
         self.consultations = SqlConsultationRepository(session, tenant_id)
         self.medical_records = SqlMedicalRecordRepository(session, tenant_id)

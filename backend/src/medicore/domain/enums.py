@@ -274,6 +274,7 @@ class PlanFeature(StrEnum):
     """Capabilities that differ between plans (beyond their quotas)."""
 
     USER_PERMISSIONS = "user_permissions"  # per-user permission overrides
+    CUSTOM_NOTE_TEMPLATES = "custom_note_templates"  # the clinic builds its own note templates
 
 
 class PaymentMethod(StrEnum):

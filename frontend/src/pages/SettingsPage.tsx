@@ -60,7 +60,7 @@ export function SettingsPage() {
     <div className="space-y-5 p-8">
       <PageHeader title={t('settings.title')} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[200px_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[200px_minmax(0,1fr)]">
         <nav className="space-y-0.5">
           {sections.map((s) => (
             <button

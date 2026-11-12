@@ -56,3 +56,30 @@ def test_switch_template_and_autosave_sections(seed, client, auth_headers):
     resp = client.patch(f"/api/v1/consultations/{cid}/autosave",
                         json={"note": {"anamnesis": "x"}}, headers=auth_headers)
     assert resp.status_code in (400, 422) and resp.json()["code"] == "note.unknown_section"
+
+
+def test_custom_templates(client, admin_headers, auth_headers):
+    body = {"name": "Control prenatal", "sections": [
+        {"title": "Evolución del embarazo", "role": "subjective"},
+        {"title": "Altura uterina y FCF", "role": "objective"},
+        {"title": "Plan", "role": "plan", "required": False}]}
+    resp = client.post("/api/v1/note-templates", json=body, headers=admin_headers)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["custom_allowed"] is True
+    [custom] = [t for t in resp.json()["templates"] if not t["system"]]
+    assert custom["name"] == "Control prenatal"
+    assert [s["key"] for s in custom["sections"]] == ["s1", "s2", "s3"]
+
+    resp = client.post("/api/v1/note-templates", json=body, headers=auth_headers)
+    assert resp.status_code == 403 and resp.json()["code"] == "note.cannot_configure"
+    resp = client.post("/api/v1/note-templates", json={**body, "sections": []},
+                       headers=admin_headers)
+    assert resp.status_code == 422
+
+    body["name"] = "Prenatal"
+    resp = client.put(f"/api/v1/note-templates/{custom['key']}", json=body,
+                      headers=admin_headers)
+    assert [t["name"] for t in resp.json()["templates"] if not t["system"]] == ["Prenatal"]
+    resp = client.delete(f"/api/v1/note-templates/{custom['key']}", headers=admin_headers)
+    assert resp.status_code == 200
+    assert all(t["system"] for t in resp.json()["templates"])

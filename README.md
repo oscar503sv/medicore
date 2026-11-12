@@ -81,7 +81,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException with a translatable code
     ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
     ├── schemas/         # Pydantic request + response models per resource
-    └── routers/         # 26 routers, 173 endpoints under /api/v1/
+    └── routers/         # 26 routers, 176 endpoints under /api/v1/
 ```
 
 ### Multi-tenancy
@@ -143,7 +143,7 @@ Access control is **granular and customizable per clinic** (`application/common/
 
 Each clinic has a **subscription** (`Subscription` value object on `Tenant`): plan, optional modules, paid-until date, trial flag, grace days and special terms (limit overrides, negotiated price). Activation is manual — clinics pay by bank transfer and support records it from the platform console.
 
-- **Plan catalog** (`plans`, editable in **Plans & pricing**): Profesional independiente, Clínica, Clínica Plus and Empresarial (custom quote). Each sets limits for doctors, support staff (nursing, reception and admins beyond the first), sites and storage, plus features (`user_permissions`) and its **analytics tier** (`basic` < `clinic` < `operations`: basic dashboard, clinic dashboard, operational metrics).
+- **Plan catalog** (`plans`, editable in **Plans & pricing**): Profesional independiente, Clínica, Clínica Plus and Empresarial (custom quote). Each sets limits for doctors, support staff (nursing, reception and admins beyond the first), sites and storage, plus features (`user_permissions`; `custom_note_templates` from Clínica Plus) and its **analytics tier** (`basic` < `clinic` < `operations`: basic dashboard, clinic dashboard, operational metrics).
 - **Optional modules** (`addon_pricing`): vaccination, applications and procedures, each with a monthly price and a bundle price for all three; plus **advanced analytics** ($20), which raises the clinic to operational metrics, is charged apart from the bundle and is not sold to plans that already include it (`plan.analytics_included`).
 - **Quotas** are enforced in the use cases (invite, role change, reactivation, new site): growing above a limit is refused with `plan.quota_*`; a clinic already above it (after a downgrade) keeps what it has.
 - **Payments and renewal** (`subscription_payments`): recording a payment extends the paid period by 1–24 months. After the period ends the clinic keeps working for the grace days; then it becomes **read-only** (`plan.read_only`: it can view but not change data until renewed). The app shows banners as expiry approaches.
@@ -207,6 +207,8 @@ The basic tier reports on the current or the previous month; from the clinic tie
 The consultation note is written in a **template**, not a fixed SOAP form. Built in: **SOAP**, **P-SOAP** (problem-oriented, an ISSS audit criterion; its *Problems* section starts from the patient's conditions), **Full clinical history** (first visit), **Progress note** (follow-ups) and **Narrative** (free text). Each section has a *role* (subjective, objective, assessment, plan, history, problems, free), so switching templates mid-visit carries the text over — text without a matching section is kept under its old title — and the *plan* role feeds the prescription's general instructions whatever the template calls it.
 
 In **Settings → Clinical notes** the clinic admin enables templates, picks the default, sets a template per appointment type and for the patient's **first visit** to the clinic, and can make the format **mandatory**. A consultation opens with: first-visit rule → appointment-type rule → the doctor's **preferred template** (unless mandatory) → the clinic default. In the single-doctor plan the doctor configures it. A signed record keeps the template and section titles it was written with, and amendments edit its sections. Completion (and the 60% floor to sign) counts the template's required sections.
+
+From **Clínica Plus** up, the clinic can build **its own templates** (up to 12 sections, each with a title, a role and whether it is required). They sit next to the built-in ones in the enabled formats, the rules and the doctor's preferred template. Editing one never changes notes already written, which keep their version; deleting one takes it out of the settings without touching signed records or consultations in progress. On a downgrade they stop being offered.
 
 ---
 
@@ -318,6 +320,7 @@ medicore/
 | **21** | Printing: prescription (with general instructions), exam orders, medical certificates (rest/attendance, voidable), record copy, procedure documents, vaccination card, appointment slip without price and daily agenda; half-letter or letter, letterhead, doctor JVPM, every print audited | ✅ Done |
 | **22** | Reports with CSV export (appointments, income, insurers, no-shows, vaccination by MINSAL age band, procedures, applications), `reports.export` permission, audited exports | ✅ Done |
 | **23** | Clinical note templates (SOAP, P-SOAP with problems from the patient's conditions, full history, progress, narrative), clinic rules per appointment type and first visit, mandatory format, doctor's preferred template, text carried over when switching; consultation screen with live completion, what is missing to sign, patient context and safe autosave | ✅ Done |
+| **24** | The clinic's own note templates (Clínica Plus and up): section editor with role and required flag, written notes keep their version, audited, plan feature editable from the platform | ✅ Done |
 | — | Email/SMS notifications and appointment reminders | 🗓️ Future |
 | — | Vaccine lot inventory and vaccination reminders | 🗓️ Future |
 | — | Applications: frequent-drug catalog, printable application record, inventory and billing | 🗓️ Future |
@@ -377,7 +380,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1004 tests)
+.venv/bin/pytest                          # full suite (1012 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -430,14 +433,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1004 passing tests
+1012 passing tests
    249  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   425  — application (auth, sessions, appointments, consultations, records, notifications,
+   431  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   245  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   246  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    85  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    86  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

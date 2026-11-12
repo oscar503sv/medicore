@@ -168,7 +168,7 @@ export const ADDON_MODULES: AddonModule[] = [
 /** Dashboard and reports depth, least to most. The analytics add-on raises a clinic to operations. */
 export type AnalyticsTier = 'basic' | 'clinic' | 'operations'
 export const ANALYTICS_TIERS: AnalyticsTier[] = ['basic', 'clinic', 'operations']
-export type PlanFeature = 'user_permissions'
+export type PlanFeature = 'user_permissions' | 'custom_note_templates'
 export type SubscriptionStatus = 'trial' | 'active' | 'grace' | 'read_only'
 
 /** Quotas; `null` = unlimited on a plan, "use the plan's" on a clinic override. */
@@ -561,6 +561,14 @@ export interface NoteCatalog {
   allowed: string[]
   favourite: string | null
   can_configure: boolean
+  custom_allowed: boolean // the plan includes the clinic's own templates
+}
+
+/** A section as the clinic writes it in its own template. */
+export interface SectionInput {
+  title: string
+  role: NoteRole
+  required: boolean
 }
 
 export interface Diagnosis {

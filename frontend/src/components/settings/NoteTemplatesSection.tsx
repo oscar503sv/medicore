@@ -9,6 +9,7 @@ import { Select } from '@/components/ui/Select'
 import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
+import { CustomNoteTemplates } from '@/components/settings/CustomNoteTemplates'
 import { templateName } from '@/lib/notes'
 import { useAuthStore } from '@/stores/auth'
 import type { NoteCatalog, NoteSettings } from '@/types'
@@ -33,6 +34,7 @@ export function NoteTemplatesSection() {
       {/* A doctor who configures the formats (single-doctor plan) sets the default itself */}
       {isDoctor && !catalog.can_configure && <FavouriteCard catalog={catalog} />}
       {catalog.can_configure && <ClinicNotesCard catalog={catalog} solo={isDoctor} />}
+      {catalog.can_configure && <CustomNoteTemplates catalog={catalog} />}
     </>
   )
 }
@@ -139,9 +141,11 @@ function ClinicNotesCard({ catalog, solo }: { catalog: NoteCatalog; solo: boolea
                   />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-tx">{templateName(t, tpl.key, tpl.name)}</p>
-                    {tpl.system && (
-                      <p className="text-xs text-tx-3">{t(`note.template_desc.${tpl.key}`)}</p>
-                    )}
+                    <p className="truncate text-xs text-tx-3">
+                      {tpl.system
+                        ? t(`note.template_desc.${tpl.key}`)
+                        : tpl.sections.map((s) => s.title).join(' · ')}
+                    </p>
                   </div>
                   {isDefault ? (
                     <span className="shrink-0 rounded-pill bg-[var(--accent-10)] px-2 py-0.5 text-xs text-accent">

@@ -30,6 +30,7 @@ import {
   type AddonPricing,
   type AnalyticsTier,
   type Plan,
+  type PlanFeature,
   type PlanLimits,
 } from '@/types'
 
@@ -172,6 +173,8 @@ function AddonPricingCard({ pricing }: { pricing: AddonPricing }) {
   )
 }
 
+const PLAN_FEATURES: PlanFeature[] = ['user_permissions', 'custom_note_templates']
+
 type LimitText = Record<keyof PlanLimits, string>
 
 function PlanModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
@@ -182,7 +185,7 @@ function PlanModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
   const [limits, setLimits] = useState<LimitText>(
     () => Object.fromEntries(LIMIT_KEYS.map((k) => [k, limitToText(plan.limits[k])])) as LimitText,
   )
-  const [userPermissions, setUserPermissions] = useState(plan.features.includes('user_permissions'))
+  const [features, setFeatures] = useState<PlanFeature[]>(plan.features)
   const [active, setActive] = useState(plan.active)
   const [tier, setTier] = useState<AnalyticsTier>(plan.analytics_tier)
 
@@ -194,7 +197,7 @@ function PlanModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
         limits: Object.fromEntries(
           LIMIT_KEYS.map((k) => [k, textToLimit(limits[k])]),
         ) as unknown as PlanLimits,
-        features: userPermissions ? ['user_permissions'] : [],
+        features,
         active,
         analytics_tier: tier,
       }),
@@ -262,13 +265,17 @@ function PlanModal({ plan, onClose }: { plan: Plan; onClose: () => void }) {
           </Select>
           <p className="mt-1 text-xs text-tx-3">{t(`sub.tier_desc.${tier}`)}</p>
         </div>
-        <label className="flex items-center gap-2 text-sm text-tx">
-          <Checkbox
-            checked={userPermissions}
-            onChange={(e) => setUserPermissions(e.target.checked)}
-          />
-          {t('sub.feature.user_permissions')}
-        </label>
+        {PLAN_FEATURES.map((f) => (
+          <label key={f} className="flex items-center gap-2 text-sm text-tx">
+            <Checkbox
+              checked={features.includes(f)}
+              onChange={(e) =>
+                setFeatures((cur) => (e.target.checked ? [...cur, f] : cur.filter((x) => x !== f)))
+              }
+            />
+            {t(`sub.feature.${f}`)}
+          </label>
+        ))}
         <label className="flex items-center gap-2 text-sm text-tx">
           <Checkbox checked={active} onChange={(e) => setActive(e.target.checked)} />
           {t('sub.f_active')}

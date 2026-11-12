@@ -40,3 +40,16 @@ class NoteSettings:
 
     def allows(self, template: str) -> bool:
         return not self.enabled or template in self.enabled
+
+    def without(self, gone: set[str]) -> NoteSettings:
+        """The same settings with templates that no longer exist taken out (an archived
+        custom template, or custom ones after a plan without them)."""
+        if not gone & {self.default, *self.enabled, *self.rules.values()}:
+            return self
+        enabled = tuple(k for k in self.enabled if k not in gone)
+        if self.enabled and not enabled:
+            enabled = (DEFAULT_TEMPLATE,)
+        default = self.default if self.default not in gone else (
+            enabled[0] if enabled else DEFAULT_TEMPLATE)
+        rules = {k: v for k, v in self.rules.items() if v not in gone}
+        return NoteSettings(enabled=enabled, default=default, rules=rules, locked=self.locked)

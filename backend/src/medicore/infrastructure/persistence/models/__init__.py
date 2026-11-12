@@ -23,6 +23,7 @@ from medicore.infrastructure.persistence.models.medical_certificate import (
 )
 from medicore.infrastructure.persistence.models.medical_document import MedicalDocumentModel
 from medicore.infrastructure.persistence.models.medical_record import MedicalRecordModel
+from medicore.infrastructure.persistence.models.note_template import NoteTemplateModel
 from medicore.infrastructure.persistence.models.notification import NotificationModel
 from medicore.infrastructure.persistence.models.patient import PatientModel
 from medicore.infrastructure.persistence.models.platform import (
@@ -63,6 +64,7 @@ __all__ = [
     "DoctorProfileModel",
     "FeeScheduleModel",
     "InsurerModel",
+    "NoteTemplateModel",
     "LocationModel",
     "LoginAttemptModel",
     "MedicalCertificateModel",

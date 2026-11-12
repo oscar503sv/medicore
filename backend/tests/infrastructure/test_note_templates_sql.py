@@ -6,9 +6,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from medicore.domain.entities.medical_record import MedicalRecord
-from medicore.domain.enums import ClinicalRecordType, Role
+from medicore.domain.entities.note_template import CustomNoteTemplate, SectionDraft
+from medicore.domain.enums import ClinicalRecordType, NoteRole, Role
 from medicore.domain.services.note_templates import HISTORY
-from medicore.domain.shared.identifiers import RecordId, TenantId
+from medicore.domain.shared.identifiers import RecordId, TenantId, UserId
 from medicore.domain.value_objects.clinical_note import ClinicalNote
 from medicore.domain.value_objects.note_settings import NoteSettings
 from medicore.domain.value_objects.vitals import Vitals
@@ -47,3 +48,26 @@ def test_round_trips(session):  # noqa: F811
     assert uow.tenants.get_by_id(tenant.id).note_settings == settings
     assert uow.users.get_by_id(doctor.id).preferences.note_template == "history"
     assert uow.medical_records.get_by_id(record.id).note == note
+
+
+def test_custom_template_round_trip(session):  # noqa: F811
+    tenant = build_tenant(slug=f"test-tpl-{TenantId.new().value.hex[:8]}")
+    uow = SqlAlchemyUnitOfWork(session, tenant.id)
+    uow.tenants.save(tenant)
+    session.flush()
+    template = CustomNoteTemplate.create(
+        tenant_id=tenant.id, name="Prenatal", created_by_id=UserId.new(), now=NOW,
+        sections=[SectionDraft("Evolución", NoteRole.SUBJECTIVE),
+                  SectionDraft("Plan", NoteRole.PLAN, required=False)],
+    )
+    uow.note_templates.save(template)
+    session.flush()
+    session.expire_all()
+    assert uow.note_templates.get_by_id(template.id) == template
+    template.archive(NOW)
+    uow.note_templates.save(template)
+    session.flush()
+    assert uow.note_templates.list() == []
+    assert uow.note_templates.list(include_archived=True)[0].archived
+    other = SqlAlchemyUnitOfWork(session, TenantId.new())
+    assert other.note_templates.get_by_id(template.id) is None  # tenant-scoped

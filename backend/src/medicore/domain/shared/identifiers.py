@@ -77,6 +77,11 @@ class InsurerId(Identifier):
 
 
 @dataclass(frozen=True, slots=True)
+class NoteTemplateId(Identifier):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class AppointmentId(Identifier):
     pass
 

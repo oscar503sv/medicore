@@ -20,6 +20,7 @@ from medicore.domain.entities.job_run import JobRun
 from medicore.domain.entities.medical_certificate import MedicalCertificate
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
+from medicore.domain.entities.note_template import CustomNoteTemplate
 from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.plan import AddonPricing, Plan
@@ -49,6 +50,7 @@ class InMemoryStore:
     doctor_profiles: dict[UUID, DoctorProfile] = field(default_factory=dict)
     patients: dict[UUID, Patient] = field(default_factory=dict)
     insurers: dict[UUID, Insurer] = field(default_factory=dict)
+    note_templates: dict[UUID, CustomNoteTemplate] = field(default_factory=dict)
     appointments: dict[UUID, Appointment] = field(default_factory=dict)
     consultations: dict[UUID, Consultation] = field(default_factory=dict)
     medical_records: dict[UUID, MedicalRecord] = field(default_factory=dict)
