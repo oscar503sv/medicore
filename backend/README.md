@@ -70,7 +70,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/a
   those of a whole clinic (third-party revocations audited as `session.revoked`).
 - **Console session limits**: the superadmin console session expires after 30 min without activity and at most 8 h after sign-in (`PLATFORM_SESSION_IDLE_MINUTES` / `PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request.
 - **Optional MFA (TOTP) for superadmins**: enabled from the console under *Account security* (`/platform/security`). With MFA on, the console login asks for the password and then a 6-digit code from an authenticator app, or a recovery code. The challenge is single-use, valid for 5 min and kept in an httpOnly cookie limited to `/api/v1/platform/login`. A code can't be reused, and after 5 failed attempts the lockout escalates. There are 10 single-use recovery codes, shown once and stored as hashes. The TOTP secret is encrypted with AES-256-GCM. Enabling MFA, regenerating the recovery codes or disabling it requires the current password, and every change is recorded in the platform audit log.
-- **Login lockout** with three counters: per IP (30 attempts in 15 min → 15 min block, IPv6 by /64); per account from one IP (5 failures → 1 min, doubling up to 15); per account in total (20 attempts in 15 min, exempt for an IP that signed in to that account in the last 30 days). Each attempt is reserved atomically before the password check. Blocked attempts get HTTP 429 + `Retry-After`; an IP block answers the same whether or not the account exists, so the lockout doesn't reveal which accounts exist. A successful sign-in clears only that account's failures from that IP. The console's second factor keeps its own limit of 5 per superadmin.
+- **Login lockout** with three counters: per IP (30 attempts in 15 min → 15 min block, IPv6 by /64); per account from one IP (5 failures → 1 min, doubling up to 15); per account in total (20 attempts in 15 min, exempt for an IP that signed in to that account in the last 30 days). Each attempt is reserved atomically before the password check. Blocked attempts get HTTP 429 + `Retry-After`; an IP block answers the same whether or not the account exists, so the lockout doesn't reveal which accounts exist. A successful sign-in clears only that account's failures from that IP. A support reactivation or password reset also lifts that account's lockout, but not the IP counter. The console's second factor keeps its own limit of 5 per superadmin.
 - **Last administrator**: no operation, from the clinic or the platform console, can leave a clinic without an active admin (409 `users.last_admin`), even with concurrent changes.
 - **Granular permissions** (`application/common/permissions.py`): a catalog of **30
   permissions** (`Permission`, `StrEnum`), a default set per role (`ROLE_PERMISSIONS`) and
@@ -132,7 +132,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/a
   to the author themselves. Events: appointment created/rescheduled/cancelled/no-show (to the
   appointment's doctor), record amended (to the original author), document uploaded (to the
   patient's assigned doctor or, if none, the doctor of their last completed appointment) and
-  user created/role changed (to active admins). Only `type` + `data` are stored (ids and
+  user created/role changed (to active admins), and support actions on a clinic's users (to active admins and the affected user; the impersonation entry, to admins only). Only `type` + `data` are stored (ids and
   labels, never clinical content or file names) and the client writes the text in its own
   language. `notifications` router: paginated list (filterable by unread and by category:
   `appointment`, `record`, `document`, `user`), unread count, mark one / all; read ones
@@ -147,7 +147,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/a
 - **Auditing (HIPAA/GDPR)** per tenant plus a global platform console; every action stores a
   readable `subject` in its metadata for a useful detail column.
 - **Platform console** (superadmin): clinic onboarding/management, global stats, consolidated
-  audit and **support sessions** (impersonation with a short TTL and a trail).
+  audit and **support sessions** (impersonation with a short TTL, a required reason of 5–500 characters and a trail in the clinic's audit). Support actions on a clinic's users (password reset with a reason, edit, role change, suspension, reactivation) are recorded in that clinic's audit as "Platform support", with IP and browser but without the superadmin's identity, and are not duplicated in the global audit.
 
 ## Configuration
 
@@ -239,7 +239,7 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **1293 tests** (278 domain · 558 application · 307 presentation · 150 infrastructure),
+A suite of **1322 tests** (278 domain · 580 application · 312 presentation · 152 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 

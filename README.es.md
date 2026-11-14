@@ -6,7 +6,7 @@ Sistema de gestión clínica **multi-tenant** construido con **Clean Architectur
 
 Cubre el ciclo completo de atención: autenticación por organización, dashboard con métricas reales, gestión de pacientes, agenda y citas, consulta en curso (**plantillas de nota clínica**: SOAP, P-SOAP, historia completa, evolución, narrativa) con **catálogo de diagnósticos CIE-10/CIE-11**, historiales clínicos firmados e inmutables, archivos médicos, disponibilidad por doctor, aseguradoras, gestión de usuarios, **permisos granulares por rol con personalización por clínica**, **notificaciones in-app**, **vacunación según el esquema nacional de El Salvador**, **aplicaciones de medicamentos en la clínica**, **procedimientos menores**, ajustes de organización y una **guía de primeros pasos** para médicos y administradores que se marca sola con los datos reales. La interfaz está disponible en **español e inglés**, incluidos los mensajes de error del backend.
 
-Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, un panel de **Negocio** (MRR, cobros, vencimientos, adopción y cupos por clínica), **Monitoreo** (salud de la API y la base de datos, errores del servidor, intentos fallidos y bloqueos, sesiones y accesos de soporte abiertos, rendimiento de la API por ruta), auditoría global, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión) e **impersonación auditada** de una clínica para dar soporte.
+Incluye además una **consola de plataforma (superadmin)** por encima del límite multi-tenant: alta y administración de clínicas, un panel de **Negocio** (MRR, cobros, vencimientos, adopción y cupos por clínica), **Monitoreo** (salud de la API y la base de datos, errores del servidor, intentos fallidos y bloqueos, sesiones y accesos de soporte abiertos, rendimiento de la API por ruta), auditoría global, soporte de cuentas (reseteo de contraseña, reactivación, suspensión) e **impersonación auditada** de una clínica para dar soporte, ambas con motivo obligatorio.
 
 ---
 
@@ -89,7 +89,7 @@ src/medicore/
 Toda entidad de negocio lleva `tenant_id`. El filtro se aplica **en cada repositorio**, no en el caller — el aislamiento se cumple estructuralmente. El `UnitOfWork` está scoped por tenant: `factory.for_tenant(tenant_id)`. Las operaciones globales (resolución de slug, superadmin) usan un `UnitOfWork` no scopeado o helpers de solo lectura.
 
 ### Plataforma (superadmin)
-Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que opera por encima del límite multi-tenant: alta/edición de clínicas (incluidas la zona horaria y las sedes), la **suscripción** de cada clínica (plan, módulos, periodo pagado, condiciones especiales, pagos), cambio de estado (activa / suspendida / archivada), estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión de usuarios) e **impersonación**. La impersonación emite un token de tenant marcado con `impersonated_by` y con TTL más corta, de modo que toda escritura durante el soporte queda auditada. Se puede impersonar una clínica suspendida, pero no una archivada.
+Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que opera por encima del límite multi-tenant: alta/edición de clínicas (incluidas la zona horaria y las sedes), la **suscripción** de cada clínica (plan, módulos, periodo pagado, condiciones especiales, pagos), cambio de estado (activa / suspendida / archivada), estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, reactivación, suspensión de usuarios) e **impersonación**. La impersonación y los reseteos de contraseña desde soporte exigen un motivo (5–500 caracteres) que queda en la auditoría. Las acciones de soporte sobre usuarios de una clínica (reseteo de contraseña, edición, cambio de rol, suspensión, reactivación) y la entrada o salida de impersonación quedan en la auditoría de esa clínica como «Soporte de la plataforma», con IP y navegador pero sin nombre ni email del superadmin, y se notifican en la campana a los admins activos de la clínica y al usuario afectado (la entrada de impersonación, solo a los admins). No se duplican en la auditoría global de la consola. La impersonación emite un token de tenant marcado con `impersonated_by` y con TTL más corta, de modo que toda escritura durante el soporte queda auditada. Se puede impersonar una clínica suspendida, pero no una archivada.
 
 ### Reglas de negocio críticas
 - Citas solo dentro de la disponibilidad del doctor, sin solapes, respetando las reglas de reserva.
@@ -138,7 +138,7 @@ El control de acceso es **granular y personalizable por clínica** (`application
 | Zona horaria | solo lectura | ✅ (mueve el "hoy", la agenda y los recordatorios de la clínica) |
 | Slug (identificador de inicio de sesión) | solo lectura | fijo desde la creación |
 | Plan, módulos, límites, periodo pagado, pagos | solo lectura | ✅ |
-| Usuarios, roles, permisos por usuario | ✅ (dentro de los cupos) | acciones de soporte (restablecer contraseña, desbloquear, desactivar) |
+| Usuarios, roles, permisos por usuario | ✅ (dentro de los cupos) | acciones de soporte (restablecer contraseña, editar, cambiar rol, suspender, reactivar) |
 
 ---
 
@@ -164,7 +164,7 @@ La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con tod
   - **Por IP**: 30 intentos en 15 min → bloqueo de 15 min (IPv6 se agrupa por /64).
   - **Por cuenta desde una misma IP**: 5 fallos → 1 min, duplicando hasta 15, así el dueño puede entrar desde otra dirección aunque alguien ataque su cuenta.
   - **Por cuenta en total**: 20 intentos en 15 min contra ataques distribuidos; queda exenta una IP desde la que esa cuenta entró bien en los últimos 30 días.
-  Un intento bloqueado responde 429 con `Retry-After`; un bloqueo por IP responde igual exista o no la cuenta. Un login correcto borra los fallos de esa cuenta desde esa IP, pero no los totales de la IP ni de la cuenta (solo les devuelve su intento). El segundo factor de la consola mantiene su límite de 5 por superadmin, independiente de la IP. La página Monitoreo muestra también los bloqueos por IP y la IP de los bloqueos por cuenta.
+  Un intento bloqueado responde 429 con `Retry-After`; un bloqueo por IP responde igual exista o no la cuenta. Un login correcto borra los fallos de esa cuenta desde esa IP, pero no los totales de la IP ni de la cuenta (solo les devuelve su intento). Reactivar o restablecer la contraseña desde soporte también levanta el bloqueo de login de esa cuenta, no el contador por IP. El segundo factor de la consola mantiene su límite de 5 por superadmin, independiente de la IP. La página Monitoreo muestra también los bloqueos por IP y la IP de los bloqueos por cuenta.
 - **Límites de la sesión de consola**: la sesión de la consola de superadmin caduca tras 30 min sin actividad (`PLATFORM_SESSION_IDLE_MINUTES`) y como máximo 8 h después del login (`PLATFORM_SESSION_MAX_MINUTES`). El refresco en segundo plano de Monitoreo no cuenta como actividad, un superadmin desactivado pierde el acceso en la siguiente petición, y `scripts/create_platform_admin.py` revoca las sesiones del admin al actualizarlo.
 - **MFA TOTP opcional para superadmins**: se activa desde la consola, en *Seguridad de la cuenta* (`/platform/security`). Con MFA activo, el login de la consola pide la contraseña y después un código de 6 dígitos de una app de autenticación, o un código de recuperación. El desafío es de un solo uso, válido 5 min y va en una cookie httpOnly limitada a `/api/v1/platform/login`. Un código no se puede reutilizar, y tras 5 intentos fallidos el bloqueo es progresivo. Hay 10 códigos de recuperación de un solo uso, mostrados una sola vez y guardados como hash. El secreto TOTP se cifra con AES-256-GCM. Activar MFA, regenerar los códigos de recuperación o desactivarlo exige la contraseña actual, y cada cambio queda en la auditoría de plataforma.
 - **Despliegue recomendado**: sirve la consola de plataforma desde un origen o subdominio propio (p. ej. `console.example.com`), para que un XSS en la app de clínicas no comparta origen con ella. Es una recomendación; la app no lo impone.
@@ -178,7 +178,7 @@ Los hallazgos pendientes están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).
 
 ## Notificaciones y dashboard
 
-- **Notificaciones in-app**: citas creadas, reprogramadas, canceladas o marcadas como no-show (al doctor), enmiendas de historial (al autor original), documentos subidos (al médico tratante) y altas o cambios de rol de usuarios (a los administradores). Campana en la barra superior con contador (sondeo cada 60 s), filtro de no leídas y enlaces directos al elemento, además de una **página de buzón** (`/notifications`) filtrable por estado y categoría y agrupada por día. Se conservan 90 días.
+- **Notificaciones in-app**: citas creadas, reprogramadas, canceladas o marcadas como no-show (al doctor), enmiendas de historial (al autor original), documentos subidos (al médico tratante) y altas o cambios de rol de usuarios (a los administradores) y acciones de soporte sobre usuarios de la clínica (a los admins activos y al usuario afectado; la entrada de impersonación, solo a los admins). Campana en la barra superior con contador (sondeo cada 60 s), filtro de no leídas y enlaces directos al elemento, además de una **página de buzón** (`/notifications`) filtrable por estado y categoría y agrupada por día. Se conservan 90 días.
 - **Dashboard con datos reales** (`GET /dashboard/summary`): citas de hoy, pendientes, pacientes registrados y ocupación de la agenda, cada uno comparado con la semana anterior, y las próximas citas pendientes a partir de ahora (`GET /appointments/upcoming`). El doctor ve su propia agenda; los demás roles, la clínica completa. Quien puede ver métricas también recibe ahí un **resumen del mes**.
 
 ## Métricas de la práctica
@@ -391,7 +391,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1293 tests)
+.venv/bin/pytest                          # suite completa (1322 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -445,14 +445,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1293 tests en verde
+1322 tests en verde
    278  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   558  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
-            plataforma, permisos granulares, aislamiento multi-tenant)
-   307  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   580  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+            plataforma (las acciones de soporte quedan en la auditoría de la clínica y se notifican), permisos granulares, aislamiento multi-tenant)
+   312  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    150  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    152  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

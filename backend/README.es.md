@@ -70,7 +70,7 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
   terceros auditadas como `session.revoked`).
 - **Límites de la sesión de consola**: la sesión de la consola de superadmin caduca tras 30 min sin actividad y como máximo 8 h después del login (`PLATFORM_SESSION_IDLE_MINUTES` / `PLATFORM_SESSION_MAX_MINUTES`). El refresco en segundo plano de Monitoreo no cuenta como actividad, y un superadmin desactivado pierde el acceso en la siguiente petición.
 - **MFA TOTP opcional para superadmins**: se activa desde la consola, en *Seguridad de la cuenta* (`/platform/security`). Con MFA activo, el login de la consola pide la contraseña y después un código de 6 dígitos de una app de autenticación, o un código de recuperación. El desafío es de un solo uso, válido 5 min y va en una cookie httpOnly limitada a `/api/v1/platform/login`. Un código no se puede reutilizar, y tras 5 intentos fallidos el bloqueo es progresivo. Hay 10 códigos de recuperación de un solo uso, mostrados una sola vez y guardados como hash. El secreto TOTP se cifra con AES-256-GCM. Activar MFA, regenerar los códigos de recuperación o desactivarlo exige la contraseña actual, y cada cambio queda en la auditoría de plataforma.
-- **Lockout de login** con tres contadores: por IP (30 intentos en 15 min → bloqueo de 15 min, IPv6 por /64); por cuenta desde una misma IP (5 fallos → 1 min, duplicando hasta 15); por cuenta en total (20 intentos en 15 min, exenta una IP que entró bien a esa cuenta en los últimos 30 días). Cada intento se reserva de forma atómica antes de verificar la contraseña. Los intentos bloqueados reciben HTTP 429 + `Retry-After`; un bloqueo por IP responde igual exista o no la cuenta, para no revelar cuáles existen. Un login correcto solo borra los fallos de esa cuenta desde esa IP. El segundo factor de la consola mantiene su límite de 5 por superadmin.
+- **Lockout de login** con tres contadores: por IP (30 intentos en 15 min → bloqueo de 15 min, IPv6 por /64); por cuenta desde una misma IP (5 fallos → 1 min, duplicando hasta 15); por cuenta en total (20 intentos en 15 min, exenta una IP que entró bien a esa cuenta en los últimos 30 días). Cada intento se reserva de forma atómica antes de verificar la contraseña. Los intentos bloqueados reciben HTTP 429 + `Retry-After`; un bloqueo por IP responde igual exista o no la cuenta, para no revelar cuáles existen. Un login correcto solo borra los fallos de esa cuenta desde esa IP. Reactivar o restablecer la contraseña desde soporte también levanta el bloqueo de login de esa cuenta, no el contador por IP. El segundo factor de la consola mantiene su límite de 5 por superadmin.
 - **Último administrador**: ninguna operación (desde la clínica o desde la consola de plataforma) puede dejar una clínica sin admins activos (409 `users.last_admin`), ni siquiera con cambios simultáneos.
 - **Permisos granulares** (`application/common/permissions.py`): catálogo de **30 permisos**
   (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
@@ -133,8 +133,7 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
   emiten dentro de su propia transacción —se guardan junto con la acción o no se guardan—,
   nunca al propio autor. Eventos: cita creada/reprogramada/cancelada/no-show (al médico de la
   cita), historial enmendado (al autor original), documento subido (al médico asignado del
-  paciente o, si no tiene, al de su última cita completada) y usuario creado/cambio de rol (a
-  los admins activos). Se guarda `type` + `data` (ids y etiquetas, nunca contenido clínico ni
+  paciente o, si no tiene, al de su última cita completada) y usuario creado/cambio de rol (a los admins activos), y acciones de soporte sobre usuarios de la clínica (a los admins activos y al usuario afectado; la entrada de impersonación, solo a los admins). Se guarda `type` + `data` (ids y etiquetas, nunca contenido clínico ni
   nombres de archivo) y el cliente redacta el texto en su idioma. Router `notifications`:
   listado paginado (filtrable por no leídas y por categoría: `appointment`, `record`,
   `document`, `user`), contador de no leídas, marcar una / todas; las leídas con más de 90 días
@@ -148,7 +147,7 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
 - **Auditoría (HIPAA/GDPR)** por tenant y consola global de plataforma; cada acción guarda un
   `subject` legible en su metadata para una columna de detalle útil.
 - **Consola de plataforma** (superadmin): alta/gestión de clínicas, estadísticas globales,
-  auditoría consolidada y **sesiones de soporte** (impersonación con TTL corto y traza).
+  auditoría consolidada y **sesiones de soporte** (impersonación con TTL corto, motivo obligatorio de 5–500 caracteres y traza en la auditoría de la clínica). Las acciones de soporte sobre usuarios de una clínica (restablecer contraseña con motivo, editar, cambiar rol, suspender, reactivar) quedan en la auditoría de esa clínica como «Soporte de la plataforma», con IP y navegador pero sin la identidad del superadmin, y no se duplican en la auditoría global.
 
 ## Configuración
 
@@ -240,7 +239,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **1293 tests** (278 dominio · 558 aplicación · 307 presentación · 150 infraestructura), casi
+Suite de **1322 tests** (278 dominio · 580 aplicación · 312 presentación · 152 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 

@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react'
+import { forwardRef, useId, type InputHTMLAttributes, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -8,29 +8,38 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, suffix, error, className, ...props }, ref) => (
-    <label className="block">
-      {label && <span className="mb-1.5 block text-[13px] font-medium text-tx-2">{label}</span>}
-      <div className="relative flex items-center">
-        <input
-          ref={ref}
-          className={cn(
-            'h-10 w-full rounded-lg border border-line bg-bg px-3 text-sm text-tx',
-            'placeholder:text-tx-4 transition-colors',
-            'focus:border-accent focus:outline-none',
-            suffix && 'pr-20',
-            error && 'border-danger',
-            className,
+  ({ label, suffix, error, className, ...props }, ref) => {
+    const errorId = useId()
+    return (
+      <label className="block">
+        {label && <span className="mb-1.5 block text-[13px] font-medium text-tx-2">{label}</span>}
+        <div className="relative flex items-center">
+          <input
+            ref={ref}
+            className={cn(
+              'h-10 w-full rounded-lg border border-line bg-bg px-3 text-sm text-tx',
+              'placeholder:text-tx-4 transition-colors',
+              'focus:border-accent focus:outline-none',
+              suffix && 'pr-20',
+              error && 'border-danger',
+              className,
+            )}
+            {...props}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : props['aria-describedby']}
+          />
+          {suffix && (
+            <span className="absolute right-3 text-[13px] text-tx-3 font-mono">{suffix}</span>
           )}
-          {...props}
-        />
-        {suffix && (
-          <span className="absolute right-3 text-[13px] text-tx-3 font-mono">{suffix}</span>
+        </div>
+        {error && (
+          <span id={errorId} className="mt-1 block text-xs text-danger">
+            {error}
+          </span>
         )}
-      </div>
-      {error && <span className="mt-1 block text-xs text-danger">{error}</span>}
-    </label>
-  ),
+      </label>
+    )
+  },
 )
 Input.displayName = 'Input'
 

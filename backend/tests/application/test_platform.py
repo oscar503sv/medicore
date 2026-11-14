@@ -25,10 +25,10 @@ from medicore.application.use_cases.platform import (
     ListGlobalAudit,
     ListTenants,
     PlatformMfaChallengeDTO,
+    ReactivateTenantUser,
     ResetUserPassword,
     SetTenantStatus,
     SuspendTenantUser,
-    UnlockUser,
     UpdateTenant,
     UpdateTenantUser,
 )
@@ -250,7 +250,8 @@ def test_platform_reset_password_revokes_user_sessions():
     sid = _session_id(login.token)
 
     ResetUserPassword(seed.factory, PlainPasswordHasher(), clock).execute(
-        actor_for(seed), seed.tenant.id, seed.doctor.id, "Volcan-Izalco-77"
+        actor_for(seed), seed.tenant.id, seed.doctor.id, "Volcan-Izalco-77",
+        "Forgot the password",
     )
     assert not seed.factory.store.sessions[sid.value].is_active(clock.now())
 
@@ -370,17 +371,18 @@ def test_tenant_stats_counts():
 def test_reset_user_password_sets_temporary():
     seed = seed_clinic()
     user = ResetUserPassword(seed.factory, PlainPasswordHasher(), FixedClock()).execute(
-        actor_for(seed), seed.tenant.id, seed.doctor.id, "brand-new-pass"
+        actor_for(seed), seed.tenant.id, seed.doctor.id, "brand-new-pass",
+        "Forgot the password",
     )
     assert user.must_change_password is True
     assert seed.factory.platform_uow().platform_audit.list()
 
 
-def test_unlock_user_reactivates():
+def test_reactivate_user_reactivates():
     seed = seed_clinic()
     seed.doctor.status = UserStatus.SUSPENDED
     seed.factory.store.users[seed.doctor.id.value] = seed.doctor
-    user = UnlockUser(seed.factory, FixedClock()).execute(
+    user = ReactivateTenantUser(seed.factory, FixedClock()).execute(
         actor_for(seed), seed.tenant.id, seed.doctor.id
     )
     assert user.status == UserStatus.ACTIVE
@@ -500,10 +502,11 @@ def test_impersonation_rejected_for_archived_clinic():
     SetTenantStatus(seed.factory, FixedClock()).execute(
         actor_for(seed), seed.tenant.id, TenantStatus.ARCHIVED
     )
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as caught:
         ImpersonateTenant(seed.factory, FakeTokenIssuer(), FixedClock()).execute(
-            actor_for(seed), seed.tenant.id
+            actor_for(seed), seed.tenant.id, "Customer asked for help"
         )
+    assert caught.value.code == "support.clinic_archived"
 
 
 def _login(seed, clock, user, slug="clinica-norte") -> SessionId:

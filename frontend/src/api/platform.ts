@@ -203,17 +203,17 @@ export const platformTenantsApi = {
   revokeSession: (id: string, sessionId: string) =>
     platformApi.delete(`/platform/tenants/${id}/sessions/${sessionId}`),
 
-  resetUserPassword: (id: string, userId: string, password: string) =>
+  resetUserPassword: (id: string, userId: string, password: string, reason: string) =>
     platformApi
       .post<PaginatedResponse<User>>(
         `/platform/tenants/${id}/users/${userId}/reset-password`,
-        { password },
+        { password, reason },
       )
       .then((r) => r.data),
 
-  unlockUser: (id: string, userId: string) =>
+  reactivateUser: (id: string, userId: string) =>
     platformApi
-      .post<PaginatedResponse<User>>(`/platform/tenants/${id}/users/${userId}/unlock`)
+      .post<PaginatedResponse<User>>(`/platform/tenants/${id}/users/${userId}/reactivate`)
       .then((r) => r.data),
 
   updateUser: (

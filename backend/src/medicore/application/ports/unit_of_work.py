@@ -273,6 +273,11 @@ class LoginThrottleRepository(Protocol):
         """Forget the failure history and remember the success at ``now``."""
         ...
 
+    def clear_account(self, account: str) -> None:
+        """Forget an account's failures and lockouts: its own counter and its per-IP pairs.
+        Keeps last_success_at and leaves ip:* counters alone."""
+        ...
+
     def purge_stale(self, now: datetime) -> None:
         """Drop entries that no longer affect anything: last attempt outside the window, no
         active lockout and no recent success (the next attempt would restart at 1 anyway).

@@ -13,7 +13,14 @@ import { Select } from '@/components/ui/Input'
 import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
-import { actionLabel, auditDetail, categoryMeta, entityLabel, AUDIT_CATEGORIES } from '@/lib/audit'
+import {
+  actionLabel,
+  auditDetail,
+  categoryMeta,
+  entityLabel,
+  isPlatformSupport,
+  AUDIT_CATEGORIES,
+} from '@/lib/audit'
 import { cn } from '@/lib/cn'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
@@ -121,8 +128,12 @@ export function AuditPage() {
                         </Td>
                         <Td>
                           <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-tx">{e.actor_name ?? '—'}</span>
-                            {e.metadata?.impersonated_by != null && (
+                            <span className="font-medium text-tx">
+                              {isPlatformSupport(e)
+                                ? t('audit.platform_support')
+                                : (e.actor_name ?? '—')}
+                            </span>
+                            {(isPlatformSupport(e) || e.metadata?.impersonated_by != null) && (
                               <Badge tone="info">
                                 <ShieldCheck className="h-3 w-3" />
                                 {t('audit.support_badge')}

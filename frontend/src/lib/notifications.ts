@@ -5,7 +5,9 @@ import {
   CalendarPlus,
   CalendarX,
   FilePen,
+  LifeBuoy,
   Paperclip,
+  ShieldCheck,
   UserCheck,
   UserPlus,
   UserX,
@@ -37,6 +39,11 @@ const META: Record<string, { icon: LucideIcon; tone: Tone }> = {
   'user.role_changed': { icon: UserCheck, tone: 'warn' },
   'application.reaction': { icon: AlertTriangle, tone: 'danger' },
   'procedure.performed': { icon: Activity, tone: 'ok' },
+  'support.password_reset': { icon: LifeBuoy, tone: 'warn' },
+  'support.user_updated': { icon: LifeBuoy, tone: 'warn' },
+  'support.user_suspended': { icon: LifeBuoy, tone: 'danger' },
+  'support.user_reactivated': { icon: LifeBuoy, tone: 'warn' },
+  'support.access_started': { icon: ShieldCheck, tone: 'warn' },
 }
 
 /** Translate `key`, falling back to `fallback` when the key is missing. */
@@ -70,6 +77,7 @@ function hrefFor(n: AppNotification): string | null {
   if (n.type === 'procedure.performed' && d.procedure_id) {
     return `/procedures/${d.procedure_id}`
   }
+  if (n.type.startsWith('support.')) return d.about_you === 'true' ? null : '/audit'
   if (n.type.startsWith('user.')) return '/users'
   return null
 }
@@ -88,7 +96,9 @@ export function describeNotification(t: T, n: AppNotification): NotificationView
     role: d.role ? tr(t, `role.${d.role}`, d.role) : undefined,
     previous_role: d.previous_role ? tr(t, `role.${d.previous_role}`, d.previous_role) : undefined,
   }
-  const template = tr(t, `notif.type.${n.type}`, n.type)
+  // Support actions on the reader's own account are worded in the second person.
+  const key = d.about_you === 'true' ? `notif.type.${n.type}.self` : `notif.type.${n.type}`
+  const template = tr(t, key, tr(t, `notif.type.${n.type}`, n.type))
   return {
     ...(META[n.type] ?? { icon: Bell, tone: 'neutral' as Tone }),
     text: fill(template, values),

@@ -12,6 +12,7 @@ from datetime import date, datetime
 from sqlalchemy import desc, func, literal, select, union_all
 from sqlalchemy.orm import Session
 
+from medicore.application.common.audit import PLATFORM_SUPPORT
 from medicore.domain.repositories._support import (
     GlobalAuditRow,
     Page,
@@ -39,6 +40,9 @@ _COUNTERS = {
     "consultations": ConsultationModel,
     "records": MedicalRecordModel,
 }
+
+
+_CLINIC_OWN = AuditLogModel.metadata_["via"].astext.is_distinct_from(PLATFORM_SUPPORT)
 
 
 class SqlPlatformReadModel:
@@ -90,13 +94,14 @@ class SqlPlatformReadModel:
     ) -> dict[str, TenantActivity]:
         last = dict(
             self._s.query(AuditLogModel.tenant_id, func.max(AuditLogModel.timestamp))
+            .filter(_CLINIC_OWN)  # support work is not clinic activity
             .group_by(AuditLogModel.tenant_id)
             .all()
         )
         people = func.count(func.distinct(AuditLogModel.actor_id))
         active = dict(
             self._s.query(AuditLogModel.tenant_id, people)
-            .filter(AuditLogModel.timestamp >= active_since)
+            .filter(AuditLogModel.timestamp >= active_since, _CLINIC_OWN)
             .group_by(AuditLogModel.tenant_id)
             .all()
         )
@@ -134,7 +139,7 @@ class SqlPlatformReadModel:
     ) -> Page[GlobalAuditRow]:
         """Consolidated, chronological view over both the tenant and platform audit trails."""
 
-        def leg(model, kind: str):
+        def leg(model, kind: str, *conditions):
             s = select(
                 model.id.label("id"),
                 model.actor_id.label("actor_id"),
@@ -149,10 +154,11 @@ class SqlPlatformReadModel:
             if category:
                 # autoescape neutralizes LIKE wildcards in the user-provided category.
                 s = s.where(model.action.startswith(f"{category}.", autoescape=True))
-            return s
+            return s.where(*conditions)
 
+        # The platform leg already holds the support copies the clinic trail carries.
         u = union_all(
-            leg(AuditLogModel, "tenant"), leg(PlatformAuditLogModel, "platform")
+            leg(AuditLogModel, "tenant", _CLINIC_OWN), leg(PlatformAuditLogModel, "platform")
         ).subquery()
         total = self._s.execute(select(func.count()).select_from(u)).scalar_one()
         rows = self._s.execute(

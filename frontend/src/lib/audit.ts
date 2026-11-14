@@ -105,3 +105,8 @@ export function auditDetail(e: { metadata?: Record<string, unknown> }): string {
   if (typeof m.slug === 'string') parts.push(m.slug)
   return parts.join(' · ')
 }
+
+/** True for entries written by platform support on behalf of the clinic's trail. */
+export function isPlatformSupport(e: { metadata?: Record<string, unknown> }): boolean {
+  return e.metadata?.via === 'platform_support'
+}

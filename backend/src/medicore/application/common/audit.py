@@ -7,7 +7,9 @@ from datetime import datetime
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
-from medicore.domain.shared.identifiers import AuditLogId, TenantId
+from medicore.domain.shared.identifiers import AuditLogId, TenantId, UserId
+
+PLATFORM_SUPPORT = "platform_support"
 
 
 def subject(*parts: object) -> str:
@@ -64,6 +66,32 @@ def platform_audit_entry(
         metadata=dict(metadata),
         timestamp=when,
         tenant_id=tenant_id,
+        ip_address=actor.ip_address,
+        user_agent=actor.user_agent,
+    )
+
+
+def support_audit_entry(
+    actor: PlatformActorContext,
+    tenant_id: TenantId,
+    when: datetime,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    **metadata: object,
+) -> AuditLog:
+    """Clinic-trail copy of a console action on the clinic's accounts, so the clinic sees
+    what platform support did. The actor is the superadmin's id; no email or name leaves
+    the platform."""
+    return AuditLog(
+        id=AuditLogId.new(),
+        tenant_id=tenant_id,
+        actor_id=UserId(actor.admin_id.value),
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        metadata={**metadata, "via": PLATFORM_SUPPORT},
+        timestamp=when,
         ip_address=actor.ip_address,
         user_agent=actor.user_agent,
     )

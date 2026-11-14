@@ -27,11 +27,11 @@ from medicore.application.use_cases.platform import (
     ListTenants,
     ListTenantUsers,
     PlatformMfaChallengeDTO,
+    ReactivateTenantUser,
     ResetTenantRolePermissions,
     ResetUserPassword,
     SetTenantStatus,
     SuspendTenantUser,
-    UnlockUser,
     UpdateTenant,
     UpdateTenantRolePermissions,
     UpdateTenantUser,
@@ -396,7 +396,8 @@ def revoke_tenant_session(
 def reset_user_password(tenant_id: str, user_id: str, body: ResetPasswordRequest,
                         actor: PlatformActor, factory: UoWFactory, hasher: Hasher, clock: Clock):
     ResetUserPassword(factory, hasher, clock).execute(
-        actor, TenantId.parse(tenant_id), UserId.parse(user_id), body.password
+        actor, TenantId.parse(tenant_id), UserId.parse(user_id), body.password,
+        body.reason,
     )
     page = ListTenantUsers(factory).execute(actor, TenantId.parse(tenant_id))
     return UserListResponse(
@@ -405,10 +406,10 @@ def reset_user_password(tenant_id: str, user_id: str, body: ResetPasswordRequest
     )
 
 
-@router.post("/tenants/{tenant_id}/users/{user_id}/unlock", response_model=UserListResponse)
-def unlock_user(tenant_id: str, user_id: str, actor: PlatformActor, factory: UoWFactory,
-                clock: Clock):
-    UnlockUser(factory, clock).execute(
+@router.post("/tenants/{tenant_id}/users/{user_id}/reactivate", response_model=UserListResponse)
+def reactivate_tenant_user(tenant_id: str, user_id: str, actor: PlatformActor,
+                           factory: UoWFactory, clock: Clock):
+    ReactivateTenantUser(factory, clock).execute(
         actor, TenantId.parse(tenant_id), UserId.parse(user_id)
     )
     page = ListTenantUsers(factory).execute(actor, TenantId.parse(tenant_id))

@@ -6,7 +6,7 @@ import pytest
 
 from medicore.application.common.context import PlatformActorContext
 from medicore.application.use_cases.organization import AddLocation
-from medicore.application.use_cases.platform import UnlockUser, UpdateTenantUser
+from medicore.application.use_cases.platform import ReactivateTenantUser, UpdateTenantUser
 from medicore.application.use_cases.users import (
     InviteUser,
     InviteUserCommand,
@@ -131,7 +131,9 @@ class TestPlatformSide:
         SuspendUser(uow, FixedClock()).execute(seed.actor(seed.admin), seed.doctor.id)
         invite(seed, uow, Role.DOCTOR, 1)
         with pytest.raises(QuotaExceeded):
-            UnlockUser(seed.factory, FixedClock()).execute(actor, seed.tenant.id, seed.doctor.id)
+            ReactivateTenantUser(seed.factory, FixedClock()).execute(
+                actor, seed.tenant.id, seed.doctor.id
+            )
 
 
 class TestLocations:

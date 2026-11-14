@@ -89,7 +89,8 @@ class TestTemporaryPasswords:
         seed = seed_clinic()
         actor = PlatformActorContext(admin_id=seed.platform_admin.id)
         use_case = PlatformReset(seed.factory, PlainPasswordHasher(), FixedClock())
+        weak = "aaaaaaaaaa"
         assert (
-            _code(lambda: use_case.execute(actor, seed.tenant.id, seed.nurse.id, "aaaaaaaaaa"))
+            _code(lambda: use_case.execute(actor, seed.tenant.id, seed.nurse.id, weak, "Forgot it"))
             == "password.too_simple"
         )

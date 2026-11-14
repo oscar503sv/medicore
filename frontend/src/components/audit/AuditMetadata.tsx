@@ -1,7 +1,7 @@
 import { useT } from '@/lib/i18n'
 
 // Keys already surfaced elsewhere (Detail column / support badge) — hidden from the raw dump.
-const HIDDEN = new Set(['subject', 'impersonated_by'])
+const HIDDEN = new Set(['subject', 'impersonated_by', 'via'])
 
 /** Expanded-row content: the full audit metadata as key/value pairs, plus the user agent. */
 export function AuditMetadata({

@@ -190,7 +190,7 @@ def test_list_tenant_users_and_reset_password(seed, client, platform_headers):
     resp = client.post(
         f"/api/v1/platform/tenants/{seed.tenant.id}/users/{seed.doctor.id}/reset-password",
         headers=platform_headers,
-        json={"password": "fresh-temp-pass"},
+        json={"password": "fresh-temp-pass", "reason": "Forgot the password"},
     )
     assert resp.status_code == 200, resp.text
     # the doctor must now change password on next login
@@ -206,14 +206,14 @@ def test_list_tenant_users_and_reset_password(seed, client, platform_headers):
     assert login.json()["must_change_password"] is True
 
 
-def test_unlock_user_endpoint(seed, client, platform_headers):
+def test_reactivate_user_endpoint(seed, client, platform_headers):
     from medicore.domain.enums import UserStatus
 
     seed.doctor.status = UserStatus.SUSPENDED
     seed.factory.store.users[seed.doctor.id.value] = seed.doctor
 
     resp = client.post(
-        f"/api/v1/platform/tenants/{seed.tenant.id}/users/{seed.doctor.id}/unlock",
+        f"/api/v1/platform/tenants/{seed.tenant.id}/users/{seed.doctor.id}/reactivate",
         headers=platform_headers,
     )
     assert resp.status_code == 200

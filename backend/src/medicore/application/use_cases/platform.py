@@ -12,7 +12,12 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from medicore.application.common.admins import ensure_clinic_keeps_an_admin
-from medicore.application.common.audit import platform_audit_entry
+from medicore.application.common.audit import (
+    audit_entry,
+    platform_audit_entry,
+    subject,
+    support_audit_entry,
+)
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.entitlements import granted_permissions
 from medicore.application.common.errors import (
@@ -21,17 +26,29 @@ from medicore.application.common.errors import (
     ValidationError,
 )
 from medicore.application.common.login_gate import LoginGate
-from medicore.application.common.login_throttle import platform_login_identifier
+from medicore.application.common.login_throttle import (
+    platform_login_identifier,
+    tenant_login_identifier,
+)
+from medicore.application.common.notifications import (
+    SUPPORT_ACCESS_STARTED,
+    SUPPORT_PASSWORD_RESET,
+    SUPPORT_USER_REACTIVATED,
+    SUPPORT_USER_SUSPENDED,
+    SUPPORT_USER_UPDATED,
+    notify_support_action,
+)
 from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.common.permissions import effective_permissions
 from medicore.application.common.platform_mfa import mfa_required_for
 from medicore.application.common.platform_session import PlatformSessionPolicy
 from medicore.application.common.quotas import ensure_seat_for
+from medicore.application.common.support import require_support_reason
 from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
 from medicore.application.ports.token_issuer import SessionClaims, TokenIssuer
-from medicore.application.ports.unit_of_work import UnitOfWorkFactory
+from medicore.application.ports.unit_of_work import UnitOfWork, UnitOfWorkFactory
 from medicore.application.use_cases import role_permissions
 from medicore.application.use_cases.organization import open_location
 from medicore.application.use_cases.subscriptions import (
@@ -605,6 +622,40 @@ def _require_user(uow, tenant_id: TenantId, user_id: UserId) -> User:
     return user
 
 
+def _record_support_action(
+    uow: UnitOfWork,
+    actor: PlatformActorContext,
+    now: datetime,
+    action: str,
+    user: User,
+    tenant_id: TenantId,
+    notification: str,
+    *,
+    reason: str | None = None,
+    **metadata: object,
+) -> None:
+    """One support action on an account, written in the caller's transaction to the platform
+    trail, the clinic's trail and the inbox of the clinic's admins and the person concerned."""
+    why = {"reason": reason} if reason else {}
+    uow.platform_audit.append(
+        _audit(actor, now, action, "User", str(user.id), tenant_id=tenant_id, **why, **metadata)
+    )
+    uow.audit.append(
+        support_audit_entry(
+            actor, tenant_id, now, action, "User", str(user.id),
+            subject=subject(user.name), **why, **metadata,
+        )
+    )
+    notify_support_action(uow, now, notification, about=user)
+
+
+def _clear_login_lockout(factory: UnitOfWorkFactory, tenant: Tenant, user: User) -> None:
+    """Support restored access: the person must not stay locked out by earlier failures.
+    The per-IP counter is left alone: it is shared and says nothing about this account."""
+    with factory.login_throttle() as throttle:
+        throttle.clear_account(tenant_login_identifier(str(tenant.slug), user.email))
+
+
 class ResetUserPassword:
     """Superadmin sets a temporary password for a user; they must change it on next login."""
 
@@ -621,7 +672,9 @@ class ResetUserPassword:
         tenant_id: TenantId,
         user_id: UserId,
         password: str,
+        reason: str,
     ) -> User:
+        reason = require_support_reason(reason)
         with self._factory.for_tenant(tenant_id) as uow:
             user = _require_user(uow, tenant_id, user_id)
             tenant = uow.tenants.get_by_id(tenant_id)
@@ -630,14 +683,15 @@ class ResetUserPassword:
             )
             user.set_temporary_password(self._hasher.hash(password))
             uow.users.save(user)
-            uow.sessions.revoke_all_for_user(user_id.value, self._clock.now())
-            uow.platform_audit.append(
-                _audit(
-                    actor, self._clock.now(), "user.password_reset", "User", str(user_id),
-                    tenant_id=tenant_id,
-                )
+            now = self._clock.now()
+            uow.sessions.revoke_all_for_user(user_id.value, now)
+            _record_support_action(
+                uow, actor, now, "user.password_reset", user, tenant_id,
+                SUPPORT_PASSWORD_RESET, reason=reason,
             )
             uow.commit()
+        if tenant is not None:
+            _clear_login_lockout(self._factory, tenant, user)
         return user
 
 
@@ -669,8 +723,9 @@ class ImpersonateTenant:
         self._clock = clock
 
     def execute(
-        self, actor: PlatformActorContext, tenant_id: TenantId, reason: str = ""
+        self, actor: PlatformActorContext, tenant_id: TenantId, reason: str
     ) -> ImpersonationSessionDTO:
+        reason = require_support_reason(reason)
         with self._factory.platform_uow() as platform:
             tenant = platform.tenants.get_by_id(tenant_id)
         if tenant is None:
@@ -706,9 +761,16 @@ class ImpersonateTenant:
             uow.platform_audit.append(
                 _audit(
                     actor, now, "support.access.started", "Tenant", str(tenant_id),
-                    tenant_id=tenant_id, as_user=str(target.id), reason=reason.strip(),
+                    tenant_id=tenant_id, as_user=str(target.id), reason=reason,
                 )
             )
+            uow.audit.append(
+                support_audit_entry(
+                    actor, tenant_id, now, "support.access.started", "Tenant", str(tenant_id),
+                    reason=reason, as_user=str(target.id), subject=subject(target.name),
+                )
+            )
+            notify_support_action(uow, now, SUPPORT_ACCESS_STARTED)
             uow.commit()
         token = self._tokens.issue(
             SessionClaims(
@@ -764,11 +826,17 @@ class EndImpersonation:
                     user_agent=actor.user_agent,
                 )
             )
+            uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "support.access.ended", "Tenant",
+                    str(actor.tenant_id),
+                )
+            )
             uow.commit()
 
 
-class UnlockUser:
-    """Reactivate a suspended user account."""
+class ReactivateTenantUser:
+    """Reactivate a suspended account and clear its sign-in lockout."""
 
     def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
         self._factory = uow_factory
@@ -779,17 +847,18 @@ class UnlockUser:
     ) -> User:
         with self._factory.for_tenant(tenant_id) as uow:
             user = _require_user(uow, tenant_id, user_id)
+            tenant = uow.tenants.get_by_id(tenant_id)
             if not user.is_active:
                 ensure_seat_for(uow, tenant_id, taking=user.role)
             user.activate()
             uow.users.save(user)
-            uow.platform_audit.append(
-                _audit(
-                    actor, self._clock.now(), "user.unlocked", "User", str(user_id),
-                    tenant_id=tenant_id,
-                )
+            _record_support_action(
+                uow, actor, self._clock.now(), "user.reactivated", user, tenant_id,
+                SUPPORT_USER_REACTIVATED,
             )
             uow.commit()
+        if tenant is not None:
+            _clear_login_lockout(self._factory, tenant, user)
         return user
 
 
@@ -818,16 +887,28 @@ class UpdateTenantUser:
                 ensure_seat_for(
                     uow, tenant_id, taking=Role(changes["role"]), releasing=user.role
                 )
+            changed = sorted(
+                k for k, v in changes.items() if k in allowed and v is not None
+                and getattr(user, k) != v
+            )
+            previous_role = user.role
             for key, value in changes.items():
                 if key in allowed:
                     setattr(user, key, value)
             uow.users.save(user)
-            uow.platform_audit.append(
-                _audit(
-                    actor, self._clock.now(), "user.updated", "User", str(user_id),
-                    tenant_id=tenant_id,
+            now = self._clock.now()
+            if changed:
+                detail: dict[str, object] = {"fields": ", ".join(changed)}
+                if "role" in changed:
+                    detail |= {"role": str(user.role), "previous_role": str(previous_role)}
+                _record_support_action(
+                    uow, actor, now, "user.updated", user, tenant_id,
+                    SUPPORT_USER_UPDATED, **detail,
                 )
-            )
+            else:
+                uow.platform_audit.append(
+                    _audit(actor, now, "user.updated", "User", str(user_id), tenant_id=tenant_id)
+                )
             uow.commit()
         return user
 
@@ -847,12 +928,10 @@ class SuspendTenantUser:
             ensure_clinic_keeps_an_admin(uow, user, stays_admin=False)
             user.suspend()
             uow.users.save(user)
-            uow.sessions.revoke_all_for_user(user_id.value, self._clock.now())
-            uow.platform_audit.append(
-                _audit(
-                    actor, self._clock.now(), "user.suspended", "User", str(user_id),
-                    tenant_id=tenant_id,
-                )
+            now = self._clock.now()
+            uow.sessions.revoke_all_for_user(user_id.value, now)
+            _record_support_action(
+                uow, actor, now, "user.suspended", user, tenant_id, SUPPORT_USER_SUSPENDED
             )
             uow.commit()
         return user

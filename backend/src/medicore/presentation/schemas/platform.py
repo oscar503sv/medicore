@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
+from medicore.application.common.support import SUPPORT_REASON_MAX, SUPPORT_REASON_MIN
 from medicore.domain.enums import AddonModule, IcdVersion, Role, Sex, TenantStatus
 from medicore.presentation.schemas.subscriptions import TenantSubscriptionSummary
+
+SupportReason = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=SUPPORT_REASON_MIN, max_length=SUPPORT_REASON_MAX
+    ),
+]
 
 
 class PlatformLoginRequest(BaseModel):
@@ -182,6 +191,7 @@ class GlobalAuditListResponse(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     password: str
+    reason: SupportReason  # why support resets it; recorded in the clinic's audit trail
 
 
 class UpdateTenantUserRequest(BaseModel):
@@ -193,7 +203,7 @@ class UpdateTenantUserRequest(BaseModel):
 
 
 class ImpersonateRequest(BaseModel):
-    reason: str = ""  # why support is entering the clinic; recorded in the audit trail
+    reason: SupportReason  # why support is entering the clinic; recorded in the audit trail
 
 
 class ImpersonationResponse(BaseModel):

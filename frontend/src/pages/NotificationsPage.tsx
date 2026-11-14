@@ -108,6 +108,7 @@ export function NotificationsPage() {
             { value: 'application', label: t('notif.cat.application') },
             { value: 'procedure', label: t('notif.cat.procedure') },
             { value: 'user', label: t('notif.cat.user') },
+            { value: 'support', label: t('notif.cat.support') },
           ]}
         />
         <span className="ml-auto text-[13px] text-tx-3">

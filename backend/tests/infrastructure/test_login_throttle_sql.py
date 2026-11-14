@@ -116,6 +116,32 @@ def test_reset_clears_the_history_and_remembers_the_success(repo):
     assert _count(repo, IDENTIFIER) == 1
 
 
+def test_clear_account_forgets_the_account_and_its_pairs_only(repo):
+    account = "tenant:t:d_c@x.test"
+    pair = f"{account}|203.0.113.9"
+    lookalike = "tenant:t:dxc@x.test|203.0.113.9"  # "_" must not act as a wildcard
+    shared_ip = "ip:203.0.113.9"
+    for identifier in (account, pair, lookalike, shared_ip):
+        for _ in range(5):
+            _reserve(repo, identifier)
+    repo.reset(pair, NOW)  # leaves a last_success_at to keep
+    for _ in range(5):
+        _reserve(repo, pair)
+    ip_before = _count(repo, shared_ip)
+
+    repo.clear_account(account)
+
+    for identifier in (account, pair):
+        failed, locked_until = repo._s.execute(
+            text("SELECT failed_count, locked_until FROM login_attempts WHERE identifier = :id"),
+            {"id": identifier},
+        ).one()
+        assert (failed, locked_until) == (0, None)
+    assert _reserve(repo, pair, at=NOW + timedelta(seconds=1)).last_success_at == NOW
+    assert _count(repo, lookalike) == 5
+    assert _count(repo, shared_ip) == ip_before
+
+
 def test_refund_lifts_a_lock_that_falls_below_the_threshold(repo):
     for _ in range(5):
         _reserve(repo)

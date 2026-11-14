@@ -18,8 +18,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 import medicore.infrastructure.persistence.models  # noqa: F401  (register all tables)
-from medicore.application.common.audit import audit_entry
-from medicore.application.common.context import ActorContext
+from medicore.application.common.audit import audit_entry, support_audit_entry
+from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.enums import PaymentMethod, Role, UserStatus
 from medicore.domain.shared.identifiers import PlatformAdminId, SubscriptionPaymentId
@@ -134,3 +134,23 @@ def test_activity_and_weekly_signed(session, clinic):
 
     weeks = dict(reads.signed_per_week(FUTURE - timedelta(days=14)))
     assert weeks == {date(2031, 3, 3): 2, date(2031, 2, 24): 1}
+
+
+def test_support_copies_are_not_clinic_activity_nor_duplicated(session, clinic):
+    tenant, doctor, _ = clinic
+    audit = SqlAuditLogRepository(session, tenant.id)
+    actor = ActorContext(user_id=doctor.id, tenant_id=tenant.id, role=doctor.role)
+    audit.append(audit_entry(actor, FUTURE - timedelta(days=3), "auth.login", "User", "x"))
+    console = PlatformActorContext(admin_id=PlatformAdminId.new())
+    audit.append(
+        support_audit_entry(console, tenant.id, FUTURE, "user.password_reset", "User", "x")
+    )
+    session.flush()
+
+    reads = SqlPlatformReadModel(session)
+    mine = reads.activity_by_tenant(FUTURE - timedelta(days=7), FUTURE)[str(tenant.id)]
+    assert mine.last_activity == FUTURE - timedelta(days=3)
+    assert mine.active_users == 1
+
+    rows = reads.global_audit(limit=1000, category="user").items
+    assert not [r for r in rows if r.metadata.get("via") == "platform_support"]

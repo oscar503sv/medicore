@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, KeyRound, LogIn, Pencil } from 'lucide-react'
@@ -27,6 +27,7 @@ import { useT } from '@/lib/i18n'
 import { genPassword } from '@/lib/passwordPolicy'
 import { TIMEZONES, tzLabel } from '@/lib/timezones'
 import { deviceLabel } from '@/lib/userAgent'
+import { SUPPORT_REASON_MAX, supportReasonError } from '@/lib/validation'
 import { Activity, CalendarCheck, FileText, Search, Users } from 'lucide-react'
 import type { TenantStatus } from '@/types'
 
@@ -113,6 +114,12 @@ export function ClinicDetailPage() {
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null)
   const [supportOpen, setSupportOpen] = useState(false)
   const [supportReason, setSupportReason] = useState('')
+  const [supportError, setSupportError] = useState<string>()
+  const supportInputRef = useRef<HTMLInputElement>(null)
+  const [resetTarget, setResetTarget] = useState<User | null>(null)
+  const [resetReason, setResetReason] = useState('')
+  const [resetError, setResetError] = useState<string>()
+  const resetInputRef = useRef<HTMLInputElement>(null)
   const activeAdmins = (users?.items ?? []).filter((u) => u.role === 'admin' && u.status === 'active')
   const isLastAdmin = (u: User) => activeAdmins.length === 1 && activeAdmins[0].id === u.id
   const filteredUsers = useMemo(() => {
@@ -130,20 +137,22 @@ export function ClinicDetailPage() {
   // The temporary password is shown once so support can hand it to the user.
   const [issued, setIssued] = useState<{ email: string; password: string } | null>(null)
   const resetPassword = useMutation({
-    mutationFn: async (userId: string) => {
+    mutationFn: async ({ userId, reason }: { userId: string; reason: string }) => {
       const password = genPassword()
-      const res = await platformTenantsApi.resetUserPassword(id, userId, password)
+      const res = await platformTenantsApi.resetUserPassword(id, userId, password, reason)
       return { res, password }
     },
-    onSuccess: ({ res, password }, userId) => {
+    onSuccess: ({ res, password }, { userId }) => {
       const u = res.items.find((x) => x.id === userId)
+      setResetTarget(null)
+      setResetReason('')
       setIssued({ email: u?.email ?? '', password })
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
   const reactivate = useMutation({
-    mutationFn: (userId: string) => platformTenantsApi.unlockUser(id, userId),
+    mutationFn: (userId: string) => platformTenantsApi.reactivateUser(id, userId),
     onSuccess: () => {
       toast(t('users.activated_ok'))
       qc.invalidateQueries({ queryKey: ['platform-tenant-users', id] })
@@ -325,6 +334,7 @@ export function ClinicDetailPage() {
               loading={impersonate.isPending}
               onClick={() => {
                 setSupportReason('')
+                setSupportError(undefined)
                 setSupportOpen(true)
               }}
             >
@@ -406,8 +416,11 @@ export function ClinicDetailPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      loading={resetPassword.isPending && resetPassword.variables === u.id}
-                      onClick={() => resetPassword.mutate(u.id)}
+                      onClick={() => {
+                        setResetReason('')
+                        setResetError(undefined)
+                        setResetTarget(u)
+                      }}
                     >
                       <KeyRound className="h-3.5 w-3.5" />
                       {t('platform.reset_password')}
@@ -470,18 +483,31 @@ export function ClinicDetailPage() {
 
       <Modal open={supportOpen} onClose={() => setSupportOpen(false)} title={t('platform.support_reason_title')}>
         <form
+          noValidate
           onSubmit={(e) => {
             e.preventDefault()
+            const error = supportReasonError(t, supportReason)
+            setSupportError(error)
+            if (error) {
+              supportInputRef.current?.focus()
+              return
+            }
             impersonate.mutate(supportReason.trim())
           }}
           className="space-y-4 p-5"
         >
           <div>
             <Input
+              ref={supportInputRef}
               label={t('platform.support_reason_label')}
               value={supportReason}
-              onChange={(e) => setSupportReason(e.target.value)}
+              onChange={(e) => {
+                setSupportReason(e.target.value)
+                setSupportError(undefined)
+              }}
               placeholder={t('platform.support_reason_ph')}
+              error={supportError}
+              maxLength={SUPPORT_REASON_MAX}
               required
             />
             <p className="mt-1.5 text-xs text-tx-3">{t('platform.support_reason_hint')}</p>
@@ -490,9 +516,57 @@ export function ClinicDetailPage() {
             <Button type="button" variant="outline" onClick={() => setSupportOpen(false)}>
               {t('app.cancel')}
             </Button>
-            <Button type="submit" loading={impersonate.isPending} disabled={!supportReason.trim()}>
+            <Button type="submit" loading={impersonate.isPending}>
               <LogIn className="h-4 w-4" />
               {t('platform.action_impersonate')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={!!resetTarget}
+        onClose={() => setResetTarget(null)}
+        title={t('platform.reset_reason_title')}
+      >
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (!resetTarget) return
+            const error = supportReasonError(t, resetReason)
+            setResetError(error)
+            if (error) {
+              resetInputRef.current?.focus()
+              return
+            }
+            resetPassword.mutate({ userId: resetTarget.id, reason: resetReason.trim() })
+          }}
+          className="space-y-4 p-5"
+        >
+          <div>
+            <Input
+              ref={resetInputRef}
+              label={t('platform.reset_reason_label')}
+              value={resetReason}
+              onChange={(e) => {
+                setResetReason(e.target.value)
+                setResetError(undefined)
+              }}
+              placeholder={t('platform.reset_reason_ph')}
+              error={resetError}
+              maxLength={SUPPORT_REASON_MAX}
+              required
+            />
+            <p className="mt-1.5 text-xs text-tx-3">{t('platform.reset_reason_hint')}</p>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setResetTarget(null)}>
+              {t('app.cancel')}
+            </Button>
+            <Button type="submit" loading={resetPassword.isPending}>
+              <KeyRound className="h-4 w-4" />
+              {t('platform.reset_confirm')}
             </Button>
           </div>
         </form>

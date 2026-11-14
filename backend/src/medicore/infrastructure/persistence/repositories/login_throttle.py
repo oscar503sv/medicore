@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import or_, text
+from sqlalchemy import or_, text, update
 from sqlalchemy.orm import Session
 
 from medicore.application.common.login_throttle import (
@@ -93,6 +93,20 @@ class SqlLoginThrottleRepository:
                 """
             ),
             {"id": identifier, "now": now},
+        )
+        self._s.commit()
+
+    def clear_account(self, account: str) -> None:
+        self._s.execute(
+            update(LoginAttemptModel)
+            .where(
+                or_(
+                    LoginAttemptModel.identifier == account,
+                    # "_" is common in emails and would otherwise match any character.
+                    LoginAttemptModel.identifier.startswith(f"{account}|", autoescape=True),
+                )
+            )
+            .values(failed_count=0, locked_until=None)
         )
         self._s.commit()
 

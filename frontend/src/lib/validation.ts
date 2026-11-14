@@ -16,3 +16,16 @@ export function formatPhone(input: string): string {
 export function isValidPhone(phone: string): boolean {
   return !phone.trim() || PHONE_RE.test(phone.trim())
 }
+
+export const SUPPORT_REASON_MIN = 5
+export const SUPPORT_REASON_MAX = 500
+
+/** Error message for a support reason (impersonation, password reset), or undefined if valid. */
+export function supportReasonError(
+  t: (key: string) => string,
+  value: string,
+): string | undefined {
+  return value.trim().length < SUPPORT_REASON_MIN
+    ? t('platform.support_reason_too_short').replace('{min}', String(SUPPORT_REASON_MIN))
+    : undefined
+}

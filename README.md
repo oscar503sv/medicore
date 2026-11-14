@@ -6,7 +6,7 @@ A **multi-tenant** clinic management system built with **Clean Architecture**.
 
 It covers the full care cycle: per-organization sign-in, a dashboard with real metrics, patient management, scheduling and appointments, the live consultation (**clinical note templates**: SOAP, P-SOAP, full history, progress, narrative) with an **ICD-10/ICD-11 diagnosis catalog**, signed and immutable medical records, medical files, per-doctor availability, insurers, user management, **granular role permissions customizable per clinic**, **in-app notifications**, **vaccination following El Salvador's national scheme**, **in-clinic medication applications**, **minor procedures**, organization settings and a **getting-started guide** for doctors and admins that ticks itself off from real data. The interface is available in **Spanish and English**, including the backend's error messages.
 
-It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, a **Business** overview (MRR, collections, expirations, adoption and seats per clinic), **Monitoring** (API and database health, server errors, failed sign-ins and lockouts, open sessions and support access, per-route API performance), global audit, account support (password reset, unlock, suspension) and **audited impersonation** of a clinic for support.
+It also ships a **platform console (superadmin)** that sits above the multi-tenant boundary: clinic onboarding and administration, a **Business** overview (MRR, collections, expirations, adoption and seats per clinic), **Monitoring** (API and database health, server errors, failed sign-ins and lockouts, open sessions and support access, per-route API performance), global audit, account support (password reset, reactivation, suspension) and **audited impersonation** of a clinic for support, both with a required reason.
 
 ---
 
@@ -89,7 +89,7 @@ src/medicore/
 Every business entity carries a `tenant_id`. The filter is applied **in every repository**, not by the caller — isolation is enforced structurally. The `UnitOfWork` is tenant-scoped: `factory.for_tenant(tenant_id)`. Global operations (slug resolution, superadmin) use an unscoped `UnitOfWork` or read-only helpers.
 
 ### Platform (superadmin)
-A separate session (`platform`-scoped token, with its own `mc_console` cookie) that operates above the multi-tenant boundary: clinic creation/editing (including the timezone and sites), each clinic's **subscription** (plan, modules, paid period, special terms, payments), status changes (active / suspended / archived), global stats and audit, account support (password reset, unlock, user suspension) and **impersonation**. Impersonation issues a tenant token marked with `impersonated_by` and a shorter TTL, so every write made during support is audited. Impersonation is allowed in suspended clinics, but not in archived ones.
+A separate session (`platform`-scoped token, with its own `mc_console` cookie) that operates above the multi-tenant boundary: clinic creation/editing (including the timezone and sites), each clinic's **subscription** (plan, modules, paid period, special terms, payments), status changes (active / suspended / archived), global stats and audit, account support (password reset, reactivation, user suspension) and **impersonation**. Impersonation and support password resets require a reason (5–500 characters) that is kept in the audit. Support actions on a clinic's users (password reset, edit, role change, suspension, reactivation) and entering or leaving impersonation are recorded in that clinic's own audit as "Platform support", with IP and browser but without the superadmin's name or email, and notified in the bell to the clinic's active admins and the affected user (impersonation entry: admins only). They are not duplicated in the global console audit. Impersonation issues a tenant token marked with `impersonated_by` and a shorter TTL, so every write made during support is audited. Impersonation is allowed in suspended clinics, but not in archived ones.
 
 ### Critical business rules
 - Appointments only within the doctor's availability, with no overlaps, honoring the booking rules.
@@ -138,7 +138,7 @@ Access control is **granular and customizable per clinic** (`application/common/
 | Timezone | read-only | ✅ (it moves the clinic's "today", agenda and reminders) |
 | Slug (sign-in identifier) | read-only | fixed at creation |
 | Plan, modules, limits, paid period, payments | read-only | ✅ |
-| Users, roles, per-user permissions | ✅ (within seat limits) | support actions (reset password, unlock, suspend) |
+| Users, roles, per-user permissions | ✅ (within seat limits) | support actions (reset password, edit, change role, suspend, reactivate) |
 
 ---
 
@@ -164,7 +164,7 @@ The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every 
   - **Per IP**: 30 attempts in 15 min → 15 min block (IPv6 grouped by /64).
   - **Per account from one IP**: 5 failures → 1 min, doubling up to 15, so the owner can still sign in from another address while someone attacks the account.
   - **Per account in total**: 20 attempts in 15 min against distributed attacks; an IP that signed in successfully to that account in the last 30 days is exempt.
-  A blocked attempt gets a 429 with `Retry-After`; an IP block answers the same whether or not the account exists. A successful sign-in clears that account's failures from that IP, but not the IP's or the account's totals (it only gives back its own attempt). The console's second factor keeps its own limit of 5 per superadmin, regardless of IP. The Monitoring page also shows IP blocks and the IP behind account blocks.
+  A blocked attempt gets a 429 with `Retry-After`; an IP block answers the same whether or not the account exists. A successful sign-in clears that account's failures from that IP, but not the IP's or the account's totals (it only gives back its own attempt). A support reactivation or password reset also lifts that account's lockout, but not the IP counter. The console's second factor keeps its own limit of 5 per superadmin, regardless of IP. The Monitoring page also shows IP blocks and the IP behind account blocks.
 - **Console session limits**: the superadmin console session expires after 30 min without activity (`PLATFORM_SESSION_IDLE_MINUTES`) and at most 8 h after sign-in (`PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request. `scripts/create_platform_admin.py` revokes the admin's sessions when it updates the account.
 - **Optional MFA (TOTP) for superadmins**: enabled from the console under *Account security* (`/platform/security`). With MFA on, the console login asks for the password and then a 6-digit code from an authenticator app, or a recovery code. The challenge is single-use, valid for 5 min and kept in an httpOnly cookie limited to `/api/v1/platform/login`. A code can't be reused, and after 5 failed attempts the lockout escalates. There are 10 single-use recovery codes, shown once and stored as hashes. The TOTP secret is encrypted with AES-256-GCM. Enabling MFA, regenerating the recovery codes or disabling it requires the current password, and every change is recorded in the platform audit log.
 - **Recommended deployment**: serve the platform console from its own origin or subdomain (e.g. `console.example.com`), so an XSS in the clinic app cannot share an origin with it. This is a recommendation; the app does not enforce it.
@@ -178,7 +178,7 @@ Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## Notifications and dashboard
 
-- **In-app notifications**: appointments created, rescheduled, cancelled or marked as no-show (to the doctor), record amendments (to the original author), uploaded documents (to the treating doctor) and new users or role changes (to administrators). A bell in the top bar with an unread counter (polled every 60 s), an unread-only filter and deep links to the item, plus a full **inbox page** (`/notifications`) filterable by status and category and grouped by day. Kept for 90 days.
+- **In-app notifications**: appointments created, rescheduled, cancelled or marked as no-show (to the doctor), record amendments (to the original author), uploaded documents (to the treating doctor) and new users or role changes (to administrators) and support actions on a clinic's users (to active admins and the affected user; impersonation entry: admins only). A bell in the top bar with an unread counter (polled every 60 s), an unread-only filter and deep links to the item, plus a full **inbox page** (`/notifications`) filterable by status and category and grouped by day. Kept for 90 days.
 - **Dashboard with real data** (`GET /dashboard/summary`): today's appointments, pending ones, registered patients and schedule occupancy, each compared with the previous week, plus the next pending appointments from now on (`GET /appointments/upcoming`). Doctors see their own schedule; other roles see the whole clinic. Whoever can see metrics also gets a **month summary** there.
 
 ## Practice metrics
@@ -391,7 +391,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1293 tests)
+.venv/bin/pytest                          # full suite (1322 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -445,14 +445,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1293 passing tests
+1322 passing tests
    278  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   558  — application (auth, sessions, appointments, consultations, records, notifications,
-            dashboard, platform, granular permissions, multi-tenant isolation)
-   307  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   580  — application (auth, sessions, appointments, consultations, records, notifications,
+            dashboard, platform (support actions land in the clinic's audit and are notified), granular permissions, multi-tenant isolation)
+   312  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    150  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    152  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

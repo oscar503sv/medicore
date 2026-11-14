@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
+from medicore.application.common.audit import PLATFORM_SUPPORT
 from medicore.application.common.login_throttle import (
     KNOWN_IP_TTL,
     WINDOW,
@@ -311,6 +312,11 @@ class InMemoryLoginThrottleRepository:
             self._store.login_attempts[identifier] = (0, entry[1], None)
         self._store.login_successes[identifier] = now
 
+    def clear_account(self, account: str) -> None:
+        for key, (_, last, _) in list(self._store.login_attempts.items()):
+            if key == account or key.startswith(f"{account}|"):
+                self._store.login_attempts[key] = (0, last, None)
+
     def purge_stale(self, now: datetime) -> None:
         for identifier, (_, last, locked) in list(self._store.login_attempts.items()):
             success = self._store.login_successes.get(identifier)
@@ -395,11 +401,15 @@ class InMemoryPlatformReadModel:
         from medicore.domain.repositories._support import TenantActivity
 
         out = {}
-        tenants = {str(e.tenant_id) for e in self._store.audit.values()} | {
+        # Support work is not clinic activity.
+        clinic_audit = [
+            e for e in self._store.audit.values() if e.metadata.get("via") != PLATFORM_SUPPORT
+        ]
+        tenants = {str(e.tenant_id) for e in clinic_audit} | {
             str(r.tenant_id) for r in self._store.medical_records.values()
         }
         for tid in tenants:
-            entries = [e for e in self._store.audit.values() if str(e.tenant_id) == tid]
+            entries = [e for e in clinic_audit if str(e.tenant_id) == tid]
             out[tid] = TenantActivity(
                 last_activity=max((e.timestamp for e in entries), default=None),
                 active_users=len({e.actor_id for e in entries if e.timestamp >= active_since}),
@@ -430,7 +440,12 @@ class InMemoryPlatformReadModel:
         admins = {str(a.id): a.name for a in self._store.platform_admins.values()}
         clinics = {str(t.id): t.legal_name for t in self._store.tenants.values()}
 
-        rows: list[tuple] = [(e, "tenant") for e in self._store.audit.values()]
+        # The platform leg already holds the support copies.
+        rows: list[tuple] = [
+            (e, "tenant")
+            for e in self._store.audit.values()
+            if e.metadata.get("via") != PLATFORM_SUPPORT
+        ]
         rows += [(e, "platform") for e in self._store.platform_audit.values()]
         rows.sort(key=lambda pair: pair[0].timestamp, reverse=True)
         if category:

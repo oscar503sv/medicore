@@ -19,6 +19,7 @@ from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
+from medicore.domain.entities.user import User
 from medicore.domain.enums import AppointmentStatus, Role, UserStatus
 from medicore.domain.repositories._support import Paging, UserFilter
 from medicore.domain.shared.identifiers import NotificationId, UserId
@@ -34,6 +35,11 @@ USER_CREATED = "user.created"
 USER_ROLE_CHANGED = "user.role_changed"
 APPLICATION_REACTION = "application.reaction"
 PROCEDURE_PERFORMED = "procedure.performed"
+SUPPORT_PASSWORD_RESET = "support.password_reset"
+SUPPORT_USER_UPDATED = "support.user_updated"
+SUPPORT_USER_SUSPENDED = "support.user_suspended"
+SUPPORT_USER_REACTIVATED = "support.user_reactivated"
+SUPPORT_ACCESS_STARTED = "support.access_started"
 
 
 def notify(
@@ -63,6 +69,37 @@ def notify(
                 user_id=user_id,
                 type=type,
                 data=dict(payload),
+                created_at=when,
+            )
+        )
+
+
+def notify_support_action(
+    uow: UnitOfWork, when: datetime, type: str, *, about: User | None = None, **data: str | None
+) -> None:
+    """Tell the clinic's active admins, and the account concerned, that platform support acted.
+
+    There is no clinic actor to leave out. The account concerned gets a single copy marked
+    ``about_you`` (also when it is an admin) so the client can address it in the second person.
+    Call inside the action's ``with uow`` block, before ``commit()``.
+    """
+    payload = {k: v for k, v in data.items() if v is not None}
+    if about is not None:
+        payload |= {"user_id": str(about.id), "user_name": about.name}
+    recipients = set(active_admins(uow))
+    if about is not None:
+        recipients.add(about.id)
+    for user_id in sorted(recipients, key=str):
+        item = dict(payload)
+        if about is not None and user_id == about.id:
+            item["about_you"] = "true"
+        uow.notifications.save(
+            Notification(
+                id=NotificationId.new(),
+                tenant_id=uow.tenant_id,
+                user_id=user_id,
+                type=type,
+                data=item,
                 created_at=when,
             )
         )
