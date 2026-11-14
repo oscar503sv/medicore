@@ -76,14 +76,6 @@ class AuthenticateUser:
         self._hasher = hasher
         self._tokens = tokens
         self._clock = clock
-        self._dummy_hash: str | None = None
-
-    def _dummy(self) -> str:
-        # Hash to verify against when the email does not exist, so the response time
-        # does not reveal whether an account exists (user enumeration via timing).
-        if self._dummy_hash is None:
-            self._dummy_hash = self._hasher.hash("medicore.invalid-user.dummy")
-        return self._dummy_hash
 
     def execute(self, cmd: AuthenticateUserCommand) -> SessionDTO:
         identifier = tenant_login_identifier(cmd.slug, cmd.email)
@@ -96,7 +88,7 @@ class AuthenticateUser:
                 session = self._authenticate(cmd)
             except AuthenticationFailed:
                 # Counted for non-existent accounts too, so the lockout does not reveal
-                # which accounts exist (complements the dummy-hash timing defense).
+                # which accounts exist (complements the dummy hash check).
                 if throttle.record_failure(identifier, now) is not None:
                     self._audit_lockout(cmd, now)
                 raise
@@ -134,9 +126,9 @@ class AuthenticateUser:
             uow.commit()
 
     def _reject_unknown(self, cmd: AuthenticateUserCommand) -> NoReturn:
-        # Unknown organization: burn the same bcrypt work and answer exactly like a
-        # wrong password, so neither the message nor the timing reveals which slugs exist.
-        self._hasher.verify(cmd.password, self._dummy())
+        # No such organization or account: burn one hash check and answer exactly like a
+        # wrong password, so neither the message nor the timing reveals what exists.
+        self._hasher.dummy_verify(cmd.password)
         raise AuthenticationFailed("invalid credentials", code="auth.invalid_credentials")
 
     def _authenticate(self, cmd: AuthenticateUserCommand) -> SessionDTO:
@@ -152,10 +144,9 @@ class AuthenticateUser:
 
         with self._factory.for_tenant(tenant.id) as uow:
             user = uow.users.get_by_email(cmd.email)
-            password_ok = self._hasher.verify(
-                cmd.password, user.password_hash if user else self._dummy()
-            )
-            if user is None or not password_ok:
+            if user is None:
+                self._reject_unknown(cmd)
+            if not self._hasher.verify(cmd.password, user.password_hash):
                 raise AuthenticationFailed("invalid credentials", code="auth.invalid_credentials")
             # Status messages only after valid credentials: the legitimate user learns why
             # they cannot get in, an attacker without the password learns nothing.

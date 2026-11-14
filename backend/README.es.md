@@ -241,7 +241,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **1209 tests** (270 dominio · 500 aplicación · 299 presentación · 140 infraestructura), casi
+Suite de **1230 tests** (270 dominio · 516 aplicación · 299 presentación · 145 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 

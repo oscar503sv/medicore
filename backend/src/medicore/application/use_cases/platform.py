@@ -160,14 +160,6 @@ class AuthenticatePlatformAdmin:
         self._tokens = tokens
         self._clock = clock
         self._policy = policy
-        self._dummy_hash: str | None = None
-
-    def _dummy(self) -> str:
-        # Hash to verify against when the email does not exist, so the response time
-        # does not reveal whether an account exists (user enumeration via timing).
-        if self._dummy_hash is None:
-            self._dummy_hash = self._hasher.hash("medicore.invalid-user.dummy")
-        return self._dummy_hash
 
     def execute(
         self,
@@ -186,7 +178,7 @@ class AuthenticatePlatformAdmin:
                 session = self._authenticate(email, password, ip_address, user_agent)
             except AuthenticationFailed as exc:
                 # Counted for non-existent accounts too, so the lockout does not reveal
-                # which accounts exist (complements the dummy-hash timing defense).
+                # which accounts exist (complements the dummy hash check).
                 locked = throttle.record_failure(identifier, now)
                 self._audit_failure(email, now, exc.code, locked, ip_address, user_agent)
                 raise
@@ -253,10 +245,11 @@ class AuthenticatePlatformAdmin:
     ) -> PlatformSessionDTO | PlatformMfaChallengeDTO:
         with self._factory.platform_uow() as uow:
             admin = uow.platform_admins.get_by_email(email)
-            password_ok = self._hasher.verify(
-                password, admin.password_hash if admin else self._dummy()
-            )
-            if admin is None or not password_ok:
+            if admin is None:
+                # No such account: same hash work and answer as a wrong password (anti-enumeration).
+                self._hasher.dummy_verify(password)
+                raise AuthenticationFailed("invalid credentials", code="auth.invalid_credentials")
+            if not self._hasher.verify(password, admin.password_hash):
                 raise AuthenticationFailed("invalid credentials", code="auth.invalid_credentials")
             if not admin.is_active:
                 raise AuthenticationFailed("account is not active", code="auth.account_inactive")

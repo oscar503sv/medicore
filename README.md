@@ -163,7 +163,7 @@ The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every 
 - **Console session limits**: the superadmin console session expires after 30 min without activity (`PLATFORM_SESSION_IDLE_MINUTES`) and at most 8 h after sign-in (`PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request. `scripts/create_platform_admin.py` revokes the admin's sessions when it updates the account.
 - **Optional MFA (TOTP) for superadmins**: enabled from the console under *Account security* (`/platform/security`). With MFA on, the console login asks for the password and then a 6-digit code from an authenticator app, or a recovery code. The challenge is single-use, valid for 5 min and kept in an httpOnly cookie limited to `/api/v1/platform/login`. A code can't be reused, and after 5 failed attempts the lockout escalates. There are 10 single-use recovery codes, shown once and stored as hashes. The TOTP secret is encrypted with AES-256-GCM. Enabling MFA, regenerating the recovery codes or disabling it requires the current password, and every change is recorded in the platform audit log.
 - **Recommended deployment**: serve the platform console from its own origin or subdomain (e.g. `console.example.com`), so an XSS in the clinic app cannot share an origin with it. This is a recommendation; the app does not enforce it.
-- **No enumeration**: constant-time login; an unknown slug or email answers exactly like a wrong password.
+- **No enumeration**: login does the same password-hashing work whether or not the organization or account exists (one bcrypt check per attempt), and an unknown slug or email answers exactly like a wrong password.
 - `X-Forwarded-For` is only honored from the proxies listed in `TRUSTED_PROXIES`.
 - Security headers on the API and a strict CSP in the frontend build.
 
@@ -386,7 +386,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1209 tests)
+.venv/bin/pytest                          # full suite (1230 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -440,14 +440,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1209 passing tests
+1230 passing tests
    270  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   500  — application (auth, sessions, appointments, consultations, records, notifications,
+   516  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
    299  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    140  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    145  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

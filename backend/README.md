@@ -240,7 +240,7 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **1209 tests** (270 domain · 500 application · 299 presentation · 140 infrastructure),
+A suite of **1230 tests** (270 domain · 516 application · 299 presentation · 145 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 

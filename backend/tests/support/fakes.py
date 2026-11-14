@@ -46,6 +46,29 @@ class PlainPasswordHasher:
     def verify(self, plain: str, hashed: str) -> bool:
         return hashed == self.hash(plain)
 
+    def dummy_verify(self, plain: str) -> None:
+        return None
+
+
+class SpyPasswordHasher(PlainPasswordHasher):
+    """Records which password operations ran, to check the work each login branch does."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def hash(self, plain: str) -> str:
+        self.calls.append("hash")
+        return super().hash(plain)
+
+    def verify(self, plain: str, hashed: str) -> bool:
+        self.calls.append("verify")
+        # Compared directly: going through self.hash would record a spurious "hash".
+        return hashed == f"{self.PREFIX}{plain}"
+
+    def dummy_verify(self, plain: str) -> None:
+        self.calls.append("dummy_verify")
+        super().dummy_verify(plain)
+
 
 class FakeTokenIssuer:
     def __init__(self) -> None:

@@ -24,6 +24,7 @@ from medicore.application.use_cases.platform import (
     ImpersonateTenant,
     ListGlobalAudit,
     ListTenants,
+    PlatformMfaChallengeDTO,
     ResetUserPassword,
     SetTenantStatus,
     SuspendTenantUser,
@@ -36,7 +37,7 @@ from medicore.domain.enums import IcdVersion, Role, TenantStatus, UserStatus
 from medicore.domain.services.plan_catalog import CLINICA
 from medicore.domain.shared.identifiers import SessionId, UserId
 from tests.support.builders import PASSWORD, build_tenant, build_user, seed_clinic
-from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
+from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher, SpyPasswordHasher
 
 
 def make_platform_auth(seed):
@@ -71,19 +72,116 @@ def test_platform_login_wrong_password():
         make_platform_auth(seed).execute(seed.platform_admin.email, "nope")
 
 
-def test_platform_unknown_email_still_runs_password_verification():
-    # Timing-safety: verify() must run even when the email does not exist, so an
-    # attacker cannot enumerate accounts by measuring response times.
-    seed = seed_clinic()
-    hasher = PlainPasswordHasher()
-    calls: list[str] = []
-    original_verify = hasher.verify
-    hasher.verify = lambda plain, hashed: calls.append(plain) or original_verify(plain, hashed)
+def _spy_platform_auth(seed) -> tuple[AuthenticatePlatformAdmin, SpyPasswordHasher]:
+    hasher = SpyPasswordHasher()
     auth = AuthenticatePlatformAdmin(seed.factory, hasher, FakeTokenIssuer(), FixedClock())
+    return auth, hasher
+
+
+def _stored_admin(seed):
+    return seed.factory.store.platform_admins[seed.platform_admin.id.value]
+
+
+def test_platform_unknown_email_burns_one_dummy_check():
+    seed = seed_clinic()
+    auth, hasher = _spy_platform_auth(seed)
+
+    with pytest.raises(AuthenticationFailed) as exc:
+        auth.execute("nadie@example.com", "whatever")
+
+    assert exc.value.code == "auth.invalid_credentials"
+    assert hasher.calls == ["dummy_verify"]
+
+
+def test_platform_dummy_check_is_not_recomputed_per_request():
+    seed = seed_clinic()
+    hasher = SpyPasswordHasher()
+    for _ in range(2):
+        auth = AuthenticatePlatformAdmin(seed.factory, hasher, FakeTokenIssuer(), FixedClock())
+        with pytest.raises(AuthenticationFailed):
+            auth.execute("nadie@example.com", "whatever")
+
+    assert hasher.calls == ["dummy_verify"] * 2
+
+
+def test_platform_wrong_password_runs_one_verify():
+    seed = seed_clinic()
+    auth, hasher = _spy_platform_auth(seed)
+
+    with pytest.raises(AuthenticationFailed) as exc:
+        auth.execute(seed.platform_admin.email, "nope")
+
+    assert exc.value.code == "auth.invalid_credentials"
+    assert hasher.calls == ["verify"]
+
+
+def test_platform_suspended_admin_with_wrong_password_looks_like_wrong_password():
+    seed = seed_clinic()
+    _stored_admin(seed).status = UserStatus.SUSPENDED
+    auth, hasher = _spy_platform_auth(seed)
+
+    with pytest.raises(AuthenticationFailed) as exc:
+        auth.execute(seed.platform_admin.email, "nope")
+
+    assert exc.value.code == "auth.invalid_credentials"
+    assert hasher.calls == ["verify"]
+
+
+def test_platform_suspended_admin_with_valid_password_is_told_it_is_inactive():
+    seed = seed_clinic()
+    _stored_admin(seed).status = UserStatus.SUSPENDED
+    auth, hasher = _spy_platform_auth(seed)
+
+    with pytest.raises(AuthenticationFailed) as exc:
+        auth.execute(seed.platform_admin.email, PASSWORD)
+
+    assert exc.value.code == "auth.account_inactive"
+    assert hasher.calls == ["verify"]
+
+
+def test_platform_mfa_admin_with_valid_password_gets_a_challenge_after_one_verify():
+    seed = seed_clinic()
+    _stored_admin(seed).mfa_secret = "sealed"
+    auth, hasher = _spy_platform_auth(seed)
+
+    result = auth.execute(seed.platform_admin.email, PASSWORD)
+
+    assert isinstance(result, PlatformMfaChallengeDTO)
+    assert hasher.calls == ["verify"]
+
+
+def test_platform_mfa_admin_with_wrong_password_runs_one_verify():
+    seed = seed_clinic()
+    _stored_admin(seed).mfa_secret = "sealed"
+    auth, hasher = _spy_platform_auth(seed)
 
     with pytest.raises(AuthenticationFailed):
-        auth.execute("nadie@example.com", "whatever")
-    assert calls == ["whatever"]
+        auth.execute(seed.platform_admin.email, "nope")
+
+    assert hasher.calls == ["verify"]
+
+
+def test_platform_successful_login_runs_one_verify():
+    seed = seed_clinic()
+    auth, hasher = _spy_platform_auth(seed)
+
+    auth.execute(seed.platform_admin.email, PASSWORD)
+
+    assert hasher.calls == ["verify"]
+
+
+def test_platform_locked_out_login_does_no_password_work():
+    seed = seed_clinic()
+    auth, hasher = _spy_platform_auth(seed)
+    for _ in range(5):
+        with pytest.raises(AuthenticationFailed):
+            auth.execute(seed.platform_admin.email, "nope")
+    hasher.calls.clear()
+
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(seed.platform_admin.email, PASSWORD)
+
+    assert hasher.calls == []
 
 
 def _session_id(token: str) -> SessionId:

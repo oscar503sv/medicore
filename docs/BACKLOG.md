@@ -102,7 +102,7 @@ stores the date it is paid until.
 
 ## Security — consciously deferred
 
-Quick wins already applied (June 2026): constant-time login, CORS/docs validation in
+Quick wins already applied (June 2026): same hashing work at login whether or not the account exists, CORS/docs validation in
 production, security headers, upload metadata validation, auditing of chart reads
 (`patient.chart_viewed`) and `startswith` in the audit filter. In addition, the session token
 is no longer stored in localStorage: it lives in an httpOnly cookie (SameSite=Lax, Secure in
@@ -129,7 +129,7 @@ is already queried on every authenticated request):
   empty → the socket IP is recorded. The Docker image starts uvicorn with
   `--no-proxy-headers` so the app is the only one interpreting the header.
 - **Organization enumeration at login**: an unknown or invalid slug answers exactly like a
-  wrong password (`invalid credentials`) and runs the verify against the dummy hash, so
+  wrong password (`invalid credentials`) and runs one check against a dummy hash computed once per process, so
   neither the message nor the timing reveals which slugs exist. The clinic's status
   (`this organization is not active`) is only reported after valid credentials, just like
   the account's.

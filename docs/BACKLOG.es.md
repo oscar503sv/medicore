@@ -105,8 +105,8 @@ guarda la fecha hasta la que está pagada.
 
 ## Seguridad — diferido conscientemente
 
-Quick wins ya aplicados (jun 2026): login en tiempo constante, validación de CORS/docs en
-producción, security headers, validación de metadata de uploads, auditoría de lectura de
+Quick wins ya aplicados (jun 2026): el login hace el mismo trabajo de hash exista o no la
+cuenta, validación de CORS/docs en producción, security headers, validación de metadata de uploads, auditoría de lectura de
 expediente (`patient.chart_viewed`) y `startswith` en el filtro de auditoría. Además, el
 token de sesión ya no se guarda en localStorage: vive en una cookie httpOnly
 (SameSite=Lax, Secure en producción) con CSRF double-submit (`mc_csrf` +
@@ -132,8 +132,8 @@ ya se consulta en cada request autenticado):
   confiables); vacío → se registra la IP del socket. La imagen Docker arranca uvicorn con
   `--no-proxy-headers` para que la app sea la única que interprete la cabecera.
 - **Enumeración de organizaciones en login**: un slug inexistente o inválido responde
-  igual que una contraseña incorrecta (`invalid credentials`) y ejecuta el verify contra
-  el hash dummy, así que ni el mensaje ni el tiempo revelan qué slugs existen. El estado
+  igual que una contraseña incorrecta (`invalid credentials`) y ejecuta una verificación
+  contra un hash dummy calculado una vez por proceso, así que ni el mensaje ni el tiempo revelan qué slugs existen. El estado
   de la clínica (`this organization is not active`) solo se informa tras credenciales
   válidas, igual que el de la cuenta.
 

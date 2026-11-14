@@ -163,7 +163,7 @@ La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con tod
 - **Límites de la sesión de consola**: la sesión de la consola de superadmin caduca tras 30 min sin actividad (`PLATFORM_SESSION_IDLE_MINUTES`) y como máximo 8 h después del login (`PLATFORM_SESSION_MAX_MINUTES`). El refresco en segundo plano de Monitoreo no cuenta como actividad, un superadmin desactivado pierde el acceso en la siguiente petición, y `scripts/create_platform_admin.py` revoca las sesiones del admin al actualizarlo.
 - **MFA TOTP opcional para superadmins**: se activa desde la consola, en *Seguridad de la cuenta* (`/platform/security`). Con MFA activo, el login de la consola pide la contraseña y después un código de 6 dígitos de una app de autenticación, o un código de recuperación. El desafío es de un solo uso, válido 5 min y va en una cookie httpOnly limitada a `/api/v1/platform/login`. Un código no se puede reutilizar, y tras 5 intentos fallidos el bloqueo es progresivo. Hay 10 códigos de recuperación de un solo uso, mostrados una sola vez y guardados como hash. El secreto TOTP se cifra con AES-256-GCM. Activar MFA, regenerar los códigos de recuperación o desactivarlo exige la contraseña actual, y cada cambio queda en la auditoría de plataforma.
 - **Despliegue recomendado**: sirve la consola de plataforma desde un origen o subdominio propio (p. ej. `console.example.com`), para que un XSS en la app de clínicas no comparta origen con ella. Es una recomendación; la app no lo impone.
-- **Sin enumeración**: login en tiempo constante; un slug o un email inexistente responde igual que una contraseña incorrecta.
+- **Sin enumeración**: el login hace el mismo trabajo de hash exista o no la organización o la cuenta (una verificación bcrypt por intento), y un slug o un email inexistente responde igual que una contraseña incorrecta.
 - `X-Forwarded-For` solo se honra desde los proxies listados en `TRUSTED_PROXIES`.
 - Security headers en la API y CSP estricta en el build del frontend.
 
@@ -386,7 +386,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1209 tests)
+.venv/bin/pytest                          # suite completa (1230 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -440,14 +440,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1209 tests en verde
+1230 tests en verde
    270  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   500  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   516  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
    299  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    140  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    145  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

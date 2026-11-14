@@ -19,7 +19,7 @@ from medicore.application.use_cases.auth import (
 from medicore.domain.enums import Role, ThemePref, UserStatus
 from medicore.domain.shared.identifiers import SessionId
 from tests.support.builders import PASSWORD, seed_clinic
-from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
+from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher, SpyPasswordHasher
 
 
 def make_auth(seed):
@@ -51,17 +51,14 @@ def test_authenticate_success_returns_session():
 
 
 def _counting_auth(seed) -> tuple[AuthenticateUser, list[str]]:
-    hasher = PlainPasswordHasher()
-    calls: list[str] = []
-    original_verify = hasher.verify
-    hasher.verify = lambda plain, hashed: calls.append(plain) or original_verify(plain, hashed)
-    return AuthenticateUser(seed.factory, hasher, FakeTokenIssuer(), FixedClock()), calls
+    hasher = SpyPasswordHasher()
+    return AuthenticateUser(seed.factory, hasher, FakeTokenIssuer(), FixedClock()), hasher.calls
 
 
 @pytest.mark.parametrize("slug", ["otra-clinica", "!!no es un slug!!"])
 def test_unknown_organization_is_indistinguishable_from_wrong_password(slug):
-    # Anti-enumeration: same message as bad credentials, and verify() still runs so
-    # the response time does not reveal which organization slugs exist.
+    # Anti-enumeration: same message as bad credentials, and one dummy check still runs
+    # so the response time does not reveal which organization slugs exist.
     seed = seed_clinic()
     auth, calls = _counting_auth(seed)
 
@@ -69,7 +66,7 @@ def test_unknown_organization_is_indistinguishable_from_wrong_password(slug):
         auth.execute(AuthenticateUserCommand(slug=slug, email=seed.doctor.email, password="x"))
 
     assert str(exc.value) == "invalid credentials"
-    assert calls == ["x"]
+    assert calls == ["dummy_verify"]
 
 
 def test_suspended_organization_hidden_without_valid_password():
@@ -83,7 +80,7 @@ def test_suspended_organization_hidden_without_valid_password():
         )
 
     assert str(exc.value) == "invalid credentials"
-    assert calls == ["nope"]
+    assert calls == ["verify"]
 
 
 def test_suspended_organization_explained_after_valid_password():
@@ -125,15 +122,9 @@ def test_wrong_password_fails():
         )
 
 
-def test_unknown_email_still_runs_password_verification():
-    # Timing-safety: verify() must run even when the email does not exist, so an
-    # attacker cannot enumerate accounts by measuring response times.
+def test_unknown_email_burns_one_dummy_check():
     seed = seed_clinic()
-    hasher = PlainPasswordHasher()
-    calls: list[str] = []
-    original_verify = hasher.verify
-    hasher.verify = lambda plain, hashed: calls.append(plain) or original_verify(plain, hashed)
-    auth = AuthenticateUser(seed.factory, hasher, FakeTokenIssuer(), FixedClock())
+    auth, calls = _counting_auth(seed)
 
     with pytest.raises(AuthenticationFailed):
         auth.execute(
@@ -141,7 +132,89 @@ def test_unknown_email_still_runs_password_verification():
                 slug="clinica-norte", email="nadie@example.com", password="whatever"
             )
         )
-    assert calls == ["whatever"]
+    assert calls == ["dummy_verify"]
+
+
+def _attempt(seed, email: str, password: str):
+    auth, calls = _counting_auth(seed)
+    try:
+        auth.execute(_login_cmd(email, password))
+        code = None
+    except AuthenticationFailed as exc:
+        code = exc.code
+    return code, calls
+
+
+def test_unknown_email_in_suspended_organization_burns_one_dummy_check():
+    seed = seed_clinic()
+    seed.tenant.suspend()
+
+    code, calls = _attempt(seed, "nadie@example.com", PASSWORD)
+
+    assert (code, calls) == ("auth.invalid_credentials", ["dummy_verify"])
+
+
+def test_suspended_user_with_wrong_password_looks_like_wrong_password():
+    seed = seed_clinic()
+    seed.doctor.status = UserStatus.SUSPENDED
+
+    code, calls = _attempt(seed, seed.doctor.email, "nope")
+
+    assert (code, calls) == ("auth.invalid_credentials", ["verify"])
+
+
+def test_suspended_user_with_valid_password_is_told_the_account_is_inactive():
+    seed = seed_clinic()
+    seed.doctor.status = UserStatus.SUSPENDED
+
+    code, calls = _attempt(seed, seed.doctor.email, PASSWORD)
+
+    assert (code, calls) == ("auth.account_inactive", ["verify"])
+
+
+def test_wrong_password_runs_one_verify():
+    seed = seed_clinic()
+
+    code, calls = _attempt(seed, seed.doctor.email, "nope")
+
+    assert (code, calls) == ("auth.invalid_credentials", ["verify"])
+
+
+def test_successful_login_runs_one_verify():
+    seed = seed_clinic()
+
+    code, calls = _attempt(seed, seed.doctor.email, PASSWORD)
+
+    assert (code, calls) == (None, ["verify"])
+
+
+def test_dummy_check_is_not_recomputed_per_request():
+    # Use cases are built per request: no instance may hash anything to get its dummy.
+    seed = seed_clinic()
+    hasher = SpyPasswordHasher()
+    attempts = [("clinica-norte", "a@example.com"), ("clinica-norte", "b@example.com"),
+                ("otra-clinica", "c@example.com")]
+    for slug, email in attempts:
+        auth = AuthenticateUser(seed.factory, hasher, FakeTokenIssuer(), FixedClock())
+        with pytest.raises(AuthenticationFailed):
+            auth.execute(AuthenticateUserCommand(slug=slug, email=email, password="x"))
+
+    assert hasher.calls == ["dummy_verify"] * 3
+
+
+@pytest.mark.parametrize("existing", [True, False])
+def test_locked_out_login_does_no_password_work(existing):
+    seed = seed_clinic()
+    email = seed.doctor.email if existing else "nadie@example.com"
+    auth, calls = _counting_auth(seed)
+    for _ in range(5):
+        _fail_login(auth, email)
+    calls.clear()
+
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(_login_cmd(email, PASSWORD))
+
+    assert calls == []
 
 
 def test_suspended_user_cannot_authenticate():
