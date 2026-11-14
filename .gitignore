@@ -101,3 +101,5 @@ $RECYCLE.BIN/
 *.lnk
 
 design_handoff_medicore/
+# Security audit reports (may describe unfixed vulnerabilities; repo is public)
+audit/

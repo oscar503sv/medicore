@@ -31,6 +31,11 @@ class AuthSessionRepository(Protocol):
         """Revoke every active session of the user, optionally sparing the current one."""
         ...
 
+    def revoke_all_for_tenant(self, tenant_id: TenantId, now: datetime) -> None:
+        """Revoke every active session of a clinic, support ones included. Platform
+        sessions have no tenant and are left alone."""
+        ...
+
     def delete_expired_for_user(self, user_id: UUID, now: datetime) -> None:
         """Opportunistic cleanup on login, so expired rows never need a cron job."""
         ...

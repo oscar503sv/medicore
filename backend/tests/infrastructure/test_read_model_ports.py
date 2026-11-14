@@ -18,8 +18,9 @@ from medicore.application.ports.unit_of_work import (
     ReportReadModel,
     RequestStatsRepository,
 )
-from medicore.domain.repositories import FeeScheduleRepository
+from medicore.domain.repositories import AuthSessionRepository, FeeScheduleRepository
 from medicore.infrastructure.persistence.repositories.analytics import SqlAnalyticsReadModel
+from medicore.infrastructure.persistence.repositories.auth_session import SqlAuthSessionRepository
 from medicore.infrastructure.persistence.repositories.fee_schedule import SqlFeeScheduleRepository
 from medicore.infrastructure.persistence.repositories.login_throttle import (
     SqlLoginThrottleRepository,
@@ -34,6 +35,7 @@ from medicore.infrastructure.persistence.repositories.platform_reads import SqlP
 from medicore.infrastructure.persistence.repositories.reports import SqlReportReadModel
 from tests.support.repositories import (
     InMemoryAnalyticsReadModel,
+    InMemoryAuthSessionRepository,
     InMemoryErrorLogRepository,
     InMemoryFeeScheduleRepository,
     InMemoryJobLogRepository,
@@ -64,6 +66,7 @@ def _methods(port) -> set[str]:
         (LoginThrottleRepository, (SqlLoginThrottleRepository, InMemoryLoginThrottleRepository)),
         (AnalyticsReadModel, (SqlAnalyticsReadModel, InMemoryAnalyticsReadModel)),
         (ReportReadModel, (SqlReportReadModel, InMemoryReportReadModel)),
+        (AuthSessionRepository, (SqlAuthSessionRepository, InMemoryAuthSessionRepository)),
     ],
 )
 def test_adapters_implement_the_whole_port(port, adapters):

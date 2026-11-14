@@ -100,6 +100,21 @@ def test_suspended_organization_explained_after_valid_password():
     assert str(exc.value) == "this organization is not active"
 
 
+def test_pending_user_cannot_authenticate():
+    seed = seed_clinic()
+    seed.doctor.status = UserStatus.PENDING
+
+    with pytest.raises(AuthenticationFailed) as exc:
+        make_auth(seed).execute(
+            AuthenticateUserCommand(
+                slug="clinica-norte", email=seed.doctor.email, password=PASSWORD
+            )
+        )
+
+    assert exc.value.code == "auth.account_inactive"
+    assert str(exc.value) == "account is not active"
+
+
 def test_wrong_password_fails():
     seed = seed_clinic()
     with pytest.raises(AuthenticationFailed):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from medicore.domain.enums import TenantStatus
 from tests.support.builders import PASSWORD
 
 
@@ -81,6 +82,86 @@ def test_set_tenant_status_blocks_login(seed, client, platform_headers):
         json={"slug": str(seed.tenant.slug), "email": seed.doctor.email, "password": PASSWORD},
     )
     assert login.status_code == 401
+
+
+def _set_status(client, seed, platform_headers, status):
+    resp = client.post(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/status",
+        headers=platform_headers,
+        json={"status": status},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_suspending_a_clinic_logs_its_users_out(seed, client, auth_headers, platform_headers):
+    assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 200
+
+    _set_status(client, seed, platform_headers, "suspended")
+    resp = client.get("/api/v1/auth/me", headers=auth_headers)
+    assert resp.status_code == 401
+    assert resp.json()["code"] == "auth.session_expired"
+
+    # Reactivating does not bring the old session back: people sign in again.
+    _set_status(client, seed, platform_headers, "active")
+    assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 401
+
+
+def _open_support_session(client, seed, platform_headers):
+    resp = client.post(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/impersonate",
+        headers=platform_headers,
+        json={"reason": "soporte: clínica suspendida"},
+    )
+    return resp, {"Authorization": f"Bearer {client.cookies.get('mc_session')}"}
+
+
+def test_support_session_cut_when_clinic_is_suspended(seed, client, platform_headers):
+    resp, support = _open_support_session(client, seed, platform_headers)
+    assert resp.status_code == 200, resp.text
+    client.cookies.clear()
+    assert client.get("/api/v1/auth/me", headers=support).status_code == 200
+
+    _set_status(client, seed, platform_headers, "suspended")
+
+    assert client.get("/api/v1/auth/me", headers=support).status_code == 401
+
+
+def test_support_session_opens_in_a_suspended_clinic(seed, client, platform_headers):
+    _set_status(client, seed, platform_headers, "suspended")
+    resp, support = _open_support_session(client, seed, platform_headers)
+    assert resp.status_code == 200, resp.text
+    client.cookies.clear()
+    assert client.get("/api/v1/auth/me", headers=support).status_code == 200
+
+    # Archived clinics are out of reach, for support too.
+    _set_status(client, seed, platform_headers, "archived")
+    assert client.get("/api/v1/auth/me", headers=support).status_code == 401
+    client.cookies.clear()
+    resp, _ = _open_support_session(client, seed, platform_headers)
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "support.clinic_archived"
+
+
+def test_live_status_check_lets_support_into_suspended_but_not_archived(
+    seed, client, platform_headers
+):
+    # Status changed straight in the store, so no session is revoked: only the access
+    # policy in get_actor decides.
+    resp, support = _open_support_session(client, seed, platform_headers)
+    assert resp.status_code == 200, resp.text
+    client.cookies.clear()
+
+    def set_status(status):
+        # Fetched each time: the in-memory unit of work swaps its objects for snapshots.
+        seed.factory.store.tenants[seed.tenant.id.value].status = status
+
+    set_status(TenantStatus.SUSPENDED)
+    assert client.get("/api/v1/auth/me", headers=support).status_code == 200
+
+    set_status(TenantStatus.ARCHIVED)
+    resp = client.get("/api/v1/auth/me", headers=support)
+    assert resp.status_code == 401
+    assert resp.json()["code"] == "auth.organization_inactive"
 
 
 def test_update_tenant_icd_version(seed, client, platform_headers):

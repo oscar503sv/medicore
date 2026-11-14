@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import NoReturn
 
+from medicore.application.common.access import ensure_may_sign_in
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.entitlements import granted_permissions
@@ -24,7 +25,7 @@ from medicore.application.ports.unit_of_work import UnitOfWork, UnitOfWorkFactor
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.entities.user import DoctorProfile, normalize_jvpm
-from medicore.domain.enums import LangPref, Role, Sex, ThemePref, UserStatus
+from medicore.domain.enums import LangPref, Role, Sex, ThemePref
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import (
     AuditLogId,
@@ -157,12 +158,7 @@ class AuthenticateUser:
                 raise AuthenticationFailed("invalid credentials", code="auth.invalid_credentials")
             # Status messages only after valid credentials: the legitimate user learns why
             # they cannot get in, an attacker without the password learns nothing.
-            if not tenant.is_active:
-                raise AuthenticationFailed(
-                    "this organization is not active", code="auth.organization_inactive"
-                )
-            if user.status != UserStatus.ACTIVE:
-                raise AuthenticationFailed("account is not active", code="auth.account_inactive")
+            ensure_may_sign_in(tenant, user)
             permissions = granted_permissions(uow, tenant, user)
             now = self._clock.now()
             user.last_seen_at = now

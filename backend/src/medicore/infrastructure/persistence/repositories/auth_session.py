@@ -97,6 +97,12 @@ class SqlAuthSessionRepository:
             query = query.filter(AuthSessionModel.id != except_id.value)
         query.update({"revoked_at": now})
 
+    def revoke_all_for_tenant(self, tenant_id: TenantId, now: datetime) -> None:
+        self._s.query(AuthSessionModel).filter(
+            AuthSessionModel.tenant_id == tenant_id.value,
+            AuthSessionModel.revoked_at.is_(None),
+        ).update({"revoked_at": now})
+
     def delete_expired_for_user(self, user_id: UUID, now: datetime) -> None:
         self._s.query(AuthSessionModel).filter(
             AuthSessionModel.user_id == user_id,

@@ -13,8 +13,8 @@ Summary of the DOMAIN_MODEL rules the defaults encode:
   * doctor       → all clinical work for their patients + their own availability, fees and
                    metrics (with their income).
   * admin        → user & organization management; full access except sign/amend; the
-                   clinic's metrics without money. Only admins act on other admins and hand
-                   out permissions.
+                   clinic's metrics without money. Only admins act on other admins or doctors and
+                   hand out permissions.
 
 Those defaults describe a clinic of associated doctors. The clinic's practice model shifts
 them (``role_defaults``): with employed doctors, the doctor no longer sets prices nor sees
@@ -31,6 +31,7 @@ from enum import StrEnum
 
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import ValidationError
+from medicore.domain.entities.user import User
 from medicore.domain.enums import AddonModule, PracticeModel, Role
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
@@ -311,14 +312,31 @@ def has_permission(actor: ActorContext, permission: Permission) -> bool:
     return permission in ROLE_PERMISSIONS[actor.role]
 
 
-def ensure_acts_on_admins(actor: ActorContext, *roles: Role) -> None:
-    """Only an administrator may act on an administrator account (edit, suspend, reset its
-    password, close its sessions) or make someone an administrator. Someone else holding
-    ``users.manage`` still manages the rest of the staff."""
-    if Role.ADMIN in roles and actor.role != Role.ADMIN:
+def ensure_manages_roles(actor: ActorContext, *roles: Role) -> None:
+    """Only an administrator acts on admin or doctor accounts, or hands out those roles.
+    Someone else holding ``users.manage`` still manages the rest of the staff.
+
+    Doctors are protected because whoever creates or takes over a doctor account gains the
+    signing of medical records."""
+    if actor.role == Role.ADMIN:
+        return
+    if Role.ADMIN in roles:
         raise PermissionDenied(
             "only administrators may manage administrator accounts", code="users.admin_only"
         )
+    if Role.DOCTOR in roles:
+        raise PermissionDenied(
+            "only administrators may manage doctor accounts", code="users.doctor_admin_only"
+        )
+
+
+def ensure_manages_account(actor: ActorContext, user: User, *new_roles: Role) -> None:
+    """Management acts on someone else's account: nobody changes their own role, status,
+    password or sessions through it (their own profile has its own endpoints), and the
+    role rule above applies to the account's current and requested roles."""
+    if user.id == actor.user_id:
+        raise PermissionDenied("you can't manage your own account", code="users.self_management")
+    ensure_manages_roles(actor, user.role, *new_roles)
 
 
 def ensure_permission(actor: ActorContext, permission: Permission) -> None:

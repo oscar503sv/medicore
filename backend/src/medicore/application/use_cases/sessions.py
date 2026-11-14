@@ -1,8 +1,10 @@
 """Active-session use cases: list and remotely revoke server-side sessions.
 
 Three audiences share the same ``sessions`` store:
-- a user managing their own sessions (Settings) — no permission required;
-- a clinic admin managing any user's sessions (``users.manage``);
+- a user managing their own sessions (Settings, ``/auth/me/sessions``) — no permission
+  required;
+- someone with ``users.manage`` managing other people's sessions (never their own through
+  this path, and doctors' and admins' only for administrators);
 - a platform superadmin viewing/closing a clinic's sessions (support console).
 """
 
@@ -16,7 +18,8 @@ from medicore.application.common.context import ActorContext, PlatformActorConte
 from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import (
     Permission,
-    ensure_acts_on_admins,
+    ensure_manages_account,
+    ensure_manages_roles,
     ensure_permission,
 )
 from medicore.application.ports.clock import Clock
@@ -104,6 +107,7 @@ class ListUserSessions:
         ensure_permission(actor, Permission.USERS_MANAGE)
         with self._uow:
             user = _require_tenant_user(self._uow, user_id)
+            ensure_manages_roles(actor, user.role)
             sessions = self._uow.sessions.list_active_for_user(
                 user_id.value, self._clock.now()
             )
@@ -121,7 +125,7 @@ class RevokeUserSession:
         ensure_permission(actor, Permission.USERS_MANAGE)
         with self._uow:
             user = _require_tenant_user(self._uow, user_id)
-            ensure_acts_on_admins(actor, user.role)
+            ensure_manages_account(actor, user)
             session = self._uow.sessions.get(session_id)
             if session is None or session.user_id != user_id.value:
                 raise EntityNotFound("Session", session_id)
@@ -147,7 +151,7 @@ class RevokeAllUserSessions:
         ensure_permission(actor, Permission.USERS_MANAGE)
         with self._uow:
             user = _require_tenant_user(self._uow, user_id)
-            ensure_acts_on_admins(actor, user.role)
+            ensure_manages_account(actor, user)
             now = self._clock.now()
             self._uow.sessions.revoke_all_for_user(user_id.value, now)
             self._uow.audit.append(

@@ -16,7 +16,8 @@ from medicore.application.common.notifications import (
 from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.common.permissions import (
     Permission,
-    ensure_acts_on_admins,
+    ensure_manages_account,
+    ensure_manages_roles,
     ensure_permission,
 )
 from medicore.application.common.quotas import ensure_seat_for
@@ -70,7 +71,7 @@ class InviteUser:
 
     def execute(self, actor: ActorContext, cmd: InviteUserCommand) -> User:
         ensure_permission(actor, Permission.USERS_MANAGE)
-        ensure_acts_on_admins(actor, cmd.role)
+        ensure_manages_roles(actor, cmd.role)
         if self._uow.users.get_by_email(cmd.email) is not None:
             raise ValidationError(
                 f"email already in use within this tenant: {cmd.email}",
@@ -134,7 +135,7 @@ class UpdateUserRole:
     def execute(self, actor: ActorContext, user_id: UserId, role: Role) -> User:
         ensure_permission(actor, Permission.USERS_MANAGE)
         user = self._require(user_id)
-        ensure_acts_on_admins(actor, user.role, role)
+        ensure_manages_account(actor, user, role)
         previous_role = user.role
         with self._uow:
             if user.is_active:
@@ -171,7 +172,7 @@ class UpdateUser:
         if user is None:
             raise EntityNotFound("User", user_id)
         new_role = Role(changes["role"]) if changes.get("role") is not None else user.role
-        ensure_acts_on_admins(actor, user.role, new_role)
+        ensure_manages_account(actor, user, new_role)
         allowed = {"name", "role", "sex", "phone", "specialty", "jvpm"}
         if "jvpm" in changes:
             changes["jvpm"] = normalize_jvpm(changes["jvpm"])  # type: ignore[arg-type]
@@ -207,7 +208,7 @@ class SuspendUser:
         user = self._uow.users.get_by_id(user_id)
         if user is None:
             raise EntityNotFound("User", user_id)
-        ensure_acts_on_admins(actor, user.role)
+        ensure_manages_account(actor, user)
         with self._uow:
             user.suspend()
             self._uow.users.save(user)
@@ -232,7 +233,7 @@ class ReactivateUser:
         user = self._uow.users.get_by_id(user_id)
         if user is None:
             raise EntityNotFound("User", user_id)
-        ensure_acts_on_admins(actor, user.role)
+        ensure_manages_account(actor, user)
         with self._uow:
             if not user.is_active:
                 ensure_seat_for(self._uow, actor.tenant_id, taking=user.role)
@@ -267,7 +268,7 @@ class ResetUserPassword:
         user = self._uow.users.get_by_id(cmd.user_id)
         if user is None:
             raise EntityNotFound("User", cmd.user_id)
-        ensure_acts_on_admins(actor, user.role)
+        ensure_manages_account(actor, user)
         ensure_password_policy(
             cmd.password, personal=(user.name, user.email, _clinic_slug(self._uow))
         )

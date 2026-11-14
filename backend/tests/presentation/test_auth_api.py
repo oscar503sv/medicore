@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+
 from medicore.application.common.permissions import permissions_for
 from medicore.application.ports.token_issuer import SessionClaims
-from medicore.domain.enums import Role
+from medicore.domain.enums import Role, TenantStatus, UserStatus
 from tests.support.builders import PASSWORD
 from tests.support.fakes import FakeTokenIssuer
 
@@ -183,3 +185,36 @@ def test_update_my_profile(seed, client, auth_headers):
     # email and specialty are not affected
     assert data["email"] == seed.doctor.email
     assert data["specialty"] == seed.doctor.specialty
+
+
+@pytest.mark.parametrize("status", [TenantStatus.SUSPENDED, TenantStatus.ARCHIVED])
+def test_token_rejected_once_clinic_is_not_active(seed, client, auth_headers, status):
+    # The session row is untouched: the status check on every request is what refuses it.
+    seed.tenant.status = status
+
+    resp = client.get("/api/v1/auth/me", headers=auth_headers)
+
+    assert resp.status_code == 401
+    assert resp.json()["code"] == "auth.organization_inactive"
+
+
+@pytest.mark.parametrize("status", [UserStatus.SUSPENDED, UserStatus.PENDING])
+def test_token_rejected_once_account_is_not_active(seed, client, auth_headers, status):
+    seed.doctor.status = status
+
+    resp = client.get("/api/v1/auth/me", headers=auth_headers)
+
+    assert resp.status_code == 401
+    assert resp.json()["code"] == "auth.account_inactive"
+
+
+def test_status_check_is_live(seed, client, auth_headers):
+    def set_status(status):
+        # Fetched each time: the in-memory unit of work swaps its objects for snapshots.
+        seed.factory.store.tenants[seed.tenant.id.value].status = status
+
+    set_status(TenantStatus.SUSPENDED)
+    assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 401
+
+    set_status(TenantStatus.ACTIVE)
+    assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 200

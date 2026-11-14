@@ -88,7 +88,7 @@ src/medicore/
 Toda entidad de negocio lleva `tenant_id`. El filtro se aplica **en cada repositorio**, no en el caller — el aislamiento se cumple estructuralmente. El `UnitOfWork` está scoped por tenant: `factory.for_tenant(tenant_id)`. Las operaciones globales (resolución de slug, superadmin) usan un `UnitOfWork` no scopeado o helpers de solo lectura.
 
 ### Plataforma (superadmin)
-Sesión separada (token de scope `platform`) que opera por encima del límite multi-tenant: alta/edición de clínicas (incluidas la zona horaria y las sedes), la **suscripción** de cada clínica (plan, módulos, periodo pagado, condiciones especiales, pagos), cambio de estado (activa / suspendida / archivada), estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión de usuarios) e **impersonación**. La impersonación emite un token de tenant marcado con `impersonated_by` y con TTL más corta, de modo que toda escritura durante el soporte queda auditada.
+Sesión separada (token de scope `platform`) que opera por encima del límite multi-tenant: alta/edición de clínicas (incluidas la zona horaria y las sedes), la **suscripción** de cada clínica (plan, módulos, periodo pagado, condiciones especiales, pagos), cambio de estado (activa / suspendida / archivada), estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión de usuarios) e **impersonación**. La impersonación emite un token de tenant marcado con `impersonated_by` y con TTL más corta, de modo que toda escritura durante el soporte queda auditada. Se puede impersonar una clínica suspendida, pero no una archivada.
 
 ### Reglas de negocio críticas
 - Citas solo dentro de la disponibilidad del doctor, sin solapes, respetando las reglas de reserva.
@@ -123,7 +123,8 @@ El control de acceso es **granular y personalizable por clínica** (`application
 - El rol `admin` no es personalizable y siempre tiene acceso completo (salvo firmar/enmendar expedientes).
 - `records.sign` y `records.amend` son exclusivos de médicos: nunca se otorgan a otros roles o usuarios ni se les quitan a los médicos.
 - `permissions.manage` es exclusivo de administradores: no se puede delegar a un rol ni a un usuario.
-- Solo un admin actúa sobre cuentas de admin (editar, cambiar rol, desactivar, restablecer contraseña, cerrar sesiones) o nombra a alguien admin. Un `users.manage` delegado gestiona al resto del personal.
+- Solo un admin actúa sobre cuentas de admin o de médico (editar, cambiar rol, desactivar, restablecer contraseña, cerrar sesiones) o asigna esos roles. Un `users.manage` delegado gestiona al resto del personal (enfermería, recepción).
+- Nadie gestiona su propia cuenta desde **Usuarios** (cambiar su rol, editarse, suspenderse, reactivarse, restablecer su contraseña o cerrar sus sesiones): su perfil, contraseña y sesiones se gestionan en **Ajustes**. Esto aplica también a los admins.
 - Nadie edita sus propios permisos.
 
 **Qué gestiona la clínica y qué gestiona el soporte de Medicore:**
@@ -156,7 +157,7 @@ La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con tod
 ## Seguridad
 
 - **Sesiones en cookie httpOnly** (SameSite=Lax, `Secure` en producción) con **CSRF double-submit** (`mc_csrf` + cabecera `X-CSRF-Token`); el token nunca está al alcance de JavaScript. `Authorization: Bearer` sigue aceptándose para clientes de API.
-- **Sesiones revocables** (tabla `sessions` + claim `sid`): logout real; cambiar la contraseña cierra las demás sesiones; suspender o resetear un usuario cierra todas.
+- **Sesiones revocables** (tabla `sessions` + claim `sid`): logout real; cambiar la contraseña cierra las demás sesiones; suspender o resetear un usuario cierra todas; suspender o archivar una clínica cierra todas sus sesiones (también las de soporte). En cada petición se comprueba que la clínica y la cuenta sigan activas, con una sola regla de acceso compartida con el login. Soporte puede abrir una sesión nueva en una clínica suspendida, pero nunca en una archivada.
 - **Lockout de login** con backoff exponencial (5 fallos → 1 min, duplicando hasta 15) y respuesta 429 con `Retry-After`.
 - **Sin enumeración**: login en tiempo constante; un slug o un email inexistente responde igual que una contraseña incorrecta.
 - `X-Forwarded-For` solo se honra desde los proxies listados en `TRUSTED_PROXIES`.
@@ -380,7 +381,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1012 tests)
+.venv/bin/pytest                          # suite completa (1060 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -433,14 +434,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1012 tests en verde
-   249  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1060 tests en verde
+   258  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   431  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   454  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   246  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   260  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    86  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    88  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:

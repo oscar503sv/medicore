@@ -88,7 +88,7 @@ src/medicore/
 Every business entity carries a `tenant_id`. The filter is applied **in every repository**, not by the caller — isolation is enforced structurally. The `UnitOfWork` is tenant-scoped: `factory.for_tenant(tenant_id)`. Global operations (slug resolution, superadmin) use an unscoped `UnitOfWork` or read-only helpers.
 
 ### Platform (superadmin)
-A separate session (`platform`-scoped token) that operates above the multi-tenant boundary: clinic creation/editing (including the timezone and sites), each clinic's **subscription** (plan, modules, paid period, special terms, payments), status changes (active / suspended / archived), global stats and audit, account support (password reset, unlock, user suspension) and **impersonation**. Impersonation issues a tenant token marked with `impersonated_by` and a shorter TTL, so every write made during support is audited.
+A separate session (`platform`-scoped token) that operates above the multi-tenant boundary: clinic creation/editing (including the timezone and sites), each clinic's **subscription** (plan, modules, paid period, special terms, payments), status changes (active / suspended / archived), global stats and audit, account support (password reset, unlock, user suspension) and **impersonation**. Impersonation issues a tenant token marked with `impersonated_by` and a shorter TTL, so every write made during support is audited. Impersonation is allowed in suspended clinics, but not in archived ones.
 
 ### Critical business rules
 - Appointments only within the doctor's availability, with no overlaps, honoring the booking rules.
@@ -123,7 +123,8 @@ Access control is **granular and customizable per clinic** (`application/common/
 - The `admin` role is not customizable and always has full access (except signing/amending records).
 - `records.sign` and `records.amend` are doctor-only: never granted to other roles or users, never taken from doctors.
 - `permissions.manage` is admin-only: it can't be delegated to a role or a user.
-- Only an admin acts on admin accounts (edit, change role, suspend, reset password, close sessions) or makes someone an admin. A delegated `users.manage` manages the rest of the staff.
+- Only an admin acts on admin or doctor accounts (edit, change role, suspend, reset password, close sessions) or assigns those roles. A delegated `users.manage` manages the rest of the staff (nursing, reception).
+- Nobody manages their own account from **Users** (change their role, edit, suspend, reactivate, reset their password or close their sessions): their profile, password and sessions are managed in **Settings**. This applies to admins too.
 - Nobody edits their own permissions.
 
 **What the clinic manages and what Medicore support manages:**
@@ -156,7 +157,7 @@ The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every 
 ## Security
 
 - **Sessions in an httpOnly cookie** (SameSite=Lax, `Secure` in production) with **double-submit CSRF** (`mc_csrf` + `X-CSRF-Token` header); the token is never reachable from JavaScript. `Authorization: Bearer` is still accepted for API clients.
-- **Revocable sessions** (`sessions` table + `sid` claim): real logout; changing the password ends the other sessions; suspending or resetting a user ends all of them.
+- **Revocable sessions** (`sessions` table + `sid` claim): real logout; changing the password ends the other sessions; suspending or resetting a user ends all of them; suspending or archiving a clinic ends all its sessions (support's included). Every request checks that the clinic and the account are still active, using one access rule shared with sign-in. Support can open a new session in a suspended clinic, but never in an archived one.
 - **Login lockout** with exponential backoff (5 failures → 1 min, doubling up to 15) and a 429 response with `Retry-After`.
 - **No enumeration**: constant-time login; an unknown slug or email answers exactly like a wrong password.
 - `X-Forwarded-For` is only honored from the proxies listed in `TRUSTED_PROXIES`.
@@ -380,7 +381,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1012 tests)
+.venv/bin/pytest                          # full suite (1060 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -433,14 +434,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1012 passing tests
-   249  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1060 passing tests
+   258  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   431  — application (auth, sessions, appointments, consultations, records, notifications,
+   454  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   246  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   260  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    86  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    88  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:

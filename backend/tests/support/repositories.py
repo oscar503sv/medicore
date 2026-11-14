@@ -218,6 +218,11 @@ class InMemoryAuthSessionRepository:
             if session.user_id == user_id and (except_id is None or session.id != except_id):
                 session.revoke(now)
 
+    def revoke_all_for_tenant(self, tenant_id: TenantId, now: datetime) -> None:
+        for session in self._store.sessions.values():
+            if session.tenant_id == tenant_id:
+                session.revoke(now)
+
     def delete_expired_for_user(self, user_id, now: datetime) -> None:
         expired = [
             key

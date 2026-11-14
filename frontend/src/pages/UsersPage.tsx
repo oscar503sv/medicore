@@ -52,7 +52,7 @@ export function UsersPage() {
   const [permissionsTarget, setPermissionsTarget] = useState<User | null>(null)
   const canManagePermissions = useAuthStore((s) => s.can('permissions.manage'))
   const myId = useAuthStore((s) => s.session?.user_id)
-  // Only an administrator acts on administrator accounts (enforced by the API too).
+  // Only an administrator acts on admin or doctor accounts (enforced by the API too).
   const isAdmin = useAuthStore((s) => s.hasRole('admin'))
   const [roleFilter, setRoleFilter] = useState<'all' | Role>('all')
   const [q, setQ] = useState('')
@@ -184,7 +184,9 @@ export function UsersPage() {
                   </Td>
                   <Td>{fmtDateTimeTz(u.last_seen_at)}</Td>
                   <Td>
-                    {u.role === 'admin' && !isAdmin ? (
+                    {u.id === myId ? (
+                      <span className="text-xs text-tx-4">{t('users.self_hint')}</span>
+                    ) : (u.role === 'admin' || u.role === 'doctor') && !isAdmin ? (
                       <span className="text-xs text-tx-4">{t('users.admin_only_hint')}</span>
                     ) : (
                     <div className="flex items-center gap-1">
@@ -286,7 +288,7 @@ function UserFields({
       <Input label={t('users.name')} value={value.name} onChange={(e) => set({ name: e.target.value })} required />
       <div className="grid grid-cols-2 gap-4">
         <Select label={t('users.col_role')} value={value.role} onChange={(e) => set({ role: e.target.value })}>
-          <option value="doctor">{t('role.doctor')}</option>
+          {isAdmin && <option value="doctor">{t('role.doctor')}</option>}
           <option value="nurse">{t('role.nurse')}</option>
           <option value="receptionist">{t('role.receptionist')}</option>
           {isAdmin && <option value="admin">{t('role.admin')}</option>}

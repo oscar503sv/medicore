@@ -423,6 +423,7 @@ const es: Dict = {
   'users.updated_ok': 'Usuario actualizado',
   'users.reset_password': 'Restablecer contraseña',
   'users.admin_only_hint': 'Gestionado por administradores',
+  'users.self_hint': 'Tu cuenta · gestiónala en Ajustes',
   'users.view_sessions': 'Sesiones',
   'users.sessions_title': 'Sesiones activas',
   'users.reset_password_title': 'Restablecer contraseña',
@@ -607,6 +608,10 @@ const es: Dict = {
   'err.roles.doctor_only': 'Solo el rol médico puede tener: {permissions}.',
   'err.roles.admin_only': 'Solo los administradores pueden tener: {permissions}.',
   'err.users.admin_only': 'Solo un administrador puede gestionar cuentas de administrador.',
+  'err.users.doctor_admin_only':
+    'Solo un administrador puede gestionar cuentas de médico o asignar el rol de médico.',
+  'err.users.self_management':
+    'No puedes gestionar tu propia cuenta desde aquí. Usa Ajustes para tu perfil, contraseña y sesiones.',
   'err.organization.timezone_locked': 'La zona horaria de la clínica la cambia el soporte de Medicore.',
   'err.clinic.invalid_slug': 'El identificador solo admite minúsculas, números y guiones, sin guion al inicio ni al final.',
   'err.clinic.slug_taken': 'El identificador «{slug}» ya está en uso.',
@@ -1426,6 +1431,7 @@ const en: Dict = {
   'users.updated_ok': 'User updated',
   'users.reset_password': 'Reset password',
   'users.admin_only_hint': 'Managed by administrators',
+  'users.self_hint': 'Your account · manage it in Settings',
   'users.view_sessions': 'Sessions',
   'users.sessions_title': 'Active sessions',
   'users.reset_password_title': 'Reset password',
@@ -1608,6 +1614,10 @@ const en: Dict = {
   'err.roles.doctor_only': 'Only the doctor role may hold: {permissions}.',
   'err.roles.admin_only': 'Only administrators may hold: {permissions}.',
   'err.users.admin_only': 'Only an administrator can manage administrator accounts.',
+  'err.users.doctor_admin_only':
+    'Only an administrator can manage doctor accounts or assign the doctor role.',
+  'err.users.self_management':
+    "You can't manage your own account from here. Use Settings for your profile, password and sessions.",
   'err.organization.timezone_locked': "The clinic's timezone is changed by Medicore support.",
   'err.clinic.invalid_slug': 'The identifier may only contain lowercase letters, numbers and hyphens, and cannot start or end with a hyphen.',
   'err.clinic.slug_taken': 'The identifier "{slug}" is already in use.',

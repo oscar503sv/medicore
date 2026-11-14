@@ -14,6 +14,7 @@ from typing import Annotated
 import jwt
 from fastapi import Depends, Header, Request, status
 
+from medicore.application.common.access import ensure_may_sign_in
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.entitlements import ensure_writable, granted_permissions
 from medicore.application.common.timezone import tenant_today
@@ -172,7 +173,8 @@ def get_actor(
     Resolves the tenant's role-permission override so every permission check in the
     request honors the clinic's customization, and requires the token's server-side
     session (``sid``) to still be alive — a revoked session means 401 immediately, no
-    matter how long the JWT itself remains valid. Raises 401 if no valid credential is
+    matter how long the JWT itself remains valid. The clinic and the account must still be
+    allowed to hold a session (the access policy), else 401. Raises 401 if no valid credential is
     present, 403 if a cookie-authenticated mutation fails the CSRF check.
     """
     token = _session_token(request, authorization, SESSION_COOKIE)
@@ -194,6 +196,9 @@ def get_actor(
         raise ApiError(
             status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
         )
+    # Suspending or archiving a clinic (or an account) revokes its sessions; this keeps any
+    # that slipped through from working, on every request.
+    ensure_may_sign_in(tenant, user, support=session.impersonator_id is not None)
     if is_mutating(request.method) and not _always_writable(request.url.path):
         ensure_writable(tenant, tenant_today(tenant, clock))
 

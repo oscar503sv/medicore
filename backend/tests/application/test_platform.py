@@ -35,7 +35,7 @@ from medicore.application.use_cases.subscriptions import SubscriptionCommand
 from medicore.domain.enums import IcdVersion, Role, TenantStatus, UserStatus
 from medicore.domain.services.plan_catalog import CLINICA
 from medicore.domain.shared.identifiers import SessionId, UserId
-from tests.support.builders import PASSWORD, seed_clinic
+from tests.support.builders import PASSWORD, build_tenant, build_user, seed_clinic
 from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
 
 
@@ -405,6 +405,102 @@ def test_impersonation_rejected_for_archived_clinic():
         ImpersonateTenant(seed.factory, FakeTokenIssuer(), FixedClock()).execute(
             actor_for(seed), seed.tenant.id
         )
+
+
+def _login(seed, clock, user, slug="clinica-norte") -> SessionId:
+    session = AuthenticateUser(
+        seed.factory, PlainPasswordHasher(), FakeTokenIssuer(), clock
+    ).execute(AuthenticateUserCommand(slug=slug, email=user.email, password=PASSWORD))
+    return _session_id(session.token)
+
+
+def _live(seed, clock, sid: SessionId) -> bool:
+    return seed.factory.store.sessions[sid.value].is_active(clock.now())
+
+
+def _open_sessions(seed, clock):
+    """doctor, admin, support (all of the clinic) and platform sessions."""
+    doctor = _login(seed, clock, seed.doctor)
+    admin = _login(seed, clock, seed.admin)
+    support = _session_id(
+        ImpersonateTenant(seed.factory, FakeTokenIssuer(), clock)
+        .execute(actor_for(seed), seed.tenant.id, reason="soporte")
+        .token
+    )
+    platform_login = make_platform_auth(seed).execute(seed.platform_admin.email, PASSWORD)
+    platform = _session_id(platform_login.token)
+    return doctor, admin, support, platform
+
+
+def test_suspending_a_clinic_revokes_all_its_sessions():
+    seed = seed_clinic()
+    clock = FixedClock()
+    doctor, admin, support, platform = _open_sessions(seed, clock)
+
+    SetTenantStatus(seed.factory, clock).execute(
+        actor_for(seed), seed.tenant.id, TenantStatus.SUSPENDED
+    )
+
+    assert [_live(seed, clock, sid) for sid in (doctor, admin, support, platform)] == [
+        False, False, False, True,
+    ]
+
+
+def test_archiving_a_clinic_revokes_all_its_sessions():
+    seed = seed_clinic()
+    clock = FixedClock()
+    doctor, admin, support, platform = _open_sessions(seed, clock)
+
+    SetTenantStatus(seed.factory, clock).execute(
+        actor_for(seed), seed.tenant.id, TenantStatus.ARCHIVED
+    )
+
+    assert not any(_live(seed, clock, sid) for sid in (doctor, admin, support))
+    assert _live(seed, clock, platform)
+
+
+def test_suspending_a_clinic_spares_other_clinics():
+    seed = seed_clinic()
+    clock = FixedClock()
+    other = build_tenant("otra-clinica")
+    other_doctor = build_user(other.id, Role.DOCTOR, email="doc@otra.test")
+    seed.factory.store.tenants[other.id.value] = other
+    seed.factory.store.users[other_doctor.id.value] = other_doctor
+    mine = _login(seed, clock, seed.doctor)
+    theirs = _login(seed, clock, other_doctor, slug="otra-clinica")
+
+    SetTenantStatus(seed.factory, clock).execute(
+        actor_for(seed), seed.tenant.id, TenantStatus.SUSPENDED
+    )
+
+    assert not _live(seed, clock, mine)
+    assert _live(seed, clock, theirs)
+
+
+def test_activating_a_clinic_revokes_nothing():
+    seed = seed_clinic()
+    clock = FixedClock()
+    sid = _login(seed, clock, seed.doctor)
+
+    SetTenantStatus(seed.factory, clock).execute(
+        actor_for(seed), seed.tenant.id, TenantStatus.ACTIVE
+    )
+
+    assert _live(seed, clock, sid)
+
+
+def test_impersonation_allowed_for_suspended_clinic():
+    seed = seed_clinic()
+    clock = FixedClock()
+    SetTenantStatus(seed.factory, clock).execute(
+        actor_for(seed), seed.tenant.id, TenantStatus.SUSPENDED
+    )
+
+    session = ImpersonateTenant(seed.factory, FakeTokenIssuer(), clock).execute(
+        actor_for(seed), seed.tenant.id, "helping with the suspension"
+    )
+
+    assert _live(seed, clock, _session_id(session.token))
 
 
 def test_audit_entry_marks_impersonation():

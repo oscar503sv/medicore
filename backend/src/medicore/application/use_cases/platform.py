@@ -46,6 +46,7 @@ from medicore.domain.repositories._support import (
     TenantFilter,
     UserFilter,
 )
+from medicore.domain.services.access_policy import admits
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import (
     AuditLogId,
@@ -420,7 +421,8 @@ class AddTenantLocation:
 
 
 class SetTenantStatus:
-    """Suspend, activate or archive a clinic. Suspended/archived clinics cannot log in."""
+    """Suspend, activate or archive a clinic. Suspending or archiving also closes every open
+    session."""
 
     def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
         self._factory = uow_factory
@@ -433,11 +435,16 @@ class SetTenantStatus:
             tenant = uow.tenants.get_by_id(tenant_id)
             if tenant is None:
                 raise EntityNotFound("Tenant", tenant_id)
+            now = self._clock.now()
             tenant.status = status
             uow.tenants.save(tenant)
+            if not tenant.is_active:
+                # Sessions outlive the status otherwise: a token already issued would keep
+                # working until it expires.
+                uow.sessions.revoke_all_for_tenant(tenant_id, now)
             uow.platform_audit.append(
                 _audit(
-                    actor, self._clock.now(), f"tenant.{status}", "Tenant", str(tenant_id),
+                    actor, now, f"tenant.{status}", "Tenant", str(tenant_id),
                     tenant_id=tenant_id, status=str(status),
                 )
             )
@@ -595,7 +602,7 @@ class ImpersonateTenant:
             tenant = platform.tenants.get_by_id(tenant_id)
         if tenant is None:
             raise EntityNotFound("Tenant", tenant_id)
-        if tenant.status == TenantStatus.ARCHIVED:
+        if not admits(tenant, support=True):
             raise ValidationError(
                 "cannot impersonate an archived clinic", code="support.clinic_archived"
             )
