@@ -21,12 +21,46 @@ class PlatformSessionResponse(BaseModel):
     email: str
 
 
+class PlatformLoginResponse(BaseModel):
+    """Either the session (``mfa_required`` false) or the pending second step (true: only
+    the challenge cookie was set, and the identity fields are withheld)."""
+
+    mfa_required: bool = False
+    admin_id: str | None = None
+    name: str | None = None
+    email: str | None = None
+
+
+class MfaCodeRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=32)
+
+
+class MfaPasswordRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+
+
+class MfaPasswordCodeRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+    code: str = Field(min_length=1, max_length=32)
+
+
+class MfaSetupResponse(BaseModel):
+    secret: str
+    otpauth_uri: str
+
+
+class RecoveryCodesResponse(BaseModel):
+    recovery_codes: list[str]
+
+
 class PlatformAdminResponse(BaseModel):
     id: str
     name: str
     email: str
     avatar_initials: str
     last_seen_at: datetime | None = None
+    mfa_enabled: bool = False
+    recovery_codes_remaining: int = 0
 
 
 class LocationResponse(BaseModel):

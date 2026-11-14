@@ -128,3 +128,22 @@ def test_touch_updates_last_activity_and_skips_revoked(session):
 
     assert sessions.get(live).last_activity_at == NOW
     assert sessions.get(revoked).last_activity_at is None
+
+
+def test_consume_is_true_once_then_false(session):
+    root = PlatformAdmin(
+        id=PlatformAdminId.new(), name="Root", email=f"{uuid.uuid4().hex}@consume.test",
+        password_hash="x",
+    )
+    SqlPlatformAdminRepository(session).save(root)
+    sessions = SqlAuthSessionRepository(session)
+    created = AuthSession(
+        id=SessionId.new(), scope="mfa", user_id=root.id.value,
+        created_at=EARLIER, expires_at=NOW + timedelta(hours=1),
+    )
+    sessions.add(created)
+    session.flush()
+
+    assert sessions.consume(created.id, NOW) is True
+    assert sessions.consume(created.id, NOW) is False
+    assert sessions.consume(SessionId.new(), NOW) is False

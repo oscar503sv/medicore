@@ -94,6 +94,17 @@ class SqlAuthSessionRepository:
             AuthSessionModel.revoked_at.is_(None),
         ).update({"revoked_at": now})
 
+    def consume(self, session_id: SessionId, now: datetime) -> bool:
+        updated = (
+            self._s.query(AuthSessionModel)
+            .filter(
+                AuthSessionModel.id == session_id.value,
+                AuthSessionModel.revoked_at.is_(None),
+            )
+            .update({"revoked_at": now})
+        )
+        return updated == 1
+
     def revoke_all_for_user(
         self, user_id: UUID, now: datetime, except_id: SessionId | None = None
     ) -> None:

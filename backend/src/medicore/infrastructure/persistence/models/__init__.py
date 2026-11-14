@@ -28,6 +28,7 @@ from medicore.infrastructure.persistence.models.notification import Notification
 from medicore.infrastructure.persistence.models.patient import PatientModel
 from medicore.infrastructure.persistence.models.platform import (
     PlatformAdminModel,
+    PlatformAdminRecoveryCodeModel,
     PlatformAuditLogModel,
 )
 from medicore.infrastructure.persistence.models.prescription import PrescriptionModel
@@ -73,6 +74,7 @@ __all__ = [
     "NotificationModel",
     "PatientModel",
     "PlatformAdminModel",
+    "PlatformAdminRecoveryCodeModel",
     "PlatformAuditLogModel",
     "PrescriptionModel",
     "ProcedureModel",

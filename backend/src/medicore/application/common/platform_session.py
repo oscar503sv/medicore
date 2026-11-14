@@ -12,6 +12,8 @@ class PlatformSessionPolicy:
     lifetime: timedelta = timedelta(minutes=480)
     # Throttles last_activity writes so a busy page does not hit the database on every call.
     touch_every: timedelta = timedelta(seconds=60)
+    # Time to finish the second login step after the password was accepted.
+    mfa_challenge_ttl: timedelta = timedelta(minutes=5)
 
     @property
     def lifetime_minutes(self) -> int:

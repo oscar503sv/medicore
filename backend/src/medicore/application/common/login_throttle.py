@@ -32,3 +32,8 @@ def lockout_until(failed_count: int, now: datetime) -> datetime | None:
         return None
     minutes = min(2 ** (failed_count - MAX_ATTEMPTS), MAX_LOCKOUT_MINUTES)
     return now + timedelta(minutes=minutes)
+
+
+def platform_mfa_identifier(admin_id: str) -> str:
+    # By admin id, not email: the second factor is attacked after the password is known.
+    return f"platform-mfa:{admin_id}"

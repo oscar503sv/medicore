@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field, fields
+from datetime import datetime
 from uuid import UUID
 
 from medicore.domain.entities.application import ApplicationOrder, ApplicationRecord
@@ -69,6 +70,8 @@ class InMemoryStore:
     procedures: dict[UUID, Procedure] = field(default_factory=dict)
     platform_admins: dict[UUID, PlatformAdmin] = field(default_factory=dict)
     platform_audit: dict[UUID, PlatformAuditLog] = field(default_factory=dict)
+    # MFA recovery codes per admin: {code_hash: used_at}.
+    platform_recovery_codes: dict[UUID, dict[str, datetime | None]] = field(default_factory=dict)
     # Global catalog keyed by "version:code" (reference data, not tenant-scoped).
     diagnosis_codes: dict[str, CatalogDiagnosis] = field(default_factory=dict)
     # Global login throttle keyed by identifier: (failed_count, last_failed_at, locked_until).

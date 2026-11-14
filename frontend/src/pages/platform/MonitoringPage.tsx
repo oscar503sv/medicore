@@ -137,6 +137,8 @@ const LOGIN_TONE: Record<ConsoleLogin['action'], Tone> = {
   'auth.platform_login': 'ok',
   'auth.platform_login_failed': 'warn',
   'auth.platform_login_locked': 'danger',
+  'auth.platform_mfa_failed': 'warn',
+  'auth.platform_mfa_recovery_used': 'warn',
 }
 
 function ConsoleLogins({ logins }: { logins: ConsoleLogin[] }) {

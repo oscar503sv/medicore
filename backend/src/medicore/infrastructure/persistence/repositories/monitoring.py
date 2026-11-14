@@ -7,6 +7,7 @@ plus aggregates over the global sign-in, session and error tables.
 from __future__ import annotations
 
 from datetime import date, datetime
+from uuid import UUID
 
 from sqlalchemy import case, desc, func, text
 from sqlalchemy.dialects.postgresql import aggregate_order_by
@@ -41,6 +42,7 @@ from medicore.infrastructure.persistence.models.tenant import TenantModel
 MAX_LOCKED = 20
 CONSOLE_LOGIN_ACTIONS = (
     "auth.platform_login", "auth.platform_login_failed", "auth.platform_login_locked",
+    "auth.platform_mfa_failed", "auth.platform_mfa_recovery_used",
 )
 
 
@@ -112,8 +114,20 @@ class SqlMonitoringReadModel:
         return LoginPressure(
             failing_accounts=int(failing),
             failed_attempts=int(attempts),
-            locked=[_locked_login(r.identifier, r.failed_count, r.locked_until) for r in locked],
+            locked=[self._locked(r) for r in locked],
         )
+
+    def _locked(self, row: LoginAttemptModel) -> LockedLogin:
+        # A locked second step is keyed by admin id; show it as that admin's console login.
+        prefix = "platform-mfa:"
+        if row.identifier.startswith(prefix):
+            try:
+                admin = self._s.get(PlatformAdminModel, UUID(row.identifier.removeprefix(prefix)))
+            except ValueError:
+                admin = None
+            email = admin.email if admin else row.identifier.removeprefix(prefix)
+            return LockedLogin("platform", None, email, row.failed_count, row.locked_until)
+        return _locked_login(row.identifier, row.failed_count, row.locked_until)
 
     def lockouts_since(self, since: datetime) -> int:
         clinic = (
@@ -173,7 +187,12 @@ class SqlMonitoringReadModel:
         )
         rows = (
             self._s.query(kind, func.count())
-            .filter(AuthSessionModel.revoked_at.is_(None), AuthSessionModel.expires_at > now)
+            .filter(
+                AuthSessionModel.revoked_at.is_(None),
+                AuthSessionModel.expires_at > now,
+                # Pending second-step challenges are not sessions.
+                AuthSessionModel.scope != "mfa",
+            )
             .group_by(kind)
             .all()
         )

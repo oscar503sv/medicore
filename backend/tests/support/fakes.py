@@ -101,3 +101,17 @@ class SequentialCodeGenerator:
     def next_certificate_code(self, on: date) -> str:
         self._certificate += 1
         return f"CM-{on.year}-{self._certificate:04d}"
+
+
+class PlainSecretBox:
+    """Reversible, readable 'sealing' for tests only — never use in production."""
+
+    PREFIX = "sealed:"
+
+    def seal(self, plaintext: str) -> str:
+        return f"{self.PREFIX}{plaintext}"
+
+    def open(self, sealed: str) -> str:
+        if not sealed.startswith(self.PREFIX):
+            raise ValueError("not sealed by PlainSecretBox")
+        return sealed.removeprefix(self.PREFIX)

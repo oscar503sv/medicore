@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.platform_admin import PlatformAdmin
@@ -10,6 +13,7 @@ from medicore.domain.enums import UserStatus
 from medicore.domain.shared.identifiers import AuditLogId, PlatformAdminId, TenantId
 from medicore.infrastructure.persistence.models.platform import (
     PlatformAdminModel,
+    PlatformAdminRecoveryCodeModel,
     PlatformAuditLogModel,
 )
 
@@ -23,6 +27,10 @@ def _to_admin(row: PlatformAdminModel) -> PlatformAdmin:
         status=UserStatus(row.status),
         last_seen_at=row.last_seen_at,
         created_at=row.created_at,
+        mfa_secret=row.mfa_secret,
+        mfa_pending_secret=row.mfa_pending_secret,
+        mfa_enabled_at=row.mfa_enabled_at,
+        mfa_last_step=row.mfa_last_step,
     )
 
 
@@ -68,6 +76,10 @@ class SqlPlatformAdminRepository:
         row.status = str(admin.status)
         row.last_seen_at = admin.last_seen_at
         row.created_at = admin.created_at
+        row.mfa_secret = admin.mfa_secret
+        row.mfa_pending_secret = admin.mfa_pending_secret
+        row.mfa_enabled_at = admin.mfa_enabled_at
+        row.mfa_last_step = admin.mfa_last_step
 
 
 class SqlPlatformAuditLogRepository:
@@ -99,3 +111,47 @@ class SqlPlatformAuditLogRepository:
             .all()
         )
         return [_to_audit(r) for r in rows]
+
+
+class SqlPlatformRecoveryCodeRepository:
+    def __init__(self, session: Session) -> None:
+        self._s = session
+
+    def replace_all(self, admin_id: PlatformAdminId, code_hashes: list[str], now: datetime) -> None:
+        self.delete_all(admin_id)
+        self._s.add_all(
+            PlatformAdminRecoveryCodeModel(
+                admin_id=admin_id.value, code_hash=code_hash, created_at=now, updated_at=now
+            )
+            for code_hash in code_hashes
+        )
+        self._s.flush()
+
+    def consume(self, admin_id: PlatformAdminId, code_hash: str, now: datetime) -> bool:
+        # The WHERE on used_at makes the claim atomic: a concurrent second use updates 0 rows.
+        updated = (
+            self._s.query(PlatformAdminRecoveryCodeModel)
+            .filter(
+                PlatformAdminRecoveryCodeModel.admin_id == admin_id.value,
+                PlatformAdminRecoveryCodeModel.code_hash == code_hash,
+                PlatformAdminRecoveryCodeModel.used_at.is_(None),
+            )
+            .update({"used_at": now, "updated_at": now}, synchronize_session=False)
+        )
+        return updated == 1
+
+    def remaining(self, admin_id: PlatformAdminId) -> int:
+        return (
+            self._s.query(func.count(PlatformAdminRecoveryCodeModel.id))
+            .filter(
+                PlatformAdminRecoveryCodeModel.admin_id == admin_id.value,
+                PlatformAdminRecoveryCodeModel.used_at.is_(None),
+            )
+            .scalar()
+            or 0
+        )
+
+    def delete_all(self, admin_id: PlatformAdminId) -> None:
+        self._s.query(PlatformAdminRecoveryCodeModel).filter(
+            PlatformAdminRecoveryCodeModel.admin_id == admin_id.value
+        ).delete(synchronize_session=False)

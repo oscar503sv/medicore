@@ -20,6 +20,7 @@ Incluye además una **consola de plataforma (superadmin)** por encima del límit
 | Migraciones | Alembic ≥ 1.13 |
 | Base de datos | PostgreSQL (psycopg3) |
 | Auth | PyJWT ≥ 2.8 + bcrypt ≥ 4 · cookies httpOnly + CSRF ligado a la sesión |
+| Cifrado en reposo | cryptography ≥ 45 · AES-256-GCM para los secretos MFA de superadmins |
 | Validación config | pydantic-settings |
 | Tests / Lint | pytest ≥ 8 + ruff (adaptadores en memoria) |
 | Frontend | React 18 + TypeScript 5 + Vite 6 |
@@ -81,7 +82,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 26 routers, 176 endpoints bajo /api/v1/
+    └── routers/         # 26 routers, 181 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -160,6 +161,7 @@ La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con tod
 - **Sesiones revocables** (tabla `sessions` + claim `sid`): logout real; cambiar la contraseña cierra las demás sesiones; suspender o resetear un usuario cierra todas; suspender o archivar una clínica cierra todas sus sesiones (también las de soporte). En cada petición se comprueba que la clínica y la cuenta sigan activas, con una sola regla de acceso compartida con el login. Soporte puede abrir una sesión nueva en una clínica suspendida, pero nunca en una archivada.
 - **Lockout de login** con backoff exponencial (5 fallos → 1 min, duplicando hasta 15) y respuesta 429 con `Retry-After`.
 - **Límites de la sesión de consola**: la sesión de la consola de superadmin caduca tras 30 min sin actividad (`PLATFORM_SESSION_IDLE_MINUTES`) y como máximo 8 h después del login (`PLATFORM_SESSION_MAX_MINUTES`). El refresco en segundo plano de Monitoreo no cuenta como actividad, un superadmin desactivado pierde el acceso en la siguiente petición, y `scripts/create_platform_admin.py` revoca las sesiones del admin al actualizarlo.
+- **MFA TOTP opcional para superadmins**: se activa desde la consola, en *Seguridad de la cuenta* (`/platform/security`). Con MFA activo, el login de la consola pide la contraseña y después un código de 6 dígitos de una app de autenticación, o un código de recuperación. El desafío es de un solo uso, válido 5 min y va en una cookie httpOnly limitada a `/api/v1/platform/login`. Un código no se puede reutilizar, y tras 5 intentos fallidos el bloqueo es progresivo. Hay 10 códigos de recuperación de un solo uso, mostrados una sola vez y guardados como hash. El secreto TOTP se cifra con AES-256-GCM. Activar MFA, regenerar los códigos de recuperación o desactivarlo exige la contraseña actual, y cada cambio queda en la auditoría de plataforma.
 - **Despliegue recomendado**: sirve la consola de plataforma desde un origen o subdominio propio (p. ej. `console.example.com`), para que un XSS en la app de clínicas no comparta origen con ella. Es una recomendación; la app no lo impone.
 - **Sin enumeración**: login en tiempo constante; un slug o un email inexistente responde igual que una contraseña incorrecta.
 - `X-Forwarded-For` solo se honra desde los proxies listados en `TRUSTED_PROXIES`.
@@ -264,7 +266,8 @@ medicore/
 │   ├── scripts/
 │   │   ├── seed_demo.py            # Datos demo: ~8 semanas de historia + 4 de agenda, vía casos de uso
 │   │   ├── import_icd.py           # Carga del catálogo CIE-10/CIE-11
-│   │   └── create_platform_admin.py # Alta de superadmin de plataforma
+│   │   ├── create_platform_admin.py # Alta de superadmin de plataforma
+│   │   └── reset_platform_mfa.py    # Desactiva el MFA de un superadmin (dispositivo perdido)
 │   ├── pyproject.toml        # Metadata + deps + config pytest/ruff
 │   ├── src/medicore/         # Código fuente (ver Arquitectura arriba)
 │   └── tests/
@@ -383,7 +386,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1107 tests)
+.venv/bin/pytest                          # suite completa (1209 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -424,6 +427,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `subscription_payments` | Pagos registrados por clínica (renovaciones) |
 | `diagnosis_codes` | Catálogo CIE-10/CIE-11 (global, para autocompletado) |
 | `platform_admins` | Superadmins de la plataforma |
+| `platform_admin_recovery_codes` | Códigos de recuperación de un solo uso (hash) de superadmins con MFA |
 | `platform_audit_logs` | Auditoría global de operaciones de plataforma |
 | `error_events` | Errores inesperados del servidor (ruta, tipo, ubicación y commit; sin datos de pacientes; 30 días) |
 | `job_runs` | Ejecuciones de tareas programadas (p. ej. el reset nocturno de la demo) y su resultado |
@@ -436,14 +440,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1107 tests en verde
-   264  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1209 tests en verde
+   270  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   466  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   500  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   279  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   299  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    98  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    140  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:
@@ -451,6 +455,7 @@ Los tests verifican, entre otras cosas:
 - Aislamiento multi-tenant: los repos de un tenant no filtran datos de otro.
 - Permisos efectivos por rol y override por tenant, y de scope de plataforma.
 - Lockout de login, revocación de sesiones, protección CSRF y caducidad de la sesión de consola.
+- MFA TOTP de la consola (vectores RFC 6238, anti-replay, recuperación).
 - Que todo código de error del backend tenga traducción en español e inglés.
 
 ---
@@ -469,6 +474,8 @@ Los tests verifican, entre otras cosas:
 | `PLATFORM_SESSION_IDLE_MINUTES` | Caducidad por inactividad de la sesión de la consola (min, entre 5 y el máximo) | `30` |
 | `PLATFORM_SESSION_MAX_MINUTES` | Duración absoluta de la sesión de la consola (min) | `480` (8 h) |
 | `PLATFORM_COOKIE_PATH` | Ruta de la cookie de sesión de la consola (solo se envía a la API de plataforma) | `/api/v1/platform` |
+| `MFA_ENCRYPTION_KEY` | Clave que cifra los secretos TOTP de los superadmins (AES-256-GCM): 32 bytes en base64url. **Obligatoria en producción** (la app no arranca sin ella). En desarrollo, si está vacía, se deriva de `JWT_SECRET`. Si se pierde, los MFA ya activados no se pueden verificar. Generarla: `python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"` | vacío |
+| `MFA_ISSUER` | Nombre que muestra la app autenticadora junto al código | `Medicore` |
 | `CORS_ORIGINS` | Orígenes permitidos (coma-separados); `*` solo en desarrollo | `*` |
 | `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` (dev) / `false` (prod) |
 | `TRUSTED_PROXIES` | IPs/CIDRs de reverse-proxies cuyo `X-Forwarded-For` se honra; vacío → IP del socket | vacío |
@@ -476,7 +483,7 @@ Los tests verifican, entre otras cosas:
 | `DEMO_PASSWORD` | Contraseña de los usuarios demo que crea `scripts/seed_demo.py` (≥ 8 caracteres). **Obligatoria en producción**, donde se rechaza la contraseña pública por defecto | `demo1234` (solo dev) |
 | `DEMO_ADMIN_PASSWORD` | Contraseña de los admins de clínica de la demo (≥ 8 caracteres), privada para que la contraseña compartida no abra la administración. **Obligatoria en producción** y distinta de `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
-> En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*` o `COOKIE_SECURE` es `false`; además los docs quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida y los defaults funcionan tal cual.
+> En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*`, `COOKIE_SECURE` es `false` o `MFA_ENCRYPTION_KEY` está vacía; además los docs quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida y los defaults funcionan tal cual.
 
 ---
 
@@ -488,9 +495,9 @@ El backend incluye un `Dockerfile` listo para producción (usuario no-root, uvic
 
 El [`docker-compose.yml`](docker-compose.yml) de la raíz levanta todo el stack en un **único origen**: `db` (PostgreSQL 16, volumen persistente), `backend` (aplica `alembic upgrade head` al arrancar) y `frontend` (nginx que sirve el SPA, redirige `/api/` al backend y agrega las cabeceras de seguridad). Solo `frontend` lleva dominio público; el TLS lo termina el proxy de borde (Traefik en Coolify).
 
-1. Genera los secretos: `openssl rand -hex 32` (`JWT_SECRET`) y `openssl rand -base64 24` (`POSTGRES_PASSWORD`), y elige `DEMO_PASSWORD` (la que compartes con quien prueba la demo) y `DEMO_ADMIN_PASSWORD` (privada, para los admins de clínica).
+1. Genera los secretos: `openssl rand -hex 32` (`JWT_SECRET`) y `openssl rand -base64 24` (`POSTGRES_PASSWORD`), la clave MFA (`MFA_ENCRYPTION_KEY`, comando en la tabla de variables de entorno del backend), y elige `DEMO_PASSWORD` (la que compartes con quien prueba la demo) y `DEMO_ADMIN_PASSWORD` (privada, para los admins de clínica).
 2. En Coolify: **New Resource → Public Repository** → este repo, rama `main`, **Build Pack: Docker Compose**, archivo `/docker-compose.yml`.
-3. Variables de entorno: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (p. ej. `https://medicore.ejemplo.com`), `DEMO_PASSWORD` y `DEMO_ADMIN_PASSWORD`. Opcionales: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`, `WEB_CONCURRENCY` (workers de uvicorn, por defecto 2). Si falta una obligatoria el stack no arranca, a propósito.
+3. Variables de entorno: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (p. ej. `https://medicore.ejemplo.com`), `DEMO_PASSWORD`, `DEMO_ADMIN_PASSWORD` y `MFA_ENCRYPTION_KEY`. Opcionales: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`, `WEB_CONCURRENCY` (workers de uvicorn, por defecto 2). Si falta una obligatoria el stack no arranca, a propósito.
 4. Asigna el dominio solo al servicio **frontend** y pulsa **Deploy**.
 5. Carga inicial de datos (una vez), en una terminal del contenedor `backend`:
    ```sh
@@ -503,6 +510,8 @@ El [`docker-compose.yml`](docker-compose.yml) de la raíz levanta todo el stack 
 Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migraciones nuevas al arrancar.
 
 > **Nota:** la migración `d0e1f2a3b4c6` (límites de la sesión de consola) hace que los usuarios de clínica y los superadmins vuelvan a iniciar sesión una vez tras desplegar.
+
+> **Antes de desplegar esta versión:** `MFA_ENCRYPTION_KEY` tiene que llegar al servicio `backend`. Defínela en Coolify y declárala en `docker-compose.yml` (`MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY}`), porque en producción la app no arranca sin ella. La migración `e1f2a3b4c5d7` añade las columnas de MFA a `platform_admins` y la tabla `platform_admin_recovery_codes`.
 
 Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma. Cada ejecución queda registrada y la página *Monitoreo* marca la tarea si falla o si pasan más de 26 h sin un reset exitoso.
 

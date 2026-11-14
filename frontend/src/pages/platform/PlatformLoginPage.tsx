@@ -4,9 +4,11 @@ import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { platformAuthApi } from '@/api/platform'
 import { errorMessage } from '@/api/client'
 import { AuthBrand, AuthCard, AuthShell, ComplianceRow } from '@/components/AuthShell'
+import { PlatformMfaStep } from '@/components/platform/PlatformMfaStep'
 import { Button } from '@/components/ui/Button'
 import { useT } from '@/lib/i18n'
 import { usePlatformAuthStore } from '@/stores/platformAuth'
+import type { PlatformLoginResult } from '@/types'
 
 const fieldLabel = 'mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-tx-3'
 const fieldInput =
@@ -24,6 +26,14 @@ export function PlatformLoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // Second step: the password was accepted and a code from the authenticator app is pending.
+  const [isMfaStep, setIsMfaStep] = useState(false)
+
+  function finishLogin(result: PlatformLoginResult) {
+    if (!result.admin_id || !result.name || !result.email) return
+    setSession({ admin_id: result.admin_id, name: result.name, email: result.email })
+    navigate('/platform/clinics')
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -31,9 +41,9 @@ export function PlatformLoginPage() {
     clearNotice()
     setLoading(true)
     try {
-      const session = await platformAuthApi.login(email.trim(), password)
-      setSession(session)
-      navigate('/platform/clinics')
+      const result = await platformAuthApi.login(email.trim(), password)
+      if (result.mfa_required) setIsMfaStep(true)
+      else finishLogin(result)
     } catch (err) {
       // The backend's code tells bad credentials from an inactive account/clinic or a lockout.
       setError(errorMessage(err, t('platform.bad_credentials')))
@@ -51,7 +61,9 @@ export function PlatformLoginPage() {
           <h1 className="font-serif text-[38px] leading-none text-tx">
             {t('platform.login_title')}
           </h1>
-          <p className="mt-2 text-sm text-tx-3">{t('platform.login_subtitle')}</p>
+          <p className="mt-2 text-sm text-tx-3">
+            {isMfaStep ? t('platform.mfa.subtitle') : t('platform.login_subtitle')}
+          </p>
         </div>
 
         {notice && !error && (
@@ -66,58 +78,75 @@ export function PlatformLoginPage() {
         )}
 
         {error && (
-          <div className="mt-5 rounded-lg bg-[var(--danger-10)] px-3 py-2 text-[13px] text-danger">
+          <div
+            role="alert"
+            className="mt-5 rounded-lg bg-[var(--danger-10)] px-3 py-2 text-[13px] text-danger"
+          >
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div>
-            <label htmlFor="platform-email" className={fieldLabel}>
-              {t('login.email')}
-            </label>
-            <input
-              id="platform-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="super@medicore.health"
-              autoFocus
-              required
-              className={fieldInput}
-            />
-          </div>
+        {isMfaStep && (
+          <PlatformMfaStep
+            onVerified={finishLogin}
+            onError={setError}
+            onBack={() => {
+              setIsMfaStep(false)
+              setPassword('')
+              setError('')
+            }}
+          />
+        )}
 
-          <div>
-            <label htmlFor="platform-password" className={fieldLabel}>
-              {t('login.password')}
-            </label>
-            <div className="relative flex items-center">
+        {!isMfaStep && (
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div>
+              <label htmlFor="platform-email" className={fieldLabel}>
+                {t('login.email')}
+              </label>
               <input
-                id="platform-password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                id="platform-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="super@medicore.health"
+                autoFocus
                 required
-                className={`${fieldInput} pr-10`}
+                className={fieldInput}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? t('app.hide_password') : t('app.show_password')}
-                className="absolute right-2 rounded-md p-1.5 text-tx-3 transition-colors hover:text-tx"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
             </div>
-          </div>
 
-          <Button type="submit" size="lg" loading={loading} className="w-full">
-            {t('login.submit')}
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </form>
+            <div>
+              <label htmlFor="platform-password" className={fieldLabel}>
+                {t('login.password')}
+              </label>
+              <div className="relative flex items-center">
+                <input
+                  id="platform-password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className={`${fieldInput} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? t('app.hide_password') : t('app.show_password')}
+                  className="absolute right-2 rounded-md p-1.5 text-tx-3 transition-colors hover:text-tx"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+
+            <Button type="submit" size="lg" loading={loading} className="w-full">
+              {t('login.submit')}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </form>
+        )}
 
         <ComplianceRow />
       </AuthCard>

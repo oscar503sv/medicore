@@ -129,12 +129,27 @@ export interface PlatformSession {
   email: string
 }
 
+/** Answer of the password step: either the session, or "second step pending". */
+export interface PlatformLoginResult {
+  mfa_required: boolean
+  admin_id: string | null
+  name: string | null
+  email: string | null
+}
+
 export interface PlatformAdminProfile {
   id: string
   name: string
   email: string
   avatar_initials: string
   last_seen_at: string | null
+  mfa_enabled: boolean
+  recovery_codes_remaining: number
+}
+
+export interface MfaSetup {
+  secret: string
+  otpauth_uri: string
 }
 
 export interface TenantLocation {
@@ -822,7 +837,12 @@ export interface ErrorGroup {
 
 export interface ConsoleLogin {
   admin_name: string | null
-  action: 'auth.platform_login' | 'auth.platform_login_failed' | 'auth.platform_login_locked'
+  action:
+    | 'auth.platform_login'
+    | 'auth.platform_login_failed'
+    | 'auth.platform_login_locked'
+    | 'auth.platform_mfa_failed'
+    | 'auth.platform_mfa_recovery_used'
   at: string
   ip_address: string | null
   user_agent: string | null

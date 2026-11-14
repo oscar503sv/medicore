@@ -17,6 +17,7 @@ from medicore.presentation.dependencies import (
     get_hasher,
     get_jwt_issuer,
     get_platform_session_policy,
+    get_secret_box,
     get_uow,
     get_uow_factory,
 )
@@ -25,6 +26,7 @@ from tests.support.fakes import (
     FakeTokenIssuer,
     FixedClock,
     PlainPasswordHasher,
+    PlainSecretBox,
     SequentialCodeGenerator,
 )
 
@@ -58,6 +60,7 @@ def client(seed, clock):
     app.dependency_overrides[get_uow] = lambda: factory.for_tenant(seed.tenant.id)
     app.dependency_overrides[get_codes] = lambda: codes
     app.dependency_overrides[get_platform_session_policy] = lambda: PlatformSessionPolicy()
+    app.dependency_overrides[get_secret_box] = lambda: PlainSecretBox()
 
     return TestClient(app, raise_server_exceptions=True)
 

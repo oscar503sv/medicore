@@ -34,6 +34,7 @@ from tests.support.repositories import (
     InMemoryPlatformAdminRepository,
     InMemoryPlatformAuditLogRepository,
     InMemoryPlatformReadModel,
+    InMemoryPlatformRecoveryCodeRepository,
     InMemoryPrescriptionRepository,
     InMemoryProcedureRepository,
     InMemoryReportReadModel,
@@ -116,6 +117,7 @@ class InMemoryPlatformUnitOfWork:
         self._store = store
         self.tenants = InMemoryTenantRepository(store)
         self.platform_admins = InMemoryPlatformAdminRepository(store)
+        self.platform_recovery_codes = InMemoryPlatformRecoveryCodeRepository(store)
         self.platform_audit = InMemoryPlatformAuditLogRepository(store)
         self.sessions = InMemoryAuthSessionRepository(store)
         self.plans = InMemoryPlanRepository(store)

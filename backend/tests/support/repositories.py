@@ -160,6 +160,28 @@ class InMemoryPlatformAdminRepository:
         self._store.platform_admins[admin.id.value] = admin
 
 
+class InMemoryPlatformRecoveryCodeRepository:
+    def __init__(self, store: InMemoryStore) -> None:
+        self._store = store
+
+    def replace_all(self, admin_id: PlatformAdminId, code_hashes: list[str], now: datetime) -> None:
+        self._store.platform_recovery_codes[admin_id.value] = dict.fromkeys(code_hashes)
+
+    def consume(self, admin_id: PlatformAdminId, code_hash: str, now: datetime) -> bool:
+        codes = self._store.platform_recovery_codes.get(admin_id.value, {})
+        if code_hash not in codes or codes[code_hash] is not None:
+            return False
+        codes[code_hash] = now
+        return True
+
+    def remaining(self, admin_id: PlatformAdminId) -> int:
+        codes = self._store.platform_recovery_codes.get(admin_id.value, {})
+        return sum(1 for used_at in codes.values() if used_at is None)
+
+    def delete_all(self, admin_id: PlatformAdminId) -> None:
+        self._store.platform_recovery_codes.pop(admin_id.value, None)
+
+
 class InMemoryPlatformAuditLogRepository:
     def __init__(self, store: InMemoryStore) -> None:
         self._store = store
@@ -215,6 +237,13 @@ class InMemoryAuthSessionRepository:
         session = self._store.sessions.get(session_id.value)
         if session is not None:
             session.revoke(now)
+
+    def consume(self, session_id: SessionId, now: datetime) -> bool:
+        session = self._store.sessions.get(session_id.value)
+        if session is None or session.revoked_at is not None:
+            return False
+        session.revoke(now)
+        return True
 
     def revoke_all_for_user(
         self, user_id, now: datetime, except_id: SessionId | None = None
@@ -1076,7 +1105,7 @@ class InMemoryMonitoringReadModel:
     def sessions_by_kind(self, now: datetime) -> dict[str, int]:
         out = {"tenant": 0, "support": 0, "platform": 0}
         for s in self._store.sessions.values():
-            if s.is_active(now):
+            if s.is_active(now) and s.scope != "mfa":
                 out["support" if s.impersonator_id else s.scope] += 1
         return out
 

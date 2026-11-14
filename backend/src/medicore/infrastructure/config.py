@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
+import hmac
 import ipaddress
 from functools import lru_cache
 
@@ -14,6 +18,8 @@ _INSECURE_SECRETS = {
     "change-me",
     "cambia-esto-en-produccion-usa-openssl-rand-hex-32",
 }
+
+_MFA_KEY_BYTES = 32
 
 TrustedNetworks = tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]
 
@@ -62,6 +68,10 @@ class Settings(BaseSettings):
     platform_session_max_minutes: int = 480
     # Path of the console session cookie: it is only sent to the platform API.
     platform_cookie_path: str = "/api/v1/platform"
+    # Superadmin second factor. The key encrypts the TOTP secrets at rest (32 bytes, base64url);
+    # mandatory in production, derived from JWT_SECRET in development when left empty.
+    mfa_encryption_key: str = ""
+    mfa_issuer: str = "Medicore"  # name shown in the authenticator app
 
     @property
     def is_production(self) -> bool:
@@ -72,6 +82,23 @@ class Settings(BaseSettings):
         if self.cookie_secure is not None:
             return self.cookie_secure
         return self.environment.strip().lower() != "development"
+
+    @property
+    def mfa_key_bytes(self) -> bytes:
+        value = self.mfa_encryption_key.strip()
+        if not value:
+            # Development only (production refuses to start without a key): a stable key
+            # that is not the JWT secret itself.
+            return hmac.new(
+                self.jwt_secret.encode(), b"medicore.mfa.dev-only", hashlib.sha256
+            ).digest()
+        try:
+            key = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("MFA_ENCRYPTION_KEY is not valid base64url.") from exc
+        if len(key) != _MFA_KEY_BYTES:
+            raise ValueError(f"MFA_ENCRYPTION_KEY must decode to {_MFA_KEY_BYTES} bytes.")
+        return key
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -126,6 +153,17 @@ class Settings(BaseSettings):
         # Without Secure the session cookies would travel over plain http.
         if self.is_production and self.cookie_secure is False:
             raise ValueError("COOKIE_SECURE cannot be false in production.")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_mfa_key(self) -> Settings:
+        if self.is_production and not self.mfa_encryption_key.strip():
+            raise ValueError(
+                "MFA_ENCRYPTION_KEY must be set in production (32 bytes, base64url; see "
+                ".env.example for the command that generates one)."
+            )
+        if self.mfa_encryption_key.strip():
+            _ = self.mfa_key_bytes  # raises on a malformed key, failing fast at startup
         return self
 
     @model_validator(mode="after")

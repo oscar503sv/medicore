@@ -8,6 +8,7 @@ import { feeEn, feeEs } from './i18n-fees'
 import { analyticsEn, analyticsEs } from './i18n-analytics'
 import { printingEn, printingEs } from './i18n-printing'
 import { notesEn, notesEs } from './i18n-notes'
+import { secEn, secEs } from './i18n-security'
 import { reportsEn, reportsEs } from './i18n-reports'
 import { prcEn, prcEs } from './i18n-procedures'
 import { vaxEn, vaxEs } from './i18n-vaccination'
@@ -27,6 +28,7 @@ const es: Dict = {
   ...printingEs,
   ...reportsEs,
   ...notesEs,
+  ...secEs,
   // generic
   'app.loading': 'Cargando…',
   'app.save': 'Guardar',
@@ -572,6 +574,12 @@ const es: Dict = {
   'err.auth.session_idle_timeout': 'Tu sesión se cerró por inactividad. Inicia sesión de nuevo.',
   'err.auth.wrong_session': 'Esta sesión no sirve para esta sección. Inicia sesión de nuevo.',
   'err.auth.csrf_invalid': 'La solicitud no pasó la verificación de seguridad. Recarga la página.',
+  'err.auth.mfa_invalid': 'Código incorrecto o ya usado. Inténtalo de nuevo.',
+  'err.auth.mfa_challenge_expired': 'La verificación caducó. Vuelve a introducir tu contraseña.',
+  'err.mfa.invalid_code': 'El código no es correcto. Revisa que el reloj de tu teléfono esté en hora e inténtalo de nuevo.',
+  'err.mfa.already_enabled': 'La verificación en dos pasos ya está activa.',
+  'err.mfa.not_enabled': 'La verificación en dos pasos no está activa.',
+  'err.mfa.not_enrolling': 'Inicia primero la activación de la verificación en dos pasos.',
   'err.password.too_short': 'La contraseña debe tener al menos {min} caracteres.',
   'err.password.current_incorrect': 'La contraseña actual no es correcta.',
   'err.password.too_long': 'La contraseña es demasiado larga (máximo {max} bytes).',
@@ -878,6 +886,12 @@ const es: Dict = {
   'audit.action.auth.platform_login': 'Inicio de sesión en la consola',
   'audit.action.auth.platform_login_failed': 'Intento fallido en la consola',
   'audit.action.auth.platform_login_locked': 'Consola bloqueada por intentos fallidos',
+  'audit.action.auth.platform_mfa_enabled': 'Verificación en dos pasos activada',
+  'audit.action.auth.platform_mfa_disabled': 'Verificación en dos pasos desactivada',
+  'audit.action.auth.platform_mfa_reset': 'Verificación en dos pasos restablecida por un operador',
+  'audit.action.auth.platform_mfa_failed': 'Código de verificación en dos pasos incorrecto',
+  'audit.action.auth.platform_mfa_recovery_used': 'Acceso con código de recuperación',
+  'audit.action.auth.platform_mfa_recovery_regenerated': 'Códigos de recuperación regenerados',
   'audit.action.session.revoked': 'Sesión cerrada remotamente',
   'audit.action.patient.created': 'Paciente creado',
   'audit.action.patient.updated': 'Paciente actualizado',
@@ -1050,6 +1064,7 @@ const en: Dict = {
   ...printingEn,
   ...reportsEn,
   ...notesEn,
+  ...secEn,
   'app.loading': 'Loading…',
   'app.save': 'Save',
   'app.update_available': 'A new version of Medicore is available.',
@@ -1580,6 +1595,12 @@ const en: Dict = {
   'err.auth.session_idle_timeout': 'Your session was closed due to inactivity. Please sign in again.',
   'err.auth.wrong_session': 'This session cannot access this area. Please sign in again.',
   'err.auth.csrf_invalid': 'The request failed a security check. Reload the page.',
+  'err.auth.mfa_invalid': 'The code is wrong or was already used. Try again.',
+  'err.auth.mfa_challenge_expired': 'The verification expired. Enter your password again.',
+  'err.mfa.invalid_code': "The code is not correct. Check that your phone's clock is accurate and try again.",
+  'err.mfa.already_enabled': 'Two-step verification is already on.',
+  'err.mfa.not_enabled': 'Two-step verification is not on.',
+  'err.mfa.not_enrolling': 'Start turning on two-step verification first.',
   'err.password.too_short': 'The password must be at least {min} characters long.',
   'err.password.current_incorrect': 'The current password is incorrect.',
   'err.password.too_long': 'The password is too long (at most {max} bytes).',
@@ -1886,6 +1907,12 @@ const en: Dict = {
   'audit.action.auth.platform_login': 'Console sign-in',
   'audit.action.auth.platform_login_failed': 'Failed console sign-in',
   'audit.action.auth.platform_login_locked': 'Console locked after failed attempts',
+  'audit.action.auth.platform_mfa_enabled': 'Two-step verification turned on',
+  'audit.action.auth.platform_mfa_disabled': 'Two-step verification turned off',
+  'audit.action.auth.platform_mfa_reset': 'Two-step verification reset by an operator',
+  'audit.action.auth.platform_mfa_failed': 'Wrong two-step verification code',
+  'audit.action.auth.platform_mfa_recovery_used': 'Signed in with a recovery code',
+  'audit.action.auth.platform_mfa_recovery_regenerated': 'Recovery codes regenerated',
   'audit.action.session.revoked': 'Session closed remotely',
   'audit.action.patient.created': 'Patient created',
   'audit.action.patient.updated': 'Patient updated',

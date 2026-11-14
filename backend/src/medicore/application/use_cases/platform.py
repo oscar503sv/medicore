@@ -7,6 +7,7 @@ specific clinic's data must be touched atomically (e.g. seeding its first admin 
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -22,6 +23,7 @@ from medicore.application.common.errors import (
 from medicore.application.common.login_throttle import platform_login_identifier
 from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.common.permissions import effective_permissions
+from medicore.application.common.platform_mfa import mfa_required_for
 from medicore.application.common.platform_session import PlatformSessionPolicy
 from medicore.application.common.quotas import ensure_seat_for
 from medicore.application.common.timezone import tenant_today
@@ -75,6 +77,20 @@ class PlatformSessionDTO:
     email: str
 
 
+@dataclass(frozen=True, slots=True)
+class PlatformMfaChallengeDTO:
+    """Password accepted, second factor pending: the token only opens the MFA step."""
+
+    token: str
+    expires_in: int  # seconds
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformAdminProfileDTO:
+    admin: PlatformAdmin
+    recovery_codes_remaining: int
+
+
 def _login_entry(
     admin_id: PlatformAdminId,
     when: datetime,
@@ -103,6 +119,7 @@ def _open_platform_session(
     policy: PlatformSessionPolicy,
     ip_address: str | None,
     user_agent: str | None,
+    **audit_metadata: object,
 ) -> SessionId:
     """Create the console session row and its login audit entry inside ``uow``."""
     session_id = SessionId.new()
@@ -120,7 +137,9 @@ def _open_platform_session(
         )
     )
     uow.platform_audit.append(
-        _login_entry(admin.id, now, "auth.platform_login", ip_address, user_agent)
+        _login_entry(
+            admin.id, now, "auth.platform_login", ip_address, user_agent, **audit_metadata
+        )
     )
     return session_id
 
@@ -156,7 +175,7 @@ class AuthenticatePlatformAdmin:
         password: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> PlatformSessionDTO:
+    ) -> PlatformSessionDTO | PlatformMfaChallengeDTO:
         identifier = platform_login_identifier(email)
         now = self._clock.now()
         with self._factory.login_throttle() as throttle:
@@ -199,9 +218,39 @@ class AuthenticatePlatformAdmin:
             )
             uow.commit()
 
+    def _open_challenge(
+        self,
+        uow,
+        admin: PlatformAdmin,
+        now: datetime,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> PlatformMfaChallengeDTO:
+        """Store the pending second step as a short-lived, single-use ``mfa`` session row."""
+        challenge_id = SessionId.new()
+        uow.sessions.delete_expired_for_user(admin.id.value, now)
+        uow.sessions.add(
+            AuthSession(
+                id=challenge_id,
+                scope="mfa",
+                user_id=admin.id.value,
+                created_at=now,
+                expires_at=now + self._policy.mfa_challenge_ttl,
+                ip_address=ip_address,
+                user_agent=(user_agent or "")[:400] or None,
+            )
+        )
+        uow.commit()
+        ttl = self._policy.mfa_challenge_ttl
+        token = self._tokens.issue(
+            SessionClaims(user_id=str(admin.id), scope="mfa", session_id=str(challenge_id)),
+            ttl_minutes=math.ceil(ttl.total_seconds() / 60),
+        )
+        return PlatformMfaChallengeDTO(token=token, expires_in=int(ttl.total_seconds()))
+
     def _authenticate(
         self, email: str, password: str, ip_address: str | None, user_agent: str | None
-    ) -> PlatformSessionDTO:
+    ) -> PlatformSessionDTO | PlatformMfaChallengeDTO:
         with self._factory.platform_uow() as uow:
             admin = uow.platform_admins.get_by_email(email)
             password_ok = self._hasher.verify(
@@ -212,6 +261,8 @@ class AuthenticatePlatformAdmin:
             if not admin.is_active:
                 raise AuthenticationFailed("account is not active", code="auth.account_inactive")
             now = self._clock.now()
+            if mfa_required_for(admin):
+                return self._open_challenge(uow, admin, now, ip_address, user_agent)
             admin.last_seen_at = now
             uow.platform_admins.save(admin)
             session_id = _open_platform_session(
@@ -237,12 +288,15 @@ class GetPlatformAdmin:
     def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
         self._factory = uow_factory
 
-    def execute(self, actor: PlatformActorContext):
+    def execute(self, actor: PlatformActorContext) -> PlatformAdminProfileDTO:
         with self._factory.platform_uow() as uow:
             admin = uow.platform_admins.get_by_id(actor.admin_id)
-        if admin is None:
-            raise EntityNotFound("PlatformAdmin", actor.admin_id)
-        return admin
+            if admin is None:
+                raise EntityNotFound("PlatformAdmin", actor.admin_id)
+            remaining = (
+                uow.platform_recovery_codes.remaining(admin.id) if admin.mfa_enabled else 0
+            )
+        return PlatformAdminProfileDTO(admin=admin, recovery_codes_remaining=remaining)
 
 
 # ── Tenant management ─────────────────────────────────────────────────────────

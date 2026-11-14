@@ -5,6 +5,7 @@ import type {
   AnalyticsTier,
   AuthSessionInfo,
   GlobalAuditEntry,
+  MfaSetup,
   BusinessOverview,
   ErrorEvent,
   PaginatedResponse,
@@ -16,7 +17,7 @@ import type {
   PlanFeature,
   PlanLimits,
   PlatformAdminProfile,
-  PlatformSession,
+  PlatformLoginResult,
   Role,
   Subscription,
   SubscriptionPayment,
@@ -116,9 +117,31 @@ export interface CreateTenantResult {
 
 export const platformAuthApi = {
   login: (email: string, password: string) =>
-    platformApi.post<PlatformSession>('/platform/login', { email, password }).then((r) => r.data),
+    platformApi
+      .post<PlatformLoginResult>('/platform/login', { email, password })
+      .then((r) => r.data),
+
+  /** Second sign-in step: the TOTP code (or a recovery code) plus the challenge cookie. */
+  verifyMfa: (code: string) =>
+    platformApi.post<PlatformLoginResult>('/platform/login/mfa', { code }).then((r) => r.data),
 
   me: () => platformApi.get<PlatformAdminProfile>('/platform/me').then((r) => r.data),
+
+  mfaSetup: (password: string) =>
+    platformApi.post<MfaSetup>('/platform/me/mfa/setup', { password }).then((r) => r.data),
+
+  mfaConfirm: (code: string) =>
+    platformApi
+      .post<{ recovery_codes: string[] }>('/platform/me/mfa/confirm', { code })
+      .then((r) => r.data.recovery_codes),
+
+  mfaRegenerate: (password: string, code: string) =>
+    platformApi
+      .post<{ recovery_codes: string[] }>('/platform/me/mfa/recovery-codes', { password, code })
+      .then((r) => r.data.recovery_codes),
+
+  mfaDisable: (password: string, code: string) =>
+    platformApi.post('/platform/me/mfa/disable', { password, code }).then(() => undefined),
 }
 
 export const platformTenantsApi = {

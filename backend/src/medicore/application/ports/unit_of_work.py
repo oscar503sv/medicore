@@ -35,6 +35,7 @@ from medicore.domain.repositories import (
     PlanRepository,
     PlatformAdminRepository,
     PlatformAuditLogRepository,
+    PlatformRecoveryCodeRepository,
     PrescriptionRepository,
     ProcedureRepository,
     RolePermissionOverrideRepository,
@@ -187,6 +188,7 @@ class PlatformUnitOfWork(Protocol):
 
     tenants: TenantRepository
     platform_admins: PlatformAdminRepository
+    platform_recovery_codes: PlatformRecoveryCodeRepository
     platform_audit: PlatformAuditLogRepository
     sessions: AuthSessionRepository
     plans: PlanRepository

@@ -122,3 +122,36 @@ def clear_session_cookies(response: Response, spec: CookieSpec) -> None:
     response.delete_cookie(spec.csrf, path="/", secure=spec.secure, samesite=spec.samesite)
     _delete_legacy(response, spec.secure)
 
+
+
+def mfa_challenge_cookie_name(secure: bool | None = None) -> str:
+    secure = get_settings().secure_cookies if secure is None else secure
+    return f"{'__Secure-' if secure else ''}mc_console_mfa"
+
+
+def _mfa_challenge_path() -> str:
+    # Only the sign-in endpoints ever need it, so no other request carries the challenge.
+    return f"{get_settings().platform_cookie_path}/login"
+
+
+def set_mfa_challenge_cookie(response: Response, token: str, max_age: int) -> None:
+    """Cookie that carries the pending second sign-in step (httpOnly, never a session)."""
+    response.set_cookie(
+        mfa_challenge_cookie_name(),
+        token,
+        max_age=max_age,
+        httponly=True,
+        samesite="strict",
+        secure=get_settings().secure_cookies,
+        path=_mfa_challenge_path(),
+    )
+
+
+def clear_mfa_challenge_cookie(response: Response) -> None:
+    response.delete_cookie(
+        mfa_challenge_cookie_name(),
+        path=_mfa_challenge_path(),
+        secure=get_settings().secure_cookies,
+        httponly=True,
+        samesite="strict",
+    )

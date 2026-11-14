@@ -68,13 +68,16 @@ def ser_user_permissions(dto) -> dict:
     }
 
 
-def ser_platform_admin(a) -> dict:
+def ser_platform_admin(profile) -> dict:
+    a = profile.admin
     return {
         "id": str(a.id),
         "name": a.name,
         "email": a.email,
         "avatar_initials": a.avatar_initials,
         "last_seen_at": a.last_seen_at,
+        "mfa_enabled": a.mfa_enabled,
+        "recovery_codes_remaining": profile.recovery_codes_remaining,
     }
 
 

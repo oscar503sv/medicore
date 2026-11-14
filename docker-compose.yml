@@ -6,7 +6,7 @@
 #
 # Only `frontend` gets a public domain (in Coolify: assign https://<your-domain> to it).
 # Required variables (set them in Coolify → Environment Variables, or in a local .env):
-#   POSTGRES_PASSWORD, JWT_SECRET, APP_ORIGIN (e.g. https://medicore.ozkkar.dev)
+#   POSTGRES_PASSWORD, JWT_SECRET, MFA_ENCRYPTION_KEY, APP_ORIGIN (e.g. https://medicore.ozkkar.dev)
 # And before running the demo seed: DEMO_PASSWORD (≥ 8 chars, not the public default) and
 # DEMO_ADMIN_PASSWORD (≥ 8 chars, different: the clinic admins' private password).
 
@@ -38,6 +38,8 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-medicore}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medicore}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (openssl rand -hex 32)}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
+      # Seals superadmins' TOTP secrets; losing it disables their MFA (reset_platform_mfa.py).
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY (32 random bytes, base64url)}
       CORS_ORIGINS: ${APP_ORIGIN:?set APP_ORIGIN, e.g. https://medicore.example.com}
       ENABLE_DOCS: ${ENABLE_DOCS:-false}
       # Docker-internal networks: nginx and the edge proxy (Traefik) live here.

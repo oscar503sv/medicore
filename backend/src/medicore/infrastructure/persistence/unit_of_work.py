@@ -52,6 +52,7 @@ from medicore.infrastructure.persistence.repositories.patient import SqlPatientR
 from medicore.infrastructure.persistence.repositories.platform import (
     SqlPlatformAdminRepository,
     SqlPlatformAuditLogRepository,
+    SqlPlatformRecoveryCodeRepository,
 )
 from medicore.infrastructure.persistence.repositories.platform_reads import SqlPlatformReadModel
 from medicore.infrastructure.persistence.repositories.procedure import SqlProcedureRepository
@@ -149,6 +150,7 @@ class PlatformUnitOfWork:
         self._session = session
         self.tenants = SqlTenantRepository(session)
         self.platform_admins = SqlPlatformAdminRepository(session)
+        self.platform_recovery_codes = SqlPlatformRecoveryCodeRepository(session)
         self.platform_audit = SqlPlatformAuditLogRepository(session)
         self.sessions = SqlAuthSessionRepository(session)
         self.plans = SqlPlanRepository(session)

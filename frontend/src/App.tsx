@@ -32,6 +32,7 @@ import { BusinessPage } from '@/pages/platform/BusinessPage'
 import { MonitoringPage } from '@/pages/platform/MonitoringPage'
 import { PlansPage } from '@/pages/platform/PlansPage'
 import { PlatformLoginPage } from '@/pages/platform/PlatformLoginPage'
+import { PlatformSecurityPage } from '@/pages/platform/PlatformSecurityPage'
 import { RecordsPage } from '@/pages/RecordsPage'
 import { SchedulePage } from '@/pages/SchedulePage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -74,6 +75,7 @@ export function App() {
           <Route path="/platform/monitoring" element={<MonitoringPage />} />
           <Route path="/platform/stats" element={<Navigate to="/platform/business" replace />} />
           <Route path="/platform/audit" element={<GlobalAuditPage />} />
+          <Route path="/platform/security" element={<PlatformSecurityPage />} />
         </Route>
 
         {/* Forced password change after a temporary-password invite (no shell chrome) */}

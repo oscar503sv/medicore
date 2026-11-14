@@ -26,7 +26,9 @@ from medicore.domain.shared.identifiers import PlatformAdminId, SessionId, Tenan
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
 from medicore.infrastructure.auth.jwt_token_issuer import JwtTokenIssuer
+from medicore.infrastructure.auth.secret_box import AesGcmSecretBox
 from medicore.infrastructure.auth.system_clock import SystemClock
+from medicore.infrastructure.auth.totp import Rfc6238Totp
 from medicore.infrastructure.config import get_settings
 from medicore.infrastructure.database.engine import get_session_factory
 from medicore.infrastructure.persistence.unit_of_work import (
@@ -40,6 +42,7 @@ from medicore.presentation.cookies import (
     CSRF_HEADER,
     csrf_token_for,
     is_mutating,
+    mfa_challenge_cookie_name,
     platform_cookies,
     tenant_cookies,
 )
@@ -73,6 +76,14 @@ def get_platform_session_policy() -> PlatformSessionPolicy:
         idle=timedelta(minutes=settings.platform_session_idle_minutes),
         lifetime=timedelta(minutes=settings.platform_session_max_minutes),
     )
+
+
+def get_totp() -> Rfc6238Totp:
+    return Rfc6238Totp()
+
+
+def get_secret_box() -> AesGcmSecretBox:
+    return AesGcmSecretBox(get_settings().mfa_key_bytes)
 
 
 # ── Authentication ─────────────────────────────────────────────────────────────
@@ -156,6 +167,23 @@ def revoke_session_token(token: str | None, issuer: JwtTokenIssuer, factory, now
                 uow.commit()
     except (jwt.InvalidTokenError, InvalidValueObject):
         return
+
+
+def read_mfa_challenge(
+    request: Request, issuer: JwtTokenIssuer = Depends(get_jwt_issuer)
+) -> SessionId | None:
+    """Pending second-step challenge from its cookie, or None when absent, invalid, expired
+    or not an ``mfa`` token (a session token never works here, nor the reverse)."""
+    token = request.cookies.get(mfa_challenge_cookie_name())
+    if not token:
+        return None
+    try:
+        claims = issuer.decode(token)
+        if claims.scope != "mfa" or not claims.session_id:
+            return None
+        return SessionId.parse(claims.session_id)
+    except (jwt.InvalidTokenError, InvalidValueObject):
+        return None
 
 
 def _decode_or_401(issuer: JwtTokenIssuer, token: str):
@@ -311,3 +339,6 @@ UoWFactory = Annotated[SqlAlchemyUnitOfWorkFactory, Depends(get_uow_factory)]
 Hasher = Annotated[BcryptPasswordHasher, Depends(get_hasher)]
 JwtIssuer = Annotated[JwtTokenIssuer, Depends(get_jwt_issuer)]
 Runtime = Annotated[ProcessRuntimeInfo, Depends(get_runtime)]
+TotpPort = Annotated[Rfc6238Totp, Depends(get_totp)]
+SecretBoxPort = Annotated[AesGcmSecretBox, Depends(get_secret_box)]
+MfaChallenge = Annotated[SessionId | None, Depends(read_mfa_challenge)]

@@ -93,6 +93,13 @@ export function errorStatus(error: unknown): number | undefined {
   return axios.isAxiosError(error) ? error.response?.status : undefined
 }
 
+/** Backend error code (e.g. `auth.mfa_challenge_expired`) of an Axios error, if it has one. */
+export function errorCode(error: unknown): string | undefined {
+  if (!axios.isAxiosError(error)) return undefined
+  const code = error.response?.data?.code
+  return typeof code === 'string' ? code : undefined
+}
+
 /** Extract a human-readable message from an Axios error. */
 // Params whose values are themselves codes get rendered through an existing label, so a
 // message reads "No tienes permiso para esta acción: Enmendar expedientes" rather than

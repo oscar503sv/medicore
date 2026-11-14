@@ -12,6 +12,7 @@ with **Clean Architecture**.
 - **SQLAlchemy 2.0** + **PostgreSQL** (psycopg3) — persistence
 - **Alembic** — schema migrations
 - **PyJWT** + **bcrypt** — authentication and password hashing
+- **cryptography** — AES-256-GCM for the superadmins' MFA secrets
 - **pydantic-settings** — environment-based configuration
 - **pytest** + **ruff** — testing and linting
 
@@ -36,7 +37,7 @@ only from `domain`; `infrastructure`/`presentation` from the inner layers.
 
 By the numbers: **22 entities** and **10 value objects** in the domain, **20 repositories
 (Protocols)**, **5 application ports** (Clock, CodeGenerator, PasswordHasher, TokenIssuer,
-UnitOfWork), **20 use-case groups** and **19 routers / 130 endpoints** under `/api/v1/`.
+UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/api/v1/`.
 
 ## Domain conventions
 
@@ -68,6 +69,7 @@ UnitOfWork), **20 use-case groups** and **19 routers / 130 endpoints** under `/a
   ends their own (Settings), an admin those of any user in their clinic, and the superadmin
   those of a whole clinic (third-party revocations audited as `session.revoked`).
 - **Console session limits**: the superadmin console session expires after 30 min without activity and at most 8 h after sign-in (`PLATFORM_SESSION_IDLE_MINUTES` / `PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request.
+- **Optional MFA (TOTP) for superadmins**: enabled from the console under *Account security* (`/platform/security`). With MFA on, the console login asks for the password and then a 6-digit code from an authenticator app, or a recovery code. The challenge is single-use, valid for 5 min and kept in an httpOnly cookie limited to `/api/v1/platform/login`. A code can't be reused, and after 5 failed attempts the lockout escalates. There are 10 single-use recovery codes, shown once and stored as hashes. The TOTP secret is encrypted with AES-256-GCM. Enabling MFA, regenerating the recovery codes or disabling it requires the current password, and every change is recorded in the platform audit log.
 - **Login lockout**: failed-attempt counter per `(organization, email)` with a temporary
   lock and exponential backoff (HTTP 429 + `Retry-After`); it also counts non-existent
   accounts so it doesn't reveal which ones exist.
@@ -164,6 +166,8 @@ Copy `.env.example` to `.env` and adjust the values:
 | `PLATFORM_SESSION_IDLE_MINUTES` | Idle timeout of the platform console session (min, between 5 and the maximum) | `30` |
 | `PLATFORM_SESSION_MAX_MINUTES` | Absolute lifetime of the platform console session (min) | `480` (8 h) |
 | `PLATFORM_COOKIE_PATH` | Path of the console session cookie (only sent to the platform API) | `/api/v1/platform` |
+| `MFA_ENCRYPTION_KEY` | Key that encrypts the superadmins' TOTP secrets (AES-256-GCM): 32 bytes in base64url. **Required in production** (the app won't start without it). In development, if empty, it's derived from `JWT_SECRET`. Losing it makes already-enabled MFA unverifiable. Generate it with `python -c "import base64,secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"` | empty |
+| `MFA_ISSUER` | Name the authenticator app shows next to the code | `Medicore` |
 | `CORS_ORIGINS` | Allowed origins (comma-separated); `*` only in development | `*` |
 | `ENABLE_DOCS` | Expose Swagger/OpenAPI at `/api/v1/docs` | `true` (dev) / `false` (prod, unless explicitly enabled) |
 | `TRUSTED_PROXIES` | IPs/CIDRs (comma-separated) of the reverse proxies whose `X-Forwarded-For` header is honored (e.g. `127.0.0.1` or `10.0.0.0/8`). Empty → the header is ignored and the socket IP is recorded. An invalid value prevents startup. | empty |
@@ -171,7 +175,7 @@ Copy `.env.example` to `.env` and adjust the values:
 | `DEMO_ADMIN_PASSWORD` | Password for the demo clinic admins (≥ 8 chars), kept private so the shared demo password doesn't open the administration. **Required in production** and different from `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
 > In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is
-> still the insecure default or too short, or if `CORS_ORIGINS` is `*` or `COOKIE_SECURE` is `false`. API docs are also
+> still the insecure default or too short, or if `CORS_ORIGINS` is `*`, `COOKIE_SECURE` is `false` or `MFA_ENCRYPTION_KEY` is empty. API docs are also
 > disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and
 > the defaults work as-is.
 
@@ -195,6 +199,9 @@ python -m venv .venv
 
 # 5) (optional) Create a platform superadmin
 .venv/bin/python scripts/create_platform_admin.py
+
+# Superadmin lost the authenticator app and the recovery codes: turns their MFA off and revokes their sessions
+.venv/bin/python scripts/reset_platform_mfa.py <email>
 
 # 6) Start the API
 .venv/bin/uvicorn medicore.presentation.main:app --reload
@@ -233,7 +240,7 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **1107 tests** (264 domain · 466 application · 279 presentation · 98 infrastructure),
+A suite of **1209 tests** (270 domain · 500 application · 299 presentation · 140 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
@@ -274,6 +281,7 @@ Production checklist (via environment variables, see the **Configuration** table
 
 - `ENVIRONMENT=production`
 - A strong `JWT_SECRET` (`openssl rand -hex 32`) — the app won't start if it's insecure.
+- `MFA_ENCRYPTION_KEY` set (32 bytes, base64url) — the app won't start without it in production.
 - `DATABASE_URL` pointing to the real database.
 - `CORS_ORIGINS` with the frontend's origins (not `*`).
 - `TRUSTED_PROXIES` with the reverse proxy's IP (e.g. `127.0.0.1` if nginx runs on the same
@@ -281,6 +289,8 @@ Production checklist (via environment variables, see the **Configuration** table
 - Optional: `ENABLE_DOCS=false` to hide Swagger/OpenAPI.
 
 > **Upgrade note:** after applying migration `d0e1f2a3b4c6` (console session limits), clinic users and superadmins must sign in again once.
+
+> **Before deploying this version:** set `MFA_ENCRYPTION_KEY` (32 bytes, base64url). Migration `e1f2a3b4c5d7` adds the MFA columns to `platform_admins` and the `platform_admin_recovery_codes` table.
 
 > For multiple workers just set `WEB_CONCURRENCY=N` (uvicorn reads it; `docker-compose.yml` uses 2). Each
 > worker holds its own pool of up to 15 connections: keep `N × 15` below Postgres' `max_connections`.

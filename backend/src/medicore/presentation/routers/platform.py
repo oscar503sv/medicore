@@ -26,6 +26,7 @@ from medicore.application.use_cases.platform import (
     ListGlobalAudit,
     ListTenants,
     ListTenantUsers,
+    PlatformMfaChallengeDTO,
     ResetTenantRolePermissions,
     ResetUserPassword,
     SetTenantStatus,
@@ -35,6 +36,13 @@ from medicore.application.use_cases.platform import (
     UpdateTenantRolePermissions,
     UpdateTenantUser,
 )
+from medicore.application.use_cases.platform_mfa import (
+    CompletePlatformMfaLogin,
+    ConfirmPlatformMfaEnrollment,
+    DisablePlatformMfa,
+    RegeneratePlatformRecoveryCodes,
+    StartPlatformMfaEnrollment,
+)
 from medicore.application.use_cases.sessions import ListTenantSessions, RevokeTenantSession
 from medicore.application.use_cases.subscriptions import SubscriptionCommand
 from medicore.domain.entities.tenant import Tenant
@@ -43,8 +51,10 @@ from medicore.domain.shared.identifiers import SessionId, TenantId, UserId
 from medicore.domain.value_objects.subscription import DEFAULT_GRACE_DAYS
 from medicore.infrastructure.config import get_settings
 from medicore.presentation.cookies import (
+    clear_mfa_challenge_cookie,
     clear_session_cookies,
     platform_cookies,
+    set_mfa_challenge_cookie,
     set_session_cookies,
     tenant_cookies,
 )
@@ -53,9 +63,12 @@ from medicore.presentation.dependencies import (
     Clock,
     Hasher,
     JwtIssuer,
+    MfaChallenge,
     PlatformActor,
     PlatformPolicy,
     Runtime,
+    SecretBoxPort,
+    TotpPort,
     UoWFactory,
     _client_ip,
     revoke_session_token,
@@ -74,9 +87,14 @@ from medicore.presentation.schemas.platform import (
     GlobalAuditListResponse,
     ImpersonateRequest,
     ImpersonationResponse,
+    MfaCodeRequest,
+    MfaPasswordCodeRequest,
+    MfaPasswordRequest,
+    MfaSetupResponse,
     PlatformAdminResponse,
     PlatformLoginRequest,
-    PlatformSessionResponse,
+    PlatformLoginResponse,
+    RecoveryCodesResponse,
     ResetPasswordRequest,
     SetTenantStatusRequest,
     TenantListResponse,
@@ -110,13 +128,8 @@ def _ser(tenant: Tenant, clock: ClockPort) -> dict:
     return ser_tenant(tenant, today=tenant_today(tenant, clock))
 
 
-@router.post("/login", response_model=PlatformSessionResponse)
-def login(body: PlatformLoginRequest, request: Request, response: Response, factory: UoWFactory,
-          hasher: Hasher, issuer: JwtIssuer, clock: Clock, policy: PlatformPolicy):
-    session = AuthenticatePlatformAdmin(factory, hasher, issuer, clock, policy).execute(
-        body.email, body.password,
-        ip_address=_client_ip(request), user_agent=request.headers.get("user-agent"),
-    )
+def _open_console_session(response: Response, session, policy) -> PlatformLoginResponse:
+    clear_mfa_challenge_cookie(response)
     set_session_cookies(
         response,
         platform_cookies(),
@@ -124,11 +137,34 @@ def login(body: PlatformLoginRequest, request: Request, response: Response, fact
         session_id=str(session.session_id),
         max_age=policy.lifetime_minutes * 60,
     )
-    return PlatformSessionResponse(
-        admin_id=str(session.admin_id),
-        name=session.name,
-        email=session.email,
+    return PlatformLoginResponse(
+        admin_id=str(session.admin_id), name=session.name, email=session.email
     )
+
+
+@router.post("/login", response_model=PlatformLoginResponse)
+def login(body: PlatformLoginRequest, request: Request, response: Response, factory: UoWFactory,
+          hasher: Hasher, issuer: JwtIssuer, clock: Clock, policy: PlatformPolicy):
+    result = AuthenticatePlatformAdmin(factory, hasher, issuer, clock, policy).execute(
+        body.email, body.password,
+        ip_address=_client_ip(request), user_agent=request.headers.get("user-agent"),
+    )
+    if isinstance(result, PlatformMfaChallengeDTO):
+        # Password accepted but no session yet: only the challenge cookie is set.
+        set_mfa_challenge_cookie(response, result.token, result.expires_in)
+        return PlatformLoginResponse(mfa_required=True)
+    return _open_console_session(response, result, policy)
+
+
+@router.post("/login/mfa", response_model=PlatformLoginResponse)
+def login_mfa(body: MfaCodeRequest, request: Request, response: Response, factory: UoWFactory,
+              issuer: JwtIssuer, clock: Clock, policy: PlatformPolicy, totp: TotpPort,
+              box: SecretBoxPort, challenge: MfaChallenge):
+    session = CompletePlatformMfaLogin(factory, issuer, totp, box, clock, policy).execute(
+        challenge, body.code,
+        ip_address=_client_ip(request), user_agent=request.headers.get("user-agent"),
+    )
+    return _open_console_session(response, session, policy)
 
 
 @router.post("/logout", status_code=204)
@@ -148,6 +184,41 @@ def logout(
 @router.get("/me", response_model=PlatformAdminResponse)
 def me(actor: PlatformActor, factory: UoWFactory):
     return ser_platform_admin(GetPlatformAdmin(factory).execute(actor))
+
+
+@router.post("/me/mfa/setup", response_model=MfaSetupResponse)
+def mfa_setup(body: MfaPasswordRequest, actor: PlatformActor, factory: UoWFactory, hasher: Hasher,
+              clock: Clock, totp: TotpPort, box: SecretBoxPort):
+    dto = StartPlatformMfaEnrollment(
+        factory, hasher, totp, box, clock, get_settings().mfa_issuer
+    ).execute(actor, body.password)
+    return MfaSetupResponse(secret=dto.secret, otpauth_uri=dto.otpauth_uri)
+
+
+@router.post("/me/mfa/confirm", response_model=RecoveryCodesResponse)
+def mfa_confirm(body: MfaCodeRequest, actor: PlatformActor, factory: UoWFactory, hasher: Hasher,
+                clock: Clock, totp: TotpPort, box: SecretBoxPort):
+    codes = ConfirmPlatformMfaEnrollment(factory, hasher, totp, box, clock).execute(
+        actor, body.code
+    )
+    return RecoveryCodesResponse(recovery_codes=codes)
+
+
+@router.post("/me/mfa/recovery-codes", response_model=RecoveryCodesResponse)
+def mfa_regenerate_codes(body: MfaPasswordCodeRequest, actor: PlatformActor, factory: UoWFactory,
+                         hasher: Hasher, clock: Clock, totp: TotpPort, box: SecretBoxPort):
+    codes = RegeneratePlatformRecoveryCodes(factory, hasher, totp, box, clock).execute(
+        actor, body.password, body.code
+    )
+    return RecoveryCodesResponse(recovery_codes=codes)
+
+
+@router.post("/me/mfa/disable", status_code=204)
+def mfa_disable(body: MfaPasswordCodeRequest, actor: PlatformActor, factory: UoWFactory,
+                hasher: Hasher, clock: Clock, totp: TotpPort, box: SecretBoxPort):
+    DisablePlatformMfa(factory, hasher, totp, box, clock).execute(
+        actor, body.password, body.code
+    )
 
 
 @router.get("/tenants", response_model=TenantListResponse)

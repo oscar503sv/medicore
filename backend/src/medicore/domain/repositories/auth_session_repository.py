@@ -29,6 +29,11 @@ class AuthSessionRepository(Protocol):
 
     def revoke(self, session_id: SessionId, now: datetime) -> None: ...
 
+    def consume(self, session_id: SessionId, now: datetime) -> bool:
+        """Atomically revoke a live session; True only for the one caller that did it
+        (single-use rows such as MFA challenges)."""
+        ...
+
     def revoke_all_for_user(
         self, user_id: UUID, now: datetime, except_id: SessionId | None = None
     ) -> None:
