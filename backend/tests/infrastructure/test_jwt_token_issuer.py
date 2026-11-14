@@ -7,9 +7,10 @@ exercises the real PyJWT-backed issuer and inspects the ``exp``/``iat`` distance
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import jwt
+import pytest
 
 from medicore.application.ports.token_issuer import SessionClaims
 from medicore.infrastructure.auth.jwt_token_issuer import JwtTokenIssuer
@@ -19,7 +20,9 @@ _SECRET = "test-secret-at-least-32-bytes-long!!"
 
 
 def _ttl(token: str) -> timedelta:
-    payload = jwt.decode(token, _SECRET, algorithms=["HS256"], options={"verify_exp": False})
+    payload = jwt.decode(
+        token, _SECRET, algorithms=["HS256"], options={"verify_exp": False, "verify_aud": False}
+    )
     return datetime.fromtimestamp(payload["exp"]) - datetime.fromtimestamp(payload["iat"])
 
 
@@ -50,9 +53,10 @@ def test_session_id_claim_round_trips(monkeypatch):
             SessionClaims(user_id="u", tenant_id="t", role="admin", session_id="sid-123")
         )
         assert issuer.decode(token).session_id == "sid-123"
-        # a token issued without a session (pre-deploy) decodes to None → rejected upstream
+        # a token issued without a session cannot be decoded at all
         legacy = issuer.issue(SessionClaims(user_id="u", tenant_id="t", role="admin"))
-        assert issuer.decode(legacy).session_id is None
+        with pytest.raises(jwt.MissingRequiredClaimError):
+            issuer.decode(legacy)
     finally:
         get_settings.cache_clear()
 
@@ -68,3 +72,75 @@ def test_explicit_ttl_overrides_the_default(monkeypatch):
         assert _ttl(token) == timedelta(minutes=30)
     finally:
         get_settings.cache_clear()
+
+
+@pytest.fixture
+def issuer(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", _SECRET)
+    get_settings.cache_clear()
+    yield JwtTokenIssuer()
+    get_settings.cache_clear()
+
+
+def _token(issuer: JwtTokenIssuer, scope: str) -> str:
+    return issuer.issue(SessionClaims(user_id="u", scope=scope, session_id="s"))
+
+
+@pytest.mark.parametrize("scope", ["tenant", "platform", "mfa"])
+def test_each_scope_gets_its_own_audience(issuer, scope):
+    payload = jwt.decode(
+        _token(issuer, scope), _SECRET, algorithms=["HS256"], options={"verify_aud": False}
+    )
+
+    assert payload["aud"] == f"medicore:{scope}"
+
+
+def test_token_of_another_scope_is_rejected(issuer):
+    token = _token(issuer, "platform")
+
+    with pytest.raises(jwt.InvalidAudienceError):
+        issuer.decode(token, "tenant")
+    assert issuer.decode(token, "tenant", "platform").scope == "platform"
+    assert issuer.decode(token).scope == "platform"
+
+
+def test_token_without_audience_is_rejected(issuer):
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {"sub": "u", "scope": "tenant", "sid": "s", "iat": now, "exp": now + timedelta(hours=1)},
+        _SECRET,
+        algorithm="HS256",
+    )
+
+    with pytest.raises(jwt.MissingRequiredClaimError):
+        issuer.decode(token)
+
+
+def test_audience_must_match_scope(issuer):
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {
+            "sub": "u", "scope": "tenant", "aud": "medicore:platform", "sid": "s",
+            "iat": now, "exp": now + timedelta(hours=1),
+        },
+        _SECRET,
+        algorithm="HS256",
+    )
+
+    with pytest.raises(jwt.InvalidAudienceError):
+        issuer.decode(token)
+
+
+def test_unlisted_algorithm_is_rejected(issuer):
+    now = datetime.now(UTC)
+    token = jwt.encode(
+        {
+            "sub": "u", "scope": "tenant", "aud": "medicore:tenant", "sid": "s",
+            "iat": now, "exp": now + timedelta(hours=1),
+        },
+        _SECRET,
+        algorithm="HS512",
+    )
+
+    with pytest.raises(jwt.InvalidAlgorithmError):
+        issuer.decode(token)

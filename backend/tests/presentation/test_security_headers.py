@@ -17,3 +17,13 @@ def test_error_responses_also_carry_security_headers(client):
     resp = client.get("/api/v1/patients")  # no token -> 401
     assert resp.status_code == 401
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_api_responses_are_not_cacheable(client):
+    resp = client.get("/api/v1/patients")  # no token -> 401
+
+    assert resp.headers["Cache-Control"] == "no-store"
+
+
+def test_health_is_not_marked_no_store(client):
+    assert "no-store" not in client.get("/health").headers.get("Cache-Control", "")

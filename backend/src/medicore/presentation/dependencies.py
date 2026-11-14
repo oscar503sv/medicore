@@ -37,7 +37,7 @@ from medicore.infrastructure.persistence.unit_of_work import (
     SqlAlchemyUnitOfWorkFactory,
 )
 from medicore.infrastructure.runtime import ProcessRuntimeInfo
-from medicore.presentation.client_ip import resolve_client_ip
+from medicore.presentation.client_ip import client_ip, client_user_agent
 from medicore.presentation.cookies import (
     BACKGROUND_HEADER,
     CSRF_HEADER,
@@ -88,17 +88,6 @@ def get_secret_box() -> AesGcmSecretBox:
 
 
 # ── Authentication ─────────────────────────────────────────────────────────────
-
-def _client_ip(request: Request) -> str | None:
-    """Client IP for audit trails: ``X-Forwarded-For`` is honored only when the request
-    comes through a proxy listed in ``TRUSTED_PROXIES`` (else it is spoofable noise and
-    the socket peer is used)."""
-    return resolve_client_ip(
-        request.client.host if request.client else None,
-        request.headers.get("x-forwarded-for"),
-        get_settings().trusted_proxy_networks,
-    )
-
 
 def _credential(
     request: Request, authorization: str | None, cookie_name: str
@@ -154,7 +143,7 @@ def revoke_session_token(token: str | None, issuer: JwtTokenIssuer, factory, now
     if not token:
         return
     try:
-        claims = issuer.decode(token)
+        claims = issuer.decode(token, "tenant", "platform")
         if not claims.session_id:
             return
         session_id = SessionId.parse(claims.session_id)
@@ -179,7 +168,7 @@ def read_mfa_challenge(
     if not token:
         return None
     try:
-        claims = issuer.decode(token)
+        claims = issuer.decode(token, "mfa")
         if claims.scope != "mfa" or not claims.session_id:
             return None
         return SessionId.parse(claims.session_id)
@@ -187,9 +176,14 @@ def read_mfa_challenge(
         return None
 
 
-def _decode_or_401(issuer: JwtTokenIssuer, token: str):
+def _decode_or_401(issuer: JwtTokenIssuer, token: str, *scopes: str):
     try:
-        return issuer.decode(token)
+        return issuer.decode(token, *scopes)
+    except jwt.InvalidAudienceError as exc:
+        # A well-formed token of another type (e.g. a console token on the clinic API).
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Wrong session type", code="auth.wrong_session"
+        ) from exc
     except jwt.ExpiredSignatureError as exc:
         raise ApiError(
             status.HTTP_401_UNAUTHORIZED, "Token expired", code="auth.session_expired"
@@ -228,7 +222,7 @@ def _resolve_actor(
     present, 403 if a cookie-authenticated mutation fails the CSRF check.
     """
     token, from_cookie = _credential(request, authorization, tenant_cookies().session)
-    claims = _decode_or_401(issuer, token)
+    claims = _decode_or_401(issuer, token, "tenant")
 
     if claims.scope != "tenant" or not claims.tenant_id:
         raise ApiError(
@@ -238,13 +232,30 @@ def _resolve_actor(
     session_id = _session_id_or_401(claims)
     if from_cookie:
         _verify_csrf(request, session_id, "tenant")
-    tenant_id = TenantId.parse(claims.tenant_id)
+    try:
+        tenant_id = TenantId.parse(claims.tenant_id)
+        user_id = UserId.parse(claims.user_id)
+    except InvalidValueObject as exc:
+        raise ApiError(
+            status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
+        ) from exc
     with factory.for_tenant(tenant_id) as uow:
         session = uow.sessions.get(session_id)
         tenant = uow.tenants.get_by_id(tenant_id)
-        user = uow.users.get_by_id(UserId.parse(claims.user_id))
+        user = uow.users.get_by_id(user_id)
         effective = granted_permissions(uow, tenant, user) if tenant and user else frozenset()
-    if session is None or tenant is None or user is None or not session.is_active(clock.now()):
+    # The token's claims must agree with the server-side row, which is the source of truth.
+    if (
+        session is None
+        or tenant is None
+        or user is None
+        or not session.is_active(clock.now())
+        or session.scope != "tenant"
+        or session.tenant_id != tenant_id
+        or session.user_id != user.id.value
+        or (str(session.impersonator_id) if session.impersonator_id else None)
+        != claims.impersonator
+    ):
         raise ApiError(
             status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
         )
@@ -263,11 +274,12 @@ def _resolve_actor(
         # The stored role, not the token's: a role change applies on the next request,
         # consistent with the permissions resolved above.
         role=user.role,
+        # The server-side row is the truth, not the token.
         impersonated_by=(
-            PlatformAdminId.parse(claims.impersonator) if claims.impersonator else None
+            PlatformAdminId(session.impersonator_id) if session.impersonator_id else None
         ),
-        ip_address=_client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+        ip_address=client_ip(request),
+        user_agent=client_user_agent(request),
         permissions=frozenset(str(p) for p in effective),
         session_id=session_id,
     )
@@ -316,7 +328,7 @@ def get_platform_actor(
     if a cookie-authenticated mutation fails the CSRF check.
     """
     token, from_cookie = _credential(request, authorization, platform_cookies().session)
-    claims = _decode_or_401(issuer, token)
+    claims = _decode_or_401(issuer, token, "platform")
 
     if claims.scope != "platform":
         raise ApiError(
@@ -330,8 +342,8 @@ def get_platform_actor(
         claims.user_id,
         session_id,
         background=request.headers.get(BACKGROUND_HEADER) == "1",
-        ip_address=_client_ip(request),
-        user_agent=request.headers.get("user-agent"),
+        ip_address=client_ip(request),
+        user_agent=client_user_agent(request),
     )
 
 
@@ -346,20 +358,20 @@ def get_uow(
     Handlers still use ``with uow:`` to delimit transactions (commit/rollback); the
     ``finally`` here guarantees the underlying connection is returned to the pool even
     for read-only handlers that don't open a ``with`` block or that read again after a
-    write use case has exited its own ``with``. ``Session.close()`` is idempotent, so the
+    write use case has exited its own ``with``. ``close()`` is idempotent, so the
     double close (here + in a ``with`` block) is harmless.
     """
     uow = factory.for_tenant(actor.tenant_id)
     try:
         yield uow
     finally:
-        uow._session.close()
+        uow.close()
 
 
 def get_codes(uow: SqlAlchemyUnitOfWork = Depends(get_uow)) -> DbSequentialCodeGenerator:
     """Code generator sharing the request's session so its counter increments
     are part of the same transaction."""
-    return DbSequentialCodeGenerator(uow._session, uow.tenant_id.value)
+    return uow.code_generator()
 
 
 # Type aliases for annotated injection

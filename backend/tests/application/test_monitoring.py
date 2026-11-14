@@ -223,7 +223,7 @@ def _jobs(seed):
 
 def test_scheduled_jobs_states():
     seed = seed_clinic()
-    assert _jobs(seed) == {"demo_reset": "never"}
+    assert _jobs(seed) == {"demo_reset": "never", "session_purge": "never"}
 
     _run(seed, "demo_reset", NOW - timedelta(hours=3))
     assert _jobs(seed)["demo_reset"] == "ok"
@@ -234,7 +234,9 @@ def test_scheduled_jobs_states():
     seed.factory.store.job_runs.clear()
     _run(seed, "demo_reset", NOW - timedelta(hours=30))
     _run(seed, "demo_seed", NOW - timedelta(days=10))  # ad-hoc task: no schedule, still listed
-    assert _jobs(seed) == {"demo_reset": "overdue", "demo_seed": "ok"}
+    assert _jobs(seed) == {
+        "demo_reset": "overdue", "session_purge": "never", "demo_seed": "ok"
+    }
 
 
 def test_record_job_run_purges_old_runs():

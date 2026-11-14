@@ -63,6 +63,30 @@ def test_production_rejects_weak_jwt_secret():
         )
 
 
+def test_production_rejects_a_jwt_secret_under_32_bytes():
+    with pytest.raises(ValueError, match="32 bytes"):
+        make_settings(
+            environment="production", jwt_secret="x" * 31, cors_origins="https://a.example"
+        )
+
+
+def test_production_accepts_a_jwt_secret_of_32_bytes():
+    settings = make_settings(
+        environment="production",
+        jwt_secret="x" * 32,
+        mfa_encryption_key=MFA_KEY,
+        cors_origins="https://a.example",
+    )
+
+    assert settings.is_production
+
+
+@pytest.mark.parametrize("algorithm", ["none", "RS256"])
+def test_jwt_algorithm_must_be_an_hmac_one(algorithm):
+    with pytest.raises(ValueError):
+        make_settings(jwt_algorithm=algorithm)
+
+
 def test_development_keeps_permissive_defaults():
     settings = make_settings()
     assert settings.cors_origins == "*"

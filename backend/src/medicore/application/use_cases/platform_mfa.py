@@ -251,25 +251,36 @@ class _MfaManagement:
                 "current password is incorrect", code="password.current_incorrect"
             )
 
-    def _authorize(
-        self, actor: PlatformActorContext, password: str, code: str, now: datetime
-    ) -> int:
-        """Password + a fresh TOTP code of an admin who has MFA on; returns the code's time step.
-
-        The code shares the sign-in lockout so a stolen session cannot guess codes without
-        limit. The attempt is reserved before the check, and outside any unit of work, so
-        it is counted whatever the check does.
-        """
-        with self._factory.platform_uow() as uow:
-            admin = self._load(uow, actor)
-        self._check_password(admin, password)
-        if admin.mfa_secret is None:
-            raise ValidationError("MFA is not enabled", code="mfa.not_enabled")
+    def _guarded_password(self, admin: PlatformAdmin, password: str, now: datetime) -> None:
+        """Re-check the password under the MFA lockout, so a stolen session cannot guess it
+        without limit. Counted before the check, outside any unit of work."""
         identifier = platform_mfa_identifier(str(admin.id))
         with self._factory.login_throttle() as throttle:
             reservation = throttle.reserve(identifier, MFA_POLICY, now)
             if not reservation.allowed:
                 raise TooManyLoginAttempts(reservation.locked_until, now)
+            self._check_password(admin, password)
+            throttle.reset(identifier, now)
+
+    def _authorize(
+        self, actor: PlatformActorContext, password: str, code: str, now: datetime
+    ) -> int:
+        """Password + a fresh TOTP code of an admin who has MFA on; returns the code's time step.
+
+        Both share the sign-in lockout, and one attempt counts once whichever of the two
+        fails. The attempt is reserved before the checks, and outside any unit of work, so
+        it is counted whatever they do.
+        """
+        with self._factory.platform_uow() as uow:
+            admin = self._load(uow, actor)
+        identifier = platform_mfa_identifier(str(admin.id))
+        with self._factory.login_throttle() as throttle:
+            reservation = throttle.reserve(identifier, MFA_POLICY, now)
+            if not reservation.allowed:
+                raise TooManyLoginAttempts(reservation.locked_until, now)
+            self._check_password(admin, password)
+            if admin.mfa_secret is None:
+                raise ValidationError("MFA is not enabled", code="mfa.not_enabled")
             step = self._totp.matching_step(self._box.open(admin.mfa_secret), code, now)
             replayed = (
                 step is not None and admin.mfa_last_step is not None and step <= admin.mfa_last_step
@@ -294,9 +305,12 @@ class StartPlatformMfaEnrollment(_MfaManagement):
         self._issuer = issuer
 
     def execute(self, actor: PlatformActorContext, password: str) -> MfaEnrollmentDTO:
+        now = self._clock.now()
         with self._factory.platform_uow() as uow:
             admin = self._load(uow, actor)
-            self._check_password(admin, password)
+        self._guarded_password(admin, password, now)
+        with self._factory.platform_uow() as uow:
+            admin = self._load(uow, actor)
             if admin.mfa_enabled:
                 raise ValidationError("MFA is already enabled", code="mfa.already_enabled")
             secret = self._totp.new_secret()

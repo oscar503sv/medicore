@@ -70,6 +70,20 @@ def test_permission_adjustments_round_trip(session):
     assert repo.get_by_id(user.id).permission_adjustments == adj
 
 
+def test_email_is_stored_normalized_and_found_case_insensitively(session):
+    tenant = build_tenant(f"umail-{uuid.uuid4().hex[:10]}")
+    SqlTenantRepository(session).save(tenant)
+    session.flush()
+    repo = SqlUserRepository(session, tenant.id)
+    user = build_user(tenant.id, Role.NURSE, email="  Nurse@Umail.TEST ")
+    repo.save(user)
+    session.flush()
+    session.expire_all()
+
+    assert session.get(UserModel, user.id.value).email == "nurse@umail.test"
+    assert repo.get_by_email("NURSE@umail.test ").id == user.id
+
+
 def test_lock_active_admin_ids_returns_only_active_admins_in_id_order(session):
     tenant = build_tenant(f"uadm-{uuid.uuid4().hex[:10]}")
     SqlTenantRepository(session).save(tenant)

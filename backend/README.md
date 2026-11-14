@@ -68,16 +68,20 @@ UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/a
   password ends all its sessions immediately. **Active sessions** view: each user sees and
   ends their own (Settings), an admin those of any user in their clinic, and the superadmin
   those of a whole clinic (third-party revocations audited as `session.revoked`).
+- **Signed tokens**: each token type carries its own audience (`medicore:tenant`, `medicore:platform`, `medicore:mfa`) and the mandatory claims `exp`, `iat`, `sub`, `aud`, `scope` and `sid`. A token of another type answers 401 `auth.wrong_session`, and its claims are cross-checked against the session row (user, clinic, scope, impersonator). `JWT_ALGORITHM` accepts only `HS256`, `HS384` or `HS512`. Tokens issued before this version have no audience, so every user, including superadmins, signs in again once after deploying.
 - **Console session limits**: the superadmin console session expires after 30 min without activity and at most 8 h after sign-in (`PLATFORM_SESSION_IDLE_MINUTES` / `PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request.
 - **Optional MFA (TOTP) for superadmins**: enabled from the console under *Account security* (`/platform/security`). With MFA on, the console login asks for the password and then a 6-digit code from an authenticator app, or a recovery code. The challenge is single-use, valid for 5 min and kept in an httpOnly cookie limited to `/api/v1/platform/login`. A code can't be reused, and after 5 failed attempts the lockout escalates. There are 10 single-use recovery codes, shown once and stored as hashes. The TOTP secret is encrypted with AES-256-GCM. Enabling MFA, regenerating the recovery codes or disabling it requires the current password, and every change is recorded in the platform audit log.
-- **Login lockout** with three counters: per IP (30 attempts in 15 min → 15 min block, IPv6 by /64); per account from one IP (5 failures → 1 min, doubling up to 15); per account in total (20 attempts in 15 min, exempt for an IP that signed in to that account in the last 30 days). Each attempt is reserved atomically before the password check. Blocked attempts get HTTP 429 + `Retry-After`; an IP block answers the same whether or not the account exists, so the lockout doesn't reveal which accounts exist. A successful sign-in clears only that account's failures from that IP. A support reactivation or password reset also lifts that account's lockout, but not the IP counter. The console's second factor keeps its own limit of 5 per superadmin.
+- **Login lockout** with three counters: per IP (30 attempts in 15 min → 15 min block, IPv6 by /64); per account from one IP (5 failures → 1 min, doubling up to 15); per account in total (20 attempts in 15 min, exempt for an IP that signed in to that account in the last 30 days). Each attempt is reserved atomically before the password check. Blocked attempts get HTTP 429 + `Retry-After`; an IP block answers the same whether or not the account exists, so the lockout doesn't reveal which accounts exist. A successful sign-in clears only that account's failures from that IP. A support reactivation or password reset also lifts that account's lockout, but not the IP counter. The console's second factor keeps its own limit of 5 per superadmin. Changing the password has its own lockout: 5 failed attempts with the current password block that account (429 with `Retry-After`, with backoff); a weak new password doesn't count. The superadmin MFA actions (setup, recovery codes, disabling) are limited too.
+- **Input limits**: slug ≤ 63, email ≤ 254 (lowercase, no spaces, format-checked on invite and create: `user.invalid_email`), password ≤ 256, names ≤ 255; user agent truncated to 400 and IP to 45 characters in sessions and audit. 422 responses no longer echo the submitted value (`input`).
+- **Responses**: every `/api/` response carries `Cache-Control: no-store`, except those that set their own (such as CSV downloads).
+- **Plan quotas**: the seat check locks the clinic's row (`FOR NO KEY UPDATE`), so two simultaneous invitations can't exceed the plan.
 - **Last administrator**: no operation, from the clinic or the platform console, can leave a clinic without an active admin (409 `users.last_admin`), even with concurrent changes.
 - **Granular permissions** (`application/common/permissions.py`): a catalog of **30
   permissions** (`Permission`, `StrEnum`), a default set per role (`ROLE_PERMISSIONS`) and
   **per-tenant overrides** via `RolePermissionOverride`. `effective_permissions(role, stored)`
   resolves defaults vs. override and intersects with the current catalog; the presentation
   layer puts them in `ActorContext.permissions`, so every `ensure_permission(...)` honors the
-  clinic's customization. The `role_permissions` router (`GET`/`PUT`/`DELETE`) manages them.
+  clinic's customization. The `role_permissions` router (`GET`/`PUT`/`DELETE`) manages them. Changing a user's role clears their per-user exceptions; admins always keep the full set of their role.
 - **Patients**: the list's filters (status, primary doctor) also apply to searches, and the
   search matches every word against the full name, code or phone, ignoring accents. Each item
   carries its last completed and next visit; `GET /patients/stats` gives the page's headline
@@ -157,8 +161,8 @@ Copy `.env.example` to `.env` and adjust the values:
 |----------|-------------|---------|
 | `ENVIRONMENT` | `development` or `production`. Production enables strict validation. | `development` |
 | `DATABASE_URL` | PostgreSQL connection string (psycopg3) | `postgresql+psycopg://localhost/medicore` |
-| `JWT_SECRET` | Secret used to sign tokens. **Required and strong in production** (`openssl rand -hex 32`). | `change-me` (dev only) |
-| `JWT_ALGORITHM` | JWT algorithm | `HS256` |
+| `JWT_SECRET` | Secret used to sign tokens. **Required in production, at least 32 bytes** (`openssl rand -hex 32`). | `change-me` (dev only) |
+| `JWT_ALGORITHM` | JWT algorithm: `HS256`, `HS384` or `HS512` only | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Token lifetime | `1440` (24 h) |
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Lifetime of support/impersonation sessions | `60` (1 h) |
 | `COOKIE_SECURE` | `Secure` flag and `__Host-` / `__Secure-` prefixes on session cookies. Unset = on everywhere except `development`. Cannot be `false` in production. | derived from `ENVIRONMENT` |
@@ -174,7 +178,7 @@ Copy `.env.example` to `.env` and adjust the values:
 | `DEMO_ADMIN_PASSWORD` | Password for the demo clinic admins (≥ 8 chars), kept private so the shared demo password doesn't open the administration. **Required in production** and different from `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
 > In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is
-> still the insecure default or too short, or if `CORS_ORIGINS` is `*`, `COOKIE_SECURE` is `false` or `MFA_ENCRYPTION_KEY` is empty. API docs are also
+> still the insecure default or shorter than 32 bytes, or if `CORS_ORIGINS` is `*`, `COOKIE_SECURE` is `false` or `MFA_ENCRYPTION_KEY` is empty. API docs are also
 > disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and
 > the defaults work as-is.
 
@@ -201,6 +205,9 @@ python -m venv .venv
 
 # Superadmin lost the authenticator app and the recovery codes: turns their MFA off and revokes their sessions
 .venv/bin/python scripts/reset_platform_mfa.py <email>
+
+# Scheduled task, daily in every environment: deletes expired or revoked sessions (recorded as the session_purge job)
+.venv/bin/python scripts/purge_expired_sessions.py
 
 # 6) Start the API
 .venv/bin/uvicorn medicore.presentation.main:app --reload
@@ -236,10 +243,11 @@ Every error response has the same shape:
   Spanish **and** an English translation: adding a new code means adding both texts.
 - 401 is only for "who are you?" failures (credentials, session): the client drops the session
   on a 401. A wrong current password when changing it is a 400 (`password.current_incorrect`).
+- Validation errors (422) no longer include the submitted value (`input`) in their details.
 
 ## Tests and linting
 
-A suite of **1322 tests** (278 domain · 580 application · 312 presentation · 152 infrastructure),
+A suite of **1396 tests** (297 domain · 604 application · 328 presentation · 167 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
@@ -279,18 +287,21 @@ docker run -d -p 8000:8000 --env-file .env medicore-backend
 Production checklist (via environment variables, see the **Configuration** table):
 
 - `ENVIRONMENT=production`
-- A strong `JWT_SECRET` (`openssl rand -hex 32`) — the app won't start if it's insecure.
+- A strong `JWT_SECRET` of at least 32 bytes (`openssl rand -hex 32`) — the app won't start if it's insecure or shorter.
 - `MFA_ENCRYPTION_KEY` set (32 bytes, base64url) — the app won't start without it in production.
 - `DATABASE_URL` pointing to the real database.
 - `CORS_ORIGINS` with the frontend's origins (not `*`).
 - `TRUSTED_PROXIES` with the reverse proxy's IP (e.g. `127.0.0.1` if nginx runs on the same
   host) so the audit trail records the real client IP.
 - Optional: `ENABLE_DOCS=false` to hide Swagger/OpenAPI.
+- A daily scheduled task running `python scripts/purge_expired_sessions.py` (see **Getting started**).
 
 > **Upgrade note:** after applying migration `d0e1f2a3b4c6` (console session limits), clinic users and superadmins must sign in again once.
 
 > **Before deploying this version:** set `MFA_ENCRYPTION_KEY` (32 bytes, base64url). Migration `e1f2a3b4c5d7` adds the MFA columns to `platform_admins` and the `platform_admin_recovery_codes` table.
 
+> **Before deploying this version:** every user, including superadmins, signs in again once (tokens issued earlier have no audience).
+>
 > **Migration `f2a3b4c5d6e8`:** adds `last_success_at` to `login_attempts` (login lockout). It needs no new environment variables.
 
 > For multiple workers just set `WEB_CONCURRENCY=N` (uvicorn reads it; `docker-compose.yml` uses 2). Each

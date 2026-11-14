@@ -2,21 +2,27 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 from typing import NoReturn
 
 from medicore.application.common.access import ensure_may_sign_in
 from medicore.application.common.audit import audit_entry, subject
+from medicore.application.common.client_info import clip_ip, clip_user_agent
 from medicore.application.common.context import ActorContext
 from medicore.application.common.entitlements import granted_permissions
 from medicore.application.common.errors import (
     AuthenticationFailed,
     EntityNotFound,
+    TooManyLoginAttempts,
     ValidationError,
 )
 from medicore.application.common.login_gate import LoginGate
-from medicore.application.common.login_throttle import tenant_login_identifier
+from medicore.application.common.login_throttle import (
+    PASSWORD_CHECK_POLICY,
+    password_change_identifier,
+    tenant_login_identifier,
+)
 from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.password_hasher import PasswordHasher
@@ -78,6 +84,9 @@ class AuthenticateUser:
         self._clock = clock
 
     def execute(self, cmd: AuthenticateUserCommand) -> SessionDTO:
+        cmd = replace(
+            cmd, ip_address=clip_ip(cmd.ip_address), user_agent=clip_user_agent(cmd.user_agent)
+        )
         now = self._clock.now()
         with self._factory.login_throttle() as throttle:
             gate = LoginGate(throttle, now)
@@ -254,30 +263,41 @@ class ChangePassword:
         self._clock = clock
 
     def execute(self, actor: ActorContext, current_password: str, new_password: str) -> None:
-        with self._factory.for_tenant(actor.tenant_id) as uow:
-            user = uow.users.get_by_id(actor.user_id)
-            if user is None:
-                raise EntityNotFound("User", actor.user_id)
-            if not self._hasher.verify(current_password, user.password_hash):
-                raise ValidationError(
-                    "current password is incorrect", code="password.current_incorrect"
+        now = self._clock.now()
+        identifier = password_change_identifier(str(actor.user_id))
+        # The attempt is counted before the check, in its own transaction, so a stolen
+        # session cannot guess the current password without limit.
+        with self._factory.login_throttle() as throttle:
+            reservation = throttle.reserve(identifier, PASSWORD_CHECK_POLICY, now)
+            if not reservation.allowed:
+                raise TooManyLoginAttempts(reservation.locked_until, now)
+            with self._factory.for_tenant(actor.tenant_id) as uow:
+                user = uow.users.get_by_id(actor.user_id)
+                if user is None:
+                    raise EntityNotFound("User", actor.user_id)
+                if not self._hasher.verify(current_password, user.password_hash):
+                    raise ValidationError(
+                        "current password is incorrect", code="password.current_incorrect"
+                    )
+                # Reset right after the current password checks out: a weak new password
+                # is a policy error, not a guess, and must not count towards the lock.
+                throttle.reset(identifier, now)
+                tenant = uow.tenants.get_by_id(actor.tenant_id)
+                ensure_password_policy(
+                    new_password,
+                    personal=(user.name, user.email, str(tenant.slug) if tenant else None),
                 )
-            tenant = uow.tenants.get_by_id(actor.tenant_id)
-            ensure_password_policy(
-                new_password,
-                personal=(user.name, user.email, str(tenant.slug) if tenant else None),
-            )
-            if self._hasher.verify(new_password, user.password_hash):
-                raise ValidationError(
-                    "the new password must differ from the current one",
-                    code="password.same_as_current",
+                if self._hasher.verify(new_password, user.password_hash):
+                    raise ValidationError(
+                        "the new password must differ from the current one",
+                        code="password.same_as_current",
+                    )
+                user.change_password(self._hasher.hash(new_password))
+                uow.users.save(user)
+                uow.sessions.revoke_all_for_user(
+                    actor.user_id.value, now, except_id=actor.session_id
                 )
-            user.change_password(self._hasher.hash(new_password))
-            uow.users.save(user)
-            uow.sessions.revoke_all_for_user(
-                actor.user_id.value, self._clock.now(), except_id=actor.session_id
-            )
-            uow.commit()
+                uow.commit()
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,16 +311,19 @@ class MyProfileDTO:
     bio: str | None
     jvpm: str | None = None
     permissions: tuple[str, ...] = ()
+    must_change_password: bool = False
+    tenant_name: str = ""
+    timezone: str = ""
 
 
-def _build_profile(uow: UnitOfWork, user_id: UserId) -> MyProfileDTO:
+def _build_profile(uow: UnitOfWork, actor: ActorContext) -> MyProfileDTO:
     """Assemble the actor's profile from the User and (for doctors) their DoctorProfile."""
-    user = uow.users.get_by_id(user_id)
+    user = uow.users.get_by_id(actor.user_id)
     if user is None:
-        raise EntityNotFound("User", user_id)
+        raise EntityNotFound("User", actor.user_id)
     bio = None
     if user.role == Role.DOCTOR:
-        profile = uow.doctor_profiles.get_by_user_id(user_id)
+        profile = uow.doctor_profiles.get_by_user_id(actor.user_id)
         bio = profile.bio if profile else None
     tenant = uow.tenants.get_by_id(user.tenant_id)
     if tenant is None:
@@ -316,6 +339,10 @@ def _build_profile(uow: UnitOfWork, user_id: UserId) -> MyProfileDTO:
         bio=bio,
         jvpm=user.jvpm,
         permissions=tuple(sorted(permissions)),
+        # In a support session the superadmin does not hold the user's temporary password.
+        must_change_password=user.must_change_password and actor.impersonated_by is None,
+        tenant_name=tenant.legal_name,
+        timezone=tenant.timezone,
     )
 
 
@@ -328,7 +355,7 @@ class GetMyProfile:
     def execute(self, actor: ActorContext) -> MyProfileDTO:
         uow = self._factory.for_tenant(actor.tenant_id)
         with uow:
-            return _build_profile(uow, actor.user_id)
+            return _build_profile(uow, actor)
 
 
 class UpdateMyProfile:
@@ -380,4 +407,4 @@ class UpdateMyProfile:
                 )
             )
             uow.commit()
-            return _build_profile(uow, actor.user_id)
+            return _build_profile(uow, actor)

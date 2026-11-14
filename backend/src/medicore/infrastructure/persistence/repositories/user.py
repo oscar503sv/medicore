@@ -9,6 +9,7 @@ from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.enums import Role, UserStatus
 from medicore.domain.repositories._support import Page, Paging, UserFilter
 from medicore.domain.shared.identifiers import TenantId, UserId
+from medicore.domain.value_objects.email import normalize_email
 from medicore.infrastructure.persistence.mappers.entities import (
     adjustments_to_json,
     to_doctor_profile,
@@ -49,7 +50,7 @@ class SqlUserRepository:
         return to_user(row) if row else None
 
     def get_by_email(self, email: str) -> User | None:
-        row = self._q().filter(UserModel.email == email.strip().lower()).first()
+        row = self._q().filter(UserModel.email == normalize_email(email)).first()
         return to_user(row) if row else None
 
     def lock_active_admin_ids(self) -> list[UserId]:
@@ -86,7 +87,7 @@ class SqlUserRepository:
             self._s.add(row)
         row.tenant_id = user.tenant_id.value
         row.name = user.name
-        row.email = user.email.lower()
+        row.email = normalize_email(user.email)
         row.password_hash = user.password_hash
         row.role = str(user.role)
         row.status = str(user.status)

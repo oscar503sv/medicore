@@ -39,6 +39,7 @@ from medicore.infrastructure.persistence.models.platform import (
 )
 from medicore.infrastructure.persistence.models.request_stats import RequestStatsModel
 from medicore.infrastructure.persistence.models.tenant import TenantModel
+from medicore.infrastructure.persistence.models.user import UserModel
 
 MAX_LOCKED = 20
 CONSOLE_LOGIN_ACTIONS = (
@@ -133,7 +134,21 @@ class SqlMonitoringReadModel:
                 admin = None
             email = admin.email if admin else row.identifier.removeprefix(prefix)
             return LockedLogin("platform", None, email, row.failed_count, row.locked_until)
+        prefix = "pwchange:"
+        if row.identifier.startswith(prefix):
+            return self._locked_password_change(row, row.identifier.removeprefix(prefix))
         return _locked_login(row.identifier, row.failed_count, row.locked_until)
+
+    def _locked_password_change(self, row: LoginAttemptModel, raw_id: str) -> LockedLogin:
+        # Keyed by clinic account id: show which clinic and email it is.
+        try:
+            user = self._s.get(UserModel, UUID(raw_id))
+        except ValueError:
+            user = None
+        tenant = self._s.get(TenantModel, user.tenant_id) if user else None
+        if user is None or tenant is None:
+            return LockedLogin("tenant", None, raw_id, row.failed_count, row.locked_until)
+        return LockedLogin("tenant", tenant.slug, user.email, row.failed_count, row.locked_until)
 
     def lockouts_since(self, since: datetime) -> int:
         clinic = (

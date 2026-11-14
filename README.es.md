@@ -114,7 +114,7 @@ El control de acceso es **granular y personalizable por clínica** (`application
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — con un conjunto de permisos por defecto en `ROLE_PERMISSIONS`.
 - **Overrides por tenant**: cada clínica puede personalizar el set de un rol mediante una fila `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults vs. override (e intersecta con el catálogo vigente para tolerar permisos retirados).
 - En cada request, la capa de presentación coloca los permisos efectivos en `ActorContext.permissions`, de modo que toda comprobación `ensure_permission(...)` honra la personalización de la clínica.
-- **Excepciones por usuario** (planes con la función `user_permissions`, desde Clínica): una persona puede recibir algunos permisos extra o perder algunos de su rol. Se guardan como diferencia con el rol (`PermissionAdjustments` en `User`), así que los cambios posteriores del rol le siguen llegando. Se editan desde **Usuarios → Permisos** (`GET`/`PUT /users/{id}/permissions`). En un plan sin la función, las excepciones guardadas se conservan pero no se aplican.
+- **Excepciones por usuario** (planes con la función `user_permissions`, desde Clínica): una persona puede recibir algunos permisos extra o perder algunos de su rol. Se guardan como diferencia con el rol (`PermissionAdjustments` en `User`), así que los cambios posteriores del rol le siguen llegando. Se editan desde **Usuarios → Permisos** (`GET`/`PUT /users/{id}/permissions`). En un plan sin la función, las excepciones guardadas se conservan pero no se aplican. Cambiar el rol de un usuario borra sus excepciones, y los admins conservan siempre el conjunto completo de permisos de su rol.
 - **Los módulos contratados condicionan sus permisos**: una clínica sin vacunación, aplicaciones o procedimientos no recibe ninguno de sus permisos, digan lo que digan sus roles.
 - `granted(role, stored, modules, adjustments)` combina todo lo anterior; la capa de presentación coloca el resultado en `ActorContext.permissions`.
 - El frontend consume el mismo modelo: la UI se condiciona por los permisos efectivos del actor y la pantalla **Roles & Permisos** edita los overrides (router `role_permissions`: `GET`/`PUT`/`DELETE`).
@@ -148,7 +148,7 @@ Cada clínica tiene una **suscripción** (value object `Subscription` en `Tenant
 
 - **Catálogo de planes** (`plans`, editable en **Planes y precios**): Profesional independiente, Clínica, Clínica Plus y Empresarial (cotización). Cada uno fija límites de médicos, personal de apoyo (enfermería, recepción y administradores adicionales al primero), sedes y almacenamiento, además de funciones (`user_permissions`; `custom_note_templates` desde Clínica Plus) y su **nivel de analítica** (`basic` < `clinic` < `operations`: panel básico, panel de la clínica, métricas operativas).
 - **Módulos opcionales** (`addon_pricing`): vacunación, aplicaciones y procedimientos, cada uno con precio mensual y un precio de paquete por los tres; y **analítica avanzada** ($20), que sube la clínica a métricas operativas, se cobra aparte del paquete y no se vende a planes que ya la incluyen (`plan.analytics_included`).
-- **Cupos** aplicados en los casos de uso (invitar, cambiar rol, reactivar, nueva sede): crecer por encima del límite se rechaza con `plan.quota_*`; una clínica que ya lo supera (tras bajar de plan) conserva lo que tiene.
+- **Cupos** aplicados en los casos de uso (invitar, cambiar rol, reactivar, nueva sede): crecer por encima del límite se rechaza con `plan.quota_*`; una clínica que ya lo supera (tras bajar de plan) conserva lo que tiene. La comprobación de asientos bloquea la fila de la clínica (`FOR NO KEY UPDATE`), así que dos altas simultáneas no pueden exceder el plan.
 - **Pagos y renovación** (`subscription_payments`): registrar un pago extiende el periodo de 1 a 24 meses. Al vencer, la clínica sigue operando durante los días de gracia; después queda en **solo lectura** (`plan.read_only`: puede consultar pero no modificar hasta renovar). La app muestra avisos al acercarse el vencimiento.
 - Las clínicas ven su plan, uso e historial de pagos en **Ajustes → Organización**.
 
@@ -159,6 +159,7 @@ La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con tod
 ## Seguridad
 
 - **Sesiones en cookies httpOnly** (`Secure` fuera de desarrollo, con prefijos `__Host-` / `__Secure-`): `mc_session` para clínicas (SameSite=Lax) y `mc_console` para la consola de plataforma (SameSite=Strict, enviada solo a la API de plataforma). El token CSRF (`mc_csrf` / `mc_console_csrf` + cabecera `X-CSRF-Token`) es un HMAC del id de sesión, así que un token de un ámbito no sirve en el otro, y cerrar sesión en una clínica deja intacta la sesión de consola. El token de sesión en sí nunca está al alcance de JavaScript. `Authorization: Bearer` sigue aceptándose para clientes de API.
+- **Tokens firmados**: cada tipo de token tiene su propia audiencia (`medicore:tenant`, `medicore:platform`, `medicore:mfa`) y claims obligatorios (`exp`, `iat`, `sub`, `aud`, `scope`, `sid`). Un token de otro tipo responde 401 `auth.wrong_session`, y sus claims se cruzan con la fila de sesión del servidor (usuario, clínica, scope e impersonador). `JWT_ALGORITHM` acepta solo `HS256`, `HS384` o `HS512`. Los tokens emitidos antes de esta versión no tienen audiencia: todos los usuarios, incluidos los superadmins, vuelven a iniciar sesión una vez al desplegarla.
 - **Sesiones revocables** (tabla `sessions` + claim `sid`): logout real; cambiar la contraseña cierra las demás sesiones; suspender o resetear un usuario cierra todas; suspender o archivar una clínica cierra todas sus sesiones (también las de soporte). En cada petición se comprueba que la clínica y la cuenta sigan activas, con una sola regla de acceso compartida con el login. Soporte puede abrir una sesión nueva en una clínica suspendida, pero nunca en una archivada.
 - **Lockout de login** con tres contadores, todos reservados de forma atómica antes de verificar la contraseña (las peticiones en paralelo no superan los límites):
   - **Por IP**: 30 intentos en 15 min → bloqueo de 15 min (IPv6 se agrupa por /64).
@@ -167,10 +168,13 @@ La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con tod
   Un intento bloqueado responde 429 con `Retry-After`; un bloqueo por IP responde igual exista o no la cuenta. Un login correcto borra los fallos de esa cuenta desde esa IP, pero no los totales de la IP ni de la cuenta (solo les devuelve su intento). Reactivar o restablecer la contraseña desde soporte también levanta el bloqueo de login de esa cuenta, no el contador por IP. El segundo factor de la consola mantiene su límite de 5 por superadmin, independiente de la IP. La página Monitoreo muestra también los bloqueos por IP y la IP de los bloqueos por cuenta.
 - **Límites de la sesión de consola**: la sesión de la consola de superadmin caduca tras 30 min sin actividad (`PLATFORM_SESSION_IDLE_MINUTES`) y como máximo 8 h después del login (`PLATFORM_SESSION_MAX_MINUTES`). El refresco en segundo plano de Monitoreo no cuenta como actividad, un superadmin desactivado pierde el acceso en la siguiente petición, y `scripts/create_platform_admin.py` revoca las sesiones del admin al actualizarlo.
 - **MFA TOTP opcional para superadmins**: se activa desde la consola, en *Seguridad de la cuenta* (`/platform/security`). Con MFA activo, el login de la consola pide la contraseña y después un código de 6 dígitos de una app de autenticación, o un código de recuperación. El desafío es de un solo uso, válido 5 min y va en una cookie httpOnly limitada a `/api/v1/platform/login`. Un código no se puede reutilizar, y tras 5 intentos fallidos el bloqueo es progresivo. Hay 10 códigos de recuperación de un solo uso, mostrados una sola vez y guardados como hash. El secreto TOTP se cifra con AES-256-GCM. Activar MFA, regenerar los códigos de recuperación o desactivarlo exige la contraseña actual, y cada cambio queda en la auditoría de plataforma.
+- **Bloqueo al cambiar contraseña**: 5 intentos fallidos con la contraseña actual bloquean nuevos intentos de esa cuenta (429 con `Retry-After`, con backoff). Una contraseña nueva débil no cuenta. Las acciones MFA del superadmin (alta, códigos de recuperación, desactivación) también están limitadas, y Monitoreo muestra estos bloqueos con la cuenta de la clínica.
+- **Límites de entrada**: slug ≤ 63 caracteres, email ≤ 254 (guardado en minúsculas y sin espacios, con validación de formato al invitar o crear un usuario: `user.invalid_email`), contraseña ≤ 256, nombres ≤ 255. El user-agent se recorta a 400 y la IP a 45 caracteres en sesiones y auditoría. Los errores de validación (422) ya no devuelven el valor enviado (`input`).
+- **Perfil actualizado**: al cargar la app se refresca el perfil del usuario (nombre, rol, permisos, cambio de contraseña pendiente, nombre de la clínica y zona horaria), así que los cambios hechos desde otro lugar se aplican en la siguiente carga.
 - **Despliegue recomendado**: sirve la consola de plataforma desde un origen o subdominio propio (p. ej. `console.example.com`), para que un XSS en la app de clínicas no comparta origen con ella. Es una recomendación; la app no lo impone.
 - **Sin enumeración**: el login hace el mismo trabajo de hash exista o no la organización o la cuenta (una verificación bcrypt por intento), y un slug o un email inexistente responde igual que una contraseña incorrecta.
 - `X-Forwarded-For` solo se honra desde los proxies listados en `TRUSTED_PROXIES`.
-- Security headers en la API y CSP estricta en el build del frontend.
+- Security headers en la API, `Cache-Control: no-store` en cada respuesta de `/api/` (salvo las que fijan la suya, como las descargas CSV) y CSP estricta en el build del frontend.
 
 Los hallazgos pendientes están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).
 
@@ -272,7 +276,8 @@ medicore/
 │   │   ├── seed_demo.py            # Datos demo: ~8 semanas de historia + 4 de agenda, vía casos de uso
 │   │   ├── import_icd.py           # Carga del catálogo CIE-10/CIE-11
 │   │   ├── create_platform_admin.py # Alta de superadmin de plataforma
-│   │   └── reset_platform_mfa.py    # Desactiva el MFA de un superadmin (dispositivo perdido)
+│   │   ├── reset_platform_mfa.py    # Desactiva el MFA de un superadmin (dispositivo perdido)
+│   │   └── purge_expired_sessions.py # Borra sesiones caducadas o revocadas (tarea diaria)
 │   ├── pyproject.toml        # Metadata + deps + config pytest/ruff
 │   ├── src/medicore/         # Código fuente (ver Arquitectura arriba)
 │   └── tests/
@@ -391,7 +396,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1322 tests)
+.venv/bin/pytest                          # suite completa (1396 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -445,14 +450,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1322 tests en verde
-   278  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1396 tests en verde
+   297  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   580  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   604  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma (las acciones de soporte quedan en la auditoría de la clínica y se notifican), permisos granulares, aislamiento multi-tenant)
-   312  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   328  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    152  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    167  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:
@@ -473,8 +478,8 @@ Los tests verifican, entre otras cosas:
 |---|---|---|
 | `ENVIRONMENT` | `development` o `production`. En producción se activan validaciones estrictas. | `development` |
 | `DATABASE_URL` | URL de conexión PostgreSQL (psycopg3) | `postgresql+psycopg://localhost/medicore` |
-| `JWT_SECRET` | Clave HMAC para tokens. **Obligatoria y fuerte en producción** (`openssl rand -hex 32`) | `change-me` (solo dev) |
-| `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
+| `JWT_SECRET` | Clave HMAC para tokens. **Obligatoria en producción, de al menos 32 bytes** (`openssl rand -hex 32`); la app no arranca sin ella | `change-me` (solo dev) |
+| `JWT_ALGORITHM` | Algoritmo JWT: solo `HS256`, `HS384` o `HS512` | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Expiración del token en minutos | `1440` (24 h) |
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Expiración (min) de sesiones de impersonación/soporte — más corta por seguridad | `60` (1 h) |
 | `COOKIE_SECURE` | Flag `Secure` y prefijos `__Host-` / `__Secure-` en las cookies de sesión. Sin definir = activas en todo salvo `development`. No puede ser `false` en producción. | según `ENVIRONMENT` |
@@ -490,7 +495,7 @@ Los tests verifican, entre otras cosas:
 | `DEMO_PASSWORD` | Contraseña de los usuarios demo que crea `scripts/seed_demo.py` (≥ 8 caracteres). **Obligatoria en producción**, donde se rechaza la contraseña pública por defecto | `demo1234` (solo dev) |
 | `DEMO_ADMIN_PASSWORD` | Contraseña de los admins de clínica de la demo (≥ 8 caracteres), privada para que la contraseña compartida no abra la administración. **Obligatoria en producción** y distinta de `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
-> En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*`, `COOKIE_SECURE` es `false` o `MFA_ENCRYPTION_KEY` está vacía; además los docs quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida y los defaults funcionan tal cual.
+> En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue siendo el default inseguro o tiene menos de 32 bytes, o si `CORS_ORIGINS` es `*`, `COOKIE_SECURE` es `false` o `MFA_ENCRYPTION_KEY` está vacía; además los docs quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida y los defaults funcionan tal cual.
 
 ---
 
@@ -502,7 +507,7 @@ El backend incluye un `Dockerfile` listo para producción (usuario no-root, uvic
 
 El [`docker-compose.yml`](docker-compose.yml) de la raíz levanta todo el stack en un **único origen**: `db` (PostgreSQL 16, volumen persistente), `backend` (aplica `alembic upgrade head` al arrancar) y `frontend` (nginx que sirve el SPA, redirige `/api/` al backend y agrega las cabeceras de seguridad). Solo `frontend` lleva dominio público; el TLS lo termina el proxy de borde (Traefik en Coolify).
 
-1. Genera los secretos: `openssl rand -hex 32` (`JWT_SECRET`) y `openssl rand -base64 24` (`POSTGRES_PASSWORD`), la clave MFA (`MFA_ENCRYPTION_KEY`, comando en la tabla de variables de entorno del backend), y elige `DEMO_PASSWORD` (la que compartes con quien prueba la demo) y `DEMO_ADMIN_PASSWORD` (privada, para los admins de clínica).
+1. Genera los secretos: `openssl rand -hex 32` (`JWT_SECRET`, al menos 32 bytes) y `openssl rand -base64 24` (`POSTGRES_PASSWORD`), la clave MFA (`MFA_ENCRYPTION_KEY`, comando en la tabla de variables de entorno del backend), y elige `DEMO_PASSWORD` (la que compartes con quien prueba la demo) y `DEMO_ADMIN_PASSWORD` (privada, para los admins de clínica).
 2. En Coolify: **New Resource → Public Repository** → este repo, rama `main`, **Build Pack: Docker Compose**, archivo `/docker-compose.yml`.
 3. Variables de entorno: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (p. ej. `https://medicore.ejemplo.com`), `DEMO_PASSWORD`, `DEMO_ADMIN_PASSWORD` y `MFA_ENCRYPTION_KEY`. Opcionales: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`, `WEB_CONCURRENCY` (workers de uvicorn, por defecto 2). Si falta una obligatoria el stack no arranca, a propósito.
 4. Asigna el dominio solo al servicio **frontend** y pulsa **Deploy**.
@@ -520,9 +525,13 @@ Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migr
 
 > **Antes de desplegar esta versión:** `MFA_ENCRYPTION_KEY` tiene que llegar al servicio `backend`. Defínela en Coolify y declárala en `docker-compose.yml` (`MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY}`), porque en producción la app no arranca sin ella. La migración `e1f2a3b4c5d7` añade las columnas de MFA a `platform_admins` y la tabla `platform_admin_recovery_codes`.
 
+> **Antes de desplegar esta versión:** todos los usuarios, incluidos los superadmins, vuelven a iniciar sesión una vez: los tokens emitidos antes no tienen audiencia.
+>
 > **Migración `f2a3b4c5d6e8`:** añade `last_success_at` a `login_attempts` (lockout de login). No requiere variables de entorno nuevas.
 
 Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma. Cada ejecución queda registrada y la página *Monitoreo* marca la tarea si falla o si pasan más de 26 h sin un reset exitoso.
+
+En cualquier entorno, agrega además una **Scheduled Task** diaria en el contenedor `backend` que ejecute `python scripts/purge_expired_sessions.py` (p. ej. `30 9 * * *`). Borra las sesiones que ya no pueden iniciar sesión (caducadas o revocadas, de clínicas, de la consola y de desafíos de segundo paso). Cada ejecución queda registrada como el job `session_purge`, y Monitoreo la marca si pasan más de 26 h sin una ejecución exitosa.
 
 **Monitoreo.** La página *Monitoreo* de la consola solo carga si la API responde, así que para enterarte de una caída configura un monitor externo (UptimeRobot, Better Stack…) contra `https://<tu-dominio>/api/v1/health/ready`: responde `200` si la API y la base de datos están bien y `503` si la base de datos no responde. El commit desplegado que muestra la página sale de `SOURCE_COMMIT`, que Coolify inyecta en el contenedor. No la declares en el compose: Coolify bloquea las variables del compose y una vacía taparía la suya. Fuera de Coolify, defínela tú; si falta, la página lo indica.
 

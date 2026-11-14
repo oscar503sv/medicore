@@ -9,6 +9,19 @@ from pydantic import BaseModel, Field, StringConstraints
 
 from medicore.application.common.support import SUPPORT_REASON_MAX, SUPPORT_REASON_MIN
 from medicore.domain.enums import AddonModule, IcdVersion, Role, Sex, TenantStatus
+from medicore.presentation.schemas.fields import (
+    Address,
+    Email,
+    LegalName,
+    LoginEmail,
+    Password,
+    PersonName,
+    Phone,
+    PlaceName,
+    SlugText,
+    Specialty,
+    TaxId,
+)
 from medicore.presentation.schemas.subscriptions import TenantSubscriptionSummary
 
 SupportReason = Annotated[
@@ -20,8 +33,8 @@ SupportReason = Annotated[
 
 
 class PlatformLoginRequest(BaseModel):
-    email: str
-    password: str
+    email: LoginEmail
+    password: Password
 
 
 class PlatformSessionResponse(BaseModel):
@@ -45,11 +58,11 @@ class MfaCodeRequest(BaseModel):
 
 
 class MfaPasswordRequest(BaseModel):
-    password: str = Field(min_length=1, max_length=200)
+    password: Password
 
 
 class MfaPasswordCodeRequest(BaseModel):
-    password: str = Field(min_length=1, max_length=200)
+    password: Password
     code: str = Field(min_length=1, max_length=32)
 
 
@@ -99,15 +112,15 @@ class TenantListResponse(BaseModel):
 
 
 class CreateTenantRequest(BaseModel):
-    legal_name: str
-    tax_id: str
-    slug: str
+    legal_name: LegalName
+    tax_id: TaxId
+    slug: SlugText
     timezone: str = "America/El_Salvador"
     icd_version: IcdVersion = IcdVersion.CIE11
-    location_name: str
-    admin_name: str
-    admin_email: str
-    admin_password: str
+    location_name: PlaceName
+    admin_name: PersonName
+    admin_email: Email
+    admin_password: Password
     # Subscription: a free trial of ``trial_days`` from today, or paid until ``period_end``.
     plan_code: str
     modules: list[AddonModule] = []
@@ -122,16 +135,16 @@ class CreateTenantResponse(BaseModel):
 
 
 class UpdateTenantRequest(BaseModel):
-    legal_name: str | None = None
-    tax_id: str | None = None
+    legal_name: LegalName | None = None
+    tax_id: TaxId | None = None
     timezone: str | None = None
     icd_version: IcdVersion | None = None
-    location_name: str | None = None  # renames the clinic's primary location
+    location_name: PlaceName | None = None  # renames the clinic's primary location
 
 
 class AddTenantLocationRequest(BaseModel):
-    name: str
-    address: str | None = None
+    name: PlaceName
+    address: Address | None = None
 
 
 class SetTenantStatusRequest(BaseModel):
@@ -190,16 +203,16 @@ class GlobalAuditListResponse(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    password: str
+    password: Password
     reason: SupportReason  # why support resets it; recorded in the clinic's audit trail
 
 
 class UpdateTenantUserRequest(BaseModel):
-    name: str | None = None
+    name: PersonName | None = None
     role: Role | None = None
     sex: Sex | None = None
-    phone: str | None = None
-    specialty: str | None = None
+    phone: Phone | None = None
+    specialty: Specialty | None = None
 
 
 class ImpersonateRequest(BaseModel):

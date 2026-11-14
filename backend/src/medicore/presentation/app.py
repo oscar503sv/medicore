@@ -84,6 +84,9 @@ def create_app() -> FastAPI:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if request.url.path.startswith("/api/") and "cache-control" not in response.headers:
+            # Clinical and personal data: neither browsers nor proxies may keep a copy.
+            response.headers["Cache-Control"] = "no-store"
         if hsts:
             # Only meaningful behind TLS, so production-only.
             response.headers["Strict-Transport-Security"] = (

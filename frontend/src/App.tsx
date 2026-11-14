@@ -5,6 +5,7 @@ import { PlatformLayout } from '@/components/shell/PlatformLayout'
 import { RequireAuth } from '@/components/RequireAuth'
 import { RequirePlatformAuth } from '@/components/RequirePlatformAuth'
 import { ToastViewport } from '@/components/ui/ToastViewport'
+import { SessionSync } from '@/components/SessionSync'
 import { UpdateNotice } from '@/components/UpdateNotice'
 import { AppointmentsPage } from '@/pages/AppointmentsPage'
 import { AuditPage } from '@/pages/AuditPage'
@@ -144,6 +145,7 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <ToastViewport />
+      <SessionSync />
       <UpdateNotice />
     </>
   )

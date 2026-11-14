@@ -85,6 +85,7 @@ from medicore.domain.shared.identifiers import (
     UserId,
 )
 from medicore.domain.shared.text import fold
+from medicore.domain.value_objects.email import normalize_email
 from medicore.domain.value_objects.slug import Slug
 from tests.support.store import InMemoryStore
 
@@ -126,6 +127,10 @@ class InMemoryTenantRepository:
 
     def save(self, tenant: Tenant) -> None:
         self._store.tenants[tenant.id.value] = tenant
+
+    def lock(self, tenant_id: TenantId) -> None:
+        locks = self._store.tenant_locks
+        locks[tenant_id.value] = locks.get(tenant_id.value, 0) + 1
 
 
 class InMemoryPlanRepository:
@@ -249,6 +254,16 @@ class InMemoryAuthSessionRepository:
         session = self._store.sessions.get(session_id.value)
         if session is not None:
             session.revoke(now)
+
+    def delete_inactive(self, now: datetime) -> int:
+        dead = [
+            key
+            for key, s in self._store.sessions.items()
+            if s.expires_at < now or s.revoked_at is not None
+        ]
+        for key in dead:
+            del self._store.sessions[key]
+        return len(dead)
 
     def consume(self, session_id: SessionId, now: datetime) -> bool:
         session = self._store.sessions.get(session_id.value)
@@ -489,9 +504,9 @@ class InMemoryUserRepository(_Scoped):
         return user if user and user.tenant_id == self._tenant else None
 
     def get_by_email(self, email: str) -> User | None:
-        target = email.strip().lower()
+        target = normalize_email(email)
         return next(
-            (u for u in self._mine(self._store.users.values()) if u.email.lower() == target),
+            (u for u in self._mine(self._store.users.values()) if u.email == target),
             None,
         )
 

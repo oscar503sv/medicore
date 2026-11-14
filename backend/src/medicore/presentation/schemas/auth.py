@@ -7,12 +7,21 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from medicore.domain.enums import LangPref, ThemePref
+from medicore.presentation.schemas.fields import (
+    Bio,
+    Jvpm,
+    LoginEmail,
+    Password,
+    PersonName,
+    Phone,
+    SlugText,
+)
 
 
 class LoginRequest(BaseModel):
-    slug: str
-    email: str
-    password: str
+    slug: SlugText
+    email: LoginEmail
+    password: Password
 
 
 class SessionResponse(BaseModel):
@@ -36,8 +45,8 @@ class SwitchLocaleRequest(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
+    current_password: Password
+    new_password: Password
 
 
 class MyProfileResponse(BaseModel):
@@ -50,13 +59,16 @@ class MyProfileResponse(BaseModel):
     bio: str | None = None
     jvpm: str | None = None
     permissions: list[str] = []
+    must_change_password: bool = False
+    tenant_name: str = ""
+    timezone: str = ""
 
 
 class UpdateMyProfileRequest(BaseModel):
-    name: str | None = None
-    phone: str | None = None
-    bio: str | None = None
-    jvpm: str | None = None
+    name: PersonName | None = None
+    phone: Phone | None = None
+    bio: Bio | None = None
+    jvpm: Jvpm | None = None
 
 
 class SessionInfoResponse(BaseModel):

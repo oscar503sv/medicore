@@ -136,7 +136,15 @@ ya se consulta en cada request autenticado):
   de la clínica (`this organization is not active`) solo se informa tras credenciales
   válidas, igual que el de la cuenta.
 
-Pendiente, en orden de valor aproximado:
+Resueltos en nov 2026:
 
-1. **Política de contraseñas** — mínimo actual de 8 caracteres sin más requisitos
-   (`use_cases/auth.py`). NIST sugiere ≥12 o chequeo de entropía (zxcvbn).
+- **Política de contraseñas** (`domain/services/password_policy.py`): al menos 10 caracteres (máximo 72 bytes), letras y un número o símbolo, que no sea una contraseña común, nada del nombre, correo o clínica de la persona, y distinta de la actual, en todo punto donde se fija una contraseña. Requisitos en vivo en la UI.
+- **JWT**: cada token lleva audiencia por tipo y claims obligatorios, cruzados con su fila de sesión (`auth.wrong_session`); `JWT_SECRET` debe tener al menos 32 bytes en producción, y `JWT_ALGORITHM` solo admite HS256/HS384/HS512.
+- **Cache-Control: no-store** en toda respuesta de `/api/` (salvo las que fijan la suya).
+- **Límites de entrada** en slug, email, contraseña, nombres, user-agent e IP; los 422 ya no devuelven el valor enviado.
+- **Bloqueo al cambiar contraseña y en la gestión MFA de superadmins**: 5 fallos → 429 con backoff, por cuenta.
+- **Excepciones de permisos**: se borran al cambiar de rol; los admins conservan el conjunto completo de su rol.
+- **Cupos**: la comprobación de asientos bloquea la fila de la clínica, así que las altas simultáneas no exceden el plan.
+- **Purga de sesiones**: tarea programada que borra sesiones caducadas o revocadas, vigilada en Monitoreo como el job `session_purge`.
+
+No quedan hallazgos pendientes en esta lista.

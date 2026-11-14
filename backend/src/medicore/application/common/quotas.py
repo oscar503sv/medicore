@@ -55,6 +55,9 @@ def ensure_seat_for(
     freeing the ``releasing`` one) fits the subscription. Raises ``QuotaExceeded``."""
     if taking is None or taking == releasing:
         return
+    # Under READ COMMITTED the counts below are new statements, so the loser of a race
+    # sees the winner's seat.
+    uow.tenants.lock(tenant_id)
     counts = active_by_role(uow)
     after = dict(counts)
     after[taking] = after.get(taking, 0) + 1

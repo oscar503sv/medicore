@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 
@@ -13,11 +14,13 @@ from medicore.application.use_cases.sessions import (
     ListMySessions,
     ListTenantSessions,
     ListUserSessions,
+    PurgeExpiredSessions,
     RevokeAllUserSessions,
     RevokeMySession,
     RevokeTenantSession,
     RevokeUserSession,
 )
+from medicore.domain.entities.auth_session import AuthSession
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import SessionId
 from tests.support.builders import PASSWORD, seed_clinic
@@ -151,3 +154,32 @@ def test_platform_revokes_tenant_session_and_audits():
     assert not seed.factory.store.sessions[sid.value].is_active(clock.now())
     uow = seed.factory.platform_uow()
     assert any(e.action == "session.revoked" for e in uow.platform_audit.list())
+
+
+def test_purge_deletes_expired_and_revoked_rows_of_every_scope():
+    seed = seed_clinic()
+    clock = FixedClock()
+    now = clock.now()
+    live_sid = _login(seed, clock, seed.doctor.email)
+
+    def add(scope: str, *, expired: bool = False, revoked: bool = False) -> SessionId:
+        row = AuthSession(
+            id=SessionId.new(),
+            scope=scope,
+            user_id=seed.doctor.id.value,
+            tenant_id=seed.tenant.id if scope == "tenant" else None,
+            created_at=now - timedelta(hours=3),
+            expires_at=now - timedelta(minutes=1) if expired else now + timedelta(hours=1),
+            revoked_at=now - timedelta(hours=2) if revoked else None,
+        )
+        seed.factory.store.sessions[row.id.value] = row
+        return row.id
+
+    add("tenant", expired=True)
+    add("platform", revoked=True)
+    add("mfa", expired=True)
+
+    deleted = PurgeExpiredSessions(seed.factory, clock).execute()
+
+    assert deleted == 3
+    assert list(seed.factory.store.sessions) == [live_sid.value]

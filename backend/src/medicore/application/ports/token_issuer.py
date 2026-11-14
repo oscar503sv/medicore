@@ -27,7 +27,10 @@ class TokenIssuer(Protocol):
         """``ttl_minutes`` overrides the default lifetime (console sessions are shorter)."""
         ...
 
-    def decode(self, token: str) -> SessionClaims: ...
+    def decode(self, token: str, *scopes: str) -> SessionClaims:
+        """Claims of a valid token. With ``scopes`` only tokens of those types pass (others
+        raise ``jwt.InvalidAudienceError``); without them any known type does."""
+        ...
 
     def ttl_minutes(self, impersonated: bool = False) -> int:
         """Lifetime of the tokens this issuer emits, so the matching AuthSession row

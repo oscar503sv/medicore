@@ -145,3 +145,21 @@ class TestLocations:
             AddLocation(uow, FixedClock()).execute(seed.actor(seed.admin), name="Sede 3")
         assert exc.value.code == "plan.quota_locations"
         assert len(uow.tenants.get_by_id(seed.tenant.id).locations) == 2
+
+
+class TestClinicLock:
+    def test_seat_checks_lock_the_clinic(self):
+        seed = seed_clinic()
+        uow = on_plan(seed, CLINICA)
+
+        invite(seed, uow, Role.NURSE, 1)
+
+        assert seed.factory.store.tenant_locks[seed.tenant.id.value] == 1
+
+    def test_profile_edit_without_role_change_takes_no_lock(self):
+        seed = seed_clinic()
+        uow = on_plan(seed, CLINICA)
+
+        UpdateUser(uow, FixedClock()).execute(seed.actor(seed.admin), seed.nurse.id, name="Otra")
+
+        assert seed.factory.store.tenant_locks == {}

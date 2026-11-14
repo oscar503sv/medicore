@@ -43,6 +43,7 @@ ACCOUNT_IP_POLICY = ThrottlePolicy(max_attempts=5, max_lockout_minutes=15, backo
 ACCOUNT_POLICY = ThrottlePolicy(max_attempts=20, max_lockout_minutes=15, backoff=False)
 IP_POLICY = ThrottlePolicy(max_attempts=30, max_lockout_minutes=15, backoff=False)
 MFA_POLICY = ACCOUNT_IP_POLICY
+PASSWORD_CHECK_POLICY = ACCOUNT_IP_POLICY
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +69,12 @@ def platform_login_identifier(email: str) -> str:
 def platform_mfa_identifier(admin_id: str) -> str:
     # By admin id, not email: the second factor is attacked after the password is known.
     return f"platform-mfa:{admin_id}"
+
+
+def password_change_identifier(user_id: str) -> str:
+    # By account id, not by IP: whoever is guessing the current password already holds a
+    # session of that account.
+    return f"pwchange:{user_id}"
 
 
 def ip_bucket_key(ip: str | None) -> str:

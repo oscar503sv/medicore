@@ -134,7 +134,27 @@ def test_login_pressure(session):
     assert by_scope[("tenant", "198.51.100.1")].email == "ana@mon.test"
 
 
-def test_error_store_groups_pages_and_purges(session):
+def test_locked_password_change_shows_the_clinic_account(session):
+    tenant = build_tenant(f"mon-{uuid.uuid4().hex[:10]}")
+    SqlTenantRepository(session).save(tenant)
+    session.flush()
+    user = build_user(tenant.id, Role.DOCTOR, email="doc@mon.test")
+    SqlUserRepository(session, tenant.id).save(user)
+    session.add_all([
+        LoginAttemptModel(identifier=f"pwchange:{user.id}", failed_count=5,
+                          last_failed_at=FUTURE, locked_until=FUTURE + timedelta(minutes=3)),
+        LoginAttemptModel(identifier="pwchange:not-an-id", failed_count=5,
+                          last_failed_at=FUTURE, locked_until=FUTURE + timedelta(minutes=2)),
+    ])
+    session.flush()
+
+    pressure = SqlMonitoringReadModel(session).login_pressure(FUTURE - timedelta(hours=2), FUTURE)
+
+    by_email = {lk.email: lk for lk in pressure.locked}
+    known = by_email["doc@mon.test"]
+    assert (known.scope, known.clinic_slug) == ("tenant", str(tenant.slug))
+    assert "not-an-id" in by_email
+
     log = SqlErrorLogRepository(session)
 
     def record(when, route="/api/v1/patients", commit=None):

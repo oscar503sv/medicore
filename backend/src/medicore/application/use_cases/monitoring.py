@@ -48,7 +48,10 @@ JOB_RETENTION_DAYS = 90
 
 # Scheduled tasks the console expects, with how long may pass between successful runs
 # before it is flagged (the nightly demo reset gets a couple of hours of slack).
-SCHEDULED_JOBS: dict[str, timedelta] = {"demo_reset": timedelta(hours=26)}
+SCHEDULED_JOBS: dict[str, timedelta] = {
+    "demo_reset": timedelta(hours=26),
+    "session_purge": timedelta(hours=26),
+}
 
 
 @dataclass(frozen=True, slots=True)

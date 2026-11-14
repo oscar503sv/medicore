@@ -7,7 +7,11 @@ from datetime import timedelta
 
 import pytest
 
-from medicore.application.common.errors import AuthenticationFailed, TooManyLoginAttempts
+from medicore.application.common.errors import (
+    AuthenticationFailed,
+    TooManyLoginAttempts,
+    ValidationError,
+)
 from medicore.application.use_cases.auth import (
     AuthenticateUser,
     AuthenticateUserCommand,
@@ -17,7 +21,7 @@ from medicore.application.use_cases.auth import (
     UpdateMyProfile,
 )
 from medicore.domain.enums import Role, ThemePref, UserStatus
-from medicore.domain.shared.identifiers import SessionId
+from medicore.domain.shared.identifiers import PlatformAdminId, SessionId
 from tests.support.builders import PASSWORD, seed_clinic
 from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher, SpyPasswordHasher
 
@@ -498,3 +502,78 @@ def test_lockout_audited_once_when_it_engages():
 
     uow = seed.factory.for_tenant(seed.tenant.id)
     assert len(uow.audit.query(action="auth.login_locked")) == 1
+
+
+def test_long_user_agent_is_clipped_on_session_and_audit():
+    seed = seed_clinic()
+
+    make_auth(seed).execute(
+        AuthenticateUserCommand(
+            slug="clinica-norte", email=seed.doctor.email, password=PASSWORD,
+            user_agent="x" * 5000,
+        )
+    )
+
+    (session,) = seed.factory.store.sessions.values()
+    assert session.user_agent == "x" * 400
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    (entry,) = uow.audit.query(action="auth.login")
+    assert entry.user_agent == "x" * 400
+
+
+def test_login_finds_the_account_whatever_the_email_case_and_spaces():
+    seed = seed_clinic()
+
+    session = make_auth(seed).execute(
+        AuthenticateUserCommand(
+            slug="clinica-norte", email=f"  {seed.doctor.email.upper()} ", password=PASSWORD
+        )
+    )
+
+    assert session.user_id == seed.doctor.id
+
+
+def _change(seed, actor, current: str, new: str) -> None:
+    ChangePassword(seed.factory, PlainPasswordHasher(), FixedClock()).execute(actor, current, new)
+
+
+def test_change_password_locks_after_five_wrong_current_passwords():
+    seed = seed_clinic()
+    for _ in range(5):
+        with pytest.raises(ValidationError) as exc:
+            _change(seed, seed.doctor_actor, "wrong-password", "nueva-clave-123")
+        assert exc.value.code == "password.current_incorrect"
+
+    with pytest.raises(TooManyLoginAttempts):
+        _change(seed, seed.doctor_actor, PASSWORD, "nueva-clave-123")
+
+
+def test_weak_new_password_does_not_count_towards_the_lock():
+    seed = seed_clinic()
+    for _ in range(6):
+        with pytest.raises(ValidationError) as exc:
+            _change(seed, seed.doctor_actor, PASSWORD, "123")
+        assert exc.value.code != "password.current_incorrect"
+
+
+def test_password_change_lock_is_per_user():
+    seed = seed_clinic()
+    for _ in range(5):
+        with pytest.raises(ValidationError):
+            _change(seed, seed.doctor_actor, "wrong-password", "nueva-clave-123")
+
+    _change(seed, seed.actor(seed.nurse), PASSWORD, "nueva-clave-123")
+
+
+def test_profile_reports_pending_password_change_except_in_support():
+    seed = seed_clinic()
+    user = seed.factory.store.users[seed.doctor.id.value]
+    user.must_change_password = True
+    support = replace(seed.doctor_actor, impersonated_by=PlatformAdminId.new())
+
+    own = GetMyProfile(seed.factory).execute(seed.doctor_actor)
+    in_support = GetMyProfile(seed.factory).execute(support)
+
+    assert own.must_change_password is True
+    assert in_support.must_change_password is False
+    assert (own.tenant_name, own.timezone) == (seed.tenant.legal_name, seed.tenant.timezone)

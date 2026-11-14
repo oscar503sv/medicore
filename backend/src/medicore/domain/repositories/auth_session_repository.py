@@ -48,3 +48,8 @@ class AuthSessionRepository(Protocol):
     def delete_expired_for_user(self, user_id: UUID, now: datetime) -> None:
         """Opportunistic cleanup on login, so expired rows never need a cron job."""
         ...
+
+    def delete_inactive(self, now: datetime) -> int:
+        """Delete rows that can never authenticate again (expired or revoked: tenant,
+        platform and MFA challenges alike); returns how many."""
+        ...

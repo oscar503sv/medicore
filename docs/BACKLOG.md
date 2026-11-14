@@ -133,7 +133,15 @@ is already queried on every authenticated request):
   (`this organization is not active`) is only reported after valid credentials, just like
   the account's.
 
-Pending, in rough order of value:
+Resolved in November 2026:
 
-1. **Password policy** — the current minimum is 8 characters with no other requirements
-   (`use_cases/auth.py`). NIST suggests ≥12 or an entropy check (zxcvbn).
+- **Password policy** (`domain/services/password_policy.py`): at least 10 characters (at most 72 bytes), letters plus a number or symbol, not a common password, nothing from the person's name, email or clinic, and different from the current one, wherever a password is set. Live requirements in the UI.
+- **JWT**: tokens carry a per-type audience and mandatory claims, cross-checked against their session row (`auth.wrong_session`); `JWT_SECRET` must be at least 32 bytes in production, and `JWT_ALGORITHM` accepts only HS256/HS384/HS512.
+- **Cache-Control: no-store** on every `/api/` response (except those that set their own).
+- **Input limits** on slug, email, password, names, user agent and IP; 422 errors no longer echo the submitted value.
+- **Lockout on password change and superadmin MFA management**: 5 failed attempts with the current password → 429 with backoff, per account.
+- **Permission exceptions** are cleared on role change; admins keep their role's full set.
+- **Seat checks** lock the clinic's row, so simultaneous invitations can't exceed the plan.
+- **Session purge**: a scheduled job deletes expired or revoked sessions and is monitored (`session_purge`).
+
+No pending findings remain in this list.

@@ -29,6 +29,7 @@ from medicore.domain.entities.user import User, normalize_jvpm
 from medicore.domain.enums import Role, Sex, UserStatus
 from medicore.domain.repositories._support import Page, Paging, UserFilter
 from medicore.domain.shared.identifiers import UserId
+from medicore.domain.value_objects.email import parse_email
 
 
 def _clinic_slug(uow: UnitOfWork) -> str | None:
@@ -73,21 +74,20 @@ class InviteUser:
     def execute(self, actor: ActorContext, cmd: InviteUserCommand) -> User:
         ensure_permission(actor, Permission.USERS_MANAGE)
         ensure_manages_roles(actor, cmd.role)
-        if self._uow.users.get_by_email(cmd.email) is not None:
+        email = parse_email(cmd.email)
+        if self._uow.users.get_by_email(email) is not None:
             raise ValidationError(
-                f"email already in use within this tenant: {cmd.email}",
+                f"email already in use within this tenant: {email}",
                 code="user.email_taken",
-                email=cmd.email,
+                email=email,
             )
-        ensure_password_policy(
-            cmd.password, personal=(cmd.name, cmd.email, _clinic_slug(self._uow))
-        )
+        ensure_password_policy(cmd.password, personal=(cmd.name, email, _clinic_slug(self._uow)))
 
         user = User(
             id=UserId.new(),
             tenant_id=actor.tenant_id,
             name=cmd.name,
-            email=cmd.email,
+            email=email,
             password_hash=self._hasher.hash(cmd.password),
             role=cmd.role,
             status=UserStatus.ACTIVE,
@@ -190,8 +190,10 @@ class UpdateUser:
                     taking=Role(changes["role"]), releasing=previous_role,
                 )
             for key, value in changes.items():
-                if key in allowed:
+                if key in allowed and key != "role":
                     setattr(user, key, value)
+            if changes.get("role") is not None:
+                user.change_role(Role(changes["role"]))
             self._uow.users.save(user)
             self._uow.audit.append(
                 audit_entry(

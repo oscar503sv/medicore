@@ -9,6 +9,7 @@ from types import TracebackType
 from sqlalchemy.orm import Session
 
 from medicore.domain.shared.identifiers import TenantId
+from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
 from medicore.infrastructure.persistence.repositories.analytics import SqlAnalyticsReadModel
 from medicore.infrastructure.persistence.repositories.application import (
     SqlApplicationRepository,
@@ -136,6 +137,14 @@ class SqlAlchemyUnitOfWork:
     def rollback(self) -> None:
         self._session.rollback()
         self._committed = False
+
+    def close(self) -> None:
+        """Return the connection to the pool; idempotent."""
+        self._session.close()
+
+    def code_generator(self) -> DbSequentialCodeGenerator:
+        """Codes drawn inside this unit of work's transaction."""
+        return DbSequentialCodeGenerator(self._session, self.tenant_id.value)
 
 
 class PlatformUnitOfWork:

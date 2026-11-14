@@ -82,6 +82,9 @@ export interface MyProfile {
   /** Doctors: JVPM registration number, printed on their documents. */
   jvpm: string | null
   permissions: Permission[]
+  must_change_password: boolean
+  tenant_name: string
+  timezone: string
 }
 
 // A live server-side login session (the backing row of a JWT's sid claim).

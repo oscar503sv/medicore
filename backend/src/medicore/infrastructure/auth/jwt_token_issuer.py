@@ -9,6 +9,16 @@ import jwt
 from medicore.application.ports.token_issuer import SessionClaims
 from medicore.infrastructure.config import get_settings
 
+# One audience per token type, so a token minted for one purpose (a clinic session, the
+# console, a pending MFA challenge) is never accepted as another even if a check is missed.
+_AUDIENCE_PREFIX = "medicore:"
+_SCOPES = ("tenant", "platform", "mfa")
+_REQUIRED = ["exp", "iat", "sub", "aud", "scope", "sid"]
+
+
+def _audience(scope: str) -> str:
+    return f"{_AUDIENCE_PREFIX}{scope}"
+
 
 class JwtTokenIssuer:
     def __init__(self) -> None:
@@ -34,6 +44,7 @@ class JwtTokenIssuer:
             "tenant": claims.tenant_id,
             "role": claims.role,
             "scope": claims.scope,
+            "aud": _audience(claims.scope),
             "imp": claims.impersonator,
             "sid": claims.session_id,
             "exp": now + timedelta(minutes=expire_minutes),
@@ -41,13 +52,22 @@ class JwtTokenIssuer:
         }
         return jwt.encode(payload, self._secret, algorithm=self._algorithm)
 
-    def decode(self, token: str) -> SessionClaims:
-        payload = jwt.decode(token, self._secret, algorithms=[self._algorithm])
+    def decode(self, token: str, *scopes: str) -> SessionClaims:
+        allowed = scopes or _SCOPES
+        payload = jwt.decode(
+            token,
+            self._secret,
+            algorithms=[self._algorithm],
+            audience=[_audience(s) for s in allowed],
+            options={"require": _REQUIRED},
+        )
+        if payload["aud"] != _audience(payload["scope"]):
+            raise jwt.InvalidAudienceError("audience does not match the token scope")
         return SessionClaims(
             user_id=payload["sub"],
             tenant_id=payload.get("tenant"),
             role=payload.get("role", ""),
-            scope=payload.get("scope", "tenant"),
+            scope=payload["scope"],
             impersonator=payload.get("imp"),
             session_id=payload.get("sid"),
         )

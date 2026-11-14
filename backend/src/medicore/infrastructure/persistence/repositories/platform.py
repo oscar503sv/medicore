@@ -11,6 +11,7 @@ from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.enums import UserStatus
 from medicore.domain.shared.identifiers import AuditLogId, PlatformAdminId, TenantId
+from medicore.domain.value_objects.email import normalize_email
 from medicore.infrastructure.persistence.models.platform import (
     PlatformAdminModel,
     PlatformAdminRecoveryCodeModel,
@@ -60,7 +61,7 @@ class SqlPlatformAdminRepository:
     def get_by_email(self, email: str) -> PlatformAdmin | None:
         row = (
             self._s.query(PlatformAdminModel)
-            .filter(PlatformAdminModel.email == email.strip().lower())
+            .filter(PlatformAdminModel.email == normalize_email(email))
             .first()
         )
         return _to_admin(row) if row else None
@@ -71,7 +72,7 @@ class SqlPlatformAdminRepository:
             row = PlatformAdminModel(id=admin.id.value)
             self._s.add(row)
         row.name = admin.name
-        row.email = admin.email.strip().lower()
+        row.email = normalize_email(admin.email)
         row.password_hash = admin.password_hash
         row.status = str(admin.status)
         row.last_seen_at = admin.last_seen_at

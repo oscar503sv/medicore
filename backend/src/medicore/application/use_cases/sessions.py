@@ -207,3 +207,17 @@ class RevokeTenantSession:
                 )
             )
             uow.commit()
+
+
+class PurgeExpiredSessions:
+    """Scheduled cleanup: delete the session rows that can no longer authenticate."""
+
+    def __init__(self, uow_factory: UnitOfWorkFactory, clock: Clock) -> None:
+        self._factory = uow_factory
+        self._clock = clock
+
+    def execute(self) -> int:
+        with self._factory.platform_uow() as uow:
+            deleted = uow.sessions.delete_inactive(self._clock.now())
+            uow.commit()
+        return deleted

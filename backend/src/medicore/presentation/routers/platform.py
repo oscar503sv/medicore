@@ -50,6 +50,7 @@ from medicore.domain.repositories._support import Paging, TenantFilter
 from medicore.domain.shared.identifiers import SessionId, TenantId, UserId
 from medicore.domain.value_objects.subscription import DEFAULT_GRACE_DAYS
 from medicore.infrastructure.config import get_settings
+from medicore.presentation.client_ip import client_ip, client_user_agent
 from medicore.presentation.cookies import (
     clear_mfa_challenge_cookie,
     clear_session_cookies,
@@ -70,7 +71,6 @@ from medicore.presentation.dependencies import (
     SecretBoxPort,
     TotpPort,
     UoWFactory,
-    _client_ip,
     revoke_session_token,
 )
 from medicore.presentation.routers.role_permissions import parse_role, ser_matrix
@@ -147,7 +147,7 @@ def login(body: PlatformLoginRequest, request: Request, response: Response, fact
           hasher: Hasher, issuer: JwtIssuer, clock: Clock, policy: PlatformPolicy):
     result = AuthenticatePlatformAdmin(factory, hasher, issuer, clock, policy).execute(
         body.email, body.password,
-        ip_address=_client_ip(request), user_agent=request.headers.get("user-agent"),
+        ip_address=client_ip(request), user_agent=client_user_agent(request),
     )
     if isinstance(result, PlatformMfaChallengeDTO):
         # Password accepted but no session yet: only the challenge cookie is set.
@@ -162,7 +162,7 @@ def login_mfa(body: MfaCodeRequest, request: Request, response: Response, factor
               box: SecretBoxPort, challenge: MfaChallenge):
     session = CompletePlatformMfaLogin(factory, issuer, totp, box, clock, policy).execute(
         challenge, body.code,
-        ip_address=_client_ip(request), user_agent=request.headers.get("user-agent"),
+        ip_address=client_ip(request), user_agent=client_user_agent(request),
     )
     return _open_console_session(response, session, policy)
 

@@ -406,6 +406,28 @@ def test_guessing_codes_through_management_is_throttled(mfa_world):
         world._mgmt(DisablePlatformMfa).execute(world.actor, PASSWORD, world.code(world.secret))
 
 
+def test_setup_password_guessing_is_throttled(world):
+    start = world._mgmt(StartPlatformMfaEnrollment, "Medicore")
+    for _ in range(5):
+        with pytest.raises(ValidationError) as exc:
+            start.execute(world.actor, "wrong-password")
+        assert exc.value.code == "password.current_incorrect"
+
+    with pytest.raises(TooManyLoginAttempts):
+        start.execute(world.actor, PASSWORD)
+
+
+def test_management_wrong_password_counts_once_per_attempt(mfa_world):
+    world = mfa_world
+    for _ in range(5):
+        with pytest.raises(ValidationError) as exc:
+            world._mgmt(DisablePlatformMfa).execute(world.actor, "wrong-password", "000000")
+        assert exc.value.code == "password.current_incorrect"
+
+    with pytest.raises(TooManyLoginAttempts):
+        world._mgmt(DisablePlatformMfa).execute(world.actor, PASSWORD, world.code(world.secret))
+
+
 def test_disable_turns_mfa_off(mfa_world):
     world = mfa_world
     world._mgmt(DisablePlatformMfa).execute(world.actor, PASSWORD, world.code(world.secret))

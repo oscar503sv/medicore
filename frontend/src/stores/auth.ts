@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Permission, Role, Session } from '@/types'
+import type { MyProfile, Permission, Role, Session } from '@/types'
 
 // Plain fetch (not the axios instance — client.ts imports this store) to clear the
 // httpOnly session cookie server-side; JS cannot delete it. Fire-and-forget.
@@ -12,6 +12,8 @@ export function serverLogout(path: string) {
 interface AuthState {
   session: Session | null
   setSession: (session: Session) => void
+  /** Refresh the server-owned fields of the current session from the user's profile. */
+  syncProfile: (profile: MyProfile) => void
   clearMustChangePassword: () => void
   requirePasswordChange: () => void
   logout: () => void
@@ -25,6 +27,22 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       session: null,
       setSession: (session) => set({ session }),
+      syncProfile: (profile) => {
+        const s = get().session
+        if (!s) return
+        set({
+          session: {
+            ...s,
+            name: profile.name,
+            role: profile.role,
+            sex: profile.sex,
+            permissions: profile.permissions,
+            must_change_password: profile.must_change_password,
+            tenant_name: profile.tenant_name,
+            timezone: profile.timezone,
+          },
+        })
+      },
       clearMustChangePassword: () => {
         const s = get().session
         if (s) set({ session: { ...s, must_change_password: false } })

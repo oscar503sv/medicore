@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.auth_session import AuthSession
@@ -127,3 +128,15 @@ class SqlAuthSessionRepository:
             AuthSessionModel.user_id == user_id,
             AuthSessionModel.expires_at < now,
         ).delete()
+
+    def delete_inactive(self, now: datetime) -> int:
+        return (
+            self._s.query(AuthSessionModel)
+            .filter(
+                or_(
+                    AuthSessionModel.expires_at < now,
+                    AuthSessionModel.revoked_at.is_not(None),
+                )
+            )
+            .delete(synchronize_session=False)
+        )

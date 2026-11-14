@@ -298,6 +298,28 @@ def test_create_tenant_with_admin():
     assert seed.factory.platform_uow().platform_audit.list()
 
 
+def test_create_tenant_normalizes_admin_email():
+    seed = seed_clinic()
+    cmd = CreateTenantCommand(
+        legal_name="Clínica Sur SL",
+        tax_id="B99",
+        slug="clinica-sur",
+        timezone="Europe/Madrid",
+        location_name="Sevilla",
+        admin_name="Admin Sur",
+        admin_email="  Admin@Sur.TEST ",
+        admin_password="temp-pass-123",
+        subscription=_sub(CLINICA),
+        trial_days=7,
+    )
+
+    result = CreateTenantWithAdmin(seed.factory, PlainPasswordHasher(), FixedClock()).execute(
+        actor_for(seed), cmd
+    )
+
+    assert result.admin.email == "admin@sur.test"
+
+
 def test_create_tenant_duplicate_slug_rejected():
     seed = seed_clinic()
     cmd = CreateTenantCommand(

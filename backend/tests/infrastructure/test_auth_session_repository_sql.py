@@ -147,3 +147,33 @@ def test_consume_is_true_once_then_false(session):
     assert sessions.consume(created.id, NOW) is True
     assert sessions.consume(created.id, NOW) is False
     assert sessions.consume(SessionId.new(), NOW) is False
+
+
+def test_delete_inactive_keeps_live_sessions(session):
+    root = PlatformAdmin(
+        id=PlatformAdminId.new(), name="Root", email=f"{uuid.uuid4().hex}@purge.test",
+        password_hash="x",
+    )
+    SqlPlatformAdminRepository(session).save(root)
+    sessions = SqlAuthSessionRepository(session)
+
+    def add(*, expires_at, revoked_at=None):
+        created = AuthSession(
+            id=SessionId.new(), scope="platform", user_id=root.id.value,
+            created_at=EARLIER, expires_at=expires_at, revoked_at=revoked_at,
+        )
+        sessions.add(created)
+        return created.id
+
+    live = add(expires_at=NOW + timedelta(hours=1))
+    expired = add(expires_at=NOW - timedelta(minutes=1))
+    revoked = add(expires_at=NOW + timedelta(hours=1), revoked_at=EARLIER)
+    session.flush()
+
+    # The database may hold other inactive rows, so only a lower bound is certain.
+    assert sessions.delete_inactive(NOW) >= 2
+    session.expire_all()
+
+    assert sessions.get(live) is not None
+    assert sessions.get(expired) is None
+    assert sessions.get(revoked) is None

@@ -114,7 +114,7 @@ Access control is **granular and customizable per clinic** (`application/common/
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — each with a default permission set in `ROLE_PERMISSIONS`.
 - **Per-tenant overrides**: each clinic can customize a role's set through a `RolePermissionOverride` row. `effective_permissions(role, stored)` resolves defaults vs. override (and intersects with the current catalog to tolerate retired permissions).
 - On every request, the presentation layer puts the effective permissions in `ActorContext.permissions`, so every `ensure_permission(...)` check honors the clinic's customization.
-- **Per-user exceptions** (plans with the `user_permissions` feature, Clínica and up): one person can get a few extra permissions or lose a few of their role's, stored as the difference from the role (`PermissionAdjustments` on `User`), so later changes to the role still reach them. Edited from **Users → Permissions** (`GET`/`PUT /users/{id}/permissions`). On a plan without the feature, stored exceptions are kept but not applied.
+- **Per-user exceptions** (plans with the `user_permissions` feature, Clínica and up): one person can get a few extra permissions or lose a few of their role's, stored as the difference from the role (`PermissionAdjustments` on `User`), so later changes to the role still reach them. Edited from **Users → Permissions** (`GET`/`PUT /users/{id}/permissions`). On a plan without the feature, stored exceptions are kept but not applied. Changing a user's role clears their exceptions, and admins always keep the full set of their role's permissions.
 - **Contracted modules gate their permissions**: a clinic without vaccination, applications or procedures gets none of their permissions, whatever its roles say.
 - `granted(role, stored, modules, adjustments)` combines all of the above; the presentation layer puts the result in `ActorContext.permissions`.
 - The frontend uses the same model: the UI adapts to the actor's effective permissions, and the **Roles & Permissions** screen edits the overrides (`role_permissions` router: `GET`/`PUT`/`DELETE`).
@@ -148,7 +148,7 @@ Each clinic has a **subscription** (`Subscription` value object on `Tenant`): pl
 
 - **Plan catalog** (`plans`, editable in **Plans & pricing**): Profesional independiente, Clínica, Clínica Plus and Empresarial (custom quote). Each sets limits for doctors, support staff (nursing, reception and admins beyond the first), sites and storage, plus features (`user_permissions`; `custom_note_templates` from Clínica Plus) and its **analytics tier** (`basic` < `clinic` < `operations`: basic dashboard, clinic dashboard, operational metrics).
 - **Optional modules** (`addon_pricing`): vaccination, applications and procedures, each with a monthly price and a bundle price for all three; plus **advanced analytics** ($20), which raises the clinic to operational metrics, is charged apart from the bundle and is not sold to plans that already include it (`plan.analytics_included`).
-- **Quotas** are enforced in the use cases (invite, role change, reactivation, new site): growing above a limit is refused with `plan.quota_*`; a clinic already above it (after a downgrade) keeps what it has.
+- **Quotas** are enforced in the use cases (invite, role change, reactivation, new site): growing above a limit is refused with `plan.quota_*`; a clinic already above it (after a downgrade) keeps what it has. The seat check locks the clinic's row (`FOR NO KEY UPDATE`), so two simultaneous invitations can't exceed the plan.
 - **Payments and renewal** (`subscription_payments`): recording a payment extends the paid period by 1–24 months. After the period ends the clinic keeps working for the grace days; then it becomes **read-only** (`plan.read_only`: it can view but not change data until renewed). The app shows banners as expiry approaches.
 - Clinics see their plan, usage and payment history in **Settings → Organization**.
 
@@ -159,6 +159,7 @@ The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every 
 ## Security
 
 - **Sessions in httpOnly cookies** (`Secure` outside development, with `__Host-` / `__Secure-` prefixes): `mc_session` for clinics (SameSite=Lax) and `mc_console` for the platform console (SameSite=Strict, sent only to the platform API). The CSRF token (`mc_csrf` / `mc_console_csrf` + `X-CSRF-Token` header) is an HMAC of the session id, so a token from one scope is useless in the other, and signing out of a clinic leaves the console session intact. The session token itself is never reachable from JavaScript. `Authorization: Bearer` is still accepted for API clients.
+- **Signed tokens**: each token type has its own audience (`medicore:tenant`, `medicore:platform`, `medicore:mfa`) and mandatory claims (`exp`, `iat`, `sub`, `aud`, `scope`, `sid`). A token of another type gets 401 `auth.wrong_session`, and its claims are checked against the server-side session row (user, clinic, scope and impersonator). `JWT_ALGORITHM` accepts only `HS256`, `HS384` or `HS512`. Tokens issued before this version have no audience, so every user, including superadmins, signs in again once after deploying it.
 - **Revocable sessions** (`sessions` table + `sid` claim): real logout; changing the password ends the other sessions; suspending or resetting a user ends all of them; suspending or archiving a clinic ends all its sessions (support's included). Every request checks that the clinic and the account are still active, using one access rule shared with sign-in. Support can open a new session in a suspended clinic, but never in an archived one.
 - **Login lockout** with three counters, all reserved atomically before the password is checked (parallel requests can't get past the limits):
   - **Per IP**: 30 attempts in 15 min → 15 min block (IPv6 grouped by /64).
@@ -167,10 +168,13 @@ The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every 
   A blocked attempt gets a 429 with `Retry-After`; an IP block answers the same whether or not the account exists. A successful sign-in clears that account's failures from that IP, but not the IP's or the account's totals (it only gives back its own attempt). A support reactivation or password reset also lifts that account's lockout, but not the IP counter. The console's second factor keeps its own limit of 5 per superadmin, regardless of IP. The Monitoring page also shows IP blocks and the IP behind account blocks.
 - **Console session limits**: the superadmin console session expires after 30 min without activity (`PLATFORM_SESSION_IDLE_MINUTES`) and at most 8 h after sign-in (`PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request. `scripts/create_platform_admin.py` revokes the admin's sessions when it updates the account.
 - **Optional MFA (TOTP) for superadmins**: enabled from the console under *Account security* (`/platform/security`). With MFA on, the console login asks for the password and then a 6-digit code from an authenticator app, or a recovery code. The challenge is single-use, valid for 5 min and kept in an httpOnly cookie limited to `/api/v1/platform/login`. A code can't be reused, and after 5 failed attempts the lockout escalates. There are 10 single-use recovery codes, shown once and stored as hashes. The TOTP secret is encrypted with AES-256-GCM. Enabling MFA, regenerating the recovery codes or disabling it requires the current password, and every change is recorded in the platform audit log.
+- **Password change lockout**: 5 failed attempts with the current password block further attempts on that account (429 with `Retry-After`, with backoff). A weak new password doesn't count. The superadmin's MFA actions (setup, recovery codes, disabling) are rate-limited too, and Monitoring lists these blocks with the clinic's account.
+- **Input limits**: slug ≤ 63 characters, email ≤ 254 (stored in lowercase and without spaces, format-checked when inviting or creating a user: `user.invalid_email`), password ≤ 256, names ≤ 255. User agent is truncated to 400 and IP to 45 characters in sessions and audit. Validation errors (422) no longer echo the submitted value (`input`).
+- **Fresh profile**: on load the app refreshes the signed-in user's profile (name, role, permissions, pending password change, clinic name and timezone), so changes made elsewhere apply on the next load.
 - **Recommended deployment**: serve the platform console from its own origin or subdomain (e.g. `console.example.com`), so an XSS in the clinic app cannot share an origin with it. This is a recommendation; the app does not enforce it.
 - **No enumeration**: login does the same password-hashing work whether or not the organization or account exists (one bcrypt check per attempt), and an unknown slug or email answers exactly like a wrong password.
 - `X-Forwarded-For` is only honored from the proxies listed in `TRUSTED_PROXIES`.
-- Security headers on the API and a strict CSP in the frontend build.
+- Security headers on the API, `Cache-Control: no-store` on every `/api/` response (except those that set their own, such as CSV downloads) and a strict CSP in the frontend build.
 
 Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
@@ -272,7 +276,8 @@ medicore/
 │   │   ├── seed_demo.py            # Demo data: ~8 weeks of history + 4 of agenda, via the use cases
 │   │   ├── import_icd.py           # Loads the ICD-10/ICD-11 catalog
 │   │   ├── create_platform_admin.py # Creates a platform superadmin
-│   │   └── reset_platform_mfa.py    # Turns off a superadmin's MFA (lost device)
+│   │   ├── reset_platform_mfa.py    # Turns off a superadmin's MFA (lost device)
+│   │   └── purge_expired_sessions.py # Deletes expired or revoked sessions (daily task)
 │   ├── pyproject.toml        # Metadata + deps + pytest/ruff config
 │   ├── src/medicore/         # Source code (see Architecture above)
 │   └── tests/
@@ -391,7 +396,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1322 tests)
+.venv/bin/pytest                          # full suite (1396 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -445,14 +450,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1322 passing tests
-   278  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1396 passing tests
+   297  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   580  — application (auth, sessions, appointments, consultations, records, notifications,
+   604  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform (support actions land in the clinic's audit and are notified), granular permissions, multi-tenant isolation)
-   312  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   328  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    152  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    167  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:
@@ -473,8 +478,8 @@ Among other things, the tests verify:
 |---|---|---|
 | `ENVIRONMENT` | `development` or `production`. Production enables strict validation. | `development` |
 | `DATABASE_URL` | PostgreSQL connection URL (psycopg3) | `postgresql+psycopg://localhost/medicore` |
-| `JWT_SECRET` | HMAC key for tokens. **Required and strong in production** (`openssl rand -hex 32`) | `change-me` (dev only) |
-| `JWT_ALGORITHM` | JWT algorithm | `HS256` |
+| `JWT_SECRET` | HMAC key for tokens. **Required in production, at least 32 bytes** (`openssl rand -hex 32`); the app won't start otherwise | `change-me` (dev only) |
+| `JWT_ALGORITHM` | JWT algorithm: `HS256`, `HS384` or `HS512` only | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Token lifetime in minutes | `1440` (24 h) |
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Lifetime (min) of impersonation/support sessions — shorter for safety | `60` (1 h) |
 | `COOKIE_SECURE` | `Secure` flag and `__Host-` / `__Secure-` prefixes on session cookies. Unset = on everywhere except `development`. Cannot be `false` in production. | derived from `ENVIRONMENT` |
@@ -490,7 +495,7 @@ Among other things, the tests verify:
 | `DEMO_PASSWORD` | Password for the demo users created by `scripts/seed_demo.py` (≥ 8 chars). **Required in production**, where the public default is rejected | `demo1234` (dev only) |
 | `DEMO_ADMIN_PASSWORD` | Password for the demo clinic admins (≥ 8 chars), kept private so the shared demo password doesn't open the administration. **Required in production** and different from `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
-> In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is still the insecure default or too short, or if `CORS_ORIGINS` is `*`, `COOKIE_SECURE` is `false` or `MFA_ENCRYPTION_KEY` is empty; API docs are also disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and the defaults work as-is.
+> In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is still the insecure default or shorter than 32 bytes, or if `CORS_ORIGINS` is `*`, `COOKIE_SECURE` is `false` or `MFA_ENCRYPTION_KEY` is empty; API docs are also disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and the defaults work as-is.
 
 ---
 
@@ -502,7 +507,7 @@ The backend ships a production-ready `Dockerfile` (non-root user, uvicorn on por
 
 The root [`docker-compose.yml`](docker-compose.yml) runs the whole stack on a **single origin**: `db` (PostgreSQL 16, persistent volume), `backend` (applies `alembic upgrade head` on start) and `frontend` (nginx serving the SPA, proxying `/api/` to the backend and adding the security headers). Only `frontend` gets a public domain; TLS is terminated by the edge proxy (Traefik in Coolify).
 
-1. Generate the secrets: `openssl rand -hex 32` (`JWT_SECRET`) and `openssl rand -base64 24` (`POSTGRES_PASSWORD`), the MFA key (`MFA_ENCRYPTION_KEY`, command in the backend environment variables table), and choose `DEMO_PASSWORD` (shared with whoever tries the demo) and `DEMO_ADMIN_PASSWORD` (private, for the clinic admins).
+1. Generate the secrets: `openssl rand -hex 32` (`JWT_SECRET`, at least 32 bytes) and `openssl rand -base64 24` (`POSTGRES_PASSWORD`), the MFA key (`MFA_ENCRYPTION_KEY`, command in the backend environment variables table), and choose `DEMO_PASSWORD` (shared with whoever tries the demo) and `DEMO_ADMIN_PASSWORD` (private, for the clinic admins).
 2. In Coolify: **New Resource → Public Repository** → this repo, branch `main`, **Build Pack: Docker Compose**, compose file `/docker-compose.yml`.
 3. Environment variables: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (e.g. `https://medicore.example.com`), `DEMO_PASSWORD`, `DEMO_ADMIN_PASSWORD` and `MFA_ENCRYPTION_KEY`. Optional: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`, `WEB_CONCURRENCY` (uvicorn workers, default 2). If a required one is missing the stack doesn't start, on purpose.
 4. Assign the domain to the **frontend** service only, then **Deploy**.
@@ -520,9 +525,13 @@ Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on s
 
 > **Before deploying this version:** `MFA_ENCRYPTION_KEY` has to reach the `backend` service. Set it in Coolify and declare it in `docker-compose.yml` (`MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY}`), since production won't start without it. Migration `e1f2a3b4c5d7` adds the MFA columns to `platform_admins` and the `platform_admin_recovery_codes` table.
 
+> **Before deploying this version:** every user, including superadmins, signs in again once, because tokens issued earlier have no audience.
+>
 > **Migration `f2a3b4c5d6e8`:** adds `last_success_at` to `login_attempts` (login lockout). It needs no new environment variables.
 
 For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched. Each run is recorded, and the *Monitoring* page flags the task when it fails or when more than 26 h pass without a successful reset.
+
+In every environment, also add a daily **Scheduled Task** on the `backend` container running `python scripts/purge_expired_sessions.py` (e.g. `30 9 * * *`). It deletes the sessions that can no longer sign in (expired or revoked, from clinics, the console and second-step challenges). Each run is recorded as the `session_purge` job, and Monitoring flags it when more than 26 h pass without a successful run.
 
 **Monitoring.** The console's *Monitoring* page only loads while the API answers, so to hear about an outage point an external monitor (UptimeRobot, Better Stack…) at `https://<your-domain>/api/v1/health/ready`: it answers `200` when the API and the database are fine and `503` when the database does not respond. The deployed commit on that page comes from `SOURCE_COMMIT`, which Coolify injects into the container. Do not declare it in the compose file: Coolify locks compose variables and an empty one would shadow its own. Outside Coolify, set it yourself; if it is missing, the page says so.
 

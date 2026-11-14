@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.tenant import Tenant
@@ -41,6 +42,15 @@ class SqlTenantRepository:
         rows = q.offset(pg.offset).limit(pg.limit).all()
         return Page(
             items=[to_tenant(r) for r in rows], total=total, offset=pg.offset, limit=pg.limit
+        )
+
+    def lock(self, tenant_id: TenantId) -> None:
+        # FOR NO KEY UPDATE serializes quota checks without blocking the FOR KEY SHARE that
+        # every insert referencing the tenant (users, sessions, audit...) takes for its FK.
+        self._s.execute(
+            select(TenantModel.id)
+            .where(TenantModel.id == tenant_id.value)
+            .with_for_update(key_share=True)
         )
 
     def save(self, tenant: Tenant) -> None:

@@ -30,6 +30,50 @@ class TestUsers:
         assert resp.json()["status"] == "active"
         assert resp.json()["sex"] == "female"
 
+    def test_invite_stores_and_returns_the_email_in_lowercase(self, seed, client, admin_headers):
+        resp = client.post(
+            "/api/v1/users",
+            json={
+                "name": "Nuevo",
+                "email": " Nuevo@Test.ES ",
+                "role": "nurse",
+                "password": "Rio-Lempa-482",
+            },
+            headers=admin_headers,
+        )
+
+        assert resp.status_code == 201
+        assert resp.json()["email"] == "nuevo@test.es"
+
+    def test_invite_with_malformed_email_is_422(self, seed, client, admin_headers):
+        resp = client.post(
+            "/api/v1/users",
+            json={
+                "name": "Nuevo",
+                "email": "no-es-email",
+                "role": "nurse",
+                "password": "Rio-Lempa-482",
+            },
+            headers=admin_headers,
+        )
+
+        assert resp.status_code == 422
+        assert resp.json()["code"] == "request_invalid"
+
+    def test_invite_with_too_long_name_is_422(self, seed, client, admin_headers):
+        resp = client.post(
+            "/api/v1/users",
+            json={
+                "name": "n" * 256,
+                "email": "nuevo@test.es",
+                "role": "nurse",
+                "password": "Rio-Lempa-482",
+            },
+            headers=admin_headers,
+        )
+
+        assert resp.status_code == 422
+
     def test_update_user_profile(self, seed, client, admin_headers):
         resp = client.patch(
             f"/api/v1/users/{seed.nurse.id}",

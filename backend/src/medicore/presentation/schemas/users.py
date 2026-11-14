@@ -7,17 +7,25 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from medicore.domain.enums import Role, Sex
+from medicore.presentation.schemas.fields import (
+    Email,
+    Jvpm,
+    Password,
+    PersonName,
+    Phone,
+    Specialty,
+)
 
 
 class InviteUserRequest(BaseModel):
-    name: str
-    email: str
+    name: PersonName
+    email: Email
     role: Role
-    password: str
+    password: Password
     sex: Sex | None = None
-    phone: str | None = None
-    specialty: str | None = None
-    jvpm: str | None = None
+    phone: Phone | None = None
+    specialty: Specialty | None = None
+    jvpm: Jvpm | None = None
 
 
 class UpdateRoleRequest(BaseModel):
@@ -25,16 +33,16 @@ class UpdateRoleRequest(BaseModel):
 
 
 class UpdateUserRequest(BaseModel):
-    name: str | None = None
+    name: PersonName | None = None
     role: Role | None = None
     sex: Sex | None = None
-    phone: str | None = None
-    specialty: str | None = None
-    jvpm: str | None = None
+    phone: Phone | None = None
+    specialty: Specialty | None = None
+    jvpm: Jvpm | None = None
 
 
 class ResetPasswordRequest(BaseModel):
-    password: str
+    password: Password
 
 
 class UserResponse(BaseModel):

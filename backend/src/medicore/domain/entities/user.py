@@ -13,6 +13,7 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.email import normalize_email
 from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
 from medicore.domain.value_objects.user_preferences import UserPreferences
 
@@ -64,6 +65,10 @@ class User:
     last_seen_at: datetime | None = None
     joined_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    def __post_init__(self) -> None:
+        # Not validated: rows saved before the format check must still load.
+        self.email = normalize_email(self.email)
+
     @property
     def avatar_initials(self) -> str:
         return derive_initials(self.name)
@@ -79,7 +84,10 @@ class User:
         self.status = UserStatus.SUSPENDED
 
     def change_role(self, role: Role) -> None:
-        self.role = role
+        if role != self.role:
+            self.role = role
+            # The exceptions were computed against the previous role's permissions.
+            self.permission_adjustments = PermissionAdjustments()
 
     def adjust_permissions(self, adjustments: PermissionAdjustments) -> None:
         self.permission_adjustments = adjustments

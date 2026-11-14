@@ -84,13 +84,15 @@ class FakeTokenIssuer:
             f"{claims.impersonator}|{claims.session_id}"
         )
 
-    def decode(self, token: str) -> SessionClaims:
+    def decode(self, token: str, *scopes: str) -> SessionClaims:
         import jwt
 
         try:
             user_id, tenant_id, role, scope, imp, sid = token.split("|")
         except ValueError as exc:
             raise jwt.DecodeError("invalid fake token format") from exc
+        if scopes and scope not in scopes:
+            raise jwt.InvalidAudienceError("token of another type")
         return SessionClaims(
             user_id=user_id,
             tenant_id=None if tenant_id == "None" else tenant_id,

@@ -18,6 +18,7 @@ from medicore.application.common.audit import (
     subject,
     support_audit_entry,
 )
+from medicore.application.common.client_info import clip_ip, clip_user_agent
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.entitlements import granted_permissions
 from medicore.application.common.errors import (
@@ -78,6 +79,7 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.email import parse_email
 from medicore.domain.value_objects.slug import Slug
 
 _audit = platform_audit_entry
@@ -126,7 +128,7 @@ def _login_entry(
         timestamp=when,
         metadata=dict(metadata),
         ip_address=ip_address,
-        user_agent=(user_agent or "")[:400] or None,
+        user_agent=clip_user_agent(user_agent),
     )
 
 
@@ -151,7 +153,7 @@ def _open_platform_session(
             expires_at=now + policy.lifetime,
             last_activity_at=now,
             ip_address=ip_address,
-            user_agent=(user_agent or "")[:400] or None,
+            user_agent=clip_user_agent(user_agent),
         )
     )
     uow.platform_audit.append(
@@ -245,7 +247,7 @@ class AuthenticatePlatformAdmin:
                 created_at=now,
                 expires_at=now + self._policy.mfa_challenge_ttl,
                 ip_address=ip_address,
-                user_agent=(user_agent or "")[:400] or None,
+                user_agent=clip_user_agent(user_agent),
             )
         )
         uow.commit()
@@ -379,8 +381,9 @@ class CreateTenantWithAdmin:
             slug = Slug(cmd.slug.strip().lower())
         except InvalidValueObject as exc:
             raise ValidationError(str(exc), code="clinic.invalid_slug") from exc
+        admin_email = parse_email(cmd.admin_email)
         ensure_password_policy(
-            cmd.admin_password, personal=(cmd.admin_name, cmd.admin_email, str(slug))
+            cmd.admin_password, personal=(cmd.admin_name, admin_email, str(slug))
         )
 
         if cmd.trial_days is None and cmd.subscription.period_end is None:
@@ -422,7 +425,7 @@ class CreateTenantWithAdmin:
             id=UserId.new(),
             tenant_id=tenant_id,
             name=cmd.admin_name,
-            email=cmd.admin_email.strip().lower(),
+            email=admin_email,
             password_hash=self._hasher.hash(cmd.admin_password),
             role=Role.ADMIN,
             status=UserStatus.ACTIVE,
@@ -753,8 +756,8 @@ class ImpersonateTenant:
                     created_at=now,
                     expires_at=now
                     + timedelta(minutes=self._tokens.ttl_minutes(impersonated=True)),
-                    ip_address=actor.ip_address,
-                    user_agent=actor.user_agent,
+                    ip_address=clip_ip(actor.ip_address),
+                    user_agent=clip_user_agent(actor.user_agent),
                     impersonator_id=actor.admin_id.value,
                 )
             )
@@ -893,8 +896,10 @@ class UpdateTenantUser:
             )
             previous_role = user.role
             for key, value in changes.items():
-                if key in allowed:
+                if key in allowed and key != "role":
                     setattr(user, key, value)
+            if changes.get("role") is not None:
+                user.change_role(Role(changes["role"]))
             uow.users.save(user)
             now = self._clock.now()
             if changed:

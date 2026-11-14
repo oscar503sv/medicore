@@ -123,6 +123,12 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_request_validation(request: Request, exc: RequestValidationError):
         # Same list-shaped ``detail`` as FastAPI's default, plus a code and the bad fields.
         errors = jsonable_encoder(exc.errors())
+        for error in errors:
+            # Never echo submitted values (passwords) back.
+            error.pop("input", None)
+        for error in errors:
+            # Never echo submitted values (passwords) back.
+            error.pop("input", None)
         fields = sorted({str(e["loc"][-1]) for e in errors if e.get("loc")})
         return JSONResponse(
             status_code=422,

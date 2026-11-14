@@ -37,6 +37,8 @@ from medicore.domain.entities.vaccination_record import VaccinationRecord
 from medicore.domain.repositories._support import RequestStatsRow
 from medicore.domain.services.plan_catalog import default_addon_pricing, default_plans
 
+_OUTSIDE_TRANSACTIONS = frozenset({"login_attempts", "login_successes"})
+
 
 @dataclass
 class InMemoryStore:
@@ -78,6 +80,8 @@ class InMemoryStore:
     login_attempts: dict[str, tuple] = field(default_factory=dict)
     # When each identifier last signed in successfully (account-and-IP rows).
     login_successes: dict[str, datetime] = field(default_factory=dict)
+    # Times each clinic's row was locked for a quota check (tenant id -> count).
+    tenant_locks: dict[UUID, int] = field(default_factory=dict)
     # Global revocable sessions (tenant and platform scopes share the store).
     sessions: dict[UUID, AuthSession] = field(default_factory=dict)
     # Recorded server errors (platform monitoring).
@@ -96,7 +100,13 @@ class InMemoryStore:
     database_down = False
 
     def snapshot(self) -> dict[str, dict]:
-        return {f.name: copy.deepcopy(getattr(self, f.name)) for f in fields(self)}
+        # The login throttle lives in its own database session, outside any unit of work's
+        # transaction, so a rollback must not undo it.
+        return {
+            f.name: copy.deepcopy(getattr(self, f.name))
+            for f in fields(self)
+            if f.name not in _OUTSIDE_TRANSACTIONS
+        }
 
     def restore(self, snap: dict[str, dict]) -> None:
         for name, data in snap.items():

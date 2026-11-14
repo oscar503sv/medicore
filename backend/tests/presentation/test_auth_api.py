@@ -121,6 +121,43 @@ def test_token_without_session_claim_rejected(seed, client):
     assert resp.status_code == 401
 
 
+@pytest.mark.parametrize("impersonator", [None, "6b1b3b0e-0000-4000-8000-000000000001"])
+def test_token_claims_must_match_the_session_row(seed, client, auth_headers, impersonator):
+    # A token naming the admin but carrying the doctor's live session id must not pass:
+    # the row says whose session it is, and whether it is a support session.
+    (row,) = seed.factory.store.sessions.values()
+    forged = FakeTokenIssuer().issue(
+        SessionClaims(
+            user_id=str(seed.admin.id),
+            tenant_id=str(seed.tenant.id),
+            role="admin",
+            session_id=str(row.id),
+            impersonator=impersonator,
+        )
+    )
+
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {forged}"})
+
+    assert resp.status_code == 401
+
+
+def test_a_support_claim_over_a_regular_session_is_rejected(seed, client, auth_headers):
+    (row,) = seed.factory.store.sessions.values()
+    forged = FakeTokenIssuer().issue(
+        SessionClaims(
+            user_id=str(row.user_id),
+            tenant_id=str(seed.tenant.id),
+            role="doctor",
+            session_id=str(row.id),
+            impersonator="6b1b3b0e-0000-4000-8000-000000000001",
+        )
+    )
+
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {forged}"})
+
+    assert resp.status_code == 401
+
+
 def test_logout_revokes_the_server_side_session(seed, client):
     resp = client.post(
         "/api/v1/auth/login",
@@ -188,6 +225,9 @@ def test_get_my_profile(seed, client, auth_headers):
     assert data["specialty"] == seed.doctor.specialty
     assert data["bio"] is None
     assert data["permissions"] == sorted(str(p) for p in permissions_for(Role.DOCTOR))
+    assert data["tenant_name"] == seed.tenant.legal_name
+    assert data["timezone"] == seed.tenant.timezone
+    assert data["must_change_password"] is False
 
 
 def test_get_my_profile_requires_token(client):
@@ -241,3 +281,75 @@ def test_status_check_is_live(seed, client, auth_headers):
 
     set_status(TenantStatus.ACTIVE)
     assert client.get("/api/v1/auth/me", headers=auth_headers).status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("password_ok", "expected"), [(True, 200), (False, 401)], ids=["valid", "invalid"]
+)
+def test_login_with_huge_user_agent_is_not_a_server_error(seed, client, password_ok, expected):
+    resp = client.post(
+        "/api/v1/auth/login",
+        json={
+            "slug": str(seed.tenant.slug),
+            "email": seed.doctor.email,
+            "password": PASSWORD if password_ok else "wrong",
+        },
+        headers={"User-Agent": "x" * 5000},
+    )
+
+    assert resp.status_code == expected
+    if password_ok:
+        (row,) = seed.factory.store.sessions.values()
+        assert row.user_agent == "x" * 400
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"slug": "a" * 64}, {"email": "a" * 243 + "@clinic.test"}, {"password": "p" * 257}],
+    ids=["slug", "email", "password"],
+)
+def test_login_limits_return_422(seed, client, overrides):
+    payload = {
+        "slug": str(seed.tenant.slug),
+        "email": seed.doctor.email,
+        "password": PASSWORD,
+        **overrides,
+    }
+
+    resp = client.post("/api/v1/auth/login", json=payload)
+
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "request_invalid"
+    # The 422 must not echo what was submitted back (a password would leak into logs).
+    assert overrides.get("password", "\0") not in resp.text
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"email": "a" * 243 + "@clinic.test"}, {"password": "p" * 257}],
+    ids=["email", "password"],
+)
+def test_platform_login_limits_return_422(seed, client, overrides):
+    payload = {"email": seed.platform_admin.email, "password": PASSWORD, **overrides}
+
+    resp = client.post("/api/v1/platform/login", json=payload)
+
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "request_invalid"
+    assert overrides.get("password", "\0") not in resp.text
+
+
+def test_change_password_throttle_returns_429_with_retry_after(client, auth_headers):
+    wrong = {"current_password": "wrong-password", "new_password": "nueva-clave-123"}
+    for _ in range(5):
+        resp = client.post("/api/v1/auth/change-password", json=wrong, headers=auth_headers)
+        assert resp.status_code == 400
+
+    resp = client.post(
+        "/api/v1/auth/change-password",
+        json={"current_password": PASSWORD, "new_password": "nueva-clave-123"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 429
+    assert int(resp.headers["Retry-After"]) > 0

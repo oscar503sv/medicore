@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import ipaddress
 
-from medicore.infrastructure.config import TrustedNetworks
+from fastapi import Request
+
+from medicore.application.common.client_info import clip_ip, clip_user_agent
+from medicore.infrastructure.config import TrustedNetworks, get_settings
 
 
 def _parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
@@ -57,3 +60,20 @@ def resolve_client_ip(
             return str(ip)
         leftmost = str(ip)
     return leftmost
+
+
+def client_ip(request: Request) -> str | None:
+    """Client IP for audit trails: ``X-Forwarded-For`` is honored only when the request
+    comes through a proxy listed in ``TRUSTED_PROXIES`` (else it is spoofable noise and
+    the socket peer is used)."""
+    return clip_ip(
+        resolve_client_ip(
+            request.client.host if request.client else None,
+            request.headers.get("x-forwarded-for"),
+            get_settings().trusted_proxy_networks,
+        )
+    )
+
+
+def client_user_agent(request: Request) -> str | None:
+    return clip_user_agent(request.headers.get("user-agent"))

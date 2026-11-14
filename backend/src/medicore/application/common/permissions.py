@@ -293,7 +293,8 @@ def granted(
     """What a user may actually do in a clinic: the role's effective set, with the user's
     own adjustments when given, minus the permissions of uncontracted modules."""
     perms = effective_permissions(role, stored, model)
-    if adjustments is not None and not adjustments.is_empty:
+    # Admins always hold their role's full set (UpdateUserPermissions refuses them too).
+    if adjustments is not None and not adjustments.is_empty and role != Role.ADMIN:
         catalog = {str(p): p for p in Permission}
         wanted = adjustments.apply(str(p) for p in perms)
         perms = frozenset(catalog[s] for s in wanted if s in catalog)

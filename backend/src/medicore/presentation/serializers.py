@@ -149,6 +149,9 @@ def ser_my_profile(p: MyProfileDTO) -> dict:
         "bio": p.bio,
         "jvpm": p.jvpm,
         "permissions": list(p.permissions),
+        "must_change_password": p.must_change_password,
+        "tenant_name": p.tenant_name,
+        "timezone": p.timezone,
     }
 
 

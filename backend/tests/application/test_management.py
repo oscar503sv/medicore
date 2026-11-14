@@ -6,6 +6,7 @@ from datetime import date, time
 
 import pytest
 
+from medicore.application.common.errors import ValidationError
 from medicore.application.use_cases.availability import (
     AddAvailabilityException,
     GetMyAvailability,
@@ -40,7 +41,7 @@ from medicore.domain.enums import (
     UserStatus,
 )
 from medicore.domain.services.slot_resolver import SlotStatus
-from medicore.domain.shared.errors import PermissionDenied
+from medicore.domain.shared.errors import InvalidValueObject, PermissionDenied
 from medicore.domain.value_objects.time_range import TimeRange
 from tests.support.builders import PASSWORD, seed_clinic
 from tests.support.fakes import FakeTokenIssuer, FixedClock, PlainPasswordHasher
@@ -67,8 +68,6 @@ class TestUsers:
     def test_invite_duplicate_email_rejected(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
-        from medicore.application.common.errors import ValidationError
-
         with pytest.raises(ValidationError):
             InviteUser(uow, PlainPasswordHasher(), FixedClock()).execute(
                 seed.actor(seed.admin),
@@ -79,6 +78,57 @@ class TestUsers:
                     password="Rio-Lempa-482",
                 ),
             )
+
+    def test_invite_stores_the_email_normalized(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+
+        user = InviteUser(uow, PlainPasswordHasher(), FixedClock()).execute(
+            seed.actor(seed.admin),
+            InviteUserCommand(
+                name="Nuevo",
+                email="  Nuevo@Clinica-Norte.TEST ",
+                role=Role.NURSE,
+                password="Rio-Lempa-482",
+            ),
+        )
+
+        assert user.email == "nuevo@clinica-norte.test"
+        assert uow.users.get_by_email("NUEVO@clinica-norte.test") is not None
+
+    def test_invite_duplicate_with_different_case_is_rejected(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+
+        with pytest.raises(ValidationError) as exc:
+            InviteUser(uow, PlainPasswordHasher(), FixedClock()).execute(
+                seed.actor(seed.admin),
+                InviteUserCommand(
+                    name="Dup",
+                    email=f" {seed.doctor.email.upper()}",
+                    role=Role.DOCTOR,
+                    password="Rio-Lempa-482",
+                ),
+            )
+
+        assert exc.value.code == "user.email_taken"
+
+    def test_invite_malformed_email_is_rejected(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+
+        with pytest.raises(InvalidValueObject) as exc:
+            InviteUser(uow, PlainPasswordHasher(), FixedClock()).execute(
+                seed.actor(seed.admin),
+                InviteUserCommand(
+                    name="Mal",
+                    email="no-es-email",
+                    role=Role.NURSE,
+                    password="Rio-Lempa-482",
+                ),
+            )
+
+        assert exc.value.code == "user.invalid_email"
 
     def test_non_admin_cannot_manage_users(self):
         seed = seed_clinic()

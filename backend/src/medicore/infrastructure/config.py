@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import ipaddress
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -47,7 +48,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     database_url: str = "postgresql+psycopg://localhost/medicore"
     jwt_secret: str = "change-me"
-    jwt_algorithm: str = "HS256"
+    jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
     jwt_expire_minutes: int = 1440
     jwt_support_expire_minutes: int = 60  # TTL corta para sesiones de suplantación (soporte)
     # CORS: comma-separated origins, or "*" for any (dev default). With explicit origins,
@@ -121,10 +122,10 @@ class Settings(BaseSettings):
     def _enforce_production_secret(self) -> Settings:
         # Fail fast rather than ship a guessable JWT secret to production.
         if self.is_production and (
-            self.jwt_secret in _INSECURE_SECRETS or len(self.jwt_secret) < 16
+            self.jwt_secret in _INSECURE_SECRETS or len(self.jwt_secret.encode()) < 32
         ):
             raise ValueError(
-                "JWT_SECRET must be set to a strong secret in production "
+                "JWT_SECRET must be set to a strong secret of at least 32 bytes in production "
                 "(e.g. `openssl rand -hex 32`)."
             )
         return self

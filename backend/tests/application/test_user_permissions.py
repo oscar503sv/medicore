@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import pytest
 
+from medicore.application.common.context import PlatformActorContext
 from medicore.application.common.entitlements import granted_permissions
 from medicore.application.common.errors import ValidationError
 from medicore.application.common.permissions import Permission, granted
+from medicore.application.use_cases.platform import UpdateTenantUser
 from medicore.application.use_cases.role_permissions import UpdateRolePermissions
 from medicore.application.use_cases.user_permissions import (
     GetUserPermissions,
     UpdateUserPermissions,
 )
+from medicore.application.use_cases.users import UpdateUser, UpdateUserRole
 from medicore.domain.enums import AddonModule, Role
 from medicore.domain.services.plan_catalog import CLINICA, INDEPENDIENTE
 from medicore.domain.shared.errors import PermissionDenied
@@ -61,6 +64,13 @@ class TestRule:
     def test_uncontracted_modules_stay_locked(self):
         adj = PermissionAdjustments(granted=frozenset({"procedures.view"}))
         assert Permission.PROCEDURES_VIEW not in granted(Role.NURSE, None, frozenset(), adj)
+
+    def test_admin_ignores_stored_adjustments(self):
+        adj = PermissionAdjustments(revoked=frozenset({"users.manage"}))
+
+        perms = granted(Role.ADMIN, None, frozenset(AddonModule), adj)
+
+        assert Permission.USERS_MANAGE in perms
 
     def test_plan_without_the_feature_ignores_stored_adjustments(self):
         seed = seed_clinic()
@@ -189,3 +199,41 @@ class TestUpdate:
         with pytest.raises(ValidationError) as exc:
             _update(seed, seed.doctor, doctor_set)
         assert exc.value.code == "roles.doctor_must_keep"
+
+
+def _by_update_user_role(seed, user, role):
+    UpdateUserRole(_uow(seed), FixedClock()).execute(seed.actor(seed.admin), user.id, role)
+
+
+def _by_update_user(seed, user, role):
+    UpdateUser(_uow(seed), FixedClock()).execute(seed.actor(seed.admin), user.id, role=role)
+
+
+def _by_update_tenant_user(seed, user, role):
+    UpdateTenantUser(seed.factory, FixedClock()).execute(
+        PlatformActorContext(admin_id=seed.platform_admin.id), seed.tenant.id, user.id, role=role
+    )
+
+
+@pytest.mark.parametrize(
+    "change", [_by_update_user_role, _by_update_user, _by_update_tenant_user]
+)
+class TestRoleChange:
+    def test_a_new_role_drops_the_old_roles_exceptions(self, change):
+        seed = seed_clinic()
+        _update(seed, seed.nurse, [*_role_set(seed, seed.nurse), "audit.view"])
+        assert not _uow(seed).users.get_by_id(seed.nurse.id).permission_adjustments.is_empty
+
+        change(seed, seed.nurse, Role.RECEPTIONIST)
+
+        user = _uow(seed).users.get_by_id(seed.nurse.id)
+        assert user.role == Role.RECEPTIONIST
+        assert user.permission_adjustments.is_empty
+
+    def test_the_same_role_keeps_them(self, change):
+        seed = seed_clinic()
+        _update(seed, seed.nurse, [*_role_set(seed, seed.nurse), "audit.view"])
+
+        change(seed, seed.nurse, Role.NURSE)
+
+        assert not _uow(seed).users.get_by_id(seed.nurse.id).permission_adjustments.is_empty

@@ -17,6 +17,7 @@ from medicore.application.use_cases.onboarding import GetOnboarding, UpdateOnboa
 from medicore.application.use_cases.sessions import ListMySessions, RevokeMySession
 from medicore.domain.shared.identifiers import SessionId
 from medicore.infrastructure.config import get_settings
+from medicore.presentation.client_ip import client_ip, client_user_agent
 from medicore.presentation.cookies import (
     clear_session_cookies,
     set_session_cookies,
@@ -30,7 +31,6 @@ from medicore.presentation.dependencies import (
     PasswordChangeActor,
     UoW,
     UoWFactory,
-    _client_ip,
     revoke_session_token,
 )
 from medicore.presentation.schemas.auth import (
@@ -66,8 +66,8 @@ def login(
             slug=body.slug,
             email=body.email,
             password=body.password,
-            ip_address=_client_ip(request),
-            user_agent=request.headers.get("user-agent"),
+            ip_address=client_ip(request),
+            user_agent=client_user_agent(request),
         )
     )
     # The JWT travels only in an httpOnly cookie — never in the body, never in storage.
