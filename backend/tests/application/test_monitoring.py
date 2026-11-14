@@ -115,6 +115,11 @@ def test_login_pressure_counts_recent_failures_and_lists_active_lockouts():
                                                    NOW + timedelta(minutes=2))
     attempts["platform:root@x.test"] = (2, NOW - timedelta(hours=3), None)
     attempts["tenant:clinica-norte:old@x.test"] = (3, NOW - timedelta(days=2), None)
+    # The IP and account-and-IP counters watch the same attempts: never counted twice.
+    attempts["ip:198.51.100.1"] = (30, NOW - timedelta(minutes=1), NOW + timedelta(minutes=9))
+    attempts["tenant:clinica-norte:ana@x.test|198.51.100.1"] = (
+        6, NOW - timedelta(minutes=1), NOW + timedelta(minutes=1)
+    )
     seed.factory.store.audit[uuid.uuid4()] = AuditLog(
         id=AuditLogId.new(), tenant_id=seed.tenant.id, actor_id=seed.admin.id,
         action="auth.login_locked", entity_type="User", entity_id=str(seed.admin.id),
@@ -125,10 +130,11 @@ def test_login_pressure_counts_recent_failures_and_lists_active_lockouts():
 
     assert dto.logins.failing_accounts == 2
     assert dto.logins.failed_attempts == 8
-    [locked] = dto.logins.locked
-    assert (locked.scope, locked.clinic_slug, locked.email) == (
-        "tenant", "clinica-norte", "ana@x.test"
-    )
+    by_scope = {(lk.scope, lk.ip): lk for lk in dto.logins.locked}
+    assert set(by_scope) == {("tenant", None), ("ip", "198.51.100.1"), ("tenant", "198.51.100.1")}
+    account = by_scope[("tenant", None)]
+    assert (account.clinic_slug, account.email) == ("clinica-norte", "ana@x.test")
+    assert by_scope[("tenant", "198.51.100.1")].email == "ana@x.test"
     assert dto.lockouts_24h == 1
 
 

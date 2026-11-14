@@ -123,11 +123,12 @@ class TableSize:
 
 @dataclass(frozen=True, slots=True)
 class LockedLogin:
-    scope: str  # "tenant" | "platform"
+    scope: str  # "tenant" | "platform" | "ip"
     clinic_slug: str | None
     email: str
     failed_count: int
     locked_until: datetime
+    ip: str | None = None  # the address bucket, for "ip" rows and account-and-IP rows
 
 
 @dataclass(frozen=True, slots=True)

@@ -616,6 +616,7 @@ def ser_system_status(dto, retention_days: int) -> dict:
                     "email": lk.email,
                     "failed_count": lk.failed_count,
                     "locked_until": lk.locked_until,
+                    "ip": lk.ip,
                 }
                 for lk in dto.logins.locked
             ],

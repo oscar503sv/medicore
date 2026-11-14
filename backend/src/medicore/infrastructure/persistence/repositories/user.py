@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.user import DoctorProfile, User
+from medicore.domain.enums import Role, UserStatus
 from medicore.domain.repositories._support import Page, Paging, UserFilter
 from medicore.domain.shared.identifiers import TenantId, UserId
 from medicore.infrastructure.persistence.mappers.entities import (
@@ -49,6 +51,22 @@ class SqlUserRepository:
     def get_by_email(self, email: str) -> User | None:
         row = self._q().filter(UserModel.email == email.strip().lower()).first()
         return to_user(row) if row else None
+
+    def lock_active_admin_ids(self) -> list[UserId]:
+        # Locking in id order keeps two concurrent admin changes from deadlocking; under
+        # READ COMMITTED the WHERE is re-evaluated once the lock is granted, so the loser
+        # of a race counts what the winner committed.
+        rows = self._s.execute(
+            select(UserModel.id)
+            .where(
+                UserModel.tenant_id == self._tid,
+                UserModel.role == str(Role.ADMIN),
+                UserModel.status == str(UserStatus.ACTIVE),
+            )
+            .order_by(UserModel.id)
+            .with_for_update()
+        ).scalars()
+        return [UserId(row) for row in rows]
 
     def list(self, filter: UserFilter | None = None, paging: Paging | None = None) -> Page[User]:
         q = self._q().order_by(UserModel.name)

@@ -37,6 +37,7 @@ from medicore.domain.shared.errors import (
     DomainError,
     InvalidStateTransition,
     InvalidValueObject,
+    LastAdminRequired,
     PermissionDenied,
     QuotaExceeded,
     RecordAlreadySigned,
@@ -159,6 +160,11 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(QuotaExceeded)
     async def handle_quota(request: Request, exc: QuotaExceeded):
         # The subscription has no room left: a conflict with the clinic's plan.
+        return _json(409, exc)
+
+    @app.exception_handler(LastAdminRequired)
+    async def handle_last_admin(request: Request, exc: LastAdminRequired):
+        # A conflict with the clinic's current admins.
         return _json(409, exc)
 
     @app.exception_handler(InvalidStateTransition)

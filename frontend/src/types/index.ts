@@ -806,11 +806,12 @@ export interface ProcedureDraft {
 // ── Platform monitoring ──────────────────────────────────────────────────────
 
 export interface LockedLogin {
-  scope: 'tenant' | 'platform'
+  scope: 'tenant' | 'platform' | 'ip'
   clinic_slug: string | null
   email: string
   failed_count: number
   locked_until: string
+  ip: string | null
 }
 
 export interface ActiveImpersonation {

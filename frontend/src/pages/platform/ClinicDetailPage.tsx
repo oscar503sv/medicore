@@ -113,6 +113,8 @@ export function ClinicDetailPage() {
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null)
   const [supportOpen, setSupportOpen] = useState(false)
   const [supportReason, setSupportReason] = useState('')
+  const activeAdmins = (users?.items ?? []).filter((u) => u.role === 'admin' && u.status === 'active')
+  const isLastAdmin = (u: User) => activeAdmins.length === 1 && activeAdmins[0].id === u.id
   const filteredUsers = useMemo(() => {
     const term = userQ.trim().toLowerCase()
     return (users?.items ?? []).filter((u) => {
@@ -415,6 +417,8 @@ export function ClinicDetailPage() {
                         size="sm"
                         variant="ghost"
                         className="text-danger hover:bg-[var(--danger-10)]"
+                        disabled={isLastAdmin(u)}
+                        title={isLastAdmin(u) ? t('users.last_admin_hint') : undefined}
                         onClick={() => setDeactivateTarget(u)}
                       >
                         {t('users.deactivate')}
@@ -459,6 +463,7 @@ export function ClinicDetailPage() {
       <EditUserModal
         tenantId={id}
         user={editTarget}
+        roleLocked={!!editTarget && isLastAdmin(editTarget)}
         onClose={() => setEditTarget(null)}
         onDone={() => qc.invalidateQueries({ queryKey: ['platform-tenant-users', id] })}
       />
@@ -587,11 +592,13 @@ function ClinicSessionsCard({ tenantId }: { tenantId: string }) {
 function EditUserModal({
   tenantId,
   user,
+  roleLocked,
   onClose,
   onDone,
 }: {
   tenantId: string
   user: User | null
+  roleLocked: boolean
   onClose: () => void
   onDone: () => void
 }) {
@@ -643,12 +650,19 @@ function EditUserModal({
             required
           />
           <div className="grid grid-cols-2 gap-4">
-            <Select label={t('users.col_role')} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option value="doctor">{t('role.doctor')}</option>
-              <option value="nurse">{t('role.nurse')}</option>
-              <option value="receptionist">{t('role.receptionist')}</option>
-              <option value="admin">{t('role.admin')}</option>
-            </Select>
+            <div title={roleLocked ? t('users.last_admin_hint') : undefined}>
+              <Select
+                label={t('users.col_role')}
+                value={form.role}
+                onChange={(e) => setForm({ ...form, role: e.target.value })}
+                disabled={roleLocked}
+              >
+                <option value="doctor">{t('role.doctor')}</option>
+                <option value="nurse">{t('role.nurse')}</option>
+                <option value="receptionist">{t('role.receptionist')}</option>
+                <option value="admin">{t('role.admin')}</option>
+              </Select>
+            </div>
             <Select label={t('users.sex')} value={form.sex} onChange={(e) => setForm({ ...form, sex: e.target.value })}>
               <option value="female">{t('sex.female')}</option>
               <option value="male">{t('sex.male')}</option>

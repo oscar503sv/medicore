@@ -13,6 +13,7 @@ from sqlalchemy import case, desc, func, text
 from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.orm import Session
 
+from medicore.application.common.login_throttle import parse_identifier
 from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.entities.job_run import JobRun
 from medicore.domain.repositories._support import (
@@ -47,10 +48,8 @@ CONSOLE_LOGIN_ACTIONS = (
 
 
 def _locked_login(identifier: str, failed_count: int, locked_until: datetime) -> LockedLogin:
-    # "tenant:{slug}:{email}" or "platform:{email}" (see application.common.login_throttle).
-    scope, _, rest = identifier.partition(":")
-    slug, email = rest.split(":", 1) if scope == "tenant" and ":" in rest else (None, rest)
-    return LockedLogin(scope, slug, email, failed_count, locked_until)
+    scope, slug, email, ip = parse_identifier(identifier)
+    return LockedLogin(scope, slug, email, failed_count, locked_until, ip)
 
 
 def _event(row: ErrorEventModel) -> ErrorEvent:
@@ -101,9 +100,16 @@ class SqlMonitoringReadModel:
         return [TableSize(name, int(size), int(rows)) for name, size, rows in rows]
 
     def login_pressure(self, since: datetime, now: datetime) -> LoginPressure:
+        # Only per-account rows: the IP and account-and-IP counters would count the same
+        # attempt again.
         failing, attempts = self._s.query(
             func.count(), func.coalesce(func.sum(LoginAttemptModel.failed_count), 0)
-        ).filter(LoginAttemptModel.last_failed_at >= since).one()
+        ).filter(
+            LoginAttemptModel.last_failed_at >= since,
+            LoginAttemptModel.failed_count > 0,
+            ~LoginAttemptModel.identifier.like("ip:%"),
+            ~LoginAttemptModel.identifier.contains("|"),
+        ).one()
         locked = (
             self._s.query(LoginAttemptModel)
             .filter(LoginAttemptModel.locked_until > now)

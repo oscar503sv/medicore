@@ -55,7 +55,7 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
 ## Funcionalidades
 
 - **Autenticación** por JWT con roles (`admin`, `doctor`, `nurse`, `receptionist`) y cambio de
-  contraseña forzado en el primer ingreso. La sesión viaja en una **cookie httpOnly**
+  contraseña forzado en el primer ingreso (hasta entonces solo se permiten el cambio, el perfil y cerrar sesión; el resto responde 403 `auth.password_change_required`; las sesiones de soporte están exentas). La sesión viaja en una **cookie httpOnly**
   (`mc_session` para clínicas, SameSite=Lax; `mc_console` para la consola de plataforma, SameSite=Strict
   y enviada solo a `/api/v1/platform`; `Secure` con prefijos `__Host-` / `__Secure-` fuera de
   desarrollo) con **token CSRF ligado a la sesión** (`mc_csrf` / `mc_console_csrf` + cabecera
@@ -70,9 +70,8 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
   terceros auditadas como `session.revoked`).
 - **Límites de la sesión de consola**: la sesión de la consola de superadmin caduca tras 30 min sin actividad y como máximo 8 h después del login (`PLATFORM_SESSION_IDLE_MINUTES` / `PLATFORM_SESSION_MAX_MINUTES`). El refresco en segundo plano de Monitoreo no cuenta como actividad, y un superadmin desactivado pierde el acceso en la siguiente petición.
 - **MFA TOTP opcional para superadmins**: se activa desde la consola, en *Seguridad de la cuenta* (`/platform/security`). Con MFA activo, el login de la consola pide la contraseña y después un código de 6 dígitos de una app de autenticación, o un código de recuperación. El desafío es de un solo uso, válido 5 min y va en una cookie httpOnly limitada a `/api/v1/platform/login`. Un código no se puede reutilizar, y tras 5 intentos fallidos el bloqueo es progresivo. Hay 10 códigos de recuperación de un solo uso, mostrados una sola vez y guardados como hash. El secreto TOTP se cifra con AES-256-GCM. Activar MFA, regenerar los códigos de recuperación o desactivarlo exige la contraseña actual, y cada cambio queda en la auditoría de plataforma.
-- **Lockout de login**: contador de intentos fallidos por `(organización, email)` con
-  bloqueo temporal y backoff exponencial (HTTP 429 + `Retry-After`); cuenta también
-  cuentas inexistentes para no revelar cuáles existen.
+- **Lockout de login** con tres contadores: por IP (30 intentos en 15 min → bloqueo de 15 min, IPv6 por /64); por cuenta desde una misma IP (5 fallos → 1 min, duplicando hasta 15); por cuenta en total (20 intentos en 15 min, exenta una IP que entró bien a esa cuenta en los últimos 30 días). Cada intento se reserva de forma atómica antes de verificar la contraseña. Los intentos bloqueados reciben HTTP 429 + `Retry-After`; un bloqueo por IP responde igual exista o no la cuenta, para no revelar cuáles existen. Un login correcto solo borra los fallos de esa cuenta desde esa IP. El segundo factor de la consola mantiene su límite de 5 por superadmin.
+- **Último administrador**: ninguna operación (desde la clínica o desde la consola de plataforma) puede dejar una clínica sin admins activos (409 `users.last_admin`), ni siquiera con cambios simultáneos.
 - **Permisos granulares** (`application/common/permissions.py`): catálogo de **30 permisos**
   (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
   tenant** vía `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults
@@ -241,7 +240,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **1230 tests** (270 dominio · 516 aplicación · 299 presentación · 145 infraestructura), casi
+Suite de **1293 tests** (278 dominio · 558 aplicación · 307 presentación · 150 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
@@ -292,6 +291,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 > **Nota de actualización:** tras aplicar la migración `d0e1f2a3b4c6` (límites de la sesión de consola), los usuarios de clínica y los superadmins deben volver a iniciar sesión una vez.
 
 > **Antes de desplegar esta versión:** define `MFA_ENCRYPTION_KEY` (32 bytes en base64url). La migración `e1f2a3b4c5d7` añade las columnas de MFA a `platform_admins` y la tabla `platform_admin_recovery_codes`.
+
+> **Migración `f2a3b4c5d6e8`:** añade `last_success_at` a `login_attempts` (lockout de login). No requiere variables de entorno nuevas.
 
 > Para varios workers basta con `WEB_CONCURRENCY=N` (uvicorn la lee; el `docker-compose.yml` usa 2). Cada
 > worker tiene su propio pool de hasta 15 conexiones: mantén `N × 15` por debajo de `max_connections` de Postgres.

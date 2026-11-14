@@ -13,6 +13,7 @@ from datetime import date, datetime
 from types import TracebackType
 from typing import Protocol, runtime_checkable
 
+from medicore.application.common.login_throttle import Reservation, ThrottlePolicy
 from medicore.domain.entities.error_event import ErrorEvent
 from medicore.domain.entities.job_run import JobRun
 from medicore.domain.repositories import (
@@ -251,28 +252,32 @@ class DiagnosisCatalogRepository(Protocol):
 
 
 class LoginThrottleRepository(Protocol):
-    """Global failed-login counter with temporary lockout (not tenant-scoped).
+    """Global sign-in attempt counters with temporary lockout (not tenant-scoped).
 
-    Implementations persist each mutation immediately (own commit): the recorded failure
-    must survive the ``AuthenticationFailed`` raised right after it.
+    Each method commits its own short transaction: an attempt is counted before any
+    password work, so it survives the ``AuthenticationFailed`` raised later, and parallel
+    requests cannot all slip under the threshold.
     """
 
-    def locked_until(self, identifier: str, now: datetime) -> datetime | None:
-        """Active lockout deadline for ``identifier``, or None when login may proceed."""
+    def reserve(self, identifier: str, policy: ThrottlePolicy, now: datetime) -> Reservation:
+        """Atomically count one attempt. While ``identifier`` is locked nothing is counted
+        and the result is a rejection carrying the active lock; otherwise it is allowed and
+        carries the lock this attempt engaged, if it crossed the threshold."""
         ...
 
-    def record_failure(self, identifier: str, now: datetime) -> datetime | None:
-        """Count one failure; returns the lockout deadline when the threshold is crossed."""
+    def refund(self, identifier: str, policy: ThrottlePolicy) -> None:
+        """Give back one attempt (a successful sign-in must not spend the shared budget)."""
         ...
 
-    def reset(self, identifier: str) -> None:
-        """Forget the failure history (called on successful login)."""
+    def reset(self, identifier: str, now: datetime) -> None:
+        """Forget the failure history and remember the success at ``now``."""
         ...
 
     def purge_stale(self, now: datetime) -> None:
-        """Drop entries that no longer affect anything: last failure outside the window and
-        no active lockout (the next failure would restart at 1 anyway). Run on successful
-        logins, so identifiers that failed and never came back don't pile up."""
+        """Drop entries that no longer affect anything: last attempt outside the window, no
+        active lockout and no recent success (the next attempt would restart at 1 anyway).
+        Run on successful logins, so identifiers that failed and never came back don't
+        pile up."""
         ...
 
 

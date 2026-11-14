@@ -6,7 +6,7 @@ from __future__ import annotations
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import TenantStatus
-from medicore.domain.shared.errors import DomainError
+from medicore.domain.shared.errors import DomainError, PasswordChangeRequired
 
 
 class AccessRefused(DomainError):
@@ -27,3 +27,9 @@ def ensure_may_access(tenant: Tenant, user: User, *, support: bool = False) -> N
         raise AccessRefused("this organization is not active", code="auth.organization_inactive")
     if not user.is_active:
         raise AccessRefused("account is not active", code="auth.account_inactive")
+
+
+def ensure_password_settled(user: User, *, support: bool = False) -> None:
+    # Support sessions are exempt: the superadmin is not the holder of the temporary password.
+    if user.must_change_password and not support:
+        raise PasswordChangeRequired("the temporary password must be changed first")

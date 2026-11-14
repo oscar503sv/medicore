@@ -513,13 +513,18 @@ export function MonitoringPage() {
             <ul className="divide-y divide-line-soft">
               {logins.locked.map((l) => (
                 <li
-                  key={`${l.scope}:${l.clinic_slug}:${l.email}`}
+                  key={`${l.scope}:${l.clinic_slug}:${l.email}:${l.ip}`}
                   className="flex items-center justify-between gap-3 px-5 py-3"
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm text-tx">{l.email}</p>
+                    <p className="truncate text-sm text-tx">
+                      {l.scope === 'ip' ? l.ip : l.email}
+                    </p>
                     <p className="font-mono text-xs text-tx-3">
-                      {l.scope === 'platform' ? t('mon.console') : l.clinic_slug}
+                      {l.scope === 'ip'
+                        ? t('mon.by_ip')
+                        : (l.scope === 'platform' ? t('mon.console') : l.clinic_slug) +
+                          (l.ip ? ` · ${l.ip}` : '')}
                     </p>
                   </div>
                   <div className="shrink-0 text-right">

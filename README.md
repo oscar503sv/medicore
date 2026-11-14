@@ -100,7 +100,7 @@ A separate session (`platform`-scoped token, with its own `mc_console` cookie) t
 - **In-clinic applications** (injections, IV fluids, nebulizations…): the doctor indicates them in the consultation and they become orders for nursing when it is signed; walk-ins with an outside prescription record the prescribing doctor and their JVPM number. Each dose is recorded with lot, site and vitals, never edited (a wrong one is voided with a reason), and opens an observation window (30 min by default, configurable per order) closed as "no reaction" or as an adverse reaction, which notifies the ordering doctor. Applying a drug that clashes with the patient's allergies requires a written, audited justification.
 - **Minor procedures** (sutures, biopsies, wound care, IUD insertion, ECG…): each clinic has a configurable catalog, preloaded with the most common procedures, that says who may perform each one (doctor only, or doctor or nurse), whether it needs informed consent, whether it usually takes a pathology specimen and the suggested follow-up. A procedure is ordered in the consultation (pending when it is signed) or registered directly, optionally tied to a procedure appointment. Before performing it: allergy review, anticoagulants, fasting and vitals; consent signed on paper is recorded with who signed and a witness (no file). The note (anesthesia, technique, findings, materials, complications, home instructions, specimen sent to pathology) is immutable once signed — corrections are amendments — and signing suggests a follow-up date and notifies the ordering doctor when someone else performed it.
 - **Granular permissions** enforced in the application layer (not just the UI) — see the next section.
-- Temporary password with a forced change on first sign-in.
+- Temporary password with a forced change on first sign-in: until it is replaced, the backend only allows changing it, reading the profile and signing out; anything else answers 403 `auth.password_change_required`. Support (impersonation) sessions are exempt.
 - **Password policy** (`domain/services/password_policy.py`, NIST SP 800-63B style) wherever a password is set — invite, reset (clinic or console), change, clinic creation, superadmin script: at least 10 characters (at most 72 bytes, bcrypt's limit), letters plus a number or symbol, not a common password, nothing from the person's name, email or clinic, and different from the current one. No periodic expiry; brute force is covered by the login lockout. The UI shows the requirements live and generates temporary passwords that always comply.
 - Auditing of access and sensitive changes (HIPAA/GDPR), per tenant and global.
 
@@ -127,6 +127,7 @@ Access control is **granular and customizable per clinic** (`application/common/
 - Only an admin acts on admin or doctor accounts (edit, change role, suspend, reset password, close sessions) or assigns those roles. A delegated `users.manage` manages the rest of the staff (nursing, reception).
 - Nobody manages their own account from **Users** (change their role, edit, suspend, reactivate, reset their password or close their sessions): their profile, password and sessions are managed in **Settings**. This applies to admins too.
 - Nobody edits their own permissions.
+- **Last administrator**: no operation, from the clinic or the platform console, can leave a clinic without an active admin (409 `users.last_admin`), even with concurrent changes.
 
 **What the clinic manages and what Medicore support manages:**
 
@@ -159,7 +160,11 @@ The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every 
 
 - **Sessions in httpOnly cookies** (`Secure` outside development, with `__Host-` / `__Secure-` prefixes): `mc_session` for clinics (SameSite=Lax) and `mc_console` for the platform console (SameSite=Strict, sent only to the platform API). The CSRF token (`mc_csrf` / `mc_console_csrf` + `X-CSRF-Token` header) is an HMAC of the session id, so a token from one scope is useless in the other, and signing out of a clinic leaves the console session intact. The session token itself is never reachable from JavaScript. `Authorization: Bearer` is still accepted for API clients.
 - **Revocable sessions** (`sessions` table + `sid` claim): real logout; changing the password ends the other sessions; suspending or resetting a user ends all of them; suspending or archiving a clinic ends all its sessions (support's included). Every request checks that the clinic and the account are still active, using one access rule shared with sign-in. Support can open a new session in a suspended clinic, but never in an archived one.
-- **Login lockout** with exponential backoff (5 failures → 1 min, doubling up to 15) and a 429 response with `Retry-After`.
+- **Login lockout** with three counters, all reserved atomically before the password is checked (parallel requests can't get past the limits):
+  - **Per IP**: 30 attempts in 15 min → 15 min block (IPv6 grouped by /64).
+  - **Per account from one IP**: 5 failures → 1 min, doubling up to 15, so the owner can still sign in from another address while someone attacks the account.
+  - **Per account in total**: 20 attempts in 15 min against distributed attacks; an IP that signed in successfully to that account in the last 30 days is exempt.
+  A blocked attempt gets a 429 with `Retry-After`; an IP block answers the same whether or not the account exists. A successful sign-in clears that account's failures from that IP, but not the IP's or the account's totals (it only gives back its own attempt). The console's second factor keeps its own limit of 5 per superadmin, regardless of IP. The Monitoring page also shows IP blocks and the IP behind account blocks.
 - **Console session limits**: the superadmin console session expires after 30 min without activity (`PLATFORM_SESSION_IDLE_MINUTES`) and at most 8 h after sign-in (`PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request. `scripts/create_platform_admin.py` revokes the admin's sessions when it updates the account.
 - **Optional MFA (TOTP) for superadmins**: enabled from the console under *Account security* (`/platform/security`). With MFA on, the console login asks for the password and then a 6-digit code from an authenticator app, or a recovery code. The challenge is single-use, valid for 5 min and kept in an httpOnly cookie limited to `/api/v1/platform/login`. A code can't be reused, and after 5 failed attempts the lockout escalates. There are 10 single-use recovery codes, shown once and stored as hashes. The TOTP secret is encrypted with AES-256-GCM. Enabling MFA, regenerating the recovery codes or disabling it requires the current password, and every change is recorded in the platform audit log.
 - **Recommended deployment**: serve the platform console from its own origin or subdomain (e.g. `console.example.com`), so an XSS in the clinic app cannot share an origin with it. This is a recommendation; the app does not enforce it.
@@ -386,7 +391,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1230 tests)
+.venv/bin/pytest                          # full suite (1293 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -440,21 +445,23 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1230 passing tests
-   270  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1293 passing tests
+   278  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   516  — application (auth, sessions, appointments, consultations, records, notifications,
+   558  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   299  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   307  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    145  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    150  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:
 - `SignConsultation` atomicity: a failure rolls back the record, prescriptions and appointment status.
 - Multi-tenant isolation: one tenant's repos never leak another tenant's data.
 - Effective permissions per role and per-tenant override, plus platform scope.
-- Login lockout, session revocation, CSRF protection and console session timeouts.
+- Session revocation, CSRF protection and console session timeouts.
+- Login lockout by IP and by account, with concurrent reservations against PostgreSQL.
+- A clinic never ends up without an active administrator.
 - Console TOTP MFA (RFC 6238 vectors, anti-replay, recovery codes).
 - That every backend error code has a Spanish and an English translation.
 
@@ -512,6 +519,8 @@ Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on s
 > **Note:** migration `d0e1f2a3b4c6` (console session limits) makes clinic users and superadmins sign in again once after deploying.
 
 > **Before deploying this version:** `MFA_ENCRYPTION_KEY` has to reach the `backend` service. Set it in Coolify and declare it in `docker-compose.yml` (`MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY}`), since production won't start without it. Migration `e1f2a3b4c5d7` adds the MFA columns to `platform_admins` and the `platform_admin_recovery_codes` table.
+
+> **Migration `f2a3b4c5d6e8`:** adds `last_success_at` to `login_attempts` (login lockout). It needs no new environment variables.
 
 For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched. Each run is recorded, and the *Monitoring* page flags the task when it fails or when more than 26 h pass without a successful reset.
 

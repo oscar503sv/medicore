@@ -117,8 +117,7 @@ is documented for the reverse proxy in the frontend README).
 Resolved in June 2026 (without Redis — the counter and the sessions live in PostgreSQL, which
 is already queried on every authenticated request):
 
-- **Login lockout**: a failure counter in the DB per `(slug, email)` with a temporary lockout
-  and exponential backoff (5 failures → 1 min, doubling up to 15); answers 429 with
+- **Login lockout**: three DB counters (per IP: 30 attempts in 15 min; per account and IP: 5 failures → 1 min, doubling up to 15; per account: 20 attempts in 15 min, exempt for IPs that signed in recently), reserved atomically before the password check; answers 429 with
   `Retry-After`, also counts non-existent accounts (anti-enumeration) and audits
   `auth.login_locked`.
 - **Session revocation**: a `sessions` table + a `sid` claim in the JWT validated on every

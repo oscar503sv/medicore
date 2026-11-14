@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from medicore.application.common.login_throttle import WINDOW_MINUTES, lockout_until
+from medicore.application.common.login_throttle import (
+    KNOWN_IP_TTL,
+    WINDOW,
+    Reservation,
+    ThrottlePolicy,
+    parse_identifier,
+)
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.auth_session import AuthSession
@@ -33,6 +39,7 @@ from medicore.domain.enums import (
     ApplicationOutcome,
     AppointmentStatus,
     ProcedureStatus,
+    Role,
     VaccinationOutcome,
     VaccinationSource,
 )
@@ -85,6 +92,10 @@ _ACTIVE_APPOINTMENTS = {
     AppointmentStatus.CONFIRMED,
     AppointmentStatus.IN_PROGRESS,
 }
+
+
+def _is_active_admin(user: User) -> bool:
+    return user.role == Role.ADMIN and user.is_active
 
 
 def _paginate(items: list, paging: Paging | None) -> Page:
@@ -268,36 +279,48 @@ class InMemoryAuthSessionRepository:
 
 
 class InMemoryLoginThrottleRepository:
-    """Same windowing/backoff contract as the SQL repo, sharing the pure policy."""
+    """Same windowing/lockout contract as the SQL repo, sharing the pure policy."""
 
     def __init__(self, store: InMemoryStore) -> None:
         self._store = store
 
-    def locked_until(self, identifier: str, now: datetime) -> datetime | None:
+    def reserve(self, identifier: str, policy: ThrottlePolicy, now: datetime) -> Reservation:
+        entry = self._store.login_attempts.get(identifier)
+        success = self._store.login_successes.get(identifier)
+        if entry is not None and entry[2] is not None and entry[2] > now:
+            return Reservation(False, entry[2], success)
+        count = 1 if entry is None or entry[1] < now - WINDOW else entry[0] + 1
+        locked = policy.lockout_until(count, now)
+        self._store.login_attempts[identifier] = (count, now, locked)
+        return Reservation(True, locked, success)
+
+    def refund(self, identifier: str, policy: ThrottlePolicy) -> None:
         entry = self._store.login_attempts.get(identifier)
         if entry is None:
-            return None
-        _, _, locked = entry
-        if locked is None or locked <= now:
-            return None
-        return locked
+            return
+        count, last, locked = entry
+        self._store.login_attempts[identifier] = (
+            max(count - 1, 0),
+            last,
+            None if count - 1 < policy.max_attempts else locked,
+        )
 
-    def record_failure(self, identifier: str, now: datetime) -> datetime | None:
+    def reset(self, identifier: str, now: datetime) -> None:
         entry = self._store.login_attempts.get(identifier)
-        window_start = now - timedelta(minutes=WINDOW_MINUTES)
-        count = 1 if entry is None or entry[1] < window_start else entry[0] + 1
-        locked = lockout_until(count, now)
-        self._store.login_attempts[identifier] = (count, now, locked)
-        return locked
-
-    def reset(self, identifier: str) -> None:
-        self._store.login_attempts.pop(identifier, None)
+        if entry is not None:
+            self._store.login_attempts[identifier] = (0, entry[1], None)
+        self._store.login_successes[identifier] = now
 
     def purge_stale(self, now: datetime) -> None:
-        window_start = now - timedelta(minutes=WINDOW_MINUTES)
         for identifier, (_, last, locked) in list(self._store.login_attempts.items()):
-            if last < window_start and (locked is None or locked <= now):
+            success = self._store.login_successes.get(identifier)
+            if (
+                last < now - WINDOW
+                and (locked is None or locked <= now)
+                and (success is None or success < now - KNOWN_IP_TTL)
+            ):
                 del self._store.login_attempts[identifier]
+                self._store.login_successes.pop(identifier, None)
 
 
 class InMemoryDiagnosisCatalogRepository:
@@ -389,7 +412,6 @@ class InMemoryPlatformReadModel:
 
     def signed_per_week(self, since):
         from collections import Counter
-        from datetime import timedelta
 
         weeks = Counter(
             (r.signed_at.date() - timedelta(days=r.signed_at.weekday()))
@@ -469,6 +491,10 @@ class InMemoryUserRepository(_Scoped):
 
     def save(self, user: User) -> None:
         self._store.users[user.id.value] = user
+
+    def lock_active_admin_ids(self) -> list[UserId]:
+        admins = [u for u in self._mine(self._store.users.values()) if _is_active_admin(u)]
+        return [u.id for u in sorted(admins, key=lambda u: u.id.value)]
 
 
 class InMemoryDoctorProfileRepository(_Scoped):
@@ -1033,21 +1059,21 @@ class InMemoryMonitoringReadModel:
         return []
 
     def login_pressure(self, since: datetime, now: datetime) -> LoginPressure:
-        recent = [
-            (ident, count, locked)
-            for ident, (count, last, locked) in self._store.login_attempts.items()
-            if last >= since
+        accounts = [
+            count
+            for ident, (count, last, _) in self._store.login_attempts.items()
+            if last >= since and count > 0 and parse_identifier(ident)[0] != "ip"
+            and parse_identifier(ident)[3] is None
         ]
         locked = []
         for ident, (count, _, until) in self._store.login_attempts.items():
             if until is not None and until > now:
-                scope, _, rest = ident.partition(":")
-                slug, email = rest.split(":", 1) if scope == "tenant" else (None, rest)
-                locked.append(LockedLogin(scope, slug, email, count, until))
+                scope, slug, email, ip = parse_identifier(ident)
+                locked.append(LockedLogin(scope, slug, email, count, until, ip))
         locked.sort(key=lambda lk: lk.locked_until, reverse=True)
         return LoginPressure(
-            failing_accounts=len(recent),
-            failed_attempts=sum(count for _, count, _ in recent),
+            failing_accounts=len(accounts),
+            failed_attempts=sum(accounts),
             locked=locked,
         )
 

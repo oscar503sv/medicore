@@ -13,7 +13,7 @@ from medicore.application.common.errors import (
     TooManyLoginAttempts,
     ValidationError,
 )
-from medicore.application.common.login_throttle import platform_mfa_identifier
+from medicore.application.common.login_throttle import MFA_POLICY, platform_mfa_identifier
 from medicore.application.common.platform_mfa import (
     generate_recovery_codes,
     hash_recovery_code,
@@ -87,20 +87,21 @@ class CompletePlatformMfaLogin:
         admin_key = self._challenge_owner(challenge_id, now)
         identifier = platform_mfa_identifier(str(admin_key))
         with self._factory.login_throttle() as throttle:
-            locked = throttle.locked_until(identifier, now)
-            if locked is not None:
-                raise TooManyLoginAttempts(locked, now)
+            # Not by IP: the second factor is already behind the password and the challenge.
+            reservation = throttle.reserve(identifier, MFA_POLICY, now)
+            if not reservation.allowed:
+                raise TooManyLoginAttempts(reservation.locked_until, now)
             try:
                 session = self._complete(
                     challenge_id, admin_key, code, now, ip_address, user_agent
                 )
             except _MfaRejected as exc:
-                locked = throttle.record_failure(identifier, now)
+                locked = reservation.locked_until if reservation.engaged else None
                 self._audit_failure(
                     challenge_id, admin_key, exc.reason, locked, now, ip_address, user_agent
                 )
                 raise
-            throttle.reset(identifier)
+            throttle.reset(identifier, now)
             throttle.purge_stale(now)
             return session
 
@@ -256,8 +257,8 @@ class _MfaManagement:
         """Password + a fresh TOTP code of an admin who has MFA on; returns the code's time step.
 
         The code shares the sign-in lockout so a stolen session cannot guess codes without
-        limit. The check runs outside any unit of work: a recorded failure must survive the
-        error raised right after it.
+        limit. The attempt is reserved before the check, and outside any unit of work, so
+        it is counted whatever the check does.
         """
         with self._factory.platform_uow() as uow:
             admin = self._load(uow, actor)
@@ -266,17 +267,16 @@ class _MfaManagement:
             raise ValidationError("MFA is not enabled", code="mfa.not_enabled")
         identifier = platform_mfa_identifier(str(admin.id))
         with self._factory.login_throttle() as throttle:
-            locked = throttle.locked_until(identifier, now)
-            if locked is not None:
-                raise TooManyLoginAttempts(locked, now)
+            reservation = throttle.reserve(identifier, MFA_POLICY, now)
+            if not reservation.allowed:
+                raise TooManyLoginAttempts(reservation.locked_until, now)
             step = self._totp.matching_step(self._box.open(admin.mfa_secret), code, now)
             replayed = (
                 step is not None and admin.mfa_last_step is not None and step <= admin.mfa_last_step
             )
             if step is None or replayed:
-                throttle.record_failure(identifier, now)
                 raise ValidationError("invalid verification code", code="mfa.invalid_code")
-            throttle.reset(identifier)
+            throttle.reset(identifier, now)
         return step
 
 

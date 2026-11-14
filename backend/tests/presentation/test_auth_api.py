@@ -76,6 +76,29 @@ def test_login_lockout_returns_429_with_retry_after(seed, client):
     assert int(resp.headers["Retry-After"]) > 0
 
 
+def test_ip_block_returns_429_without_revealing_the_account(seed, client):
+    slug = str(seed.tenant.slug)
+    for i in range(30):
+        resp = client.post(
+            "/api/v1/auth/login",
+            json={"slug": slug, "email": f"victim{i}@example.com", "password": "wrong"},
+        )
+        assert resp.status_code == 401
+
+    known = client.post(
+        "/api/v1/auth/login",
+        json={"slug": slug, "email": seed.doctor.email, "password": PASSWORD},
+    )
+    unknown = client.post(
+        "/api/v1/auth/login",
+        json={"slug": slug, "email": "nadie@example.com", "password": PASSWORD},
+    )
+
+    assert known.status_code == unknown.status_code == 429
+    assert known.json() == unknown.json()
+    assert known.headers["Retry-After"] == unknown.headers["Retry-After"]
+
+
 def test_protected_endpoint_requires_token(client):
     resp = client.get("/api/v1/patients")
     assert resp.status_code == 401

@@ -119,12 +119,19 @@ def test_login_pressure(session):
                           last_failed_at=FUTURE, locked_until=FUTURE + timedelta(minutes=2)),
         LoginAttemptModel(identifier="platform:root@mon.test", failed_count=2,
                           last_failed_at=FUTURE - timedelta(hours=1)),
+        LoginAttemptModel(identifier="ip:198.51.100.1", failed_count=30,
+                          last_failed_at=FUTURE, locked_until=FUTURE + timedelta(minutes=9)),
+        LoginAttemptModel(identifier="tenant:mon-x:ana@mon.test|198.51.100.1", failed_count=6,
+                          last_failed_at=FUTURE, locked_until=FUTURE + timedelta(minutes=1)),
     ])
     session.flush()
     pressure = SqlMonitoringReadModel(session).login_pressure(FUTURE - timedelta(hours=2), FUTURE)
     assert (pressure.failing_accounts, pressure.failed_attempts) == (2, 8)
-    [locked] = pressure.locked
-    assert (locked.scope, locked.clinic_slug, locked.email) == ("tenant", "mon-x", "ana@mon.test")
+    by_scope = {(lk.scope, lk.ip): lk for lk in pressure.locked}
+    assert set(by_scope) == {("tenant", None), ("ip", "198.51.100.1"), ("tenant", "198.51.100.1")}
+    account = by_scope[("tenant", None)]
+    assert (account.clinic_slug, account.email) == ("mon-x", "ana@mon.test")
+    assert by_scope[("tenant", "198.51.100.1")].email == "ana@mon.test"
 
 
 def test_error_store_groups_pages_and_purges(session):

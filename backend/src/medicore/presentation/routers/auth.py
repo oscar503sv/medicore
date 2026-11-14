@@ -27,6 +27,7 @@ from medicore.presentation.dependencies import (
     Clock,
     Hasher,
     JwtIssuer,
+    PasswordChangeActor,
     UoW,
     UoWFactory,
     _client_ip,
@@ -120,7 +121,11 @@ def switch_locale(body: SwitchLocaleRequest, actor: Actor, factory: UoWFactory):
 
 @router.post("/auth/change-password", status_code=204)
 def change_password(
-    body: ChangePasswordRequest, actor: Actor, factory: UoWFactory, hasher: Hasher, clock: Clock
+    body: ChangePasswordRequest,
+    actor: PasswordChangeActor,
+    factory: UoWFactory,
+    hasher: Hasher,
+    clock: Clock,
 ):
     ChangePassword(factory, hasher, clock).execute(
         actor, body.current_password, body.new_password
@@ -128,7 +133,7 @@ def change_password(
 
 
 @router.get("/auth/me", response_model=MyProfileResponse)
-def get_my_profile(actor: Actor, factory: UoWFactory):
+def get_my_profile(actor: PasswordChangeActor, factory: UoWFactory):
     return ser_my_profile(GetMyProfile(factory).execute(actor))
 
 

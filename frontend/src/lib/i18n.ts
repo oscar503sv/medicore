@@ -569,6 +569,7 @@ const es: Dict = {
   'err.auth.account_inactive': 'Tu cuenta no está activa. Contacta con el administrador.',
   'err.auth.organization_inactive': 'Esta clínica no está activa. Contacta con soporte.',
   'err.auth.too_many_attempts': 'Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.',
+  'err.auth.password_change_required': 'Debes cambiar tu contraseña temporal antes de continuar.',
   'err.auth.not_authenticated': 'Tu sesión no es válida. Inicia sesión de nuevo.',
   'err.auth.session_expired': 'Tu sesión ha caducado. Inicia sesión de nuevo.',
   'err.auth.session_idle_timeout': 'Tu sesión se cerró por inactividad. Inicia sesión de nuevo.',
@@ -621,6 +622,9 @@ const es: Dict = {
     'Solo un administrador puede gestionar cuentas de médico o asignar el rol de médico.',
   'err.users.self_management':
     'No puedes gestionar tu propia cuenta desde aquí. Usa Ajustes para tu perfil, contraseña y sesiones.',
+  'err.users.last_admin':
+    'La clínica debe conservar al menos un administrador activo. Asigna antes otro administrador.',
+  'users.last_admin_hint': 'Único administrador activo',
   'err.organization.timezone_locked': 'La zona horaria de la clínica la cambia el soporte de Medicore.',
   'err.clinic.invalid_slug': 'El identificador solo admite minúsculas, números y guiones, sin guion al inicio ni al final.',
   'err.clinic.slug_taken': 'El identificador «{slug}» ya está en uso.',
@@ -1590,6 +1594,7 @@ const en: Dict = {
   'err.auth.account_inactive': 'Your account is not active. Contact your administrator.',
   'err.auth.organization_inactive': 'This clinic is not active. Contact support.',
   'err.auth.too_many_attempts': 'Too many failed attempts. Wait a few minutes and try again.',
+  'err.auth.password_change_required': 'You must change your temporary password before continuing.',
   'err.auth.not_authenticated': 'Your session is not valid. Please sign in again.',
   'err.auth.session_expired': 'Your session has expired. Please sign in again.',
   'err.auth.session_idle_timeout': 'Your session was closed due to inactivity. Please sign in again.',
@@ -1642,6 +1647,9 @@ const en: Dict = {
     'Only an administrator can manage doctor accounts or assign the doctor role.',
   'err.users.self_management':
     "You can't manage your own account from here. Use Settings for your profile, password and sessions.",
+  'err.users.last_admin':
+    'The clinic must keep at least one active administrator. Assign another administrator first.',
+  'users.last_admin_hint': 'Only active administrator',
   'err.organization.timezone_locked': "The clinic's timezone is changed by Medicore support.",
   'err.clinic.invalid_slug': 'The identifier may only contain lowercase letters, numbers and hyphens, and cannot start or end with a hyphen.',
   'err.clinic.slug_taken': 'The identifier "{slug}" is already in use.',

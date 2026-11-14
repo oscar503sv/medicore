@@ -22,6 +22,10 @@ class UserRepository(Protocol):
 
     def save(self, user: User) -> None: ...
 
+    def lock_active_admin_ids(self) -> list[UserId]:
+        """Active admins of the tenant, row-locked until the transaction ends (ordered by id)."""
+        ...
+
 
 class DoctorProfileRepository(Protocol):
     def get_by_user_id(self, user_id: UserId) -> DoctorProfile | None: ...

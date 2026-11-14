@@ -88,3 +88,15 @@ class SubscriptionReadOnly(PermissionDenied):
     """The clinic's subscription lapsed past its grace days: it can read, not write."""
 
     code = "plan.read_only"
+
+
+class LastAdminRequired(DomainError):
+    """The change would leave the clinic without any active administrator."""
+
+    code = "users.last_admin"
+
+
+class PasswordChangeRequired(PermissionDenied):
+    """The account still has a temporary password: it may only replace it."""
+
+    code = "auth.password_change_required"

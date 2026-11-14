@@ -5,7 +5,12 @@ from __future__ import annotations
 import pytest
 
 from medicore.domain.enums import Role, TenantStatus, UserStatus
-from medicore.domain.services.access_policy import AccessRefused, ensure_may_access
+from medicore.domain.services.access_policy import (
+    AccessRefused,
+    ensure_may_access,
+    ensure_password_settled,
+)
+from medicore.domain.shared.errors import PasswordChangeRequired
 from tests.support.builders import build_tenant, build_user
 
 
@@ -61,3 +66,20 @@ def test_support_still_needs_an_active_account(tenant, user):
     tenant.status = TenantStatus.SUSPENDED
     user.status = UserStatus.SUSPENDED
     assert _refusal(tenant, user, support=True) == "auth.account_inactive"
+
+
+def test_temporary_password_must_be_replaced_first(user):
+    user.must_change_password = True
+    with pytest.raises(PasswordChangeRequired) as exc:
+        ensure_password_settled(user)
+    assert exc.value.code == "auth.password_change_required"
+
+
+def test_support_is_exempt_from_the_temporary_password(user):
+    user.must_change_password = True
+    ensure_password_settled(user, support=True)
+
+
+def test_settled_password_passes(user):
+    user.must_change_password = False
+    ensure_password_settled(user)

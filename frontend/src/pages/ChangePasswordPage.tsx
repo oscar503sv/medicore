@@ -53,6 +53,7 @@ export function ChangePasswordPage() {
   const navigate = useNavigate()
   const clearFlag = useAuthStore((s) => s.clearMustChangePassword)
   const session = useAuthStore((s) => s.session)
+  const logout = useAuthStore((s) => s.logout)
   const personal = [session?.name]
 
   const [current, setCurrent] = useState('')
@@ -78,6 +79,11 @@ export function ChangePasswordPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  function handleLogout() {
+    logout()
+    navigate('/login')
   }
 
   return (
@@ -115,6 +121,9 @@ export function ChangePasswordPage() {
           <PasswordField label={t('pwd.confirm')} value={confirm} onChange={setConfirm} />
           <Button type="submit" size="lg" loading={loading} className="w-full">
             {t('pwd.submit')}
+          </Button>
+          <Button type="button" variant="ghost" className="w-full" onClick={handleLogout}>
+            {t('nav.logout')}
           </Button>
         </div>
       </form>

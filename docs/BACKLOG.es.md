@@ -120,8 +120,7 @@ build de la SPA (meta en `dist/index.html` vía plugin de Vite; el header comple
 Resueltos en jun 2026 (sin Redis — el contador y las sesiones viven en PostgreSQL, que
 ya se consulta en cada request autenticado):
 
-- **Lockout en login**: contador de fallos en BD por `(slug, email)` con lockout temporal
-  y backoff exponencial (5 fallos → 1 min, duplicando hasta 15); responde 429 con
+- **Lockout en login**: tres contadores en BD (por IP: 30 intentos en 15 min; por cuenta y IP: 5 fallos → 1 min, duplicando hasta 15; por cuenta: 20 intentos en 15 min, exenta una IP que entró bien hace poco), reservados de forma atómica antes de verificar la contraseña; responde 429 con
   `Retry-After`, cuenta también cuentas inexistentes (anti-enumeración) y audita
   `auth.login_locked`.
 - **Revocación de sesiones**: tabla `sessions` + claim `sid` en el JWT validada en cada

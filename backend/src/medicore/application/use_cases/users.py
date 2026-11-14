@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from medicore.application.common.admins import ensure_clinic_keeps_an_admin
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
@@ -138,6 +139,7 @@ class UpdateUserRole:
         ensure_manages_account(actor, user, role)
         previous_role = user.role
         with self._uow:
+            ensure_clinic_keeps_an_admin(self._uow, user, stays_admin=role == Role.ADMIN)
             if user.is_active:
                 ensure_seat_for(self._uow, actor.tenant_id, taking=role, releasing=previous_role)
             user.change_role(role)
@@ -178,6 +180,10 @@ class UpdateUser:
             changes["jvpm"] = normalize_jvpm(changes["jvpm"])  # type: ignore[arg-type]
         previous_role = user.role
         with self._uow:
+            if changes.get("role") is not None:
+                ensure_clinic_keeps_an_admin(
+                    self._uow, user, stays_admin=Role(changes["role"]) == Role.ADMIN
+                )
             if changes.get("role") is not None and user.is_active:
                 ensure_seat_for(
                     self._uow, actor.tenant_id,
@@ -210,6 +216,7 @@ class SuspendUser:
             raise EntityNotFound("User", user_id)
         ensure_manages_account(actor, user)
         with self._uow:
+            ensure_clinic_keeps_an_admin(self._uow, user, stays_admin=False)
             user.suspend()
             self._uow.users.save(user)
             self._uow.sessions.revoke_all_for_user(user.id.value, self._clock.now())

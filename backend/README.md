@@ -55,7 +55,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/a
 ## Features
 
 - **Authentication** with JWT and roles (`admin`, `doctor`, `nurse`, `receptionist`), with a
-  forced password change on first sign-in. The session travels in an **httpOnly cookie**
+  forced password change on first sign-in (until then only the change, the profile and sign-out are allowed; anything else answers 403 `auth.password_change_required`; support sessions are exempt). The session travels in an **httpOnly cookie**
   (`mc_session` for clinics, SameSite=Lax; `mc_console` for the platform console, SameSite=Strict
   and sent only to `/api/v1/platform`; `Secure` with `__Host-` / `__Secure-` prefixes outside
   development) with a **CSRF token bound to the session** (`mc_csrf` / `mc_console_csrf` +
@@ -70,9 +70,8 @@ UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/a
   those of a whole clinic (third-party revocations audited as `session.revoked`).
 - **Console session limits**: the superadmin console session expires after 30 min without activity and at most 8 h after sign-in (`PLATFORM_SESSION_IDLE_MINUTES` / `PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request.
 - **Optional MFA (TOTP) for superadmins**: enabled from the console under *Account security* (`/platform/security`). With MFA on, the console login asks for the password and then a 6-digit code from an authenticator app, or a recovery code. The challenge is single-use, valid for 5 min and kept in an httpOnly cookie limited to `/api/v1/platform/login`. A code can't be reused, and after 5 failed attempts the lockout escalates. There are 10 single-use recovery codes, shown once and stored as hashes. The TOTP secret is encrypted with AES-256-GCM. Enabling MFA, regenerating the recovery codes or disabling it requires the current password, and every change is recorded in the platform audit log.
-- **Login lockout**: failed-attempt counter per `(organization, email)` with a temporary
-  lock and exponential backoff (HTTP 429 + `Retry-After`); it also counts non-existent
-  accounts so it doesn't reveal which ones exist.
+- **Login lockout** with three counters: per IP (30 attempts in 15 min → 15 min block, IPv6 by /64); per account from one IP (5 failures → 1 min, doubling up to 15); per account in total (20 attempts in 15 min, exempt for an IP that signed in to that account in the last 30 days). Each attempt is reserved atomically before the password check. Blocked attempts get HTTP 429 + `Retry-After`; an IP block answers the same whether or not the account exists, so the lockout doesn't reveal which accounts exist. A successful sign-in clears only that account's failures from that IP. The console's second factor keeps its own limit of 5 per superadmin.
+- **Last administrator**: no operation, from the clinic or the platform console, can leave a clinic without an active admin (409 `users.last_admin`), even with concurrent changes.
 - **Granular permissions** (`application/common/permissions.py`): a catalog of **30
   permissions** (`Permission`, `StrEnum`), a default set per role (`ROLE_PERMISSIONS`) and
   **per-tenant overrides** via `RolePermissionOverride`. `effective_permissions(role, stored)`
@@ -240,7 +239,7 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **1230 tests** (270 domain · 516 application · 299 presentation · 145 infrastructure),
+A suite of **1293 tests** (278 domain · 558 application · 307 presentation · 150 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
@@ -291,6 +290,8 @@ Production checklist (via environment variables, see the **Configuration** table
 > **Upgrade note:** after applying migration `d0e1f2a3b4c6` (console session limits), clinic users and superadmins must sign in again once.
 
 > **Before deploying this version:** set `MFA_ENCRYPTION_KEY` (32 bytes, base64url). Migration `e1f2a3b4c5d7` adds the MFA columns to `platform_admins` and the `platform_admin_recovery_codes` table.
+
+> **Migration `f2a3b4c5d6e8`:** adds `last_success_at` to `login_attempts` (login lockout). It needs no new environment variables.
 
 > For multiple workers just set `WEB_CONCURRENCY=N` (uvicorn reads it; `docker-compose.yml` uses 2). Each
 > worker holds its own pool of up to 15 connections: keep `N × 15` below Postgres' `max_connections`.

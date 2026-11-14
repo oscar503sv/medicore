@@ -21,6 +21,7 @@ from medicore.application.common.entitlements import ensure_writable, granted_pe
 from medicore.application.common.platform_session import PlatformSessionPolicy
 from medicore.application.common.timezone import tenant_today
 from medicore.application.use_cases.platform_session import ResolvePlatformSession
+from medicore.domain.services.access_policy import ensure_password_settled
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import PlatformAdminId, SessionId, TenantId, UserId
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
@@ -208,12 +209,14 @@ def _always_writable(path: str) -> bool:
     return path.startswith(_WRITABLE_WHEN_READ_ONLY)
 
 
-def get_actor(
+def _resolve_actor(
     request: Request,
-    authorization: Annotated[str | None, Header()] = None,
-    issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
-    factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
-    clock: SystemClock = Depends(get_clock),
+    authorization: str | None,
+    issuer: JwtTokenIssuer,
+    factory: SqlAlchemyUnitOfWorkFactory,
+    clock: SystemClock,
+    *,
+    allow_password_change: bool,
 ) -> ActorContext:
     """Authenticate the request (Bearer header or session cookie) and return the actor.
 
@@ -247,7 +250,10 @@ def get_actor(
         )
     # Suspending or archiving a clinic (or an account) revokes its sessions; this keeps any
     # that slipped through from working, on every request.
-    ensure_may_sign_in(tenant, user, support=session.impersonator_id is not None)
+    support = session.impersonator_id is not None
+    ensure_may_sign_in(tenant, user, support=support)
+    if not allow_password_change:
+        ensure_password_settled(user, support=support)
     if is_mutating(request.method) and not _always_writable(request.url.path):
         ensure_writable(tenant, tenant_today(tenant, clock))
 
@@ -264,6 +270,34 @@ def get_actor(
         user_agent=request.headers.get("user-agent"),
         permissions=frozenset(str(p) for p in effective),
         session_id=session_id,
+    )
+
+
+def get_actor(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+    issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
+    factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
+    clock: SystemClock = Depends(get_clock),
+) -> ActorContext:
+    """The authenticated clinic actor; accounts with a temporary password are refused
+    until they replace it (see ``_resolve_actor``)."""
+    return _resolve_actor(
+        request, authorization, issuer, factory, clock, allow_password_change=False
+    )
+
+
+def get_actor_allowing_password_change(
+    request: Request,
+    authorization: Annotated[str | None, Header()] = None,
+    issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
+    factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
+    clock: SystemClock = Depends(get_clock),
+) -> ActorContext:
+    """Only for the endpoints the forced password-change screen needs; everything else
+    uses get_actor."""
+    return _resolve_actor(
+        request, authorization, issuer, factory, clock, allow_password_change=True
     )
 
 
@@ -330,6 +364,7 @@ def get_codes(uow: SqlAlchemyUnitOfWork = Depends(get_uow)) -> DbSequentialCodeG
 
 # Type aliases for annotated injection
 Actor = Annotated[ActorContext, Depends(get_actor)]
+PasswordChangeActor = Annotated[ActorContext, Depends(get_actor_allowing_password_change)]
 PlatformActor = Annotated[PlatformActorContext, Depends(get_platform_actor)]
 PlatformPolicy = Annotated[PlatformSessionPolicy, Depends(get_platform_session_policy)]
 UoW = Annotated[SqlAlchemyUnitOfWork, Depends(get_uow)]

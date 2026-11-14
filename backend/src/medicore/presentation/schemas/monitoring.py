@@ -44,6 +44,7 @@ class LockedLoginResponse(BaseModel):
     email: str
     failed_count: int
     locked_until: datetime
+    ip: str | None = None
 
 
 class ConsoleLoginResponse(BaseModel):

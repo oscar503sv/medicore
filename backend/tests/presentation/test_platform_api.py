@@ -268,3 +268,12 @@ def test_business_overview_endpoint(seed, client, platform_headers):
 
 def test_business_overview_needs_a_platform_session(client, admin_headers):
     assert client.get("/api/v1/platform/business", headers=admin_headers).status_code == 401
+
+
+def test_console_cannot_suspend_the_only_admin(seed, client, platform_headers):
+    resp = client.post(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/users/{seed.admin.id}/suspend",
+        headers=platform_headers,
+    )
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "users.last_admin"

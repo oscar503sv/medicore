@@ -269,13 +269,15 @@ def test_change_password_revokes_other_sessions_but_keeps_current():
     assert sessions[current_sid.value].is_active(clock.now())
 
 
-def _login_cmd(email: str, password: str) -> AuthenticateUserCommand:
-    return AuthenticateUserCommand(slug="clinica-norte", email=email, password=password)
+def _login_cmd(email: str, password: str, ip: str | None = None) -> AuthenticateUserCommand:
+    return AuthenticateUserCommand(
+        slug="clinica-norte", email=email, password=password, ip_address=ip
+    )
 
 
-def _fail_login(auth, email: str) -> None:
+def _fail_login(auth, email: str, ip: str | None = None) -> None:
     with pytest.raises(AuthenticationFailed):
-        auth.execute(_login_cmd(email, "wrong-password"))
+        auth.execute(_login_cmd(email, "wrong-password", ip))
 
 
 def test_lockout_after_five_failures_blocks_even_correct_password():
@@ -415,3 +417,84 @@ def test_update_my_profile_ignores_bio_for_non_doctor():
     )
     uow = seed.factory.for_tenant(seed.tenant.id)
     assert uow.doctor_profiles.get_by_user_id(seed.receptionist.id) is None
+
+
+ATTACKER_IP = "198.51.100.1"
+OWNER_IP = "203.0.113.9"
+
+
+def test_spraying_from_one_ip_is_blocked():
+    seed = seed_clinic()
+    auth, calls = _counting_auth(seed)
+    for i in range(30):
+        _fail_login(auth, f"victim{i}@example.com", ATTACKER_IP)
+    calls.clear()
+
+    with pytest.raises(TooManyLoginAttempts) as real:
+        auth.execute(_login_cmd(seed.doctor.email, PASSWORD, ATTACKER_IP))
+    with pytest.raises(TooManyLoginAttempts) as unknown:
+        auth.execute(_login_cmd("nadie@example.com", PASSWORD, ATTACKER_IP))
+
+    assert real.value.retry_after_seconds == unknown.value.retry_after_seconds
+    assert calls == []
+
+
+def test_owner_signs_in_from_another_ip_while_attacked():
+    seed = seed_clinic()
+    auth = make_auth(seed)
+    for _ in range(5):
+        _fail_login(auth, seed.doctor.email, ATTACKER_IP)
+
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(_login_cmd(seed.doctor.email, PASSWORD, ATTACKER_IP))
+    session = auth.execute(_login_cmd(seed.doctor.email, PASSWORD, OWNER_IP))
+    assert session.user_id == seed.doctor.id
+
+
+def test_distributed_brute_force_hits_the_account_cap():
+    seed = seed_clinic()
+    auth, calls = _counting_auth(seed)
+    for i in range(20):
+        _fail_login(auth, seed.doctor.email, f"198.51.100.{i % 5 + 1}")
+    calls.clear()
+
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(_login_cmd(seed.doctor.email, PASSWORD, "192.0.2.77"))
+
+    assert calls == []
+
+
+def test_known_ip_is_exempt_from_the_account_cap():
+    seed = seed_clinic()
+    auth = make_auth(seed)
+    auth.execute(_login_cmd(seed.doctor.email, PASSWORD, OWNER_IP))
+    for i in range(20):
+        _fail_login(auth, seed.doctor.email, f"198.51.100.{i % 5 + 1}")
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(_login_cmd(seed.doctor.email, PASSWORD, "192.0.2.77"))
+
+    session = auth.execute(_login_cmd(seed.doctor.email, PASSWORD, OWNER_IP))
+    assert session.user_id == seed.doctor.id
+
+
+def test_success_does_not_spend_nor_wipe_the_ip_budget():
+    seed = seed_clinic()
+    auth = make_auth(seed)
+    for i in range(25):
+        _fail_login(auth, f"victim{i}@example.com", ATTACKER_IP)
+    auth.execute(_login_cmd(seed.doctor.email, PASSWORD, ATTACKER_IP))
+
+    for i in range(5):  # the success was refunded: five attempts are still left
+        _fail_login(auth, f"other{i}@example.com", ATTACKER_IP)
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(_login_cmd(seed.doctor.email, PASSWORD, ATTACKER_IP))
+
+
+def test_lockout_audited_once_when_it_engages():
+    seed = seed_clinic()
+    auth = make_auth(seed)
+    for _ in range(5):
+        _fail_login(auth, seed.doctor.email)
+
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    assert len(uow.audit.query(action="auth.login_locked")) == 1

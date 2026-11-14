@@ -11,15 +11,16 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from medicore.application.common.admins import ensure_clinic_keeps_an_admin
 from medicore.application.common.audit import platform_audit_entry
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.entitlements import granted_permissions
 from medicore.application.common.errors import (
     AuthenticationFailed,
     EntityNotFound,
-    TooManyLoginAttempts,
     ValidationError,
 )
+from medicore.application.common.login_gate import LoginGate
 from medicore.application.common.login_throttle import platform_login_identifier
 from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.common.permissions import effective_permissions
@@ -168,22 +169,20 @@ class AuthenticatePlatformAdmin:
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> PlatformSessionDTO | PlatformMfaChallengeDTO:
-        identifier = platform_login_identifier(email)
         now = self._clock.now()
         with self._factory.login_throttle() as throttle:
-            locked = throttle.locked_until(identifier, now)
-            if locked is not None:
-                raise TooManyLoginAttempts(locked, now)
+            gate = LoginGate(throttle, now)
+            admission = gate.admit(platform_login_identifier(email), ip_address)
             try:
                 session = self._authenticate(email, password, ip_address, user_agent)
             except AuthenticationFailed as exc:
-                # Counted for non-existent accounts too, so the lockout does not reveal
-                # which accounts exist (complements the dummy hash check).
-                locked = throttle.record_failure(identifier, now)
-                self._audit_failure(email, now, exc.code, locked, ip_address, user_agent)
+                # Already counted by the reservation, non-existent accounts too, so the
+                # lockout does not reveal which accounts exist (complements the dummy hash).
+                self._audit_failure(
+                    email, now, exc.code, admission.lock_engaged, ip_address, user_agent
+                )
                 raise
-            throttle.reset(identifier)
-            throttle.purge_stale(now)
+            gate.succeeded(admission)
             return session
 
     def _audit_failure(
@@ -191,7 +190,7 @@ class AuthenticatePlatformAdmin:
         email: str,
         now: datetime,
         reason: str,
-        locked: datetime | None,
+        locked: bool,
         ip_address: str | None,
         user_agent: str | None,
     ) -> None:
@@ -811,6 +810,10 @@ class UpdateTenantUser:
         allowed = {"name", "role", "sex", "phone", "specialty"}
         with self._factory.for_tenant(tenant_id) as uow:
             user = _require_user(uow, tenant_id, user_id)
+            if changes.get("role") is not None:
+                ensure_clinic_keeps_an_admin(
+                    uow, user, stays_admin=Role(changes["role"]) == Role.ADMIN
+                )
             if changes.get("role") is not None and user.is_active:
                 ensure_seat_for(
                     uow, tenant_id, taking=Role(changes["role"]), releasing=user.role
@@ -841,6 +844,7 @@ class SuspendTenantUser:
     ) -> User:
         with self._factory.for_tenant(tenant_id) as uow:
             user = _require_user(uow, tenant_id, user_id)
+            ensure_clinic_keeps_an_admin(uow, user, stays_admin=False)
             user.suspend()
             uow.users.save(user)
             uow.sessions.revoke_all_for_user(user_id.value, self._clock.now())

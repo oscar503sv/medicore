@@ -615,3 +615,16 @@ def test_audit_entry_marks_impersonation():
     )
     entry = audit_entry(actor, FixedClock().now(), "patient.created", "Patient", "x")
     assert entry.metadata["impersonated_by"] == str(seed.platform_admin.id)
+
+
+def test_platform_owner_signs_in_from_another_ip_while_attacked():
+    seed = seed_clinic()
+    auth = make_platform_auth(seed)
+    for _ in range(5):
+        with pytest.raises(AuthenticationFailed):
+            auth.execute(seed.platform_admin.email, "nope", ip_address="198.51.100.1")
+
+    with pytest.raises(TooManyLoginAttempts):
+        auth.execute(seed.platform_admin.email, PASSWORD, ip_address="198.51.100.1")
+    session = auth.execute(seed.platform_admin.email, PASSWORD, ip_address="203.0.113.9")
+    assert session.admin_id == seed.platform_admin.id

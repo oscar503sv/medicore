@@ -63,10 +63,10 @@ class World:
             self.factory, self.hasher, self.issuer, self.clock, POLICY
         ).execute(self.admin.email, PASSWORD)
 
-    def verify(self, challenge, code):
+    def verify(self, challenge, code, ip_address=None):
         return CompletePlatformMfaLogin(
             self.factory, self.issuer, self.totp, self.box, self.clock, POLICY
-        ).execute(_challenge_id(challenge), code)
+        ).execute(_challenge_id(challenge), code, ip_address)
 
     def _mgmt(self, cls, *extra):
         return cls(self.factory, self.hasher, self.totp, self.box, self.clock, *extra)
@@ -237,6 +237,15 @@ def test_lockout_does_not_depend_on_which_challenge_is_used(mfa_world):
             world.verify(world.login(), "000000")
     with pytest.raises(TooManyLoginAttempts):
         world.verify(world.login(), world.code(world.secret))
+
+
+def test_lockout_does_not_depend_on_the_ip(mfa_world):
+    world = mfa_world
+    for i in range(5):
+        with pytest.raises(AuthenticationFailed):
+            world.verify(world.login(), "000000", f"198.51.100.{i + 1}")
+    with pytest.raises(TooManyLoginAttempts):
+        world.verify(world.login(), world.code(world.secret), "203.0.113.9")
 
 
 def test_successful_verification_resets_the_failure_count(mfa_world):

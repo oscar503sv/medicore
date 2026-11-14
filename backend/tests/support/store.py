@@ -76,6 +76,8 @@ class InMemoryStore:
     diagnosis_codes: dict[str, CatalogDiagnosis] = field(default_factory=dict)
     # Global login throttle keyed by identifier: (failed_count, last_failed_at, locked_until).
     login_attempts: dict[str, tuple] = field(default_factory=dict)
+    # When each identifier last signed in successfully (account-and-IP rows).
+    login_successes: dict[str, datetime] = field(default_factory=dict)
     # Global revocable sessions (tenant and platform scopes share the store).
     sessions: dict[UUID, AuthSession] = field(default_factory=dict)
     # Recorded server errors (platform monitoring).

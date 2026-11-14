@@ -13,6 +13,7 @@ interface AuthState {
   session: Session | null
   setSession: (session: Session) => void
   clearMustChangePassword: () => void
+  requirePasswordChange: () => void
   logout: () => void
   hasRole: (...roles: Role[]) => boolean
   /** True if the session holds at least one of the given permissions. */
@@ -27,6 +28,10 @@ export const useAuthStore = create<AuthState>()(
       clearMustChangePassword: () => {
         const s = get().session
         if (s) set({ session: { ...s, must_change_password: false } })
+      },
+      requirePasswordChange: () => {
+        const s = get().session
+        if (s) set({ session: { ...s, must_change_password: true } })
       },
       logout: () => {
         serverLogout('/auth/logout')

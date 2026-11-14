@@ -60,6 +60,14 @@ function isCsrfRejection(error: { response?: { status?: number; data?: { code?: 
   return error.response?.status === 403 && error.response.data?.code === 'auth.csrf_invalid'
 }
 
+function isPasswordChangeRequired(error: {
+  response?: { status?: number; data?: { code?: string } }
+}) {
+  return (
+    error.response?.status === 403 && error.response.data?.code === 'auth.password_change_required'
+  )
+}
+
 // On 401, clear the session (cookie expired or invalid) → router redirects to login.
 // A rejected CSRF token means the session cookie was replaced or is gone: same treatment.
 api.interceptors.response.use(
@@ -68,6 +76,9 @@ api.interceptors.response.use(
     const expired = error.response?.status === 401 || isCsrfRejection(error)
     if (expired && useAuthStore.getState().session) {
       useAuthStore.getState().logout()
+    } else if (isPasswordChangeRequired(error) && useAuthStore.getState().session) {
+      // RequireAuth sends the account to the change screen once the flag is set.
+      useAuthStore.getState().requirePasswordChange()
     }
     return Promise.reject(error)
   },

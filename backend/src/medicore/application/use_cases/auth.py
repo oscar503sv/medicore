@@ -13,9 +13,9 @@ from medicore.application.common.entitlements import granted_permissions
 from medicore.application.common.errors import (
     AuthenticationFailed,
     EntityNotFound,
-    TooManyLoginAttempts,
     ValidationError,
 )
+from medicore.application.common.login_gate import LoginGate
 from medicore.application.common.login_throttle import tenant_login_identifier
 from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.ports.clock import Clock
@@ -78,22 +78,19 @@ class AuthenticateUser:
         self._clock = clock
 
     def execute(self, cmd: AuthenticateUserCommand) -> SessionDTO:
-        identifier = tenant_login_identifier(cmd.slug, cmd.email)
         now = self._clock.now()
         with self._factory.login_throttle() as throttle:
-            locked = throttle.locked_until(identifier, now)
-            if locked is not None:
-                raise TooManyLoginAttempts(locked, now)
+            gate = LoginGate(throttle, now)
+            admission = gate.admit(tenant_login_identifier(cmd.slug, cmd.email), cmd.ip_address)
             try:
                 session = self._authenticate(cmd)
             except AuthenticationFailed:
-                # Counted for non-existent accounts too, so the lockout does not reveal
-                # which accounts exist (complements the dummy hash check).
-                if throttle.record_failure(identifier, now) is not None:
+                # Already counted by the reservation, non-existent accounts too, so the
+                # lockout does not reveal which accounts exist (complements the dummy hash).
+                if admission.lock_engaged:
                     self._audit_lockout(cmd, now)
                 raise
-            throttle.reset(identifier)
-            throttle.purge_stale(now)
+            gate.succeeded(admission)
             return session
 
     def _audit_lockout(self, cmd: AuthenticateUserCommand, now) -> None:
