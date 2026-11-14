@@ -37,3 +37,5 @@ class PlatformActorContext:
     admin_id: PlatformAdminId
     ip_address: str | None = None
     user_agent: str | None = None
+    # Console session behind the request (None in scripts and tests).
+    session_id: SessionId | None = None

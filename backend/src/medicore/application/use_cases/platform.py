@@ -22,6 +22,7 @@ from medicore.application.common.errors import (
 from medicore.application.common.login_throttle import platform_login_identifier
 from medicore.application.common.passwords import ensure_password_policy
 from medicore.application.common.permissions import effective_permissions
+from medicore.application.common.platform_session import PlatformSessionPolicy
 from medicore.application.common.quotas import ensure_seat_for
 from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock
@@ -35,6 +36,7 @@ from medicore.application.use_cases.subscriptions import (
     resolve_subscription,
 )
 from medicore.domain.entities.auth_session import AuthSession
+from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
@@ -67,6 +69,7 @@ _audit = platform_audit_entry
 @dataclass(frozen=True, slots=True)
 class PlatformSessionDTO:
     token: str
+    session_id: SessionId
     admin_id: PlatformAdminId
     name: str
     email: str
@@ -93,6 +96,35 @@ def _login_entry(
     )
 
 
+def _open_platform_session(
+    uow,
+    admin: PlatformAdmin,
+    now: datetime,
+    policy: PlatformSessionPolicy,
+    ip_address: str | None,
+    user_agent: str | None,
+) -> SessionId:
+    """Create the console session row and its login audit entry inside ``uow``."""
+    session_id = SessionId.new()
+    uow.sessions.delete_expired_for_user(admin.id.value, now)
+    uow.sessions.add(
+        AuthSession(
+            id=session_id,
+            scope="platform",
+            user_id=admin.id.value,
+            created_at=now,
+            expires_at=now + policy.lifetime,
+            last_activity_at=now,
+            ip_address=ip_address,
+            user_agent=(user_agent or "")[:400] or None,
+        )
+    )
+    uow.platform_audit.append(
+        _login_entry(admin.id, now, "auth.platform_login", ip_address, user_agent)
+    )
+    return session_id
+
+
 class AuthenticatePlatformAdmin:
     """Authenticate a superadmin by email + password (no organization slug)."""
 
@@ -102,11 +134,13 @@ class AuthenticatePlatformAdmin:
         hasher: PasswordHasher,
         tokens: TokenIssuer,
         clock: Clock,
+        policy: PlatformSessionPolicy = PlatformSessionPolicy(),
     ) -> None:
         self._factory = uow_factory
         self._hasher = hasher
         self._tokens = tokens
         self._clock = clock
+        self._policy = policy
         self._dummy_hash: str | None = None
 
     def _dummy(self) -> str:
@@ -180,28 +214,20 @@ class AuthenticatePlatformAdmin:
             now = self._clock.now()
             admin.last_seen_at = now
             uow.platform_admins.save(admin)
-            session_id = SessionId.new()
-            uow.sessions.delete_expired_for_user(admin.id.value, now)
-            uow.sessions.add(
-                AuthSession(
-                    id=session_id,
-                    scope="platform",
-                    user_id=admin.id.value,
-                    created_at=now,
-                    expires_at=now + timedelta(minutes=self._tokens.ttl_minutes()),
-                    ip_address=ip_address,
-                    user_agent=(user_agent or "")[:400] or None,
-                )
-            )
-            uow.platform_audit.append(
-                _login_entry(admin.id, now, "auth.platform_login", ip_address, user_agent)
+            session_id = _open_platform_session(
+                uow, admin, now, self._policy, ip_address, user_agent
             )
             uow.commit()
         token = self._tokens.issue(
-            SessionClaims(user_id=str(admin.id), scope="platform", session_id=str(session_id))
+            SessionClaims(user_id=str(admin.id), scope="platform", session_id=str(session_id)),
+            ttl_minutes=self._policy.lifetime_minutes,
         )
         return PlatformSessionDTO(
-            token=token, admin_id=admin.id, name=admin.name, email=admin.email
+            token=token,
+            session_id=session_id,
+            admin_id=admin.id,
+            name=admin.name,
+            email=admin.email,
         )
 
 
@@ -572,6 +598,7 @@ class ResetUserPassword:
 @dataclass(frozen=True, slots=True)
 class ImpersonationSessionDTO:
     token: str
+    session_id: SessionId
     user_id: str
     tenant_id: str
     tenant_name: str
@@ -649,6 +676,7 @@ class ImpersonateTenant:
         )
         return ImpersonationSessionDTO(
             token=token,
+            session_id=session_id,
             user_id=str(target.id),
             tenant_id=str(tenant_id),
             tenant_name=tenant.legal_name,

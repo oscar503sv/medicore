@@ -9,7 +9,7 @@ token to expire.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from medicore.domain.shared.identifiers import SessionId, TenantId
@@ -30,6 +30,8 @@ class AuthSession:
     user_agent: str | None = None
     # Support access: the superadmin acting as this clinic user (None for a normal login).
     impersonator_id: UUID | None = None
+    # Last authenticated activity; only console sessions track it (None = never touched).
+    last_activity_at: datetime | None = None
 
     def is_active(self, now: datetime) -> bool:
         return self.revoked_at is None and self.expires_at > now
@@ -37,3 +39,15 @@ class AuthSession:
     def revoke(self, now: datetime) -> None:
         if self.revoked_at is None:
             self.revoked_at = now
+
+    def idle_since(self) -> datetime:
+        return self.last_activity_at or self.created_at
+
+    def is_idle(self, now: datetime, idle: timedelta) -> bool:
+        return now - self.idle_since() >= idle
+
+    def needs_touch(self, now: datetime, every: timedelta) -> bool:
+        return now - self.idle_since() >= every
+
+    def touch(self, now: datetime) -> None:
+        self.last_activity_at = now

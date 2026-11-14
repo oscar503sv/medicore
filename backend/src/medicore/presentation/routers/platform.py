@@ -43,10 +43,10 @@ from medicore.domain.shared.identifiers import SessionId, TenantId, UserId
 from medicore.domain.value_objects.subscription import DEFAULT_GRACE_DAYS
 from medicore.infrastructure.config import get_settings
 from medicore.presentation.cookies import (
-    PLATFORM_COOKIE,
-    SESSION_COOKIE,
     clear_session_cookies,
+    platform_cookies,
     set_session_cookies,
+    tenant_cookies,
 )
 from medicore.presentation.dependencies import (
     Actor,
@@ -54,6 +54,7 @@ from medicore.presentation.dependencies import (
     Hasher,
     JwtIssuer,
     PlatformActor,
+    PlatformPolicy,
     Runtime,
     UoWFactory,
     _client_ip,
@@ -111,16 +112,17 @@ def _ser(tenant: Tenant, clock: ClockPort) -> dict:
 
 @router.post("/login", response_model=PlatformSessionResponse)
 def login(body: PlatformLoginRequest, request: Request, response: Response, factory: UoWFactory,
-          hasher: Hasher, issuer: JwtIssuer, clock: Clock):
-    session = AuthenticatePlatformAdmin(factory, hasher, issuer, clock).execute(
+          hasher: Hasher, issuer: JwtIssuer, clock: Clock, policy: PlatformPolicy):
+    session = AuthenticatePlatformAdmin(factory, hasher, issuer, clock, policy).execute(
         body.email, body.password,
         ip_address=_client_ip(request), user_agent=request.headers.get("user-agent"),
     )
     set_session_cookies(
         response,
-        cookie_name=PLATFORM_COOKIE,
+        platform_cookies(),
         token=session.token,
-        max_age=get_settings().jwt_expire_minutes * 60,
+        session_id=str(session.session_id),
+        max_age=policy.lifetime_minutes * 60,
     )
     return PlatformSessionResponse(
         admin_id=str(session.admin_id),
@@ -138,8 +140,9 @@ def logout(
     clock: Clock,
 ):
     """Revoke the server-side session (best effort) and clear the platform cookies."""
-    revoke_session_token(request.cookies.get(PLATFORM_COOKIE), issuer, factory, clock.now())
-    clear_session_cookies(response, PLATFORM_COOKIE)
+    spec = platform_cookies()
+    revoke_session_token(request.cookies.get(spec.session), issuer, factory, clock.now())
+    clear_session_cookies(response, spec)
 
 
 @router.get("/me", response_model=PlatformAdminResponse)
@@ -381,8 +384,9 @@ def impersonate(tenant_id: str, body: ImpersonateRequest, response: Response,
     # can use the clinic app, with the shorter support TTL.
     set_session_cookies(
         response,
-        cookie_name=SESSION_COOKIE,
+        tenant_cookies(),
         token=s.token,
+        session_id=str(s.session_id),
         max_age=get_settings().jwt_support_expire_minutes * 60,
     )
     return ImpersonationResponse(
@@ -400,7 +404,7 @@ def impersonate(tenant_id: str, body: ImpersonateRequest, response: Response,
 def end_impersonation(response: Response, actor: Actor, factory: UoWFactory, clock: Clock):
     """Close the current support session (tenant-scoped: uses the impersonation token)."""
     EndImpersonation(factory, clock).execute(actor)
-    clear_session_cookies(response, SESSION_COOKIE)
+    clear_session_cookies(response, tenant_cookies())
 
 
 @router.get("/tenants/{tenant_id}/permissions", response_model=PermissionsMatrixResponse)

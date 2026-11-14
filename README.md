@@ -19,7 +19,7 @@ It also ships a **platform console (superadmin)** that sits above the multi-tena
 | ORM | SQLAlchemy 2.0 (sync) |
 | Migrations | Alembic ≥ 1.13 |
 | Database | PostgreSQL (psycopg3) |
-| Auth | PyJWT ≥ 2.8 + bcrypt ≥ 4 · httpOnly cookie + double-submit CSRF |
+| Auth | PyJWT ≥ 2.8 + bcrypt ≥ 4 · httpOnly cookies + CSRF bound to the session |
 | Config validation | pydantic-settings |
 | Tests / Lint | pytest ≥ 8 + ruff (in-memory adapters) |
 | Frontend | React 18 + TypeScript 5 + Vite 6 |
@@ -88,7 +88,7 @@ src/medicore/
 Every business entity carries a `tenant_id`. The filter is applied **in every repository**, not by the caller — isolation is enforced structurally. The `UnitOfWork` is tenant-scoped: `factory.for_tenant(tenant_id)`. Global operations (slug resolution, superadmin) use an unscoped `UnitOfWork` or read-only helpers.
 
 ### Platform (superadmin)
-A separate session (`platform`-scoped token) that operates above the multi-tenant boundary: clinic creation/editing (including the timezone and sites), each clinic's **subscription** (plan, modules, paid period, special terms, payments), status changes (active / suspended / archived), global stats and audit, account support (password reset, unlock, user suspension) and **impersonation**. Impersonation issues a tenant token marked with `impersonated_by` and a shorter TTL, so every write made during support is audited. Impersonation is allowed in suspended clinics, but not in archived ones.
+A separate session (`platform`-scoped token, with its own `mc_console` cookie) that operates above the multi-tenant boundary: clinic creation/editing (including the timezone and sites), each clinic's **subscription** (plan, modules, paid period, special terms, payments), status changes (active / suspended / archived), global stats and audit, account support (password reset, unlock, user suspension) and **impersonation**. Impersonation issues a tenant token marked with `impersonated_by` and a shorter TTL, so every write made during support is audited. Impersonation is allowed in suspended clinics, but not in archived ones.
 
 ### Critical business rules
 - Appointments only within the doctor's availability, with no overlaps, honoring the booking rules.
@@ -156,9 +156,11 @@ The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every 
 
 ## Security
 
-- **Sessions in an httpOnly cookie** (SameSite=Lax, `Secure` in production) with **double-submit CSRF** (`mc_csrf` + `X-CSRF-Token` header); the token is never reachable from JavaScript. `Authorization: Bearer` is still accepted for API clients.
+- **Sessions in httpOnly cookies** (`Secure` outside development, with `__Host-` / `__Secure-` prefixes): `mc_session` for clinics (SameSite=Lax) and `mc_console` for the platform console (SameSite=Strict, sent only to the platform API). The CSRF token (`mc_csrf` / `mc_console_csrf` + `X-CSRF-Token` header) is an HMAC of the session id, so a token from one scope is useless in the other, and signing out of a clinic leaves the console session intact. The session token itself is never reachable from JavaScript. `Authorization: Bearer` is still accepted for API clients.
 - **Revocable sessions** (`sessions` table + `sid` claim): real logout; changing the password ends the other sessions; suspending or resetting a user ends all of them; suspending or archiving a clinic ends all its sessions (support's included). Every request checks that the clinic and the account are still active, using one access rule shared with sign-in. Support can open a new session in a suspended clinic, but never in an archived one.
 - **Login lockout** with exponential backoff (5 failures → 1 min, doubling up to 15) and a 429 response with `Retry-After`.
+- **Console session limits**: the superadmin console session expires after 30 min without activity (`PLATFORM_SESSION_IDLE_MINUTES`) and at most 8 h after sign-in (`PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request. `scripts/create_platform_admin.py` revokes the admin's sessions when it updates the account.
+- **Recommended deployment**: serve the platform console from its own origin or subdomain (e.g. `console.example.com`), so an XSS in the clinic app cannot share an origin with it. This is a recommendation; the app does not enforce it.
 - **No enumeration**: constant-time login; an unknown slug or email answers exactly like a wrong password.
 - `X-Forwarded-For` is only honored from the proxies listed in `TRUSTED_PROXIES`.
 - Security headers on the API and a strict CSP in the frontend build.
@@ -381,7 +383,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1060 tests)
+.venv/bin/pytest                          # full suite (1107 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -434,21 +436,21 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1060 passing tests
-   258  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1107 passing tests
+   264  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   454  — application (auth, sessions, appointments, consultations, records, notifications,
+   466  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform, granular permissions, multi-tenant isolation)
-   260  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   279  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    88  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    98  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:
 - `SignConsultation` atomicity: a failure rolls back the record, prescriptions and appointment status.
 - Multi-tenant isolation: one tenant's repos never leak another tenant's data.
 - Effective permissions per role and per-tenant override, plus platform scope.
-- Login lockout, session revocation and CSRF protection.
+- Login lockout, session revocation, CSRF protection and console session timeouts.
 - That every backend error code has a Spanish and an English translation.
 
 ---
@@ -463,6 +465,10 @@ Among other things, the tests verify:
 | `JWT_ALGORITHM` | JWT algorithm | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Token lifetime in minutes | `1440` (24 h) |
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Lifetime (min) of impersonation/support sessions — shorter for safety | `60` (1 h) |
+| `COOKIE_SECURE` | `Secure` flag and `__Host-` / `__Secure-` prefixes on session cookies. Unset = on everywhere except `development`. Cannot be `false` in production. | derived from `ENVIRONMENT` |
+| `PLATFORM_SESSION_IDLE_MINUTES` | Idle timeout of the platform console session (min, between 5 and the maximum) | `30` |
+| `PLATFORM_SESSION_MAX_MINUTES` | Absolute lifetime of the platform console session (min) | `480` (8 h) |
+| `PLATFORM_COOKIE_PATH` | Path of the console session cookie (only sent to the platform API) | `/api/v1/platform` |
 | `CORS_ORIGINS` | Allowed origins (comma-separated); `*` only in development | `*` |
 | `ENABLE_DOCS` | Expose Swagger/OpenAPI at `/api/v1/docs` | `true` (dev) / `false` (prod) |
 | `TRUSTED_PROXIES` | IPs/CIDRs of reverse proxies whose `X-Forwarded-For` is honored; empty → socket IP | empty |
@@ -470,7 +476,7 @@ Among other things, the tests verify:
 | `DEMO_PASSWORD` | Password for the demo users created by `scripts/seed_demo.py` (≥ 8 chars). **Required in production**, where the public default is rejected | `demo1234` (dev only) |
 | `DEMO_ADMIN_PASSWORD` | Password for the demo clinic admins (≥ 8 chars), kept private so the shared demo password doesn't open the administration. **Required in production** and different from `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
-> In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is still the insecure default or too short, or if `CORS_ORIGINS` is `*`; API docs are also disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and the defaults work as-is.
+> In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is still the insecure default or too short, or if `CORS_ORIGINS` is `*` or `COOKIE_SECURE` is `false`; API docs are also disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and the defaults work as-is.
 
 ---
 
@@ -495,6 +501,8 @@ The root [`docker-compose.yml`](docker-compose.yml) runs the whole stack on a **
    ```
 
 Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on start.
+
+> **Note:** migration `d0e1f2a3b4c6` (console session limits) makes clinic users and superadmins sign in again once after deploying.
 
 For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched. Each run is recorded, and the *Monitoring* page flags the task when it fails or when more than 26 h pass without a successful reset.
 

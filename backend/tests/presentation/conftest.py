@@ -9,12 +9,14 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from medicore.application.common.platform_session import PlatformSessionPolicy
 from medicore.presentation.app import create_app
 from medicore.presentation.dependencies import (
     get_clock,
     get_codes,
     get_hasher,
     get_jwt_issuer,
+    get_platform_session_policy,
     get_uow,
     get_uow_factory,
 )
@@ -33,11 +35,15 @@ def seed():
 
 
 @pytest.fixture
-def client(seed):
+def clock():
+    return FixedClock()
+
+
+@pytest.fixture
+def client(seed, clock):
     """TestClient wired with in-memory adapters for the given seed."""
     app = create_app()
     factory = seed.factory
-    clock = FixedClock()
     codes = SequentialCodeGenerator()
     hasher = PlainPasswordHasher()
     issuer = FakeTokenIssuer()
@@ -51,6 +57,7 @@ def client(seed):
     app.dependency_overrides[get_jwt_issuer] = lambda: issuer
     app.dependency_overrides[get_uow] = lambda: factory.for_tenant(seed.tenant.id)
     app.dependency_overrides[get_codes] = lambda: codes
+    app.dependency_overrides[get_platform_session_policy] = lambda: PlatformSessionPolicy()
 
     return TestClient(app, raise_server_exceptions=True)
 
@@ -97,7 +104,7 @@ def platform_headers(seed, client):
         client,
         "/api/v1/platform/login",
         {"email": seed.platform_admin.email, "password": PASSWORD},
-        cookie="mc_platform",
+        cookie="mc_console",
     )
 
 

@@ -32,24 +32,41 @@ export function readCookie(name: string): string | null {
 
 const SAFE_METHODS = new Set(['get', 'head', 'options'])
 
-// Double-submit CSRF: echo the readable mc_csrf cookie in a header the browser would
-// never add on its own. The backend rejects cookie-authenticated mutations without it.
-function attachCsrf(config: InternalAxiosRequestConfig) {
-  if (!SAFE_METHODS.has((config.method ?? 'get').toLowerCase())) {
-    const csrf = readCookie('mc_csrf')
-    if (csrf) config.headers['X-CSRF-Token'] = csrf
-  }
-  return config
+// With Secure cookies the backend prefixes the names with __Host-; in plain-http dev they
+// are unprefixed, so try both.
+function readCsrf(base: string): string | null {
+  return readCookie(`__Host-${base}`) ?? readCookie(base)
 }
 
-api.interceptors.request.use(attachCsrf)
-platformApi.interceptors.request.use(attachCsrf)
+// CSRF: echo the readable CSRF cookie in a header the browser would never add on its own.
+// The value is bound to the session server-side; mutations without it are rejected.
+function csrfInterceptor(base: string) {
+  return (config: InternalAxiosRequestConfig) => {
+    if (!SAFE_METHODS.has((config.method ?? 'get').toLowerCase())) {
+      const csrf = readCsrf(base)
+      if (csrf) config.headers['X-CSRF-Token'] = csrf
+    }
+    return config
+  }
+}
+
+api.interceptors.request.use(csrfInterceptor('mc_csrf'))
+platformApi.interceptors.request.use(csrfInterceptor('mc_console_csrf'))
+
+/** Marks a request as polling, so the console does not count it as user activity. */
+export const BACKGROUND = { headers: { 'X-Background-Refresh': '1' } }
+
+function isCsrfRejection(error: { response?: { status?: number; data?: { code?: string } } }) {
+  return error.response?.status === 403 && error.response.data?.code === 'auth.csrf_invalid'
+}
 
 // On 401, clear the session (cookie expired or invalid) → router redirects to login.
+// A rejected CSRF token means the session cookie was replaced or is gone: same treatment.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && useAuthStore.getState().session) {
+    const expired = error.response?.status === 401 || isCsrfRejection(error)
+    if (expired && useAuthStore.getState().session) {
       useAuthStore.getState().logout()
     }
     return Promise.reject(error)
@@ -59,8 +76,13 @@ api.interceptors.response.use(
 platformApi.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 && usePlatformAuthStore.getState().session) {
-      usePlatformAuthStore.getState().logout()
+    const store = usePlatformAuthStore.getState()
+    if (store.session) {
+      if (error.response?.status === 401) {
+        store.expire(error.response.data?.code)
+      } else if (isCsrfRejection(error)) {
+        store.expire('auth.session_expired')
+      }
     }
     return Promise.reject(error)
   },

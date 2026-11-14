@@ -7,7 +7,12 @@ require the X-CSRF-Token header, and logout clears everything.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
+from medicore.domain.enums import UserStatus
 from tests.support.builders import PASSWORD
+
+BACKGROUND = {"X-Background-Refresh": "1"}
 
 
 def _login(seed, client, user=None):
@@ -84,12 +89,13 @@ class TestPlatformCookies:
     def test_platform_login_sets_its_own_cookie(self, seed, client):
         resp = _platform_login(seed, client)
         assert "token" not in resp.json()
-        assert client.cookies.get("mc_platform")
+        assert client.cookies.get("mc_console")
+        assert client.cookies.get("mc_console_csrf")
         assert client.get("/api/v1/platform/tenants").status_code == 200
 
     def test_platform_cookie_does_not_open_tenant_endpoints(self, seed, client):
         _platform_login(seed, client)
-        # mc_platform is not mc_session: tenant endpoints see no credential at all.
+        # mc_console is not mc_session: tenant endpoints see no credential at all.
         assert client.get("/api/v1/patients").status_code == 401
 
     def test_platform_logout_clears_the_session(self, seed, client):
@@ -99,7 +105,7 @@ class TestPlatformCookies:
 
     def test_platform_logout_revokes_the_server_side_session(self, seed, client):
         _platform_login(seed, client)
-        token = client.cookies.get("mc_platform")
+        token = client.cookies.get("mc_console")
         assert client.post("/api/v1/platform/logout").status_code == 204
         client.cookies.clear()
         # the old token is dead even though the JWT itself has not expired
@@ -110,7 +116,7 @@ class TestPlatformCookies:
 
     def test_impersonation_sets_tenant_cookie(self, seed, client):
         _platform_login(seed, client)
-        csrf = client.cookies.get("mc_csrf")
+        csrf = client.cookies.get("mc_console_csrf")
         resp = client.post(
             f"/api/v1/platform/tenants/{seed.tenant.id}/impersonate",
             json={"reason": "soporte: revisión de agenda"},
@@ -121,3 +127,111 @@ class TestPlatformCookies:
         # The support session is a tenant session: the clinic app now works by cookie.
         assert client.cookies.get("mc_session")
         assert client.get("/api/v1/patients").status_code == 200
+
+    def test_platform_cookie_is_path_scoped_and_strict(self, seed, client):
+        resp = _platform_login(seed, client)
+        cookies = {c.split("=", 1)[0]: c for c in resp.headers.get_list("set-cookie")}
+        session_cookie = cookies["mc_console"]
+        assert "Path=/api/v1/platform" in session_cookie
+        assert "HttpOnly" in session_cookie
+        assert "SameSite=strict" in session_cookie
+        assert "Max-Age=28800" in session_cookie  # 8 h absolute cap
+        csrf_cookie = cookies["mc_console_csrf"]
+        # Path=/ so the SPA can read it from any page; HttpOnly would hide it from the SPA.
+        assert "Path=/;" in csrf_cookie
+        assert "HttpOnly" not in csrf_cookie
+        assert "SameSite=strict" in csrf_cookie
+
+    def test_clinic_logout_keeps_console_session(self, seed, client):
+        _platform_login(seed, client)
+        _login(seed, client)
+        assert client.post("/api/v1/auth/logout").status_code == 204
+        assert client.get("/api/v1/patients").status_code == 401
+        assert client.get("/api/v1/platform/tenants").status_code == 200
+
+    def test_clinic_csrf_rejected_on_platform(self, seed, client):
+        _platform_login(seed, client)
+        _login(seed, client)
+        clinic_csrf = client.cookies.get("mc_csrf")
+        resp = client.post(
+            f"/api/v1/platform/tenants/{seed.tenant.id}/impersonate",
+            json={"reason": "soporte: revisión de agenda"},
+            headers={"X-CSRF-Token": clinic_csrf},
+        )
+        assert resp.status_code == 403
+        assert resp.json()["code"] == "auth.csrf_invalid"
+
+    def test_console_csrf_rejected_on_clinic(self, seed, client):
+        _platform_login(seed, client)
+        _login(seed, client)
+        console_csrf = client.cookies.get("mc_console_csrf")
+        resp = client.post(
+            "/api/v1/auth/theme", json={"theme": "dark"}, headers={"X-CSRF-Token": console_csrf}
+        )
+        assert resp.status_code == 403
+        assert resp.json()["code"] == "auth.csrf_invalid"
+
+    def test_csrf_cookie_value_forged_but_equal_header_rejected(self, seed, client):
+        _login(seed, client)
+        client.cookies.delete("mc_csrf")
+        client.cookies.set("mc_csrf", "forged")
+        resp = client.post(
+            "/api/v1/auth/theme", json={"theme": "dark"}, headers={"X-CSRF-Token": "forged"}
+        )
+        assert resp.status_code == 403
+
+    def test_console_csrf_cookie_value_forged_but_equal_header_rejected(self, seed, client):
+        _platform_login(seed, client)
+        client.cookies.delete("mc_console_csrf")
+        client.cookies.set("mc_console_csrf", "forged")
+        resp = client.post(
+            f"/api/v1/platform/tenants/{seed.tenant.id}/impersonate",
+            json={"reason": "soporte: revisión de agenda"},
+            headers={"X-CSRF-Token": "forged"},
+        )
+        assert resp.status_code == 403
+
+    def test_idle_timeout_returns_401_code(self, seed, client, clock):
+        _platform_login(seed, client)
+        clock.set(clock.now() + timedelta(minutes=31))
+        resp = client.get("/api/v1/platform/tenants")
+        assert resp.status_code == 401
+        assert resp.json()["code"] == "auth.session_idle_timeout"
+        # the session was revoked, not just refused once
+        clock.set(clock.now() - timedelta(minutes=30))
+        assert client.get("/api/v1/platform/tenants").status_code == 401
+
+    def test_foreground_request_extends_the_session(self, seed, client, clock):
+        _platform_login(seed, client)
+        for _ in range(3):
+            clock.set(clock.now() + timedelta(minutes=20))
+            assert client.get("/api/v1/platform/tenants").status_code == 200
+
+    def test_background_header_does_not_extend(self, seed, client, clock):
+        _platform_login(seed, client)
+        clock.set(clock.now() + timedelta(minutes=20))
+        assert client.get("/api/v1/platform/tenants", headers=BACKGROUND).status_code == 200
+        clock.set(clock.now() + timedelta(minutes=11))
+        resp = client.get("/api/v1/platform/tenants")
+        assert resp.status_code == 401
+        assert resp.json()["code"] == "auth.session_idle_timeout"
+
+    def test_inactive_admin_rejected_on_next_request(self, seed, client):
+        _platform_login(seed, client)
+        assert client.get("/api/v1/platform/tenants").status_code == 200
+        # the store hands out copies after a transaction snapshot, so edit the stored row
+        seed.factory.store.platform_admins[seed.platform_admin.id.value].status = (
+            UserStatus.SUSPENDED
+        )
+        resp = client.get("/api/v1/platform/tenants")
+        assert resp.status_code == 401
+        assert resp.json()["code"] == "auth.account_inactive"
+
+    def test_logout_deletes_legacy_platform_cookie(self, seed, client):
+        _platform_login(seed, client)
+        client.cookies.set("mc_platform", "stale-token")
+        resp = client.post("/api/v1/platform/logout")
+        legacy = [c for c in resp.headers.get_list("set-cookie") if c.startswith("mc_platform=")]
+        assert legacy
+        assert "Max-Age=0" in legacy[0]
+        assert "Path=/;" in legacy[0]

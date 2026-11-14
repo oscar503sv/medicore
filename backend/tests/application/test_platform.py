@@ -100,6 +100,7 @@ def test_platform_login_creates_session_row():
     stored = seed.factory.store.sessions[_session_id(session.token).value]
     assert stored.scope == "platform"
     assert stored.is_active(clock.now())
+    assert stored.expires_at == clock.now() + timedelta(minutes=480)
 
 
 def test_end_impersonation_revokes_the_support_session():

@@ -55,9 +55,11 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
 
 - **Autenticación** por JWT con roles (`admin`, `doctor`, `nurse`, `receptionist`) y cambio de
   contraseña forzado en el primer ingreso. La sesión viaja en una **cookie httpOnly**
-  (`mc_session` / `mc_platform`, SameSite=Lax, Secure en producción) con **CSRF
-  double-submit** (cookie `mc_csrf` + cabecera `X-CSRF-Token` en mutaciones); el header
-  `Authorization: Bearer` se acepta como alternativa para clientes API.
+  (`mc_session` para clínicas, SameSite=Lax; `mc_console` para la consola de plataforma, SameSite=Strict
+  y enviada solo a `/api/v1/platform`; `Secure` con prefijos `__Host-` / `__Secure-` fuera de
+  desarrollo) con **token CSRF ligado a la sesión** (`mc_csrf` / `mc_console_csrf` + cabecera
+  `X-CSRF-Token` en mutaciones; es un HMAC del id de sesión, así que un token de un ámbito no
+  sirve en el otro); el header `Authorization: Bearer` se acepta como alternativa para clientes API.
 - **Sesiones revocables server-side**: cada login crea una fila en `sessions` referenciada
   por el claim `sid` del JWT y validada en cada request. El logout revoca de verdad, el
   cambio de contraseña revoca las demás sesiones del usuario, y suspender o resetear la
@@ -65,6 +67,7 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
   activas**: cada usuario ve y cierra las suyas (Configuración), el admin las de cualquier
   usuario de su clínica, y el superadmin las de una clínica completa (revocaciones de
   terceros auditadas como `session.revoked`).
+- **Límites de la sesión de consola**: la sesión de la consola de superadmin caduca tras 30 min sin actividad y como máximo 8 h después del login (`PLATFORM_SESSION_IDLE_MINUTES` / `PLATFORM_SESSION_MAX_MINUTES`). El refresco en segundo plano de Monitoreo no cuenta como actividad, y un superadmin desactivado pierde el acceso en la siguiente petición.
 - **Lockout de login**: contador de intentos fallidos por `(organización, email)` con
   bloqueo temporal y backoff exponencial (HTTP 429 + `Retry-After`); cuenta también
   cuentas inexistentes para no revelar cuáles existen.
@@ -158,6 +161,10 @@ Copia `.env.example` a `.env` y ajusta los valores:
 | `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Expiración del token | `1440` (24 h) |
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Expiración de sesiones de soporte/impersonación | `60` (1 h) |
+| `COOKIE_SECURE` | Flag `Secure` y prefijos `__Host-` / `__Secure-` en las cookies de sesión. Sin definir = activas en todo salvo `development`. No puede ser `false` en producción. | según `ENVIRONMENT` |
+| `PLATFORM_SESSION_IDLE_MINUTES` | Caducidad por inactividad de la sesión de la consola (min, entre 5 y el máximo) | `30` |
+| `PLATFORM_SESSION_MAX_MINUTES` | Duración absoluta de la sesión de la consola (min) | `480` (8 h) |
+| `PLATFORM_COOKIE_PATH` | Ruta de la cookie de sesión de la consola (solo se envía a la API de plataforma) | `/api/v1/platform` |
 | `CORS_ORIGINS` | Orígenes permitidos (coma-separados); `*` solo en desarrollo | `*` |
 | `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` (dev) / `false` (prod, salvo opt-in explícito) |
 | `TRUSTED_PROXIES` | IPs/CIDRs (coma-separados) de los reverse-proxies cuya cabecera `X-Forwarded-For` se honra (p. ej. `127.0.0.1` o `10.0.0.0/8`). Vacío → la cabecera se ignora y se registra la IP del socket. Un valor inválido impide el arranque. | vacío |
@@ -165,7 +172,7 @@ Copia `.env.example` a `.env` y ajusta los valores:
 | `DEMO_ADMIN_PASSWORD` | Contraseña de los admins de clínica de la demo (≥ 8 caracteres), privada para que la contraseña compartida no abra la administración. **Obligatoria en producción** y distinta de `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
 > En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue
-> siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*`. Además los docs
+> siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*` o `COOKIE_SECURE` es `false`. Además los docs
 > quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida nada y los
 > defaults funcionan tal cual.
 
@@ -227,7 +234,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **581 tests** (120 dominio · 240 aplicación · 171 presentación · 50 infraestructura), casi
+Suite de **1107 tests** (264 dominio · 466 aplicación · 279 presentación · 98 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
@@ -273,6 +280,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 - `TRUSTED_PROXIES` con la IP del reverse-proxy (p. ej. `127.0.0.1` si nginx corre en el
   mismo host) para que la auditoría registre la IP real del cliente.
 - Opcional: `ENABLE_DOCS=false` para ocultar Swagger/OpenAPI.
+
+> **Nota de actualización:** tras aplicar la migración `d0e1f2a3b4c6` (límites de la sesión de consola), los usuarios de clínica y los superadmins deben volver a iniciar sesión una vez.
 
 > Para varios workers basta con `WEB_CONCURRENCY=N` (uvicorn la lee; el `docker-compose.yml` usa 2). Cada
 > worker tiene su propio pool de hasta 15 conexiones: mantén `N × 15` por debajo de `max_connections` de Postgres.

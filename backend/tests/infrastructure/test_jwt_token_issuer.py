@@ -55,3 +55,16 @@ def test_session_id_claim_round_trips(monkeypatch):
         assert issuer.decode(legacy).session_id is None
     finally:
         get_settings.cache_clear()
+
+
+def test_explicit_ttl_overrides_the_default(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET", _SECRET)
+    monkeypatch.setenv("JWT_EXPIRE_MINUTES", "1440")
+    get_settings.cache_clear()
+    try:
+        token = JwtTokenIssuer().issue(
+            SessionClaims(user_id="u", scope="platform", session_id="s"), ttl_minutes=30
+        )
+        assert _ttl(token) == timedelta(minutes=30)
+    finally:
+        get_settings.cache_clear()

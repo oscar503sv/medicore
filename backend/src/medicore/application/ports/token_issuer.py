@@ -23,7 +23,9 @@ class SessionClaims:
 
 
 class TokenIssuer(Protocol):
-    def issue(self, claims: SessionClaims) -> str: ...
+    def issue(self, claims: SessionClaims, ttl_minutes: int | None = None) -> str:
+        """``ttl_minutes`` overrides the default lifetime (console sessions are shorter)."""
+        ...
 
     def decode(self, token: str) -> SessionClaims: ...
 

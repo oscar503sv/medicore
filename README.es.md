@@ -19,7 +19,7 @@ Incluye además una **consola de plataforma (superadmin)** por encima del límit
 | ORM | SQLAlchemy 2.0 (sync) |
 | Migraciones | Alembic ≥ 1.13 |
 | Base de datos | PostgreSQL (psycopg3) |
-| Auth | PyJWT ≥ 2.8 + bcrypt ≥ 4 · cookie httpOnly + CSRF double-submit |
+| Auth | PyJWT ≥ 2.8 + bcrypt ≥ 4 · cookies httpOnly + CSRF ligado a la sesión |
 | Validación config | pydantic-settings |
 | Tests / Lint | pytest ≥ 8 + ruff (adaptadores en memoria) |
 | Frontend | React 18 + TypeScript 5 + Vite 6 |
@@ -88,7 +88,7 @@ src/medicore/
 Toda entidad de negocio lleva `tenant_id`. El filtro se aplica **en cada repositorio**, no en el caller — el aislamiento se cumple estructuralmente. El `UnitOfWork` está scoped por tenant: `factory.for_tenant(tenant_id)`. Las operaciones globales (resolución de slug, superadmin) usan un `UnitOfWork` no scopeado o helpers de solo lectura.
 
 ### Plataforma (superadmin)
-Sesión separada (token de scope `platform`) que opera por encima del límite multi-tenant: alta/edición de clínicas (incluidas la zona horaria y las sedes), la **suscripción** de cada clínica (plan, módulos, periodo pagado, condiciones especiales, pagos), cambio de estado (activa / suspendida / archivada), estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión de usuarios) e **impersonación**. La impersonación emite un token de tenant marcado con `impersonated_by` y con TTL más corta, de modo que toda escritura durante el soporte queda auditada. Se puede impersonar una clínica suspendida, pero no una archivada.
+Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que opera por encima del límite multi-tenant: alta/edición de clínicas (incluidas la zona horaria y las sedes), la **suscripción** de cada clínica (plan, módulos, periodo pagado, condiciones especiales, pagos), cambio de estado (activa / suspendida / archivada), estadísticas y auditoría globales, soporte de cuentas (reseteo de contraseña, desbloqueo, suspensión de usuarios) e **impersonación**. La impersonación emite un token de tenant marcado con `impersonated_by` y con TTL más corta, de modo que toda escritura durante el soporte queda auditada. Se puede impersonar una clínica suspendida, pero no una archivada.
 
 ### Reglas de negocio críticas
 - Citas solo dentro de la disponibilidad del doctor, sin solapes, respetando las reglas de reserva.
@@ -156,9 +156,11 @@ La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con tod
 
 ## Seguridad
 
-- **Sesiones en cookie httpOnly** (SameSite=Lax, `Secure` en producción) con **CSRF double-submit** (`mc_csrf` + cabecera `X-CSRF-Token`); el token nunca está al alcance de JavaScript. `Authorization: Bearer` sigue aceptándose para clientes de API.
+- **Sesiones en cookies httpOnly** (`Secure` fuera de desarrollo, con prefijos `__Host-` / `__Secure-`): `mc_session` para clínicas (SameSite=Lax) y `mc_console` para la consola de plataforma (SameSite=Strict, enviada solo a la API de plataforma). El token CSRF (`mc_csrf` / `mc_console_csrf` + cabecera `X-CSRF-Token`) es un HMAC del id de sesión, así que un token de un ámbito no sirve en el otro, y cerrar sesión en una clínica deja intacta la sesión de consola. El token de sesión en sí nunca está al alcance de JavaScript. `Authorization: Bearer` sigue aceptándose para clientes de API.
 - **Sesiones revocables** (tabla `sessions` + claim `sid`): logout real; cambiar la contraseña cierra las demás sesiones; suspender o resetear un usuario cierra todas; suspender o archivar una clínica cierra todas sus sesiones (también las de soporte). En cada petición se comprueba que la clínica y la cuenta sigan activas, con una sola regla de acceso compartida con el login. Soporte puede abrir una sesión nueva en una clínica suspendida, pero nunca en una archivada.
 - **Lockout de login** con backoff exponencial (5 fallos → 1 min, duplicando hasta 15) y respuesta 429 con `Retry-After`.
+- **Límites de la sesión de consola**: la sesión de la consola de superadmin caduca tras 30 min sin actividad (`PLATFORM_SESSION_IDLE_MINUTES`) y como máximo 8 h después del login (`PLATFORM_SESSION_MAX_MINUTES`). El refresco en segundo plano de Monitoreo no cuenta como actividad, un superadmin desactivado pierde el acceso en la siguiente petición, y `scripts/create_platform_admin.py` revoca las sesiones del admin al actualizarlo.
+- **Despliegue recomendado**: sirve la consola de plataforma desde un origen o subdominio propio (p. ej. `console.example.com`), para que un XSS en la app de clínicas no comparta origen con ella. Es una recomendación; la app no lo impone.
 - **Sin enumeración**: login en tiempo constante; un slug o un email inexistente responde igual que una contraseña incorrecta.
 - `X-Forwarded-For` solo se honra desde los proxies listados en `TRUSTED_PROXIES`.
 - Security headers en la API y CSP estricta en el build del frontend.
@@ -381,7 +383,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1060 tests)
+.venv/bin/pytest                          # suite completa (1107 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -434,21 +436,21 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1060 tests en verde
-   258  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1107 tests en verde
+   264  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   454  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   466  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma, permisos granulares, aislamiento multi-tenant)
-   260  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   279  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    88  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    98  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:
 - Atomicidad de `SignConsultation`: un fallo revierte record, recetas y estado de cita.
 - Aislamiento multi-tenant: los repos de un tenant no filtran datos de otro.
 - Permisos efectivos por rol y override por tenant, y de scope de plataforma.
-- Lockout de login, revocación de sesiones y protección CSRF.
+- Lockout de login, revocación de sesiones, protección CSRF y caducidad de la sesión de consola.
 - Que todo código de error del backend tenga traducción en español e inglés.
 
 ---
@@ -463,6 +465,10 @@ Los tests verifican, entre otras cosas:
 | `JWT_ALGORITHM` | Algoritmo JWT | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Expiración del token en minutos | `1440` (24 h) |
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Expiración (min) de sesiones de impersonación/soporte — más corta por seguridad | `60` (1 h) |
+| `COOKIE_SECURE` | Flag `Secure` y prefijos `__Host-` / `__Secure-` en las cookies de sesión. Sin definir = activas en todo salvo `development`. No puede ser `false` en producción. | según `ENVIRONMENT` |
+| `PLATFORM_SESSION_IDLE_MINUTES` | Caducidad por inactividad de la sesión de la consola (min, entre 5 y el máximo) | `30` |
+| `PLATFORM_SESSION_MAX_MINUTES` | Duración absoluta de la sesión de la consola (min) | `480` (8 h) |
+| `PLATFORM_COOKIE_PATH` | Ruta de la cookie de sesión de la consola (solo se envía a la API de plataforma) | `/api/v1/platform` |
 | `CORS_ORIGINS` | Orígenes permitidos (coma-separados); `*` solo en desarrollo | `*` |
 | `ENABLE_DOCS` | Exponer Swagger/OpenAPI en `/api/v1/docs` | `true` (dev) / `false` (prod) |
 | `TRUSTED_PROXIES` | IPs/CIDRs de reverse-proxies cuyo `X-Forwarded-For` se honra; vacío → IP del socket | vacío |
@@ -470,7 +476,7 @@ Los tests verifican, entre otras cosas:
 | `DEMO_PASSWORD` | Contraseña de los usuarios demo que crea `scripts/seed_demo.py` (≥ 8 caracteres). **Obligatoria en producción**, donde se rechaza la contraseña pública por defecto | `demo1234` (solo dev) |
 | `DEMO_ADMIN_PASSWORD` | Contraseña de los admins de clínica de la demo (≥ 8 caracteres), privada para que la contraseña compartida no abra la administración. **Obligatoria en producción** y distinta de `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
-> En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*`; además los docs quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida y los defaults funcionan tal cual.
+> En **producción** (`ENVIRONMENT=production`) la app **falla al arrancar** si `JWT_SECRET` sigue siendo el default inseguro o es demasiado corto, o si `CORS_ORIGINS` es `*` o `COOKIE_SECURE` es `false`; además los docs quedan desactivados salvo `ENABLE_DOCS=true` explícito. En desarrollo no se valida y los defaults funcionan tal cual.
 
 ---
 
@@ -495,6 +501,8 @@ El [`docker-compose.yml`](docker-compose.yml) de la raíz levanta todo el stack 
    ```
 
 Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migraciones nuevas al arrancar.
+
+> **Nota:** la migración `d0e1f2a3b4c6` (límites de la sesión de consola) hace que los usuarios de clínica y los superadmins vuelvan a iniciar sesión una vez tras desplegar.
 
 Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma. Cada ejecución queda registrada y la página *Monitoreo* marca la tarea si falla o si pasan más de 26 h sin un reset exitoso.
 

@@ -23,6 +23,10 @@ class AuthSessionRepository(Protocol):
         """Live sessions of every user of a clinic, newest first."""
         ...
 
+    def touch(self, session_id: SessionId, now: datetime) -> None:
+        """Record activity on a live session (revoked ones are left untouched)."""
+        ...
+
     def revoke(self, session_id: SessionId, now: datetime) -> None: ...
 
     def revoke_all_for_user(

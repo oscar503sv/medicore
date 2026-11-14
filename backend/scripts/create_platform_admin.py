@@ -3,12 +3,14 @@
 Usage:
     .venv/Scripts/python scripts/create_platform_admin.py <email> <name> <password>
 
-Idempotent: if an admin with the email already exists, its name/password are updated.
+Idempotent: if an admin with the email already exists, its name/password are updated
+and its live sessions are revoked.
 """
 
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 
 from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.services.password_policy import ensure_acceptable
@@ -16,6 +18,9 @@ from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import PlatformAdminId
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.database.engine import get_session
+from medicore.infrastructure.persistence.repositories.auth_session import (
+    SqlAuthSessionRepository,
+)
 from medicore.infrastructure.persistence.repositories.platform import SqlPlatformAdminRepository
 
 
@@ -33,7 +38,11 @@ def main(email: str, name: str, password: str) -> None:
             existing.name = name
             existing.change_password(hasher.hash(password))
             repo.save(existing)
-            action = "updated"
+            # A changed password must also end any session opened with the old one.
+            SqlAuthSessionRepository(session).revoke_all_for_user(
+                existing.id.value, datetime.now(UTC)
+            )
+            action = "updated (sessions revoked)"
         else:
             repo.save(
                 PlatformAdmin(

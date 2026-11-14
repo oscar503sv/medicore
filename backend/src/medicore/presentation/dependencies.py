@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Annotated
 
 import jwt
@@ -17,7 +18,9 @@ from fastapi import Depends, Header, Request, status
 from medicore.application.common.access import ensure_may_sign_in
 from medicore.application.common.context import ActorContext, PlatformActorContext
 from medicore.application.common.entitlements import ensure_writable, granted_permissions
+from medicore.application.common.platform_session import PlatformSessionPolicy
 from medicore.application.common.timezone import tenant_today
+from medicore.application.use_cases.platform_session import ResolvePlatformSession
 from medicore.domain.shared.errors import InvalidValueObject
 from medicore.domain.shared.identifiers import PlatformAdminId, SessionId, TenantId, UserId
 from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
@@ -33,11 +36,12 @@ from medicore.infrastructure.persistence.unit_of_work import (
 from medicore.infrastructure.runtime import ProcessRuntimeInfo
 from medicore.presentation.client_ip import resolve_client_ip
 from medicore.presentation.cookies import (
-    CSRF_COOKIE,
+    BACKGROUND_HEADER,
     CSRF_HEADER,
-    PLATFORM_COOKIE,
-    SESSION_COOKIE,
+    csrf_token_for,
     is_mutating,
+    platform_cookies,
+    tenant_cookies,
 )
 from medicore.presentation.errors import ApiError
 
@@ -63,6 +67,14 @@ def get_runtime() -> ProcessRuntimeInfo:
     return ProcessRuntimeInfo()
 
 
+def get_platform_session_policy() -> PlatformSessionPolicy:
+    settings = get_settings()
+    return PlatformSessionPolicy(
+        idle=timedelta(minutes=settings.platform_session_idle_minutes),
+        lifetime=timedelta(minutes=settings.platform_session_max_minutes),
+    )
+
+
 # ── Authentication ─────────────────────────────────────────────────────────────
 
 def _client_ip(request: Request) -> str | None:
@@ -76,15 +88,17 @@ def _client_ip(request: Request) -> str | None:
     )
 
 
-def _session_token(request: Request, authorization: str | None, cookie_name: str) -> str:
+def _credential(
+    request: Request, authorization: str | None, cookie_name: str
+) -> tuple[str, bool]:
     """Resolve the session token: Bearer header first, session cookie as fallback.
 
-    Cookie-authenticated mutations must pass the double-submit CSRF check — the browser
-    attaches cookies automatically, so we require a header a cross-site page cannot set.
-    Bearer requests skip it: the header itself is never sent automatically.
+    Returns the token and whether it came from a cookie, which is what decides if the
+    CSRF check applies: the browser attaches cookies automatically but never the
+    Authorization header, so Bearer requests are not forgeable cross-site.
     """
     if authorization and authorization.startswith("Bearer "):
-        return authorization.removeprefix("Bearer ").strip()
+        return authorization.removeprefix("Bearer ").strip(), False
 
     token = request.cookies.get(cookie_name)
     if not token:
@@ -93,14 +107,19 @@ def _session_token(request: Request, authorization: str | None, cookie_name: str
             "Missing or invalid Authorization header",
             code="auth.not_authenticated",
         )
-    if is_mutating(request.method):
-        csrf_cookie = request.cookies.get(CSRF_COOKIE, "")
-        csrf_header = request.headers.get(CSRF_HEADER, "")
-        if not csrf_cookie or not secrets.compare_digest(csrf_cookie, csrf_header):
-            raise ApiError(
-                status.HTTP_403_FORBIDDEN, "CSRF token missing or invalid", code="auth.csrf_invalid"
-            )
-    return token
+    return token, True
+
+
+def _verify_csrf(request: Request, session_id: SessionId, scope: str) -> None:
+    """Cookie-authenticated mutations must echo the CSRF token bound to their session."""
+    if not is_mutating(request.method):
+        return
+    header = request.headers.get(CSRF_HEADER, "")
+    expected = csrf_token_for(str(session_id), scope)
+    if not secrets.compare_digest(header.encode(), expected.encode()):
+        raise ApiError(
+            status.HTTP_403_FORBIDDEN, "CSRF token missing or invalid", code="auth.csrf_invalid"
+        )
 
 
 def _session_id_or_401(claims) -> SessionId:
@@ -168,7 +187,7 @@ def get_actor(
     factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
     clock: SystemClock = Depends(get_clock),
 ) -> ActorContext:
-    """Authenticate the request (Bearer header or mc_session cookie) and return the actor.
+    """Authenticate the request (Bearer header or session cookie) and return the actor.
 
     Resolves the tenant's role-permission override so every permission check in the
     request honors the clinic's customization, and requires the token's server-side
@@ -177,7 +196,7 @@ def get_actor(
     allowed to hold a session (the access policy), else 401. Raises 401 if no valid credential is
     present, 403 if a cookie-authenticated mutation fails the CSRF check.
     """
-    token = _session_token(request, authorization, SESSION_COOKIE)
+    token, from_cookie = _credential(request, authorization, tenant_cookies().session)
     claims = _decode_or_401(issuer, token)
 
     if claims.scope != "tenant" or not claims.tenant_id:
@@ -186,6 +205,8 @@ def get_actor(
         )
 
     session_id = _session_id_or_401(claims)
+    if from_cookie:
+        _verify_csrf(request, session_id, "tenant")
     tenant_id = TenantId.parse(claims.tenant_id)
     with factory.for_tenant(tenant_id) as uow:
         session = uow.sessions.get(session_id)
@@ -224,14 +245,15 @@ def get_platform_actor(
     issuer: JwtTokenIssuer = Depends(get_jwt_issuer),
     factory: SqlAlchemyUnitOfWorkFactory = Depends(get_uow_factory),
     clock: SystemClock = Depends(get_clock),
+    policy: PlatformSessionPolicy = Depends(get_platform_session_policy),
 ) -> PlatformActorContext:
-    """Authenticate the platform superadmin (Bearer header or mc_platform cookie).
+    """Authenticate the platform superadmin (Bearer header or console session cookie).
 
-    Raises 401 if no valid credential is present, the token is not a platform session,
-    or its server-side session has been revoked; 403 if a cookie-authenticated mutation
-    fails the CSRF check.
+    Raises 401 if no valid credential is present, the token is not a platform session, or
+    its server-side session is revoked, expired, idle or owned by a deactivated admin; 403
+    if a cookie-authenticated mutation fails the CSRF check.
     """
-    token = _session_token(request, authorization, PLATFORM_COOKIE)
+    token, from_cookie = _credential(request, authorization, platform_cookies().session)
     claims = _decode_or_401(issuer, token)
 
     if claims.scope != "platform":
@@ -240,15 +262,12 @@ def get_platform_actor(
         )
 
     session_id = _session_id_or_401(claims)
-    with factory.platform_uow() as uow:
-        session = uow.sessions.get(session_id)
-    if session is None or not session.is_active(clock.now()):
-        raise ApiError(
-            status.HTTP_401_UNAUTHORIZED, "Session revoked or expired", code="auth.session_expired"
-        )
-
-    return PlatformActorContext(
-        admin_id=PlatformAdminId.parse(claims.user_id),
+    if from_cookie:
+        _verify_csrf(request, session_id, "platform")
+    return ResolvePlatformSession(factory, clock, policy).execute(
+        claims.user_id,
+        session_id,
+        background=request.headers.get(BACKGROUND_HEADER) == "1",
         ip_address=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
@@ -284,6 +303,7 @@ def get_codes(uow: SqlAlchemyUnitOfWork = Depends(get_uow)) -> DbSequentialCodeG
 # Type aliases for annotated injection
 Actor = Annotated[ActorContext, Depends(get_actor)]
 PlatformActor = Annotated[PlatformActorContext, Depends(get_platform_actor)]
+PlatformPolicy = Annotated[PlatformSessionPolicy, Depends(get_platform_session_policy)]
 UoW = Annotated[SqlAlchemyUnitOfWork, Depends(get_uow)]
 Clock = Annotated[SystemClock, Depends(get_clock)]
 Codes = Annotated[DbSequentialCodeGenerator, Depends(get_codes)]

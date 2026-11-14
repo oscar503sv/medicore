@@ -55,15 +55,19 @@ UnitOfWork), **20 use-case groups** and **19 routers / 130 endpoints** under `/a
 
 - **Authentication** with JWT and roles (`admin`, `doctor`, `nurse`, `receptionist`), with a
   forced password change on first sign-in. The session travels in an **httpOnly cookie**
-  (`mc_session` / `mc_platform`, SameSite=Lax, Secure in production) with **double-submit
-  CSRF** (`mc_csrf` cookie + `X-CSRF-Token` header on mutations); the
-  `Authorization: Bearer` header is accepted as an alternative for API clients.
+  (`mc_session` for clinics, SameSite=Lax; `mc_console` for the platform console, SameSite=Strict
+  and sent only to `/api/v1/platform`; `Secure` with `__Host-` / `__Secure-` prefixes outside
+  development) with a **CSRF token bound to the session** (`mc_csrf` / `mc_console_csrf` +
+  `X-CSRF-Token` header on mutations; it is an HMAC of the session id, so a token from one
+  scope is useless in the other); the `Authorization: Bearer` header is accepted as an
+  alternative for API clients.
 - **Server-side revocable sessions**: every login creates a row in `sessions` referenced by
   the JWT's `sid` claim and validated on every request. Logout really revokes, changing the
   password revokes the user's other sessions, and suspending an account or resetting its
   password ends all its sessions immediately. **Active sessions** view: each user sees and
   ends their own (Settings), an admin those of any user in their clinic, and the superadmin
   those of a whole clinic (third-party revocations audited as `session.revoked`).
+- **Console session limits**: the superadmin console session expires after 30 min without activity and at most 8 h after sign-in (`PLATFORM_SESSION_IDLE_MINUTES` / `PLATFORM_SESSION_MAX_MINUTES`). Monitoring's background refresh does not count as activity, and a deactivated superadmin loses access on the next request.
 - **Login lockout**: failed-attempt counter per `(organization, email)` with a temporary
   lock and exponential backoff (HTTP 429 + `Retry-After`); it also counts non-existent
   accounts so it doesn't reveal which ones exist.
@@ -156,6 +160,10 @@ Copy `.env.example` to `.env` and adjust the values:
 | `JWT_ALGORITHM` | JWT algorithm | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Token lifetime | `1440` (24 h) |
 | `JWT_SUPPORT_EXPIRE_MINUTES` | Lifetime of support/impersonation sessions | `60` (1 h) |
+| `COOKIE_SECURE` | `Secure` flag and `__Host-` / `__Secure-` prefixes on session cookies. Unset = on everywhere except `development`. Cannot be `false` in production. | derived from `ENVIRONMENT` |
+| `PLATFORM_SESSION_IDLE_MINUTES` | Idle timeout of the platform console session (min, between 5 and the maximum) | `30` |
+| `PLATFORM_SESSION_MAX_MINUTES` | Absolute lifetime of the platform console session (min) | `480` (8 h) |
+| `PLATFORM_COOKIE_PATH` | Path of the console session cookie (only sent to the platform API) | `/api/v1/platform` |
 | `CORS_ORIGINS` | Allowed origins (comma-separated); `*` only in development | `*` |
 | `ENABLE_DOCS` | Expose Swagger/OpenAPI at `/api/v1/docs` | `true` (dev) / `false` (prod, unless explicitly enabled) |
 | `TRUSTED_PROXIES` | IPs/CIDRs (comma-separated) of the reverse proxies whose `X-Forwarded-For` header is honored (e.g. `127.0.0.1` or `10.0.0.0/8`). Empty → the header is ignored and the socket IP is recorded. An invalid value prevents startup. | empty |
@@ -163,7 +171,7 @@ Copy `.env.example` to `.env` and adjust the values:
 | `DEMO_ADMIN_PASSWORD` | Password for the demo clinic admins (≥ 8 chars), kept private so the shared demo password doesn't open the administration. **Required in production** and different from `DEMO_PASSWORD` | `DEMO_PASSWORD` |
 
 > In **production** (`ENVIRONMENT=production`) the app **refuses to start** if `JWT_SECRET` is
-> still the insecure default or too short, or if `CORS_ORIGINS` is `*`. API docs are also
+> still the insecure default or too short, or if `CORS_ORIGINS` is `*` or `COOKIE_SECURE` is `false`. API docs are also
 > disabled unless `ENABLE_DOCS=true` is set explicitly. Nothing is validated in development and
 > the defaults work as-is.
 
@@ -225,7 +233,7 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **581 tests** (120 domain · 240 application · 171 presentation · 50 infrastructure),
+A suite of **1107 tests** (264 domain · 466 application · 279 presentation · 98 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
@@ -271,6 +279,8 @@ Production checklist (via environment variables, see the **Configuration** table
 - `TRUSTED_PROXIES` with the reverse proxy's IP (e.g. `127.0.0.1` if nginx runs on the same
   host) so the audit trail records the real client IP.
 - Optional: `ENABLE_DOCS=false` to hide Swagger/OpenAPI.
+
+> **Upgrade note:** after applying migration `d0e1f2a3b4c6` (console session limits), clinic users and superadmins must sign in again once.
 
 > For multiple workers just set `WEB_CONCURRENCY=N` (uvicorn reads it; `docker-compose.yml` uses 2). Each
 > worker holds its own pool of up to 15 connections: keep `N × 15` below Postgres' `max_connections`.

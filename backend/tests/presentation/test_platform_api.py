@@ -28,7 +28,7 @@ def test_platform_endpoints_require_platform_token(seed, client, auth_headers):
         "/api/v1/platform/login",
         json={"email": seed.platform_admin.email, "password": PASSWORD},
     )
-    plat = client.cookies.get("mc_platform")
+    plat = client.cookies.get("mc_console")
     client.cookies.clear()
     headers = {"Authorization": f"Bearer {plat}"}
     assert client.get("/api/v1/patients", headers=headers).status_code == 401

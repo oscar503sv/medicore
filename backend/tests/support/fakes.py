@@ -48,10 +48,14 @@ class PlainPasswordHasher:
 
 
 class FakeTokenIssuer:
+    def __init__(self) -> None:
+        self.last_ttl_minutes: int | None = None
+
     def ttl_minutes(self, impersonated: bool = False) -> int:
         return 60 if impersonated else 1440
 
-    def issue(self, claims: SessionClaims) -> str:
+    def issue(self, claims: SessionClaims, ttl_minutes: int | None = None) -> str:
+        self.last_ttl_minutes = ttl_minutes
         return (
             f"{claims.user_id}|{claims.tenant_id}|{claims.role}|{claims.scope}|"
             f"{claims.impersonator}|{claims.session_id}"

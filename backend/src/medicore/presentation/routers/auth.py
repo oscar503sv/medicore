@@ -18,9 +18,9 @@ from medicore.application.use_cases.sessions import ListMySessions, RevokeMySess
 from medicore.domain.shared.identifiers import SessionId
 from medicore.infrastructure.config import get_settings
 from medicore.presentation.cookies import (
-    SESSION_COOKIE,
     clear_session_cookies,
     set_session_cookies,
+    tenant_cookies,
 )
 from medicore.presentation.dependencies import (
     Actor,
@@ -72,8 +72,9 @@ def login(
     # The JWT travels only in an httpOnly cookie — never in the body, never in storage.
     set_session_cookies(
         response,
-        cookie_name=SESSION_COOKIE,
+        tenant_cookies(),
         token=session.token,
+        session_id=str(session.session_id),
         max_age=get_settings().jwt_expire_minutes * 60,
     )
     return SessionResponse(
@@ -102,8 +103,9 @@ def logout(
     No auth required: with a valid token this is a real logout, without one there is
     simply nothing to revoke.
     """
-    revoke_session_token(request.cookies.get(SESSION_COOKIE), issuer, factory, clock.now())
-    clear_session_cookies(response, SESSION_COOKIE)
+    spec = tenant_cookies()
+    revoke_session_token(request.cookies.get(spec.session), issuer, factory, clock.now())
+    clear_session_cookies(response, spec)
 
 
 @router.post("/auth/theme", status_code=204)

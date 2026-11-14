@@ -16,6 +16,8 @@ export function PlatformLoginPage() {
   const t = useT()
   const navigate = useNavigate()
   const setSession = usePlatformAuthStore((s) => s.setSession)
+  const notice = usePlatformAuthStore((s) => s.notice)
+  const clearNotice = usePlatformAuthStore((s) => s.clearNotice)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -26,6 +28,7 @@ export function PlatformLoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    clearNotice()
     setLoading(true)
     try {
       const session = await platformAuthApi.login(email.trim(), password)
@@ -50,6 +53,17 @@ export function PlatformLoginPage() {
           </h1>
           <p className="mt-2 text-sm text-tx-3">{t('platform.login_subtitle')}</p>
         </div>
+
+        {notice && !error && (
+          <div
+            role="alert"
+            className="mt-5 rounded-lg bg-[var(--danger-10)] px-3 py-2 text-[13px] text-danger"
+          >
+            {notice === 'auth.session_idle_timeout'
+              ? t('platform.session_idle')
+              : t('err.auth.session_expired')}
+          </div>
+        )}
 
         {error && (
           <div className="mt-5 rounded-lg bg-[var(--danger-10)] px-3 py-2 text-[13px] text-danger">

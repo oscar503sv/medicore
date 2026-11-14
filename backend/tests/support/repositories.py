@@ -206,6 +206,11 @@ class InMemoryAuthSessionRepository:
             reverse=True,
         )
 
+    def touch(self, session_id: SessionId, now: datetime) -> None:
+        session = self._store.sessions.get(session_id.value)
+        if session is not None and session.revoked_at is None:
+            session.touch(now)
+
     def revoke(self, session_id: SessionId, now: datetime) -> None:
         session = self._store.sessions.get(session_id.value)
         if session is not None:

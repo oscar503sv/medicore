@@ -1,4 +1,4 @@
-import { api, platformApi } from './client'
+import { api, BACKGROUND, platformApi } from './client'
 import type {
   AddonModule,
   AddonPricing,
@@ -153,11 +153,13 @@ export const platformTenantsApi = {
 
   business: () => platformApi.get<BusinessOverview>('/platform/business').then((r) => r.data),
 
-  monitoring: () => platformApi.get<SystemStatus>('/platform/monitoring').then((r) => r.data),
+  monitoring: () =>
+    platformApi.get<SystemStatus>('/platform/monitoring', BACKGROUND).then((r) => r.data),
 
   serverErrors: (offset = 0, limit = 20) =>
     platformApi
       .get<PaginatedResponse<ErrorEvent>>('/platform/monitoring/errors', {
+        ...BACKGROUND,
         params: { offset, limit },
       })
       .then((r) => r.data),

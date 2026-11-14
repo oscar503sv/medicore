@@ -50,6 +50,7 @@ class AuthenticateUserCommand:
 @dataclass(frozen=True, slots=True)
 class SessionDTO:
     token: str
+    session_id: SessionId
     user_id: UserId
     tenant_id: TenantId
     tenant_name: str
@@ -204,6 +205,7 @@ class AuthenticateUser:
         )
         return SessionDTO(
             token=token,
+            session_id=session_id,
             user_id=user.id,
             tenant_id=tenant.id,
             tenant_name=tenant.legal_name,

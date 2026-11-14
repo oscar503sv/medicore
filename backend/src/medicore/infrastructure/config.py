@@ -54,10 +54,24 @@ class Settings(BaseSettings):
     trusted_proxies: str = ""
     # Deployed git commit, shown in the platform console (Coolify can inject SOURCE_COMMIT).
     source_commit: str = ""
+    # Secure flag (and __Host-/__Secure- cookie prefixes). None = derived from the environment:
+    # on everywhere except development, which runs on plain http://localhost.
+    cookie_secure: bool | None = None
+    # Superadmin console: idle timeout and absolute cap, much stricter than the clinic app.
+    platform_session_idle_minutes: int = 30
+    platform_session_max_minutes: int = 480
+    # Path of the console session cookie: it is only sent to the platform API.
+    platform_cookie_path: str = "/api/v1/platform"
 
     @property
     def is_production(self) -> bool:
         return self.environment.strip().lower() == "production"
+
+    @property
+    def secure_cookies(self) -> bool:
+        if self.cookie_secure is not None:
+            return self.cookie_secure
+        return self.environment.strip().lower() != "development"
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -96,6 +110,22 @@ class Settings(BaseSettings):
                 "CORS_ORIGINS cannot be '*' in production — list the frontend "
                 "origins explicitly (e.g. https://app.example.com)."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_platform_session(self) -> Settings:
+        if not 5 <= self.platform_session_idle_minutes <= self.platform_session_max_minutes:
+            raise ValueError(
+                "PLATFORM_SESSION_IDLE_MINUTES must be at least 5 and not exceed "
+                "PLATFORM_SESSION_MAX_MINUTES."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _enforce_secure_cookies_in_production(self) -> Settings:
+        # Without Secure the session cookies would travel over plain http.
+        if self.is_production and self.cookie_secure is False:
+            raise ValueError("COOKIE_SECURE cannot be false in production.")
         return self
 
     @model_validator(mode="after")

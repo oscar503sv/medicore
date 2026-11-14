@@ -99,3 +99,32 @@ def test_revoke_all_for_tenant_revokes_only_that_clinic(session):
     assert sessions.get(already).revoked_at == EARLIER
     assert sessions.get(other_clinic).revoked_at is None
     assert sessions.get(platform).revoked_at is None
+
+
+def test_touch_updates_last_activity_and_skips_revoked(session):
+    root = PlatformAdmin(
+        id=PlatformAdminId.new(), name="Root", email=f"{uuid.uuid4().hex}@touch.test",
+        password_hash="x",
+    )
+    SqlPlatformAdminRepository(session).save(root)
+    sessions = SqlAuthSessionRepository(session)
+
+    def add(revoked_at=None):
+        created = AuthSession(
+            id=SessionId.new(), scope="platform", user_id=root.id.value,
+            created_at=EARLIER, expires_at=NOW + timedelta(hours=1), revoked_at=revoked_at,
+        )
+        sessions.add(created)
+        return created.id
+
+    live = add()
+    revoked = add(revoked_at=EARLIER)
+    session.flush()
+
+    sessions.touch(live, NOW)
+    sessions.touch(revoked, NOW)
+    session.flush()
+    session.expire_all()
+
+    assert sessions.get(live).last_activity_at == NOW
+    assert sessions.get(revoked).last_activity_at is None

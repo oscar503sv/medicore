@@ -59,3 +59,51 @@ def test_development_keeps_permissive_defaults():
     settings = make_settings()
     assert settings.cors_origins == "*"
     assert settings.enable_docs is True
+
+
+def test_production_rejects_insecure_cookies():
+    with pytest.raises(ValueError, match="COOKIE_SECURE"):
+        make_settings(
+            environment="production",
+            jwt_secret=STRONG_SECRET,
+            cors_origins="https://a.example",
+            cookie_secure=False,
+        )
+
+
+def test_production_cookies_are_secure_by_default():
+    settings = make_settings(
+        environment="production", jwt_secret=STRONG_SECRET, cors_origins="https://a.example"
+    )
+    assert settings.secure_cookies is True
+
+
+def test_staging_cookies_are_secure_by_default():
+    assert make_settings(environment="staging").secure_cookies is True
+
+
+def test_development_cookies_are_not_secure_by_default():
+    assert make_settings(environment="development").secure_cookies is False
+
+
+def test_cookie_secure_can_be_forced_outside_production():
+    assert make_settings(environment="development", cookie_secure=True).secure_cookies is True
+
+
+def test_platform_idle_cannot_exceed_the_absolute_cap():
+    with pytest.raises(ValueError, match="PLATFORM_SESSION_IDLE_MINUTES"):
+        make_settings(platform_session_idle_minutes=60, platform_session_max_minutes=30)
+
+
+def test_platform_idle_has_a_floor():
+    with pytest.raises(ValueError, match="PLATFORM_SESSION_IDLE_MINUTES"):
+        make_settings(platform_session_idle_minutes=4)
+
+
+def test_platform_session_defaults():
+    settings = make_settings()
+    assert (settings.platform_session_idle_minutes, settings.platform_session_max_minutes) == (
+        30,
+        480,
+    )
+    assert settings.platform_cookie_path == "/api/v1/platform"
