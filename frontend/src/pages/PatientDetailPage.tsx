@@ -49,9 +49,9 @@ export function PatientDetailPage() {
   const [openRecordId, setOpenRecordId] = useState<string | null>(null)
   const canEdit = useAuthStore((s) => s.can('patients.edit'))
   const canArchive = useAuthStore((s) => s.can('patients.archive'))
-  // History is visible to everyone but only a doctor may open it (clinical authorship,
-  // not a grantable capability); the clinical tabs follow records.view.
-  const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
+  // The history is clinical content: only doctors hold records.read_clinical (not grantable).
+  // The other clinical tabs follow records.view.
+  const canReadClinical = useAuthStore((s) => s.can('records.read_clinical'))
   const canClinical = useAuthStore((s) => s.can('records.view'))
   const canVaccines = useAuthStore((s) => s.can('vaccinations.view'))
   const canApplications = useAuthStore((s) => s.can('applications.view'))
@@ -65,28 +65,24 @@ export function PatientDetailPage() {
   useEffect(() => {
     const allowed: Tab[] = [
       'summary',
-      ...(isDoctor ? (['history'] as const) : []),
+      ...(canReadClinical ? (['history'] as const) : []),
       ...(canClinical ? (['prescriptions', 'vitals', 'documents'] as const) : []),
       ...(canVaccines ? (['vaccines'] as const) : []),
       ...(canApplications ? (['applications'] as const) : []),
       ...(canProcedures ? (['procedures'] as const) : []),
     ]
     if (tabParam && allowed.includes(tabParam as Tab)) setTab(tabParam as Tab)
-    if (recordParam && isDoctor) setOpenRecordId(recordParam)
-  }, [id, tabParam, recordParam, isDoctor, canClinical, canVaccines, canApplications, canProcedures])
+    if (recordParam && canReadClinical) setOpenRecordId(recordParam)
+  }, [id, tabParam, recordParam, canReadClinical, canClinical, canVaccines, canApplications, canProcedures])
 
   const { data, isLoading } = useQuery({
     queryKey: ['patient', id],
     queryFn: () => patientsApi.get(id),
   })
-  const { data: records } = useQuery({
-    queryKey: ['records', { patient_id: id }],
-    queryFn: () => recordsApi.list({ patient_id: id }),
-    enabled:
-      tab === 'history' ||
-      tab === 'prescriptions' ||
-      tab === 'vitals' ||
-      (tab === 'summary' && canClinical),
+  const history = useQuery({
+    queryKey: ['records', 'history', id],
+    queryFn: () => recordsApi.history(id),
+    enabled: tab === 'history' && canReadClinical,
   })
 
   const archivePatient = useMutation({
@@ -116,7 +112,7 @@ export function PatientDetailPage() {
 
   const tabs: { id: Tab; label: string; locked?: boolean }[] = [
     { id: 'summary', label: t('patient.summary') },
-    { id: 'history', label: t('patient.history'), locked: !isDoctor },
+    { id: 'history', label: t('patient.history'), locked: !canReadClinical },
     ...(canClinical
       ? ([
           { id: 'prescriptions', label: t('patient.prescriptions') },
@@ -226,12 +222,18 @@ export function PatientDetailPage() {
       </div>
 
       {/* Content */}
-      {tab === 'summary' && <PatientSummary detail={data} records={records ?? []} />}
+      {tab === 'summary' && <PatientSummary detail={data} />}
 
       {tab === 'history' && (
         <Card>
           <div className="divide-y divide-line-soft">
-            {(records ?? []).map((r) => (
+            {history.isLoading && <PageLoader />}
+            {history.isError && (
+              <p role="alert" className="px-5 py-8 text-center text-sm text-danger">
+                {errorMessage(history.error)}
+              </p>
+            )}
+            {(history.data ?? []).map((r) => (
               <button
                 key={r.id}
                 onClick={() => setOpenRecordId(r.id)}
@@ -248,7 +250,7 @@ export function PatientDetailPage() {
                 </p>
               </button>
             ))}
-            {(!records || records.length === 0) && (
+            {history.isSuccess && history.data.length === 0 && (
               <p className="px-5 py-8 text-center text-sm text-tx-3">{t('patient.history_empty')}</p>
             )}
           </div>
@@ -262,12 +264,12 @@ export function PatientDetailPage() {
             <h3 className="mb-3 text-[13px] font-medium uppercase tracking-wide text-tx-3">
               {t('rx.timeline_title')}
             </h3>
-            <MedicationTimeline records={records ?? []} />
+            <MedicationTimeline patientId={id} />
           </div>
         </div>
       )}
 
-      {tab === 'vitals' && <VitalsHistory records={records ?? []} />}
+      {tab === 'vitals' && <VitalsHistory patientId={id} />}
 
       {tab === 'documents' && <PatientDocuments patientId={id} />}
 
@@ -294,7 +296,9 @@ export function PatientDetailPage() {
       )}
 
       <EditPatientModal patient={editOpen ? p : null} onClose={() => setEditOpen(false)} />
-      <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />
+      {canReadClinical && (
+        <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />
+      )}
 
       <Modal
         open={archiveOpen}

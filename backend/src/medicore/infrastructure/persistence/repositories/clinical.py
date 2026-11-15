@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
+from sqlalchemy import String, and_, func, literal_column, or_
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.consultation import Consultation
@@ -9,7 +12,7 @@ from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.enums import PrescriptionStatus
-from medicore.domain.repositories._support import RecordFilter
+from medicore.domain.repositories._support import Page, Paging, RecordFilter, RecordSummary
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     ConsultationId,
@@ -20,6 +23,7 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+from medicore.domain.shared.text import fold
 from medicore.infrastructure.persistence.mappers._json import (
     application_draft_to_dict,
     attachment_to_dict,
@@ -41,7 +45,11 @@ from medicore.infrastructure.persistence.mappers.entities import (
 from medicore.infrastructure.persistence.models.consultation import ConsultationModel
 from medicore.infrastructure.persistence.models.medical_document import MedicalDocumentModel
 from medicore.infrastructure.persistence.models.medical_record import MedicalRecordModel
+from medicore.infrastructure.persistence.models.patient import PatientModel, patient_search_sql
 from medicore.infrastructure.persistence.models.prescription import PrescriptionModel
+from medicore.infrastructure.persistence.models.user import UserModel
+
+_PATIENT_SEARCH_SQL = patient_search_sql("patients.")
 
 
 class SqlConsultationRepository:
@@ -116,14 +124,69 @@ class SqlMedicalRecordRepository:
         )
         return [to_medical_record(r) for r in rows]
 
-    def list(self, filter: RecordFilter | None = None) -> list[MedicalRecord]:
-        q = self._q().order_by(MedicalRecordModel.encounter_at.desc())
-        if filter and filter.patient_id:
-            from uuid import UUID
-            q = q.filter(MedicalRecordModel.patient_id == UUID(filter.patient_id))
-        if filter and filter.type:
-            q = q.filter(MedicalRecordModel.type == filter.type)
-        return [to_medical_record(r) for r in q.all()]
+    def summaries(self, filter: RecordFilter, paging: Paging) -> Page[RecordSummary]:
+        m = MedicalRecordModel
+        q = (
+            self._s.query(
+                m.id, m.code, m.patient_id, m.type, m.status, m.encounter_at, m.location_name,
+                m.signed_by_id, m.consultation_id, m.amends_record_id,
+                PatientModel.first_name, PatientModel.last_name, UserModel.name,
+            )
+            .outerjoin(
+                PatientModel,
+                and_(PatientModel.id == m.patient_id, PatientModel.tenant_id == self._tid),
+            )
+            .outerjoin(
+                UserModel, and_(UserModel.id == m.signed_by_id, UserModel.tenant_id == self._tid)
+            )
+            .filter(m.tenant_id == self._tid)
+        )
+        if filter.patient_id:
+            q = q.filter(m.patient_id == UUID(filter.patient_id))
+        if filter.type:
+            q = q.filter(m.type == filter.type)
+        if filter.encounter_from:
+            q = q.filter(m.encounter_at >= filter.encounter_from)
+        if filter.encounter_before:
+            q = q.filter(m.encounter_at < filter.encounter_before)
+        if filter.search:
+            # Literal SQL identical to the patients trigram indexes, so they can be used.
+            name = literal_column(_PATIENT_SEARCH_SQL["name"], String)
+            patient_code = literal_column(_PATIENT_SEARCH_SQL["code"], String)
+            for word in fold(filter.search).split():
+                # autoescape neutralizes LIKE wildcards typed into the search box.
+                q = q.filter(
+                    or_(
+                        name.contains(word, autoescape=True),
+                        patient_code.contains(word, autoescape=True),
+                        func.lower(m.code).contains(word, autoescape=True),
+                    )
+                )
+        total = q.count()
+        rows = (
+            q.order_by(m.encounter_at.desc(), m.id.desc())
+            .offset(paging.offset)
+            .limit(paging.limit)
+            .all()
+        )
+        items = [
+            RecordSummary(
+                id=str(r.id),
+                code=r.code,
+                patient_id=str(r.patient_id),
+                patient_name=f"{r.first_name} {r.last_name}" if r.first_name else None,
+                type=r.type,
+                status=r.status,
+                encounter_at=r.encounter_at,
+                location_name=r.location_name,
+                signed_by_id=str(r.signed_by_id),
+                signed_by_name=r.name,
+                consultation_id=str(r.consultation_id) if r.consultation_id else None,
+                amends_record_id=str(r.amends_record_id) if r.amends_record_id else None,
+            )
+            for r in rows
+        ]
+        return Page(items=items, total=total, offset=paging.offset, limit=paging.limit)
 
     def exists_by_author(self, author_id: UserId) -> bool:
         return (

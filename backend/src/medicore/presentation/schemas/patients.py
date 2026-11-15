@@ -8,6 +8,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from medicore.domain.enums import Sex
+from medicore.presentation.schemas.records import RecordSummaryResponse, VitalsReadingResponse
 
 
 class ContactInfoSchema(BaseModel):
@@ -82,3 +83,5 @@ class PatientDetailResponse(BaseModel):
     records_count: int
     active_prescriptions: int
     next_appointment: dict[str, Any] | None = None
+    latest_vitals: VitalsReadingResponse | None = None
+    recent_records: list[RecordSummaryResponse] = []

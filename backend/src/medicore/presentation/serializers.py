@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from medicore.application.use_cases.auth import MyProfileDTO
+from medicore.application.use_cases.records import VitalsReading
 from medicore.application.use_cases.sessions import SessionInfoDTO
 from medicore.application.use_cases.subscriptions import SubscriptionNotice, SubscriptionView
 from medicore.domain.entities.appointment import Appointment
@@ -20,6 +21,7 @@ from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import User
+from medicore.domain.repositories._support import RecordSummary
 from medicore.domain.services.slot_resolver import Slot
 from medicore.domain.value_objects.fee import Charge
 from medicore.domain.value_objects.money import Money
@@ -358,6 +360,45 @@ def ser_record(
         "signed_by_id": str(r.signed_by_id),
         "appointment_id": str(r.appointment_id) if r.appointment_id else None,
         "consultation_id": str(r.consultation_id) if r.consultation_id else None,
+        "amends_record_id": str(r.amends_record_id) if r.amends_record_id else None,
+    }
+
+
+def ser_record_summary(s: RecordSummary) -> dict:
+    return {
+        "id": s.id,
+        "code": s.code,
+        "patient_id": s.patient_id,
+        "patient_name": s.patient_name,
+        "type": s.type,
+        "status": s.status,
+        "encounter_at": s.encounter_at,
+        "location_name": s.location_name,
+        "signed_by_id": s.signed_by_id,
+        "signed_by_name": s.signed_by_name,
+        "consultation_id": s.consultation_id,
+        "amends_record_id": s.amends_record_id,
+    }
+
+
+def ser_vitals_reading(v: VitalsReading) -> dict:
+    return {
+        "record_id": str(v.record_id),
+        "record_code": v.record_code,
+        "encounter_at": v.encounter_at,
+        "vitals": vitals_to_dict(v.vitals),
+    }
+
+
+def ser_record_prescription(r: MedicalRecord) -> dict:
+    """What reprinting a prescription needs of its record: not the note, vitals or diagnoses."""
+    return {
+        "id": str(r.id),
+        "code": r.code,
+        "encounter_at": r.encounter_at,
+        "status": str(r.status),
+        "prescriptions": [snapshot_to_dict(p) for p in r.prescriptions],
+        "signed_by_id": str(r.signed_by_id),
         "amends_record_id": str(r.amends_record_id) if r.amends_record_id else None,
     }
 

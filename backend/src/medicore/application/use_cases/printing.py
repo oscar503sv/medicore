@@ -15,7 +15,11 @@ from typing import Literal
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
-from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.permissions import (
+    Permission,
+    ensure_permission,
+    has_permission,
+)
 from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -80,6 +84,7 @@ class PrintContext:
 @dataclass(frozen=True, slots=True)
 class RecordPrint:
     context: PrintContext
+    document: RecordDocument
     record: MedicalRecord
     indications: str | None  # the note's plan, when the doctor wrote one
     amends_code: str | None  # the original record's code, for an amendment
@@ -196,12 +201,21 @@ class _Printer:
 
 
 class PrintRecordDocument(_Printer):
-    """The prescription, the exam order or the full copy of a signed record."""
+    """The prescription, the exam order or the full copy of a signed record.
+
+    The exam order and the copy carry diagnoses and the note, so they need the clinical
+    permission; the prescription only needs records.view and leaves out the plan's text
+    unless the actor may read it."""
 
     def execute(
         self, actor: ActorContext, record_id: RecordId, document: RecordDocument
     ) -> RecordPrint:
-        ensure_permission(actor, Permission.RECORDS_VIEW)
+        ensure_permission(
+            actor,
+            Permission.RECORDS_VIEW if document == "prescription"
+            else Permission.RECORDS_READ_CLINICAL,
+        )
+        can_read_clinical = has_permission(actor, Permission.RECORDS_READ_CLINICAL)
         record = self._uow.medical_records.get_by_id(record_id)
         if record is None:
             raise EntityNotFound("MedicalRecord", record_id)
@@ -219,15 +233,16 @@ class PrintRecordDocument(_Printer):
             doctor_id=record.signed_by_id, on=record.encounter_at.date(),
         )
         self._audit(actor, document, "MedicalRecord", str(record.id), record.code, patient)
+        indications = record.note.text_for(NoteRole.PLAN) or None if can_read_clinical else None
         return RecordPrint(
-            context=context, record=record, indications=record.note.text_for(NoteRole.PLAN) or None,
+            context=context, document=document, record=record, indications=indications,
             amends_code=amends_code,
         )
 
 
 class PrintCertificate(_Printer):
     def execute(self, actor: ActorContext, certificate_id: CertificateId) -> CertificatePrint:
-        ensure_permission(actor, Permission.RECORDS_VIEW)
+        ensure_permission(actor, Permission.RECORDS_READ_CLINICAL)
         certificate = self._uow.certificates.get_by_id(certificate_id)
         if certificate is None:
             raise EntityNotFound("MedicalCertificate", certificate_id)

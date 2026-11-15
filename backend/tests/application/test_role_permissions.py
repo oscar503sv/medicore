@@ -114,6 +114,23 @@ class TestUpdate:
                 seed.actor(seed.admin), Role.DOCTOR, no_sign
             )
 
+    def test_read_clinical_cannot_be_granted_to_nurse_nor_removed_from_doctor(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        with pytest.raises(ValidationError) as exc:
+            UpdateRolePermissions(uow, FixedClock()).execute(
+                seed.actor(seed.admin), Role.NURSE, ["records.view", "records.read_clinical"]
+            )
+        assert exc.value.code == "roles.doctor_only"
+        no_read = [
+            str(p) for p in permissions_for(Role.DOCTOR) if p != Permission.RECORDS_READ_CLINICAL
+        ]
+        with pytest.raises(ValidationError) as exc:
+            UpdateRolePermissions(uow, FixedClock()).execute(
+                seed.actor(seed.admin), Role.DOCTOR, no_read
+            )
+        assert exc.value.code == "roles.doctor_must_keep"
+
     def test_unknown_permission_rejected_on_write(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)

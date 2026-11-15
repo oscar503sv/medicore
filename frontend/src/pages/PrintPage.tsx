@@ -42,9 +42,9 @@ async function load(kind: string, id: string, doctor: string | null): Promise<Lo
         ctx: doc.context,
         indications: kind === 'prescription' && !!doc.indications,
         render: (paper, withIndications) =>
-          kind === 'prescription' ? (
+          doc.document === 'prescription' ? (
             <PrescriptionDoc doc={doc} paper={paper} withIndications={withIndications} />
-          ) : kind === 'exams' ? (
+          ) : doc.document === 'exams' ? (
             <ExamOrderDoc doc={doc} paper={paper} />
           ) : (
             <RecordCopyDoc doc={doc} />

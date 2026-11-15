@@ -16,6 +16,8 @@ class MedicalRecordModel(Base):
     __tablename__ = "medical_records"
     __table_args__ = (
         Index("ix_records_tenant_patient", "tenant_id", "patient_id"),
+        # The paginated records list is newest-first within a clinic.
+        Index("ix_records_tenant_encounter", "tenant_id", "encounter_at"),
         # One original record per consultation (amendments repeat consultation_id): the
         # database backstop behind the sign lock.
         Index(

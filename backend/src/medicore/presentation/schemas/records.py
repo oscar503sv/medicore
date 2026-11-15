@@ -65,3 +65,32 @@ class DocumentResponse(BaseModel):
     uploaded_by_id: str
     uploaded_at: datetime
     record_id: str | None
+
+
+class RecordSummaryResponse(BaseModel):
+    id: str
+    code: str
+    patient_id: str
+    patient_name: str | None = None
+    type: str
+    status: str
+    encounter_at: datetime
+    location_name: str
+    signed_by_id: str
+    signed_by_name: str | None = None
+    consultation_id: str | None
+    amends_record_id: str | None
+
+
+class RecordListResponse(BaseModel):
+    items: list[RecordSummaryResponse]
+    total: int
+    offset: int
+    limit: int
+
+
+class VitalsReadingResponse(BaseModel):
+    record_id: str
+    record_code: str
+    encounter_at: datetime
+    vitals: dict[str, Any]

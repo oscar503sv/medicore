@@ -9,6 +9,7 @@ from medicore.domain.repositories._support import (
     Paging,
     PatientFilter,
     RecordFilter,
+    RecordSummary,
     TenantFilter,
     UserFilter,
 )
@@ -65,6 +66,7 @@ __all__ = [
     "Paging",
     "PatientFilter",
     "RecordFilter",
+    "RecordSummary",
     "TenantFilter",
     "UserFilter",
     "AppointmentRepository",

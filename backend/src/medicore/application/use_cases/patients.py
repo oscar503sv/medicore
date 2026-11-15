@@ -17,10 +17,11 @@ from medicore.application.common.timezone import clinic_now, to_naive
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
+from medicore.application.use_cases.records import VitalsReading, summarize, vitals_readings
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.patient import Patient
 from medicore.domain.enums import AppointmentStatus, PrescriptionStatus, Sex
-from medicore.domain.repositories._support import Page, Paging, PatientFilter
+from medicore.domain.repositories._support import Page, Paging, PatientFilter, RecordSummary
 from medicore.domain.shared.identifiers import PatientId, UserId
 from medicore.domain.value_objects.blood_type import BloodType
 from medicore.domain.value_objects.contact_info import ContactInfo
@@ -47,6 +48,12 @@ class PatientDetailDTO:
     records_count: int
     active_prescriptions: int
     next_appointment: Appointment | None = None
+    # Filled only for those with records.view; never the clinical content of the records.
+    latest_vitals: VitalsReading | None = None
+    recent_records: list[RecordSummary] = field(default_factory=list)
+
+
+RECENT_RECORDS_LIMIT = 6
 
 
 class CreatePatient:
@@ -287,6 +294,17 @@ class GetPatientDetail:
         records = self._uow.medical_records.list_by_patient(patient_id)
         prescriptions = self._uow.prescriptions.list_by_patient(patient_id, active_only=True)
 
+        latest_vitals = None
+        recent_records: list[RecordSummary] = []
+        if has_permission(actor, Permission.RECORDS_VIEW):
+            latest_vitals = next(iter(vitals_readings(records)), None)
+            names: dict[UserId, str | None] = {}
+            for r in records[:RECENT_RECORDS_LIMIT]:
+                if r.signed_by_id not in names:
+                    signer = self._uow.users.get_by_id(r.signed_by_id)
+                    names[r.signed_by_id] = signer.name if signer else None
+                recent_records.append(summarize(r, patient.full_name, names[r.signed_by_id]))
+
         # Opening a patient chart exposes their clinical history — auditable (HIPAA/GDPR).
         # One entry per access, not per record (GetMedicalRecord audits individual reads).
         with self._uow:
@@ -310,4 +328,6 @@ class GetPatientDetail:
                 if p.status == PrescriptionStatus.ACTIVE and not p.is_expired_on(now.date())
             ),
             next_appointment=next_appt,
+            latest_vitals=latest_vitals,
+            recent_records=recent_records,
         )

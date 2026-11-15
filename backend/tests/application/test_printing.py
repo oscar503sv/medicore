@@ -118,6 +118,24 @@ class TestRecordDocuments:
             seed.doctor_actor, record.id, "exams")
         assert doc.record.exams[0].kind == ExamKind.IMAGING
 
+    def test_nurse_reprints_the_prescription_without_the_plan_text(self, seed):
+        record = _record(seed)
+        doc = PrintRecordDocument(_uow(seed), FixedClock(NOW)).execute(
+            seed.actor(seed.nurse), record.id, "prescription")
+        assert doc.document == "prescription"
+        assert doc.indications is None
+        assert doc.record.prescriptions
+
+    @pytest.mark.parametrize("document", ["exams", "record"])
+    def test_nurse_cannot_print_clinical_documents(self, seed, document):
+        record = _record(seed, exams=[ExamRequest("Ultrasonografía", ExamKind.IMAGING)])
+        for actor in (seed.actor(seed.nurse), seed.actor(seed.admin)):
+            with pytest.raises(PermissionDenied) as e:
+                PrintRecordDocument(_uow(seed), FixedClock(NOW)).execute(
+                    actor, record.id, document)
+            assert e.value.code == "permission.missing"
+        assert "document.printed" not in _actions(seed)
+
     def test_receptionist_without_records_view_is_refused(self, seed):
         reception = replace(seed.receptionist_actor, permissions=frozenset())
         with pytest.raises(PermissionDenied):
@@ -153,9 +171,17 @@ class TestCertificates:
         assert doc.certificate.rest_until == date(2026, 5, 22)
         assert doc.context.doctor.jvpm == "12345"
         listed = ListMedicalCertificates(_uow(seed)).execute(
-            seed.actor(seed.nurse), patient_id=seed.patient.id)
+            seed.doctor_actor, patient_id=seed.patient.id)
         assert [x.id for x in listed] == [c.id]
         assert {"certificate.issued", "document.printed"} <= set(_actions(seed))
+
+    def test_certificates_are_clinical_content(self, seed):
+        c = self._issue(seed, _record(seed))
+        for actor in (seed.actor(seed.nurse), seed.actor(seed.admin)):
+            with pytest.raises(PermissionDenied):
+                ListMedicalCertificates(_uow(seed)).execute(actor, patient_id=seed.patient.id)
+            with pytest.raises(PermissionDenied):
+                PrintCertificate(_uow(seed), FixedClock(NOW)).execute(actor, c.id)
 
     def test_diagnosis_stays_private_by_default(self, seed):
         assert self._issue(seed, _record(seed)).diagnosis is None

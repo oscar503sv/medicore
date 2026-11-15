@@ -37,7 +37,7 @@ only from `domain`; `infrastructure`/`presentation` from the inner layers.
 
 By the numbers: **22 entities** and **10 value objects** in the domain, **20 repositories
 (Protocols)**, **5 application ports** (Clock, CodeGenerator, PasswordHasher, TokenIssuer,
-UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/api/v1/`.
+UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/api/v1/`.
 
 ## Domain conventions
 
@@ -76,7 +76,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/a
 - **Responses**: every `/api/` response carries `Cache-Control: no-store`, except those that set their own (such as CSV downloads).
 - **Plan quotas**: the seat check locks the clinic's row (`FOR NO KEY UPDATE`), so two simultaneous invitations can't exceed the plan.
 - **Last administrator**: no operation, from the clinic or the platform console, can leave a clinic without an active admin (409 `users.last_admin`), even with concurrent changes.
-- **Granular permissions** (`application/common/permissions.py`): a catalog of **30
+- **Granular permissions** (`application/common/permissions.py`): a catalog of **38
   permissions** (`Permission`, `StrEnum`), a default set per role (`ROLE_PERMISSIONS`) and
   **per-tenant overrides** via `RolePermissionOverride`. `effective_permissions(role, stored)`
   resolves defaults vs. override and intersects with the current catalog; the presentation
@@ -135,6 +135,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/a
   of the same consultation are serialized: a second sign or an edit of a signed one answers 409
   (`consultation.already_signed`), a late autosave cannot revert it to a draft, and starting the
   same appointment twice returns the same consultation.
+- **Medical records reading** (`application/use_cases/records.py`, `records` router): the clinical content of a record (note, diagnoses, prescriptions, vaccines, exams, full copy, certificates and the clinical history) needs `records.read_clinical`, a doctor-only permission that can't be delegated (`DOCTOR_ONLY`); anyone else gets 403 `permission.missing`. `GET /records` is paginated (`{items, total, offset, limit}`, 25 by default, 100 at most) and filters on the server: `patient_id`, `type`, `date_from`/`date_to` (clinic days) and `q` (record code, patient name or code); a reversed range answers 400 `records.invalid_range`. It returns metadata only (no reason for the visit, note or vitals) and is backed by the index `ix_records_tenant_encounter`. New endpoints: `GET /patients/{id}/records` (clinical history, doctors only) and `GET /patients/{id}/vitals` (`records.view`); `GET /patients/{id}` adds `latest_vitals` and `recent_records` (up to 6, metadata only). Audit: `record.listed` (each page; never the search text), `record.viewed`, `record.history_viewed`, `patient.vitals_listed`, `prescription.listed` and `document.listed`. In printing, `GET /print/records/{id}` includes `document`; for non-doctors the prescription comes without the general instructions, and the full copy, the exam order and certificates (listing and printing) need `records.read_clinical`.
 - **In-app notifications** (`application/common/notifications.py`): use cases emit them inside
   their own transaction — they are saved together with the action or not at all — and never
   to the author themselves. Events: appointment created/rescheduled/cancelled/no-show (to the
@@ -250,10 +251,11 @@ Every error response has the same shape:
 - Validation errors (422) no longer include the submitted value (`input`) in their details.
 - Signing a consultation twice, or editing one that is already signed (autosave, diagnoses, drafts),
   answers 409 `consultation.already_signed`. `consultation.incomplete` stays a 422.
+- Reading clinical content without `records.read_clinical` answers 403 `permission.missing`; a records list with `date_from` after `date_to` answers 400 `records.invalid_range`.
 
 ## Tests and linting
 
-A suite of **1411 tests** (298 domain · 610 application · 330 presentation · 173 infrastructure),
+A suite of **1459 tests** (298 domain · 641 application · 346 presentation · 174 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
@@ -262,7 +264,7 @@ The integration tests against real PostgreSQL (`tests/infrastructure/test_audit_
 `test_login_throttle_sql.py` — atomic UPSERT of the login lockout —
 `test_consultation_sign_sql.py` — concurrent signs and edits of one consultation — and
 `test_notification_repository_sql.py` — JSONB and bulk UPDATE/DELETE of the inbox —
-`test_patient_search_sql.py` — accent-insensitive search, phone digits, last visits) use
+`test_record_summaries_sql.py` — the records list (summaries, filters and paging) — `test_patient_search_sql.py` — accent-insensitive search, phone digits, last visits) use
 `TEST_DATABASE_URL` (or the configured `DATABASE_URL`), run inside a transaction that is always
 rolled back — they leave no trace in the development database — and are **skipped
 automatically** when PostgreSQL isn't reachable.
@@ -312,6 +314,8 @@ Production checklist (via environment variables, see the **Configuration** table
 > **Migration `f2a3b4c5d6e8`:** adds `last_success_at` to `login_attempts` (login lockout). It needs no new environment variables.
 >
 > **Migration `a3b4c5d6e7f9`:** adds a unique partial index so a consultation has at most one original medical record. **Before deploying, run the detection query in [Duplicate records from double signing](#duplicate-records-from-double-signing)**: the migration refuses to run while duplicates exist (it lists only their ids) and never resolves them itself. Creating the index blocks writes to `medical_records` for an instant. The Docker entrypoint runs `alembic upgrade head`, so the migration applies on deploy.
+>
+> **Migration `c4d5e6f7a8b0`:** adds the index `ix_records_tenant_encounter` on `medical_records(tenant_id, encounter_at)` for the records list, and grants `records.read_clinical` to the doctor role of clinics that had customized it. Creating the index blocks writes to `medical_records` for an instant. Its downgrade removes the permission from the doctor's customizations and drops the index.
 
 > For multiple workers just set `WEB_CONCURRENCY=N` (uvicorn reads it; `docker-compose.yml` uses 2). Each
 > worker holds its own pool of up to 15 connections: keep `N × 15` below Postgres' `max_connections`.

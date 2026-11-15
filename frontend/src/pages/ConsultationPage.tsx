@@ -226,6 +226,8 @@ export function ConsultationPage() {
     onSuccess: (record) => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       qc.invalidateQueries({ queryKey: ['records'] })
+      qc.invalidateQueries({ queryKey: ['vitals'] })
+      qc.invalidateQueries({ queryKey: ['patient'] })
       toast(t('consult.signed_ok'))
       setSignOpen(false)
       setSigned(record) // offer the patient's documents before leaving
@@ -236,6 +238,8 @@ export function ConsultationPage() {
         qc.invalidateQueries({ queryKey: ['consultation', id] })
         qc.invalidateQueries({ queryKey: ['appointments'] })
         qc.invalidateQueries({ queryKey: ['records'] })
+        qc.invalidateQueries({ queryKey: ['vitals'] })
+        qc.invalidateQueries({ queryKey: ['patient'] })
         setSignOpen(false)
       }
       toast(errorMessage(err), 'danger')

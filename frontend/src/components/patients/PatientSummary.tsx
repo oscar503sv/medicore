@@ -6,7 +6,7 @@ import { errorMessage } from '@/api/client'
 import { RescheduleAppointmentModal } from '@/components/appointments/RescheduleAppointmentModal'
 import { RecordDrawer } from '@/components/records/RecordDrawer'
 import { VitalStat } from '@/components/patients/VitalsHistory'
-import { VITAL_COLS, hasAnyVital } from '@/components/patients/vitalsData'
+import { VITAL_COLS } from '@/components/patients/vitalsData'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader } from '@/components/ui/Card'
@@ -15,19 +15,13 @@ import { toast } from '@/components/ui/Toast'
 import { useAuthStore } from '@/stores/auth'
 import { fmtDate, fmtDateTime, fmtDateTz, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-import type { MedicalRecord, PatientDetail } from '@/types'
+import type { PatientDetail, RecordSummary, VitalsReading } from '@/types'
 
-export function PatientSummary({
-  detail,
-  records,
-}: {
-  detail: PatientDetail
-  records: MedicalRecord[]
-}) {
+export function PatientSummary({ detail }: { detail: PatientDetail }) {
   const t = useT()
   const qc = useQueryClient()
   const canClinical = useAuthStore((s) => s.can('records.view'))
-  const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
+  const canReadClinical = useAuthStore((s) => s.can('records.read_clinical'))
   const canManage = useAuthStore((s) => s.can('appointments.manage'))
 
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
@@ -69,7 +63,7 @@ export function PatientSummary({
         </Card>
 
         {/* Latest vitals (clinical roles only) */}
-        {canClinical && <LatestVitalsCard records={records} />}
+        {canClinical && <LatestVitalsCard reading={detail.latest_vitals} />}
 
         {/* Next appointment */}
         <Card>
@@ -123,8 +117,8 @@ export function PatientSummary({
           <Card>
             <CardHeader title={t('patient.recent_activity')} />
             <RecentActivity
-              records={records}
-              onOpen={isDoctor ? setOpenRecordId : undefined}
+              items={detail.recent_records}
+              onOpen={canReadClinical ? setOpenRecordId : undefined}
             />
           </Card>
         )}
@@ -157,7 +151,9 @@ export function PatientSummary({
           </div>
         </div>
       </Modal>
-      <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />
+      {canReadClinical && (
+        <RecordDrawer recordId={openRecordId} onClose={() => setOpenRecordId(null)} />
+      )}
     </div>
   )
 }
@@ -174,21 +170,17 @@ function ContactRow({ icon: Icon, label, value }: { icon: LucideIcon; label: str
   )
 }
 
-function LatestVitalsCard({ records }: { records: MedicalRecord[] }) {
+function LatestVitalsCard({ reading }: { reading: VitalsReading | null }) {
   const t = useT()
-  const latest = records
-    .filter((r) => hasAnyVital(r.vitals))
-    .sort((a, b) => b.encounter_at.localeCompare(a.encounter_at))[0]
-
   return (
     <Card>
       <CardHeader title={t('patient.vitals')} />
-      {latest ? (
+      {reading ? (
         <div className="p-5">
-          <p className="eyebrow mb-2.5">{fmtDateTz(latest.encounter_at)}</p>
+          <p className="eyebrow mb-2.5">{fmtDateTz(reading.encounter_at)}</p>
           <div className="grid grid-cols-2 gap-2.5">
-            {VITAL_COLS.filter((col) => latest.vitals[col.key] != null).map((col) => (
-              <VitalStat key={col.key} col={col} value={latest.vitals[col.key]!} />
+            {VITAL_COLS.filter((col) => reading.vitals[col.key] != null).map((col) => (
+              <VitalStat key={col.key} col={col} value={reading.vitals[col.key]!} />
             ))}
           </div>
         </div>
@@ -200,16 +192,13 @@ function LatestVitalsCard({ records }: { records: MedicalRecord[] }) {
 }
 
 function RecentActivity({
-  records,
+  items,
   onOpen,
 }: {
-  records: MedicalRecord[]
+  items: RecordSummary[]
   onOpen?: (id: string) => void
 }) {
   const t = useT()
-  const items = [...records]
-    .sort((a, b) => b.encounter_at.localeCompare(a.encounter_at))
-    .slice(0, 6)
 
   if (items.length === 0)
     return <p className="px-5 py-8 text-center text-sm text-tx-3">{t('patient.history_empty')}</p>
@@ -222,10 +211,11 @@ function RecentActivity({
           const body = (
             <>
               <p className="text-[13px] text-tx-3">{fmtDateTz(r.encounter_at, "d MMM yyyy · HH:mm")}</p>
-              <p className="text-sm font-medium text-tx">{r.chief_complaint}</p>
-              <p className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-tx-3">
+              <p className="text-sm font-medium text-tx">
                 <Badge>{t(`record.type_${r.type}`)}</Badge>
-                {r.location_name}
+              </p>
+              <p className="mt-0.5 text-xs text-tx-3">
+                {[r.signed_by_name, r.location_name].filter(Boolean).join(' · ')}
               </p>
             </>
           )

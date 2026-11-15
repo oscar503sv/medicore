@@ -122,3 +122,27 @@ def receptionist_headers(seed, client):
             "password": PASSWORD,
         },
     )
+
+
+@pytest.fixture
+def nurse_headers(seed, client):
+    return bearer_login(
+        client,
+        "/api/v1/auth/login",
+        {"slug": str(seed.tenant.slug), "email": seed.nurse.email, "password": PASSWORD},
+    )
+
+
+@pytest.fixture
+def support_headers(seed, client, platform_headers):
+    """A platform support session inside the clinic (impersonating, with the admin's set)."""
+    resp = client.post(
+        f"/api/v1/platform/tenants/{seed.tenant.id}/impersonate",
+        json={"reason": "support: reviewing the records list"},
+        headers=platform_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    token = client.cookies.get("mc_session")
+    assert token, "impersonation did not set the session cookie"
+    client.cookies.clear()
+    return {"Authorization": f"Bearer {token}"}

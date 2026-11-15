@@ -23,11 +23,12 @@ export function RecordDrawer({
 }) {
   const t = useT()
   const canAmend = useAuthStore((s) => s.can('records.amend'))
+  const canReadClinical = useAuthStore((s) => s.can('records.read_clinical'))
   const [amendOpen, setAmendOpen] = useState(false)
   const { data: record, isLoading } = useQuery({
     queryKey: ['record', recordId],
     queryFn: () => recordsApi.get(recordId!),
-    enabled: !!recordId,
+    enabled: !!recordId && canReadClinical,
   })
 
   return (

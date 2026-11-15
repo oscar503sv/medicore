@@ -82,7 +82,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException with a translatable code
     ├── error_handlers.py# Errors → {"detail", "code", "params"} with their HTTP status
     ├── schemas/         # Pydantic request + response models per resource
-    └── routers/         # 26 routers, 181 endpoints under /api/v1/
+    └── routers/         # 26 routers, 183 endpoints under /api/v1/
 ```
 
 ### Multi-tenancy
@@ -99,6 +99,7 @@ A separate session (`platform`-scoped token, with its own `mc_console` cookie) t
 - **Vaccination** following El Salvador's national scheme (MINSAL), for children, adolescents and adults: each patient's card computes every dose's status (given, due, overdue, upcoming…) from their age and records; records are never edited, a wrong one is voided with a reason. A worklist shows overdue and upcoming doses across the clinic.
 - **In-clinic applications** (injections, IV fluids, nebulizations…): the doctor indicates them in the consultation and they become orders for nursing when it is signed; walk-ins with an outside prescription record the prescribing doctor and their JVPM number. Each dose is recorded with lot, site and vitals, never edited (a wrong one is voided with a reason), and opens an observation window (30 min by default, configurable per order) closed as "no reaction" or as an adverse reaction, which notifies the ordering doctor. Applying a drug that clashes with the patient's allergies requires a written, audited justification.
 - **Minor procedures** (sutures, biopsies, wound care, IUD insertion, ECG…): each clinic has a configurable catalog, preloaded with the most common procedures, that says who may perform each one (doctor only, or doctor or nurse), whether it needs informed consent, whether it usually takes a pathology specimen and the suggested follow-up. A procedure is ordered in the consultation (pending when it is signed) or registered directly, optionally tied to a procedure appointment. Before performing it: allergy review, anticoagulants, fasting and vitals; consent signed on paper is recorded with who signed and a witness (no file). The note (anesthesia, technique, findings, materials, complications, home instructions, specimen sent to pathology) is immutable once signed — corrections are amendments — and signing suggests a follow-up date and notifies the ordering doctor when someone else performed it.
+- **Clinical content of records is for doctors**: the note, diagnoses, the record's prescriptions, vaccines, exams, the full copy, certificates and the clinical history need `records.read_clinical` (doctor-only, not delegable). The records list is paginated and filtered on the server and shows metadata only (code, date, type, doctor, site, status, patient; never the reason for the visit, the note or the vitals). `records.view` covers that list, prescriptions, vitals and documents. The backend answers 403 `permission.missing` on `GET /records/{id}` to anyone who is not a doctor, and each page of the list is audited (`record.listed`, never the search text).
 - **Granular permissions** enforced in the application layer (not just the UI) — see the next section.
 - Temporary password with a forced change on first sign-in: until it is replaced, the backend only allows changing it, reading the profile and signing out; anything else answers 403 `auth.password_change_required`. Support (impersonation) sessions are exempt.
 - **Password policy** (`domain/services/password_policy.py`, NIST SP 800-63B style) wherever a password is set — invite, reset (clinic or console), change, clinic creation, superadmin script: at least 10 characters (at most 72 bytes, bcrypt's limit), letters plus a number or symbol, not a common password, nothing from the person's name, email or clinic, and different from the current one. No periodic expiry; brute force is covered by the login lockout. The UI shows the requirements live and generates temporary passwords that always comply.
@@ -110,7 +111,7 @@ A separate session (`platform`-scoped token, with its own `mc_console` cookie) t
 
 Access control is **granular and customizable per clinic** (`application/common/permissions.py`):
 
-- **Catalog of 31 permissions** (`Permission`, `StrEnum`) grouped by resource: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (including `sign` and `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `locations.manage`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
+- **Catalog of 38 permissions** (`Permission`, `StrEnum`) grouped by resource: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (`view`, plus the doctor-only `read_clinical`, `sign` and `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `locations.manage`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — each with a default permission set in `ROLE_PERMISSIONS`.
 - **Per-tenant overrides**: each clinic can customize a role's set through a `RolePermissionOverride` row. `effective_permissions(role, stored)` resolves defaults vs. override (and intersects with the current catalog to tolerate retired permissions).
 - On every request, the presentation layer puts the effective permissions in `ActorContext.permissions`, so every `ensure_permission(...)` check honors the clinic's customization.
@@ -121,8 +122,8 @@ Access control is **granular and customizable per clinic** (`application/common/
 
 **Guardrails** (enforced in the backend, mirrored in the UI):
 
-- The `admin` role is not customizable and always has full access (except signing/amending records).
-- `records.sign` and `records.amend` are doctor-only: never granted to other roles or users, never taken from doctors.
+- The `admin` role is not customizable and always has full access (except the clinical content of records, signing and amending).
+- `records.sign`, `records.amend` and `records.read_clinical` are doctor-only: never granted to other roles or users, never taken from doctors.
 - `permissions.manage` is admin-only: it can't be delegated to a role or a user.
 - Only an admin acts on admin or doctor accounts (edit, change role, suspend, reset password, close sessions) or assigns those roles. A delegated `users.manage` manages the rest of the staff (nursing, reception).
 - Nobody manages their own account from **Users** (change their role, edit, suspend, reactivate, reset their password or close their sessions): their profile, password and sessions are managed in **Settings**. This applies to admins too.
@@ -232,10 +233,10 @@ Every document prints from the browser (`/print/:kind/:id`, "Save as PDF" works 
 
 | Document | Where | Notes |
 |---|---|---|
-| **Prescription** | Signed visit (after signing, the record, the patient's prescriptions) | Includes the note's *plan* as "General instructions" only when the doctor wrote one (it can be left out per print) |
-| **Exam order** | Signed visit | Exams ordered during the consultation (lab, imaging, other) with one-click common picks |
-| **Medical certificate** | Signed visit — issued only by the doctor who signed it | Rest (up to 90 days, with dates) or attendance (visit hours); diagnosis only if the patient agrees; coded `CM-{year}-{n}`, reprintable and voidable with a reason |
-| **Record copy** | Signed visit | Vitals, the clinical note in its template, diagnoses, prescriptions, vaccines and exams |
+| **Prescription** | Signed visit (after signing, the record, the patient's prescriptions) | Includes the note's *plan* as "General instructions" only when the doctor wrote one (it can be left out per print). Users without `records.read_clinical` (nurses, admins) print it without them |
+| **Exam order** | Signed visit | Exams ordered during the consultation (lab, imaging, other) with one-click common picks. Requires `records.read_clinical` |
+| **Medical certificate** | Signed visit — issued only by the doctor who signed it | Rest (up to 90 days, with dates) or attendance (visit hours); diagnosis only if the patient agrees; coded `CM-{year}-{n}`, reprintable and voidable with a reason. Listing and printing require `records.read_clinical` |
+| **Record copy** | Signed visit | Vitals, the clinical note in its template, diagnoses, prescriptions, vaccines and exams. Requires `records.read_clinical` |
 | **Procedure** | Procedure detail | Care instructions, consent form to sign on paper, pathology request |
 | **Vaccination card** | Patient → Vaccines | Doses given and upcoming |
 | **Appointment slip** | Appointments | Date, doctor, type and location — **never the price** |
@@ -396,7 +397,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1411 tests)
+.venv/bin/pytest                          # full suite (1459 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -421,7 +422,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `appointments` | Appointments with a status FSM and their charge (fee in force when booked, amount charged and the reason for an adjustment) |
 | `doctor_fees` | Each doctor's fee per appointment type (USD) |
 | `consultations` | Consultation in progress (mutable draft) |
-| `medical_records` | Signed, immutable medical records (at most one original per consultation) |
+| `medical_records` | Signed, immutable medical records (at most one original per consultation); indexed by `(tenant_id, encounter_at)` for the records list |
 | `prescriptions` | Issued prescriptions |
 | `medical_documents` | Medical files (metadata) |
 | `insurers` | The clinic's insurers |
@@ -450,18 +451,19 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1411 passing tests
+1459 passing tests
    298  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   610  — application (auth, sessions, appointments, consultations, records, notifications,
+   641  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform (support actions land in the clinic's audit and are notified), granular permissions, multi-tenant isolation)
-   330  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   346  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    173  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    174  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:
 - `SignConsultation` atomicity: a failure rolls back the record, prescriptions and appointment status. Concurrent signs of one consultation store a single record.
+- Only doctors read the clinical content of records, and the records list paginates and filters on the server.
 - Multi-tenant isolation: one tenant's repos never leak another tenant's data.
 - Effective permissions per role and per-tenant override, plus platform scope.
 - Session revocation, CSRF protection and console session timeouts.
@@ -530,6 +532,10 @@ Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on s
 > **Migration `f2a3b4c5d6e8`:** adds `last_success_at` to `login_attempts` (login lockout). It needs no new environment variables.
 >
 > **Migration `a3b4c5d6e7f9`:** adds a unique partial index so a consultation has at most one original medical record. **Before deploying, run the detection query in [`backend/README.md`](backend/README.md#duplicate-records-from-double-signing)**: the migration refuses to run while duplicates exist (it lists only their ids) and never resolves them itself. Creating the index blocks writes to `medical_records` for an instant. The Docker entrypoint runs `alembic upgrade head`, so the migration applies on deploy.
+
+> **Migration `c4d5e6f7a8b0`:** adds the index `ix_records_tenant_encounter` on `medical_records(tenant_id, encounter_at)` for the records list, and grants `records.read_clinical` to the doctor role of clinics that had customized it. Creating the index blocks writes to `medical_records` for an instant. Its downgrade removes the permission from the doctor's customizations and drops the index.
+
+> **Visible changes in this version** (tell the clinics' users): administrators and nurses no longer see the reason for the visit in Records or in the patient summary; in Records the Reason column becomes Doctor, and only the doctor can open a record; the medication line shows the prescribing doctor instead of the record code; administrators and nurses reprint prescriptions without general instructions; tabs opened with the previous version fail in Records until they are reloaded. **Pending** (next release, OZK-95): nurses and administrators can still edit the consultation in progress; this version does not fix it yet.
 
 For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched. Each run is recorded, and the *Monitoring* page flags the task when it fails or when more than 26 h pass without a successful reset.
 

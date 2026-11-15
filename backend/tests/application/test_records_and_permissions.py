@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
@@ -31,10 +32,12 @@ from medicore.application.use_cases.records import (
     AmendMedicalRecord,
     GetMedicalRecord,
     ListMedicalRecords,
+    RecordQuery,
     UploadDocument,
     UploadDocumentCommand,
 )
 from medicore.domain.enums import AppointmentType, DocumentKind, RecordStatus, Sex
+from medicore.domain.repositories._support import Paging
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import PatientId
 from medicore.domain.value_objects.icd_code import IcdCode
@@ -115,14 +118,32 @@ class TestRecordPermissions:
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
         with pytest.raises(PermissionDenied):
-            ListMedicalRecords(uow).execute(seed.receptionist_actor)
+            ListMedicalRecords(uow, FixedClock()).execute(
+                seed.receptionist_actor, RecordQuery(), Paging()
+            )
 
     def test_doctor_can_view_records(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
         _sign_a_record(seed, uow)
-        records = ListMedicalRecords(uow).execute(seed.doctor_actor)
-        assert len(records) == 1
+        page = ListMedicalRecords(uow, FixedClock()).execute(
+            seed.doctor_actor, RecordQuery(), Paging()
+        )
+        assert len(page.items) == 1
+
+    def test_only_a_doctor_opens_the_clinical_content(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        record = _sign_a_record(seed, uow)
+        get = GetMedicalRecord(uow, FixedClock())
+        assert get.execute(seed.doctor_actor, record.id).id == record.id
+        for actor in (
+            seed.actor(seed.admin), seed.actor(seed.nurse), seed.receptionist_actor,
+            replace(seed.actor(seed.admin), impersonated_by=seed.platform_admin.id),
+        ):
+            with pytest.raises(PermissionDenied) as exc:
+                get.execute(actor, record.id)
+            assert exc.value.code == "permission.missing"
 
     def test_get_record_is_audited(self):
         seed = seed_clinic()

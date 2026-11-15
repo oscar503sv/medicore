@@ -103,6 +103,12 @@ un precio anual por plan, editable desde la consola igual que el mensual, y que 
 sume un año al periodo pagado en lugar de un mes. La suscripción en sí no cambia, porque ya
 guarda la fecha hasta la que está pagada.
 
+### Triaje de signos vitales antes de la consulta
+Hoy los signos vitales se registran dentro de la consulta una vez abierta. Un paso de triaje antes de iniciarla (enfermería registra peso, presión y temperatura al llegar el paciente) permitiría que el médico los vea en cuanto abre la consulta, y daría un orden a la lista de espera. Requiere un estado de triaje en la cita y lecturas de signos vitales que existan sin consulta abierta.
+
+### Lecturas de signos vitales por paciente — consulta proyectada
+`GET /patients/{id}/vitals` carga todos los expedientes del paciente, con su contenido completo, y proyecta los signos vitales en memoria. Una consulta que lea solo las columnas de signos vitales, con límite, evitaría cargar el resto de un historial largo en cada petición.
+
 ## Seguridad — diferido conscientemente
 
 Quick wins ya aplicados (jun 2026): el login hace el mismo trabajo de hash exista o no la
@@ -147,5 +153,7 @@ Resueltos en nov 2026:
 - **Cupos**: la comprobación de asientos bloquea la fila de la clínica, así que las altas simultáneas no exceden el plan.
 - **Purga de sesiones**: tarea programada que borra sesiones caducadas o revocadas, vigilada en Monitoreo como el job `session_purge`.
 - **Firma de consultas serializada por consulta**: la firma bloquea la fila de la consulta, y un índice único parcial permite un solo expediente original por consulta (OZK-93).
+- **El contenido clínico de los expedientes es solo para médicos** (OZK-96): `records.read_clinical` (exclusivo de médicos, no delegable) protege la nota, los diagnósticos, las recetas del expediente, las vacunas, los exámenes, la copia completa, las constancias y el historial clínico. El backend responde 403 en `GET /records/{id}` a los demás roles, y el frontend sigue la misma regla.
+- **Listado de expedientes paginado y auditado** (OZK-97): `GET /records` devuelve `{items, total, offset, limit}` con filtros en el servidor (paciente, tipo, fechas, búsqueda), solo metadatos fuera de la lectura clínica del médico, un índice sobre `(tenant_id, encounter_at)` y una entrada de auditoría por página (`record.listed`).
 
 No quedan hallazgos pendientes en esta lista.

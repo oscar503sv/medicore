@@ -85,7 +85,9 @@ class TestListing:
         completed = issue(seed, uow, drug="Ibuprofeno")
         CompletePrescription(uow, FixedClock()).execute(seed.doctor_actor, completed.id)
 
-        views = ListPatientPrescriptions(uow).execute(seed.actor(seed.nurse), seed.patient.id)
+        views = ListPatientPrescriptions(uow, FixedClock()).execute(
+            seed.actor(seed.nurse), seed.patient.id
+        )
 
         assert {v.prescription.id for v in views} == {active.id, completed.id}
         assert all(v.prescriber_name == seed.doctor.name for v in views)
@@ -94,7 +96,9 @@ class TestListing:
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
         with pytest.raises(PermissionDenied):
-            ListPatientPrescriptions(uow).execute(seed.receptionist_actor, seed.patient.id)
+            ListPatientPrescriptions(uow, FixedClock()).execute(
+                seed.receptionist_actor, seed.patient.id
+            )
 
 
 class TestActiveCount:

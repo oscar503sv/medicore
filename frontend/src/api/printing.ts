@@ -31,26 +31,50 @@ export interface PrintContext {
 export type RecordDocument = 'prescription' | 'exams' | 'record'
 export type ProcedureDocument = 'instructions' | 'consent' | 'pathology'
 
-export interface RecordPrint {
+interface RecordPrintBase {
   context: PrintContext
-  record: {
-    code: string
-    encounter_at: string
-    signed_at: string
-    location_name: string
-    insurer_name: string | null
-    chief_complaint: string
-    note: ClinicalNote
-    vitals: Vitals
-    diagnoses: { code: string; label: string }[]
-    prescriptions: PrescriptionSnapshot[]
-    exams: ExamRequest[]
-    vaccines: { name: string; lot: string; dose: string; site: string }[]
-    status: string
-  }
   indications: string | null
   amends_code: string | null
 }
+
+/** What reprinting a prescription needs of its record (the server leaves out the rest). */
+export interface PrescriptionPrintRecord {
+  id: string
+  code: string
+  encounter_at: string
+  status: string
+  prescriptions: PrescriptionSnapshot[]
+  signed_by_id: string
+  amends_record_id: string | null
+}
+
+export interface FullPrintRecord {
+  code: string
+  encounter_at: string
+  signed_at: string
+  location_name: string
+  insurer_name: string | null
+  chief_complaint: string
+  note: ClinicalNote
+  vitals: Vitals
+  diagnoses: { code: string; label: string }[]
+  prescriptions: PrescriptionSnapshot[]
+  exams: ExamRequest[]
+  vaccines: { name: string; lot: string; dose: string; site: string }[]
+  status: string
+}
+
+export type PrescriptionPrint = RecordPrintBase & {
+  document: 'prescription'
+  record: PrescriptionPrintRecord
+}
+
+export type FullRecordPrint = RecordPrintBase & {
+  document: 'exams' | 'record'
+  record: FullPrintRecord
+}
+
+export type RecordPrint = PrescriptionPrint | FullRecordPrint
 
 export interface CertificatePrint {
   context: PrintContext

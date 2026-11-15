@@ -36,6 +36,8 @@ export function AmendRecordModal({
       recordsApi.amend(record!.id, { chief_complaint: chiefComplaint, note: { ...note } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['records'] })
+      qc.invalidateQueries({ queryKey: ['vitals'] })
+      qc.invalidateQueries({ queryKey: ['patient'] })
       qc.invalidateQueries({ queryKey: ['record', record!.id] })
       toast(t('record.amend_ok'))
       onClose()

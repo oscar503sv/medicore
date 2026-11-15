@@ -30,7 +30,12 @@ from medicore.presentation.schemas.patients import (
     PatientStatsResponse,
     UpdatePatientRequest,
 )
-from medicore.presentation.serializers import ser_appointment, ser_patient
+from medicore.presentation.serializers import (
+    ser_appointment,
+    ser_patient,
+    ser_record_summary,
+    ser_vitals_reading,
+)
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -128,6 +133,8 @@ def get_patient(patient_id: str, actor: Actor, uow: UoW, clock: Clock):
         records_count=detail.records_count,
         active_prescriptions=detail.active_prescriptions,
         next_appointment=next_appointment,
+        latest_vitals=ser_vitals_reading(detail.latest_vitals) if detail.latest_vitals else None,
+        recent_records=[ser_record_summary(r) for r in detail.recent_records],
     )
 
 

@@ -1,9 +1,23 @@
 import { api } from './client'
-import type { MedicalDocument, MedicalRecord } from '@/types'
+import type { MedicalDocument, MedicalRecord, RecordPage, VitalsReading } from '@/types'
 
 export const recordsApi = {
-  list: (params: { patient_id?: string; type?: string } = {}) =>
-    api.get<MedicalRecord[]>('/records', { params }).then((r) => r.data),
+  list: (params: {
+    patient_id?: string
+    type?: string
+    date_from?: string
+    date_to?: string
+    q?: string
+    offset: number
+    limit: number
+  }) => api.get<RecordPage>('/records', { params }).then((r) => r.data),
+
+  /** The full clinical history of a patient: doctors only. */
+  history: (patientId: string) =>
+    api.get<MedicalRecord[]>(`/patients/${patientId}/records`).then((r) => r.data),
+
+  vitals: (patientId: string) =>
+    api.get<VitalsReading[]>(`/patients/${patientId}/vitals`).then((r) => r.data),
 
   get: (id: string) => api.get<MedicalRecord>(`/records/${id}`).then((r) => r.data),
 

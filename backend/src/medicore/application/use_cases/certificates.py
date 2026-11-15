@@ -98,7 +98,8 @@ class ListMedicalCertificates:
         self, actor: ActorContext, *, patient_id: PatientId | None = None,
         record_id: RecordId | None = None,
     ) -> list[MedicalCertificate]:
-        ensure_permission(actor, Permission.RECORDS_VIEW)
+        # A certificate can carry the diagnosis, so it is clinical content.
+        ensure_permission(actor, Permission.RECORDS_READ_CLINICAL)
         if record_id is not None:
             return self._uow.certificates.list_by_record(record_id)
         if patient_id is not None:

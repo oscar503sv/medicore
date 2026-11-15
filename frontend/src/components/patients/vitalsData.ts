@@ -23,4 +23,3 @@ export const VITAL_COLS: VitalCol[] = [
 export const unitLabel = (t: (key: string) => string, unit: string) =>
   unit.startsWith('vital.') ? t(unit) : unit
 
-export const hasAnyVital = (v: Vitals) => VITAL_COLS.some((c) => v[c.key] != null)

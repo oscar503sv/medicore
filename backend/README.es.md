@@ -37,7 +37,7 @@ La **regla de dependencia** apunta hacia adentro: `domain` no importa de ninguna
 
 En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios (Protocols)**,
 **5 puertos de aplicación** (Clock, CodeGenerator, PasswordHasher, TokenIssuer, UnitOfWork),
-**20 grupos de casos de uso** y **26 routers / 181 endpoints** bajo `/api/v1/`.
+**20 grupos de casos de uso** y **26 routers / 183 endpoints** bajo `/api/v1/`.
 
 ## Convenciones del dominio
 
@@ -76,7 +76,7 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
 - **Respuestas**: toda respuesta de `/api/` lleva `Cache-Control: no-store`, salvo las que fijan la suya (como las descargas CSV).
 - **Cupos del plan**: la comprobación de asientos bloquea la fila de la clínica (`FOR NO KEY UPDATE`), así que dos altas simultáneas no exceden el plan.
 - **Último administrador**: ninguna operación (desde la clínica o desde la consola de plataforma) puede dejar una clínica sin admins activos (409 `users.last_admin`), ni siquiera con cambios simultáneos.
-- **Permisos granulares** (`application/common/permissions.py`): catálogo de **30 permisos**
+- **Permisos granulares** (`application/common/permissions.py`): catálogo de **38 permisos**
   (`Permission`, `StrEnum`), un set por defecto por rol (`ROLE_PERMISSIONS`) y **overrides por
   tenant** vía `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults
   vs. override e intersecta con el catálogo vigente; la capa de presentación los coloca en
@@ -137,6 +137,7 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
   de una misma consulta se serializan: una segunda firma, o editar una ya firmada, responde 409
   (`consultation.already_signed`); un autoguardado tardío no puede devolverla a borrador, y iniciar
   dos veces la misma cita devuelve la misma consulta.
+- **Lectura de expedientes** (`application/use_cases/records.py`, router `records`): el contenido clínico de un expediente (nota, diagnósticos, recetas, vacunas, exámenes, copia completa, constancias e historial clínico) requiere `records.read_clinical`, permiso exclusivo de médicos y no delegable (`DOCTOR_ONLY`); a los demás les responde 403 `permission.missing`. `GET /records` está paginado (`{items, total, offset, limit}`, 25 por defecto, 100 como máximo) y filtra en el servidor: `patient_id`, `type`, `date_from`/`date_to` (días de la clínica) y `q` (código del expediente, nombre o código del paciente); un rango invertido responde 400 `records.invalid_range`. Devuelve solo metadatos (sin motivo de consulta, nota ni signos vitales) y lo respalda el índice `ix_records_tenant_encounter`. Endpoints nuevos: `GET /patients/{id}/records` (historial clínico, solo médicos) y `GET /patients/{id}/vitals` (`records.view`); `GET /patients/{id}` añade `latest_vitals` y `recent_records` (hasta 6, solo metadatos). Auditoría: `record.listed` (cada página; nunca el texto buscado), `record.viewed`, `record.history_viewed`, `patient.vitals_listed`, `prescription.listed` y `document.listed`. En impresión, `GET /print/records/{id}` incluye `document`; para quien no es médico la receta sale sin indicaciones generales, y la copia completa, la orden de exámenes y las constancias (listar e imprimir) requieren `records.read_clinical`.
 - **Notificaciones in-app** (`application/common/notifications.py`): los casos de uso las
   emiten dentro de su propia transacción —se guardan junto con la acción o no se guardan—,
   nunca al propio autor. Eventos: cita creada/reprogramada/cancelada/no-show (al médico de la
@@ -250,10 +251,11 @@ Toda respuesta de error tiene la misma forma:
 - Los errores de validación (422) ya no incluyen el valor enviado (`input`) en su detalle.
 - Firmar una consulta dos veces, o editar una ya firmada (autoguardado, diagnósticos, borradores),
   responde 409 `consultation.already_signed`. `consultation.incomplete` sigue siendo un 422.
+- Leer contenido clínico sin `records.read_clinical` responde 403 `permission.missing`; un listado de expedientes con `date_from` posterior a `date_to` responde 400 `records.invalid_range`.
 
 ## Pruebas y linting
 
-Suite de **1411 tests** (298 dominio · 610 aplicación · 330 presentación · 173 infraestructura), casi
+Suite de **1459 tests** (298 dominio · 641 aplicación · 346 presentación · 174 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
@@ -262,7 +264,7 @@ Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_aud
 `test_login_throttle_sql.py` — UPSERT atómico del lockout de login —
 `test_consultation_sign_sql.py` — firmas y ediciones concurrentes de una consulta — y
 `test_notification_repository_sql.py` — JSONB y UPDATE/DELETE masivos de la bandeja —
-`test_patient_search_sql.py` — búsqueda sin acentos, dígitos del teléfono, últimas visitas) usan `TEST_DATABASE_URL`
+`test_record_summaries_sql.py` — listado de expedientes (resúmenes, filtros y paginación) — `test_patient_search_sql.py` — búsqueda sin acentos, dígitos del teléfono, últimas visitas) usan `TEST_DATABASE_URL`
 (o `DATABASE_URL` de la configuración),
 corren dentro de una transacción que siempre se revierte —no dejan rastro en la BD de desarrollo—
 y se **saltan automáticamente** si no hay PostgreSQL accesible.
@@ -312,6 +314,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 > **Migración `f2a3b4c5d6e8`:** añade `last_success_at` a `login_attempts` (lockout de login). No requiere variables de entorno nuevas.
 >
 > **Migración `a3b4c5d6e7f9`:** añade un índice único parcial para que una consulta tenga como máximo un expediente original. **Antes de desplegar, ejecuta la consulta de detección de [Expedientes duplicados por doble firma](#expedientes-duplicados-por-doble-firma)**: la migración se niega a correr mientras existan duplicados (lista solo sus ids) y nunca los resuelve por sí misma. Crear el índice bloquea escrituras en `medical_records` un instante. El entrypoint de Docker ejecuta `alembic upgrade head`, así que la migración se aplica al desplegar.
+>
+> **Migración `c4d5e6f7a8b0`:** añade el índice `ix_records_tenant_encounter` sobre `medical_records(tenant_id, encounter_at)` para el listado de expedientes, y otorga `records.read_clinical` al rol médico de las clínicas que lo habían personalizado. Crear el índice bloquea escrituras en `medical_records` un instante. Su downgrade quita el permiso de las personalizaciones del médico y elimina el índice.
 
 > Para varios workers basta con `WEB_CONCURRENCY=N` (uvicorn la lee; el `docker-compose.yml` usa 2). Cada
 > worker tiene su propio pool de hasta 15 conexiones: mantén `N × 15` por debajo de `max_connections` de Postgres.

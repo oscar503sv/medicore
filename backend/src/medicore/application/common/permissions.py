@@ -8,11 +8,14 @@ and the presentation layer puts the result on ``ActorContext.permissions``, so e
 
 Summary of the DOMAIN_MODEL rules the defaults encode:
   * receptionist → manage appointments + register/edit patients; NOT clinical records.
-  * nurse        → view patients/agenda, edit open consultations (vitals), view/upload
-                   records; NOT book appointments, NOT edit patients, NOT start/sign.
+  * nurse        → view patients/agenda, edit open consultations (vitals), view the records
+                   list (metadata), prescriptions, vitals and documents, upload records;
+                   NOT the clinical content, NOT book appointments, NOT edit patients,
+                   NOT start/sign.
   * doctor       → all clinical work for their patients + their own availability, fees and
                    metrics (with their income).
-  * admin        → user & organization management; full access except sign/amend; the
+  * admin        → user & organization management; full access except sign/amend and the
+                   clinical content of records (list/metadata only); the
                    clinic's metrics without money. Only admins act on other admins or doctors and
                    hand out permissions.
 
@@ -50,6 +53,7 @@ class Permission(StrEnum):
     CONSULTATIONS_START = "consultations.start"
     CONSULTATIONS_EDIT = "consultations.edit"
     RECORDS_VIEW = "records.view"
+    RECORDS_READ_CLINICAL = "records.read_clinical"
     RECORDS_UPLOAD = "records.upload"
     RECORDS_SIGN = "records.sign"
     RECORDS_AMEND = "records.amend"
@@ -122,6 +126,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.CONSULTATIONS_START,
         Permission.CONSULTATIONS_EDIT,
         Permission.RECORDS_VIEW,
+        Permission.RECORDS_READ_CLINICAL,
         Permission.RECORDS_UPLOAD,
         Permission.RECORDS_SIGN,
         Permission.RECORDS_AMEND,
@@ -238,8 +243,11 @@ def locked_permissions(modules: Iterable[AddonModule]) -> frozenset[Permission]:
     )
 
 
-# Clinical acts only a doctor may perform, whatever a role or user customization says.
-DOCTOR_ONLY = frozenset({Permission.RECORDS_SIGN, Permission.RECORDS_AMEND})
+# Clinical content and acts only a doctor may reach, whatever a role or user customization
+# says: opening the record's content, signing and amending.
+DOCTOR_ONLY = frozenset(
+    {Permission.RECORDS_SIGN, Permission.RECORDS_AMEND, Permission.RECORDS_READ_CLINICAL}
+)
 
 # Handing out permissions stays with administrators: delegating it would let anyone who
 # holds it grant themselves (through a colleague) everything else.

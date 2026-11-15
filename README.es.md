@@ -82,7 +82,7 @@ src/medicore/
     ├── errors.py        # ApiError: HTTPException con código traducible
     ├── error_handlers.py# Errores → {"detail", "code", "params"} con su status HTTP
     ├── schemas/         # Pydantic request + response por recurso
-    └── routers/         # 26 routers, 181 endpoints bajo /api/v1/
+    └── routers/         # 26 routers, 183 endpoints bajo /api/v1/
 ```
 
 ### Multi-tenant
@@ -99,6 +99,7 @@ Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que
 - **Vacunación** según el esquema nacional de El Salvador (MINSAL), para niños, adolescentes y adultos: el carné de cada paciente calcula el estado de cada dosis (aplicada, toca, atrasada, próxima…) a partir de su edad y sus registros; los registros no se editan, uno erróneo se anula con motivo. Una lista de trabajo muestra las dosis atrasadas y próximas de toda la clínica.
 - **Aplicaciones en la clínica** (inyecciones, sueros, nebulizaciones…): el médico las indica en la consulta y se vuelven órdenes para enfermería al firmarla; las que llegan sin cita con receta externa registran al médico que receta y su número de JVPM. Cada dosis se registra con lote, sitio y signos vitales, no se edita (una errónea se anula con motivo) y abre una observación (30 min por defecto, configurable por orden) que se cierra "sin reacción" o como reacción adversa, lo que notifica al médico que la indicó. Aplicar un medicamento que choca con las alergias del paciente exige una justificación escrita y auditada.
 - **Procedimientos menores** (suturas, biopsias, curaciones, DIU, electrocardiograma…): cada clínica tiene un catálogo configurable, precargado con los más comunes, que dice quién puede realizar cada uno (solo médico, o médico o enfermería), si requiere consentimiento informado, si suele tomar muestra para patología y el control sugerido. Se indican en la consulta (quedan pendientes al firmarla) o se registran directamente, opcionalmente ligados a una cita de procedimiento. Antes de realizarlo: revisión de alergias, anticoagulantes, ayuno y signos vitales; el consentimiento firmado en papel se registra con quién firmó y un testigo (sin archivo). La nota (anestesia, técnica, hallazgos, materiales, complicaciones, indicaciones, muestra enviada a patología) no se edita una vez firmada — las correcciones son enmiendas — y al firmar se sugiere la fecha de control y se notifica al médico que lo indicó si lo realizó otra persona.
+- **El contenido clínico de los expedientes es para médicos**: la nota, los diagnósticos, las recetas del expediente, las vacunas, los exámenes, la copia completa, las constancias y el historial clínico requieren `records.read_clinical` (exclusivo de médicos, no delegable). El listado de expedientes está paginado y se filtra en el servidor, y muestra solo metadatos (código, fecha, tipo, médico, sede, estado, paciente; nunca el motivo de consulta, la nota ni los signos vitales). `records.view` cubre ese listado, las recetas, los signos vitales y los documentos. El backend responde 403 `permission.missing` en `GET /records/{id}` a quien no es médico, y cada página del listado queda en la auditoría (`record.listed`, nunca el texto buscado).
 - **Permisos granulares** validados en la capa de aplicación (no solo en UI) — ver sección siguiente.
 - Contraseña temporal con cambio forzado en el primer ingreso: mientras no se reemplace, el backend solo permite cambiarla, ver el perfil y cerrar sesión; cualquier otra cosa responde 403 `auth.password_change_required`. Las sesiones de soporte (impersonación) están exentas.
 - **Política de contraseñas** (`domain/services/password_policy.py`, al estilo NIST SP 800-63B) en todos los puntos donde se fija una contraseña — invitar, restablecer (clínica o consola), cambiarla, alta de clínica, script de superadmin: al menos 10 caracteres (máximo 72 bytes, el límite de bcrypt), letras y un número o símbolo, que no sea una contraseña común, nada del nombre, correo o clínica de la persona, y distinta de la actual. Sin caducidad periódica; la fuerza bruta la cubre el bloqueo de inicio de sesión. La UI muestra los requisitos en vivo y genera contraseñas temporales que siempre cumplen.
@@ -110,7 +111,7 @@ Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que
 
 El control de acceso es **granular y personalizable por clínica** (`application/common/permissions.py`):
 
-- **Catálogo de 31 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (incluye `sign` y `amend`), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `locations.manage`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
+- **Catálogo de 38 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (`view`, y `read_clinical`, `sign` y `amend`, exclusivos de médicos), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `locations.manage`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — con un conjunto de permisos por defecto en `ROLE_PERMISSIONS`.
 - **Overrides por tenant**: cada clínica puede personalizar el set de un rol mediante una fila `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults vs. override (e intersecta con el catálogo vigente para tolerar permisos retirados).
 - En cada request, la capa de presentación coloca los permisos efectivos en `ActorContext.permissions`, de modo que toda comprobación `ensure_permission(...)` honra la personalización de la clínica.
@@ -121,8 +122,8 @@ El control de acceso es **granular y personalizable por clínica** (`application
 
 **Salvaguardas** (aplicadas en el backend y reflejadas en la UI):
 
-- El rol `admin` no es personalizable y siempre tiene acceso completo (salvo firmar/enmendar expedientes).
-- `records.sign` y `records.amend` son exclusivos de médicos: nunca se otorgan a otros roles o usuarios ni se les quitan a los médicos.
+- El rol `admin` no es personalizable y siempre tiene acceso completo (salvo el contenido clínico de los expedientes, firmar y enmendar).
+- `records.sign`, `records.amend` y `records.read_clinical` son exclusivos de médicos: nunca se otorgan a otros roles o usuarios ni se les quitan a los médicos.
 - `permissions.manage` es exclusivo de administradores: no se puede delegar a un rol ni a un usuario.
 - Solo un admin actúa sobre cuentas de admin o de médico (editar, cambiar rol, desactivar, restablecer contraseña, cerrar sesiones) o asigna esos roles. Un `users.manage` delegado gestiona al resto del personal (enfermería, recepción).
 - Nadie gestiona su propia cuenta desde **Usuarios** (cambiar su rol, editarse, suspenderse, reactivarse, restablecer su contraseña o cerrar sus sesiones): su perfil, contraseña y sesiones se gestionan en **Ajustes**. Esto aplica también a los admins.
@@ -232,10 +233,10 @@ Todo documento se imprime desde el navegador (`/print/:kind/:id`; "Guardar como 
 
 | Documento | Dónde | Notas |
 |---|---|---|
-| **Receta** | Consulta firmada (al firmar, en el expediente, en las recetas del paciente) | Incluye el *plan* de la nota como "Indicaciones generales" solo si el médico lo escribió (se puede omitir al imprimir) |
-| **Orden de exámenes** | Consulta firmada | Exámenes indicados en la consulta (laboratorio, imagen, otros) con atajos de los más comunes |
-| **Constancia médica** | Consulta firmada — solo la emite el médico que la firmó | Reposo/incapacidad (hasta 90 días, con fechas) o asistencia (horario de la consulta); diagnóstico solo si el paciente lo autoriza; código `CM-{año}-{n}`, reimprimible y anulable con motivo |
-| **Copia de expediente** | Consulta firmada | Signos vitales, la nota clínica en su plantilla, diagnósticos, recetas, vacunas y exámenes |
+| **Receta** | Consulta firmada (al firmar, en el expediente, en las recetas del paciente) | Incluye el *plan* de la nota como "Indicaciones generales" solo si el médico lo escribió (se puede omitir al imprimir). Quien no tiene `records.read_clinical` (enfermería, admin) la imprime sin ellas |
+| **Orden de exámenes** | Consulta firmada | Exámenes indicados en la consulta (laboratorio, imagen, otros) con atajos de los más comunes. Requiere `records.read_clinical` |
+| **Constancia médica** | Consulta firmada — solo la emite el médico que la firmó | Reposo/incapacidad (hasta 90 días, con fechas) o asistencia (horario de la consulta); diagnóstico solo si el paciente lo autoriza; código `CM-{año}-{n}`, reimprimible y anulable con motivo. Listar e imprimir requiere `records.read_clinical` |
+| **Copia de expediente** | Consulta firmada | Signos vitales, la nota clínica en su plantilla, diagnósticos, recetas, vacunas y exámenes. Requiere `records.read_clinical` |
 | **Procedimiento** | Detalle del procedimiento | Indicaciones de cuidado, consentimiento para firmar en papel, solicitud de patología |
 | **Carné de vacunación** | Paciente → Vacunas | Dosis aplicadas y próximas |
 | **Comprobante de cita** | Citas | Fecha, médico, tipo y lugar — **nunca el precio** |
@@ -396,7 +397,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1411 tests)
+.venv/bin/pytest                          # suite completa (1459 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -421,7 +422,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `appointments` | Citas con FSM de estado y su cobro (tarifa vigente al agendar, monto cobrado y motivo del ajuste) |
 | `doctor_fees` | Tarifa de cada médico por tipo de cita (USD) |
 | `consultations` | Consulta en curso (borrador mutable) |
-| `medical_records` | Historiales firmados e inmutables (como máximo un original por consulta) |
+| `medical_records` | Historiales firmados e inmutables (como máximo un original por consulta); indexado por `(tenant_id, encounter_at)` para el listado de expedientes |
 | `prescriptions` | Recetas emitidas |
 | `medical_documents` | Archivos médicos (metadata) |
 | `insurers` | Aseguradoras de la clínica |
@@ -450,18 +451,19 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1411 tests en verde
+1459 tests en verde
    298  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   610  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   641  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma (las acciones de soporte quedan en la auditoría de la clínica y se notifican), permisos granulares, aislamiento multi-tenant)
-   330  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   346  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    173  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    174  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:
 - Atomicidad de `SignConsultation`: un fallo revierte record, recetas y estado de cita. Las firmas concurrentes de una consulta dejan un único record.
+- Solo los médicos leen el contenido clínico de los expedientes; el listado pagina y filtra en el servidor.
 - Aislamiento multi-tenant: los repos de un tenant no filtran datos de otro.
 - Permisos efectivos por rol y override por tenant, y de scope de plataforma.
 - Revocación de sesiones, protección CSRF y caducidad de la sesión de consola.
@@ -530,6 +532,10 @@ Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migr
 > **Migración `f2a3b4c5d6e8`:** añade `last_success_at` a `login_attempts` (lockout de login). No requiere variables de entorno nuevas.
 >
 > **Migración `a3b4c5d6e7f9`:** añade un índice único parcial para que una consulta tenga como máximo un expediente original. **Antes de desplegar, ejecuta la consulta de detección de [`backend/README.es.md`](backend/README.es.md#expedientes-duplicados-por-doble-firma)**: la migración se niega a correr mientras existan duplicados (lista solo sus ids) y nunca los resuelve por sí misma. Crear el índice bloquea escrituras en `medical_records` un instante. El entrypoint de Docker ejecuta `alembic upgrade head`, así que la migración se aplica al desplegar.
+
+> **Migración `c4d5e6f7a8b0`:** añade el índice `ix_records_tenant_encounter` sobre `medical_records(tenant_id, encounter_at)` para el listado de expedientes, y otorga `records.read_clinical` al rol médico de las clínicas que lo habían personalizado. Crear el índice bloquea escrituras en `medical_records` un instante. Su downgrade quita el permiso de las personalizaciones del médico y elimina el índice.
+
+> **Cambios visibles para los usuarios en esta versión** (avísalos a las clínicas): admin y enfermería ya no ven el motivo de consulta en Expedientes ni en el resumen del paciente; en Expedientes la columna Motivo pasa a Médico y solo el médico puede abrir un expediente; la línea de medicación muestra al médico que la prescribió en vez del código del expediente; admin y enfermería reimprimen recetas sin indicaciones; las pestañas abiertas con la versión anterior fallan en Expedientes hasta recargarlas. **Pendiente** (siguiente entrega, OZK-95): hoy enfermería y admin aún pueden editar la consulta en curso; esta versión no lo resuelve.
 
 Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma. Cada ejecución queda registrada y la página *Monitoreo* marca la tarea si falla o si pasan más de 26 h sin un reset exitoso.
 

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
@@ -15,17 +17,22 @@ from medicore.application.common.notifications import (
     treating_doctor,
 )
 from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.timezone import clinic_instant
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
-from medicore.domain.enums import DocumentKind
-from medicore.domain.repositories._support import RecordFilter
+from medicore.domain.enums import ClinicalRecordType, DocumentKind
+from medicore.domain.repositories._support import Page, Paging, RecordFilter, RecordSummary
 from medicore.domain.shared.identifiers import (
     DocumentId,
     PatientId,
     RecordId,
 )
+from medicore.domain.value_objects.vitals import Vitals
+
+MAX_RECORDS_PAGE = 100
+MAX_SEARCH_LENGTH = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,15 +46,104 @@ class UploadDocumentCommand:
     record_id: RecordId | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class RecordQuery:
+    patient_id: PatientId | None = None
+    type: ClinicalRecordType | None = None
+    date_from: date | None = None  # clinic days, inclusive
+    date_to: date | None = None
+    search: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class VitalsReading:
+    record_id: RecordId
+    record_code: str
+    encounter_at: datetime
+    vitals: Vitals
+
+
+def summarize(
+    record: MedicalRecord, patient_name: str | None, signer_name: str | None
+) -> RecordSummary:
+    return RecordSummary(
+        id=str(record.id),
+        code=record.code,
+        patient_id=str(record.patient_id),
+        patient_name=patient_name,
+        type=str(record.type),
+        status=str(record.status),
+        encounter_at=record.encounter_at,
+        location_name=record.location_name,
+        signed_by_id=str(record.signed_by_id),
+        signed_by_name=signer_name,
+        consultation_id=str(record.consultation_id) if record.consultation_id else None,
+        amends_record_id=str(record.amends_record_id) if record.amends_record_id else None,
+    )
+
+
+def vitals_readings(records: list[MedicalRecord]) -> list[VitalsReading]:
+    """The records that captured vitals, in the order given (newest first)."""
+    return [
+        VitalsReading(r.id, r.code, r.encounter_at, r.vitals)
+        for r in records
+        if not r.vitals.is_empty()
+    ]
+
+
 class ListMedicalRecords:
-    def __init__(self, uow: UnitOfWork) -> None:
+    """The records list as anyone with records.view sees it: metadata only (see
+    ``RecordSummary``), paginated and audited."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
+        self._clock = clock
+
+    def _instant(self, actor: ActorContext, day: date) -> datetime:
+        return clinic_instant(
+            self._uow, actor.tenant_id, self._clock, datetime.combine(day, time.min)
+        )
 
     def execute(
-        self, actor: ActorContext, filter: RecordFilter | None = None
-    ) -> list[MedicalRecord]:
+        self, actor: ActorContext, query: RecordQuery, paging: Paging
+    ) -> Page[RecordSummary]:
         ensure_permission(actor, Permission.RECORDS_VIEW)
-        return self._uow.medical_records.list(filter)
+        if query.date_from and query.date_to and query.date_from > query.date_to:
+            raise ValidationError("date_from is after date_to", code="records.invalid_range")
+        paging = Paging(offset=paging.offset, limit=min(paging.limit, MAX_RECORDS_PAGE))
+        search = (query.search or "").strip()[:MAX_SEARCH_LENGTH] or None
+        record_filter = RecordFilter(
+            patient_id=str(query.patient_id) if query.patient_id else None,
+            type=str(query.type) if query.type else None,
+            encounter_from=self._instant(actor, query.date_from) if query.date_from else None,
+            encounter_before=(
+                self._instant(actor, query.date_to + timedelta(days=1)) if query.date_to else None
+            ),
+            search=search,
+        )
+        page = self._uow.medical_records.summaries(record_filter, paging)
+        patient = self._uow.patients.get_by_id(query.patient_id) if query.patient_id else None
+        # Listing who was seen, when and by whom is itself access to clinical data. The
+        # search text is never stored: it is often a patient's name.
+        with self._uow:
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "record.listed",
+                    "Patient" if query.patient_id else "MedicalRecord",
+                    str(query.patient_id) if query.patient_id else "list",
+                    patient_id=str(query.patient_id) if query.patient_id else None,
+                    type=str(query.type) if query.type else None,
+                    date_from=query.date_from.isoformat() if query.date_from else None,
+                    date_to=query.date_to.isoformat() if query.date_to else None,
+                    searched=search is not None,
+                    offset=page.offset,
+                    returned=len(page.items),
+                    total=page.total,
+                    subject=subject(patient.code, patient.full_name) if patient else None,
+                )
+            )
+            self._uow.commit()
+        return page
 
 
 class GetMedicalRecord:
@@ -56,7 +152,7 @@ class GetMedicalRecord:
         self._clock = clock
 
     def execute(self, actor: ActorContext, record_id: RecordId) -> MedicalRecord:
-        ensure_permission(actor, Permission.RECORDS_VIEW)
+        ensure_permission(actor, Permission.RECORDS_READ_CLINICAL)
         record = self._uow.medical_records.get_by_id(record_id)
         if record is None:
             raise EntityNotFound("MedicalRecord", record_id)
@@ -71,6 +167,56 @@ class GetMedicalRecord:
             )
             self._uow.commit()
         return record
+
+
+class _PatientRecordsReader:
+    """Reads a patient's records and audits the access with how many were returned."""
+
+    permission: Permission
+    action: str
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def _read[T](
+        self, actor: ActorContext, patient_id: PatientId,
+        shape: Callable[[list[MedicalRecord]], list[T]],
+    ) -> list[T]:
+        ensure_permission(actor, self.permission)
+        patient = self._uow.patients.get_by_id(patient_id)
+        if patient is None:
+            raise EntityNotFound("Patient", patient_id)
+        items = shape(self._uow.medical_records.list_by_patient(patient_id))
+        with self._uow:
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), self.action, "Patient", str(patient_id),
+                    count=len(items), subject=subject(patient.code, patient.full_name),
+                )
+            )
+            self._uow.commit()
+        return items
+
+
+class ListPatientHistory(_PatientRecordsReader):
+    """The patient's full clinical history: content, so doctors only."""
+
+    permission = Permission.RECORDS_READ_CLINICAL
+    action = "record.history_viewed"
+
+    def execute(self, actor: ActorContext, patient_id: PatientId) -> list[MedicalRecord]:
+        return self._read(actor, patient_id, list)
+
+
+class ListPatientVitals(_PatientRecordsReader):
+    """The vitals of the patient's visits, newest first (nothing else of the records)."""
+
+    permission = Permission.RECORDS_VIEW
+    action = "patient.vitals_listed"
+
+    def execute(self, actor: ActorContext, patient_id: PatientId) -> list[VitalsReading]:
+        return self._read(actor, patient_id, vitals_readings)
 
 
 class AmendMedicalRecord:
@@ -201,9 +347,21 @@ class UploadDocument:
 
 
 class ListPatientDocuments:
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
+        self._clock = clock
 
     def execute(self, actor: ActorContext, patient_id: PatientId) -> list[MedicalDocument]:
         ensure_permission(actor, Permission.RECORDS_VIEW)
-        return self._uow.documents.list_by_patient(patient_id)
+        documents = self._uow.documents.list_by_patient(patient_id)
+        patient = self._uow.patients.get_by_id(patient_id)
+        with self._uow:
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "document.listed", "Patient", str(patient_id),
+                    count=len(documents),
+                    subject=subject(patient.code, patient.full_name) if patient else None,
+                )
+            )
+            self._uow.commit()
+        return documents

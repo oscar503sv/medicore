@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { addDays, format, parseISO } from 'date-fns'
@@ -32,6 +32,7 @@ import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { cn } from '@/lib/cn'
 import { clinicToday, fmtDate, fmtRelative } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { useDebounced } from '@/lib/useDebounced'
 import { useAuthStore } from '@/stores/auth'
 import type { Patient } from '@/types'
 
@@ -388,13 +389,4 @@ function NextVisit({ iso }: { iso: string | null }) {
       {fmtDate(iso, 'd MMM')} · {time}
     </span>
   )
-}
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), ms)
-    return () => clearTimeout(id)
-  }, [value, ms])
-  return debounced
 }

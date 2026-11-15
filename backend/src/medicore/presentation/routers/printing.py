@@ -36,7 +36,7 @@ from medicore.presentation.schemas.printing import (
     ProcedurePrintResponse,
     RecordPrintResponse,
 )
-from medicore.presentation.serializers import ser_record
+from medicore.presentation.serializers import ser_record, ser_record_prescription
 
 router = APIRouter(prefix="/print", tags=["printing"])
 
@@ -87,8 +87,12 @@ def print_record(
     document: Literal["prescription", "exams", "record"] = Query("prescription"),
 ):
     doc = PrintRecordDocument(uow, clock).execute(actor, RecordId.parse(record_id), document)
+    record = (
+        ser_record_prescription(doc.record) if doc.document == "prescription"
+        else ser_record(doc.record)
+    )
     return {
-        "context": _context(doc.context), "record": ser_record(doc.record),
+        "context": _context(doc.context), "document": doc.document, "record": record,
         "indications": doc.indications, "amends_code": doc.amends_code,
     }
 

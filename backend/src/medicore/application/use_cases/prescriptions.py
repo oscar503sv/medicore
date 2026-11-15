@@ -15,7 +15,7 @@ from medicore.application.common.permissions import Permission, ensure_permissio
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.prescription import Prescription
-from medicore.domain.shared.identifiers import PatientId, PrescriptionId
+from medicore.domain.shared.identifiers import PatientId, PrescriptionId, UserId
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,17 +27,30 @@ class PrescriptionView:
 class ListPatientPrescriptions:
     """Every prescription of a patient, any status, newest first."""
 
-    def __init__(self, uow: UnitOfWork) -> None:
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
+        self._clock = clock
 
     def execute(self, actor: ActorContext, patient_id: PatientId) -> list[PrescriptionView]:
         ensure_permission(actor, Permission.RECORDS_VIEW)
         prescriptions = self._uow.prescriptions.list_by_patient(patient_id)
         prescriptions.sort(key=lambda p: p.created_at, reverse=True)
-        views = []
+        names: dict[UserId, str | None] = {}
         for p in prescriptions:
-            prescriber = self._uow.users.get_by_id(p.prescriber_id)
-            views.append(PrescriptionView(p, prescriber.name if prescriber else None))
+            if p.prescriber_id not in names:
+                prescriber = self._uow.users.get_by_id(p.prescriber_id)
+                names[p.prescriber_id] = prescriber.name if prescriber else None
+        views = [PrescriptionView(p, names[p.prescriber_id]) for p in prescriptions]
+        patient = self._uow.patients.get_by_id(patient_id)
+        with self._uow:
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "prescription.listed", "Patient", str(patient_id),
+                    count=len(views),
+                    subject=subject(patient.code, patient.full_name) if patient else None,
+                )
+            )
+            self._uow.commit()
         return views
 
 

@@ -1,9 +1,13 @@
+import { useQuery } from '@tanstack/react-query'
+import { errorMessage } from '@/api/client'
+import { recordsApi } from '@/api/records'
 import { Card, CardHeader } from '@/components/ui/Card'
+import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th } from '@/components/ui/Table'
 import { fmtDateTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-import { VITAL_COLS, hasAnyVital, unitLabel, type VitalCol } from './vitalsData'
-import type { MedicalRecord, Vitals } from '@/types'
+import { VITAL_COLS, unitLabel, type VitalCol } from './vitalsData'
+import type { Vitals } from '@/types'
 
 /** A single vital reading as a bordered stat card (icon + label, value + unit). */
 export function VitalStat({ col, value }: { col: VitalCol; value: NonNullable<Vitals[keyof Vitals]> }) {
@@ -24,12 +28,22 @@ export function VitalStat({ col, value }: { col: VitalCol; value: NonNullable<Vi
 }
 
 /** Latest reading as headline cards, plus a full history table — newest first. */
-export function VitalsHistory({ records }: { records: MedicalRecord[] }) {
+export function VitalsHistory({ patientId }: { patientId: string }) {
   const t = useT()
-  const rows = records
-    .filter((r) => hasAnyVital(r.vitals))
-    .sort((a, b) => b.encounter_at.localeCompare(a.encounter_at))
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['vitals', patientId],
+    queryFn: () => recordsApi.vitals(patientId),
+  })
 
+  if (isLoading) return <PageLoader />
+  if (isError)
+    return (
+      <Card role="alert" className="p-8 text-center text-sm text-danger">
+        {errorMessage(error)}
+      </Card>
+    )
+  // The server returns them newest first.
+  const rows = data ?? []
   if (rows.length === 0)
     return <Card className="p-8 text-center text-sm text-tx-3">{t('patient.vitals_empty')}</Card>
 
@@ -64,14 +78,14 @@ export function VitalsHistory({ records }: { records: MedicalRecord[] }) {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.record_id}>
                 <Td className="whitespace-nowrap font-medium text-tx">{fmtDateTz(r.encounter_at)}</Td>
                 {VITAL_COLS.map((c) => (
                   <Td key={c.key} className="whitespace-nowrap">
                     {r.vitals[c.key] != null ? (
                       <>
                         {c.fmt(r.vitals[c.key]!)}
-                        <span className="ml-1 text-xs text-tx-4">{c.unit}</span>
+                        <span className="ml-1 text-xs text-tx-4">{unitLabel(t, c.unit)}</span>
                       </>
                     ) : (
                       '—'

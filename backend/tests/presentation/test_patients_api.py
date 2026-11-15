@@ -43,6 +43,8 @@ def test_get_patient_detail(seed, client, auth_headers):
     data = resp.json()
     assert data["patient"]["id"] == str(seed.patient.id)
     assert "records_count" in data
+    assert data["latest_vitals"] is None
+    assert data["recent_records"] == []
 
 
 def test_get_nonexistent_patient_returns_404(client, auth_headers):

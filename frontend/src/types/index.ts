@@ -13,6 +13,7 @@ export type Permission =
   | 'consultations.start'
   | 'consultations.edit'
   | 'records.view'
+  | 'records.read_clinical'
   | 'records.upload'
   | 'records.sign'
   | 'records.amend'
@@ -460,6 +461,8 @@ export interface PatientDetail {
   records_count: number
   active_prescriptions: number
   next_appointment: Appointment | null
+  latest_vitals: VitalsReading | null
+  recent_records: RecordSummary[]
 }
 
 export type PrescriptionStatus = 'active' | 'completed' | 'cancelled'
@@ -682,6 +685,37 @@ export interface MedicalRecord {
   appointment_id: string | null
   consultation_id: string | null
   amends_record_id: string | null
+}
+
+/** What lists show of a record to anyone with records.view: never the clinical content. */
+export type RecordSummary = Pick<
+  MedicalRecord,
+  | 'id'
+  | 'code'
+  | 'patient_id'
+  | 'patient_name'
+  | 'type'
+  | 'status'
+  | 'encounter_at'
+  | 'location_name'
+  | 'signed_by_id'
+  | 'signed_by_name'
+  | 'consultation_id'
+  | 'amends_record_id'
+>
+
+export interface RecordPage {
+  items: RecordSummary[]
+  total: number
+  offset: number
+  limit: number
+}
+
+export interface VitalsReading {
+  record_id: string
+  record_code: string
+  encounter_at: string
+  vitals: Vitals
 }
 
 // ── Documents ─────────────────────────────────────────────────────────────────

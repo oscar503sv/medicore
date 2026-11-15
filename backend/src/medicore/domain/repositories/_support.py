@@ -51,9 +51,29 @@ class TenantFilter:
 class RecordFilter:
     patient_id: str | None = None
     type: str | None = None
-    date_from: str | None = None
-    date_to: str | None = None
+    encounter_from: datetime | None = None  # inclusive
+    encounter_before: datetime | None = None  # exclusive
+    search: str | None = None  # record code, patient name or patient code
     extra: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class RecordSummary:
+    """A signed record as lists show it to anyone with records.view: who, when, what kind —
+    never the note, vitals, diagnoses or prescriptions."""
+
+    id: str
+    code: str
+    patient_id: str
+    patient_name: str | None
+    type: str
+    status: str
+    encounter_at: datetime
+    location_name: str
+    signed_by_id: str
+    signed_by_name: str | None
+    consultation_id: str | None
+    amends_record_id: str | None
 
 
 @dataclass(frozen=True, slots=True)

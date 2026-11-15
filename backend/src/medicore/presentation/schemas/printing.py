@@ -45,6 +45,7 @@ class PrintContextSchema(BaseModel):
 
 class RecordPrintResponse(BaseModel):
     context: PrintContextSchema
+    document: str
     record: dict[str, Any]
     indications: str | None
     amends_code: str | None

@@ -3,10 +3,11 @@ import type {
   AgendaPrint,
   AppointmentPrint,
   CertificatePrint,
+  FullRecordPrint,
+  PrescriptionPrint,
   PrintContext,
   ProcedureDocument,
   ProcedurePrint,
-  RecordPrint,
 } from '@/api/printing'
 import type { ScheduledDose, VaccinationCard } from '@/api/vaccinations'
 import { PatientStrip, PrintSheet, SignatureLine } from '@/components/print/PrintSheet'
@@ -51,7 +52,7 @@ export function PrescriptionDoc({
   paper,
   withIndications,
 }: {
-  doc: RecordPrint
+  doc: PrescriptionPrint
   paper: PaperSize
   withIndications: boolean
 }) {
@@ -103,7 +104,7 @@ export function PrescriptionDoc({
 
 const EXAM_ORDER: ExamKind[] = ['lab', 'imaging', 'other']
 
-export function ExamOrderDoc({ doc, paper }: { doc: RecordPrint; paper: PaperSize }) {
+export function ExamOrderDoc({ doc, paper }: { doc: FullRecordPrint; paper: PaperSize }) {
   const t = useT()
   const LONG = t('pr.date_long')
   const r = doc.record
@@ -148,7 +149,7 @@ export function ExamOrderDoc({ doc, paper }: { doc: RecordPrint; paper: PaperSiz
 
 // ── Record copy ───────────────────────────────────────────────────────────────
 
-export function RecordCopyDoc({ doc }: { doc: RecordPrint }) {
+export function RecordCopyDoc({ doc }: { doc: FullRecordPrint }) {
   const t = useT()
   const f = useFill()
   const r = doc.record

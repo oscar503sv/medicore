@@ -100,6 +100,12 @@ price per plan, editable from the console like the monthly one, and renewal addi
 the paid period instead of a month. The subscription itself does not change, since it already
 stores the date it is paid until.
 
+### Vital signs triage before the consultation
+Today nurses record vital signs inside the consultation once it is open. A triage step before the consultation starts (nursing records weight, blood pressure and temperature when the patient arrives) would let the doctor see them as soon as the consultation opens, and would give the waiting list an order. It needs a triage state on the appointment and vital-sign readings that exist without an open consultation.
+
+### Vital signs readings per patient — projected query
+`GET /patients/{id}/vitals` loads every record of the patient, with its full content, and projects the vital signs in memory. A query that reads only the vital-sign columns, with a limit, would avoid loading the rest of a long history on each request.
+
 ## Security — consciously deferred
 
 Quick wins already applied (June 2026): same hashing work at login whether or not the account exists, CORS/docs validation in
@@ -144,5 +150,7 @@ Resolved in November 2026:
 - **Seat checks** lock the clinic's row, so simultaneous invitations can't exceed the plan.
 - **Session purge**: a scheduled job deletes expired or revoked sessions and is monitored (`session_purge`).
 - **Consultation signing serialized per consultation**: the sign locks the consultation row, and a partial unique index allows a single original record per consultation (OZK-93).
+- **Clinical content of records is doctor-only** (OZK-96): `records.read_clinical` (doctor-only, not delegable) gates the note, diagnoses, record prescriptions, vaccines, exams, the full copy, certificates and the clinical history. The backend answers 403 on `GET /records/{id}` for other roles, and the frontend follows the same rule.
+- **Paginated, audited records list** (OZK-97): `GET /records` returns `{items, total, offset, limit}` with server-side filters (patient, type, dates, search), metadata only outside the doctor's clinical reading, an index on `(tenant_id, encounter_at)`, and an audit entry per page (`record.listed`).
 
 No pending findings remain in this list.

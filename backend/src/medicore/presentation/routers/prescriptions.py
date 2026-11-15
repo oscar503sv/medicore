@@ -1,4 +1,4 @@
-"""Prescriptions router. Listing follows records.view; lifecycle actions require
+"""Prescriptions router. Listing follows records.view (and is audited); lifecycle actions require
 prescriptions.manage (enforced in the use cases)."""
 
 from __future__ import annotations
@@ -22,9 +22,9 @@ router = APIRouter(prefix="/prescriptions", tags=["prescriptions"])
 
 
 @router.get("", response_model=PrescriptionListResponse)
-def list_prescriptions(actor: Actor, uow: UoW, patient_id: str = Query(...)):
+def list_prescriptions(actor: Actor, uow: UoW, clock: Clock, patient_id: str = Query(...)):
     with uow:
-        views = ListPatientPrescriptions(uow).execute(actor, PatientId.parse(patient_id))
+        views = ListPatientPrescriptions(uow, clock).execute(actor, PatientId.parse(patient_id))
     return PrescriptionListResponse(
         items=[ser_prescription(v.prescription, v.prescriber_name) for v in views]
     )

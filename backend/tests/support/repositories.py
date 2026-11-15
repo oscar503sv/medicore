@@ -64,6 +64,7 @@ from medicore.domain.repositories._support import (
     ProcedureFact,
     ProcedureReportRow,
     RecordFilter,
+    RecordSummary,
     RequestStatsRow,
     TableSize,
     TenantFilter,
@@ -897,14 +898,50 @@ class InMemoryMedicalRecordRepository(_Scoped):
         result.sort(key=lambda r: r.encounter_at, reverse=True)
         return result
 
-    def list(self, filter: RecordFilter | None = None) -> list[MedicalRecord]:
+    def summaries(self, filter: RecordFilter, paging: Paging) -> Page[RecordSummary]:
+        patients = {str(p.id): p for p in self._mine(self._store.patients.values())}
+        signers = {str(u.id): u.name for u in self._store.users.values()}
         records = self._mine(self._store.medical_records.values())
-        if filter and filter.patient_id:
+        if filter.patient_id:
             records = [r for r in records if str(r.patient_id) == filter.patient_id]
-        if filter and filter.type:
+        if filter.type:
             records = [r for r in records if str(r.type) == filter.type]
-        records.sort(key=lambda r: r.encounter_at, reverse=True)
-        return records
+        if filter.encounter_from:
+            records = [r for r in records if r.encounter_at >= filter.encounter_from]
+        if filter.encounter_before:
+            records = [r for r in records if r.encounter_at < filter.encounter_before]
+
+        def hit(r: MedicalRecord, word: str) -> bool:
+            patient = patients.get(str(r.patient_id))
+            return (
+                word in r.code.lower()
+                or (patient is not None and word in fold(patient.full_name))
+                or (patient is not None and word in patient.code.lower())
+            )
+
+        for word in fold(filter.search or "").split():
+            records = [r for r in records if hit(r, word)]
+        records.sort(key=lambda r: (r.encounter_at, str(r.id)), reverse=True)
+        items = []
+        for r in _paginate(records, paging).items:
+            patient = patients.get(str(r.patient_id))
+            items.append(
+                RecordSummary(
+                    id=str(r.id),
+                    code=r.code,
+                    patient_id=str(r.patient_id),
+                    patient_name=patient.full_name if patient else None,
+                    type=str(r.type),
+                    status=str(r.status),
+                    encounter_at=r.encounter_at,
+                    location_name=r.location_name,
+                    signed_by_id=str(r.signed_by_id),
+                    signed_by_name=signers.get(str(r.signed_by_id)),
+                    consultation_id=str(r.consultation_id) if r.consultation_id else None,
+                    amends_record_id=str(r.amends_record_id) if r.amends_record_id else None,
+                )
+            )
+        return Page(items=items, total=len(records), offset=paging.offset, limit=paging.limit)
 
     def exists_by_author(self, author_id: UserId) -> bool:
         return any(

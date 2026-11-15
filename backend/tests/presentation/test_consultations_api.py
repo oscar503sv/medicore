@@ -116,11 +116,17 @@ def test_records_list_includes_patient_name_and_chosen_type(seed, client, auth_h
         headers=auth_headers,
     )
 
-    resp = client.get("/api/v1/records", headers=auth_headers)
+    signed = client.get(f"/api/v1/consultations/{cid}", headers=auth_headers).json()
+    code = client.get(
+        f"/api/v1/patients/{seed.patient.id}/records", headers=auth_headers
+    ).json()[0]["code"]
+    assert signed["status"] == "signed"
+
+    resp = client.get(f"/api/v1/records?q={code}", headers=auth_headers)
     assert resp.status_code == 200
-    records = resp.json()
-    assert len(records) >= 1
-    rec = next(r for r in records if r["chief_complaint"] == "Análisis")
+    records = resp.json()["items"]
+    assert len(records) == 1
+    rec = records[0]
     assert rec["type"] == "consultation"  # signing a consultation always yields CONSULTATION
     assert rec["patient_name"] == seed.patient.full_name
 

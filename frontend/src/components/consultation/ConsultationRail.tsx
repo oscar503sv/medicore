@@ -91,8 +91,8 @@ function PatientContext({ patient, consultationId }: { patient: Patient; consult
     queryFn: () => prescriptionsApi.list(patient.id),
   })
   const { data: records } = useQuery({
-    queryKey: ['records', { patient_id: patient.id }],
-    queryFn: () => recordsApi.list({ patient_id: patient.id }),
+    queryKey: ['records', 'history', patient.id],
+    queryFn: () => recordsApi.history(patient.id),
   })
   // Each medication once (repeat prescriptions of the same drug and dose), the first few.
   const active = [
