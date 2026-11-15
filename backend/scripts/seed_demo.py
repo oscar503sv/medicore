@@ -191,7 +191,11 @@ from medicore.infrastructure.auth.bcrypt_hasher import BcryptPasswordHasher
 from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerator
 from medicore.infrastructure.auth.system_clock import SystemClock
 from medicore.infrastructure.config import get_settings
-from medicore.infrastructure.database.engine import get_session, get_session_factory
+from medicore.infrastructure.database.engine import (
+    get_session,
+    get_session_factory,
+    owner_session,
+)
 from medicore.infrastructure.database.tenant_purge import purge_tenants
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.notification import NotificationModel
@@ -1813,9 +1817,11 @@ def main() -> None:
 
 
 def _seed(reset: bool) -> None:
+    if reset:
+        # The purge lifts the append-only triggers, which only the schema owner may do.
+        with owner_session() as owner:
+            reset_demo(owner)
     with get_session() as session:
-        if reset:
-            reset_demo(session)
         for demo in DEMO_CLINICS:
             seed_tenant(session, demo)
     if PASSWORD == ADMIN_PASSWORD == _DEFAULT_DEMO_PASSWORD:

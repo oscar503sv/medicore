@@ -106,6 +106,7 @@ Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que
 - **Documentos médicos** (OZK-101): por ahora solo metadatos. El servidor elige la clave de almacenamiento de cada archivo (`{tenant_id}/{patient_id}/{document_id}`) y nunca la devuelve; una sesión de soporte no puede registrar documentos; un documento solo puede ligarse a un expediente del mismo paciente.
 - **Procedimientos y citas serializados** (OZK-106): la segunda firma de un procedimiento responde 409 `procedure.already_signed`, igual que cualquier escritura sobre uno firmado; un procedimiento cancelado sigue respondiendo 422 `procedure.closed`. Las transiciones de cita bloquean la cita, así que quien pierde la carrera recibe 422 `invalid_transition`, y una cita en curso o completada no se cancela.
 - **Expedientes firmados protegidos en la base de datos** (OZK-99): cada versión de un expediente lleva un sello SHA-256 sobre su contenido inmutable y sobre el sello de la versión anterior. Los expedientes firmados no se pueden actualizar, borrar ni truncar, y una receta solo puede cerrarse. Las lecturas, las copias impresas y las constancias verifican el sello: un expediente alterado se sigue mostrando, con un banner rojo y un aviso visible en su copia impresa; el evento queda en la auditoría como `record.integrity_failed`, y el expediente no se puede enmendar (409 `record.tampered`). Las claves foráneas de expedientes, recetas y documentos impiden borrar el paciente, el usuario, la consulta, la cita o la clínica a la que apuntan. El sello demuestra que el contenido no ha cambiado desde que se selló; no protege frente a quien puede escribir en la base de datos (ver [Expedientes protegidos](backend/README.es.md#expedientes-protegidos-y-referencias-huérfanas-antes-de-ozk-99)).
+- **Roles de base de datos separados** (OZK-113): la API se conecta como `medicore_app`, que solo lee y escribe filas (SELECT, INSERT, UPDATE, DELETE). No puede alterar el esquema, desactivar los triggers de solo inserción, hacer TRUNCATE ni crear tablas temporales. Las migraciones y la purga de la demo corren como `medicore_owner`, el dueño del esquema. En producción la API se niega a arrancar con un superusuario, o con un rol que pueda crear roles, saltarse el RLS o ser dueño de objetos. Ver [Roles de base de datos](backend/README.es.md#roles-de-base-de-datos).
 - **Auditoría de consultas**: `consultation.viewed` (alcance `full` o `vitals`), `consultation.note_updated`, `consultation.vitals_updated`, `consultation.template_changed` y `consultation.draft_changed` guardan solo nombres de secciones y campos, nunca texto clínico. Las lecturas y las ediciones de nota y vitales de un mismo actor dentro de 10 minutos se agregan por clave, para que el autoguardado y el sondeo no llenen la bitácora.
 - **Permisos granulares** validados en la capa de aplicación (no solo en UI) — ver sección siguiente.
 - Contraseña temporal con cambio forzado en el primer ingreso: mientras no se reemplace, el backend solo permite cambiarla, ver el perfil y cerrar sesión; cualquier otra cosa responde 403 `auth.password_change_required`. Las sesiones de soporte (impersonación) están exentas.
@@ -419,7 +420,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1789 tests)
+.venv/bin/pytest                          # suite completa (1821 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -473,18 +474,19 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1789 tests en verde
+1821 tests en verde
    385  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias, recetas, documentos médicos, sello de expedientes)
    766  — aplicación (auth, sesiones, citas, consultas, records y enmiendas, integridad de expedientes, recetas, notificaciones, dashboard,
             plataforma (las acciones de soporte quedan en la auditoría de la clínica y se notifican), permisos granulares, aislamiento multi-tenant)
    401  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma, integridad de expedientes)
-   233  — infraestructura (repositorios SQLAlchemy contra PostgreSQL, incluidas la cadena de enmiendas, el cierre de recetas y los triggers de solo inserción)
+   265  — infraestructura (repositorios SQLAlchemy contra PostgreSQL, incluidas la cadena de enmiendas, el cierre de recetas, los triggers de solo inserción y los roles de base de datos)
      4  — scripts (seed de demo; su test contra PostgreSQL solo corre con DEMO_TEST_DATABASE_URL)
 ```
 
 Los tests verifican, entre otras cosas:
+- Roles de base de datos: el rol de la API solo tiene DML y no tiene `TRUNCATE`, `TEMPORARY` ni `CREATE`, no puede quitar los triggers de solo inserción, y producción se niega a arrancar con un rol privilegiado (contra una base preparada con `scripts/db_roles.sql`; si no, se omite).
 - Atomicidad de `SignConsultation`: un fallo revierte record, recetas y estado de cita. Las firmas concurrentes de una consulta dejan un único record.
 - Solo quien emitió una receta la completa o la cancela, y cancelar exige motivo; dos cierres concurrentes dejan el segundo con `invalid_transition`.
 - Expedientes firmados: el sello de cada versión se recalcula desde su contenido, una versión alterada se detecta y se audita, y los triggers rechazan `UPDATE`, `DELETE` y `TRUNCATE`, también con `session_replication_role = replica`.
@@ -506,7 +508,8 @@ Los tests verifican, entre otras cosas:
 | Variable | Descripción | Default |
 |---|---|---|
 | `ENVIRONMENT` | `development` o `production`. En producción se activan validaciones estrictas. | `development` |
-| `DATABASE_URL` | URL de conexión PostgreSQL (psycopg3) | `postgresql+psycopg://localhost/medicore` |
+| `DATABASE_URL` | URL de conexión PostgreSQL (psycopg3) del rol de la API, solo DML (`medicore_app` en producción) | `postgresql+psycopg://localhost/medicore` |
+| `MIGRATIONS_DATABASE_URL` | URL del dueño del esquema (`medicore_owner`), que usan las migraciones y la purga de la demo. **Obligatoria en producción**, con un rol distinto de `DATABASE_URL`; el entrypoint la quita antes de arrancar la API | `DATABASE_URL` (solo desarrollo) |
 | `JWT_SECRET` | Clave HMAC para tokens. **Obligatoria en producción, de al menos 32 bytes** (`openssl rand -hex 32`); la app no arranca sin ella | `change-me` (solo dev) |
 | `JWT_ALGORITHM` | Algoritmo JWT: solo `HS256`, `HS384` o `HS512` | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Expiración del token en minutos | `1440` (24 h) |
@@ -536,9 +539,9 @@ El backend incluye un `Dockerfile` listo para producción (usuario no-root, uvic
 
 El [`docker-compose.yml`](docker-compose.yml) de la raíz levanta todo el stack en un **único origen**: `db` (PostgreSQL 16, volumen persistente), `backend` (aplica `alembic upgrade head` al arrancar) y `frontend` (nginx que sirve el SPA, redirige `/api/` al backend y agrega las cabeceras de seguridad). Solo `frontend` lleva dominio público; el TLS lo termina el proxy de borde (Traefik en Coolify).
 
-1. Genera los secretos: `openssl rand -hex 32` (`JWT_SECRET`, al menos 32 bytes) y `openssl rand -base64 24` (`POSTGRES_PASSWORD`), la clave MFA (`MFA_ENCRYPTION_KEY`, comando en la tabla de variables de entorno del backend), y elige `DEMO_PASSWORD` (la que compartes con quien prueba la demo) y `DEMO_ADMIN_PASSWORD` (privada, para los admins de clínica).
+1. Genera los secretos: `openssl rand -hex 32` (`JWT_SECRET`, al menos 32 bytes) `openssl rand -base64 24` (`POSTGRES_PASSWORD`), `openssl rand -hex 24` para cada una de `DB_OWNER_PASSWORD` y `DB_APP_PASSWORD` (ver la nota de esta versión más abajo), la clave MFA (`MFA_ENCRYPTION_KEY`, comando en la tabla de variables de entorno del backend), y elige `DEMO_PASSWORD` (la que compartes con quien prueba la demo) y `DEMO_ADMIN_PASSWORD` (privada, para los admins de clínica).
 2. En Coolify: **New Resource → Public Repository** → este repo, rama `main`, **Build Pack: Docker Compose**, archivo `/docker-compose.yml`.
-3. Variables de entorno: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (p. ej. `https://medicore.ejemplo.com`), `DEMO_PASSWORD`, `DEMO_ADMIN_PASSWORD` y `MFA_ENCRYPTION_KEY`. Opcionales: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`, `WEB_CONCURRENCY` (workers de uvicorn, por defecto 2). Si falta una obligatoria el stack no arranca, a propósito.
+3. Variables de entorno: `POSTGRES_PASSWORD`, `DB_OWNER_PASSWORD`, `DB_APP_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (p. ej. `https://medicore.ejemplo.com`), `DEMO_PASSWORD`, `DEMO_ADMIN_PASSWORD` y `MFA_ENCRYPTION_KEY`. Opcionales: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`, `WEB_CONCURRENCY` (workers de uvicorn, por defecto 2). Si falta una obligatoria el stack no arranca, a propósito.
 4. Asigna el dominio solo al servicio **frontend** y pulsa **Deploy**.
 5. Carga inicial de datos (una vez), en una terminal del contenedor `backend`:
    ```sh
@@ -552,7 +555,33 @@ Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migr
 
 > **Nota:** la migración `d0e1f2a3b4c6` (límites de la sesión de consola) hace que los usuarios de clínica y los superadmins vuelvan a iniciar sesión una vez tras desplegar.
 
-> **Antes de desplegar esta versión:** `MFA_ENCRYPTION_KEY` tiene que llegar al servicio `backend`. Defínela en Coolify y declárala en `docker-compose.yml` (`MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY}`), porque en producción la app no arranca sin ella. La migración `e1f2a3b4c5d7` añade las columnas de MFA a `platform_admins` y la tabla `platform_admin_recovery_codes`.
+> **Antes de desplegar esta versión** (OZK-113, roles de base de datos; sin migración de Alembic): la API deja de conectarse como superusuario de la base. Se conecta como `medicore_app` (solo filas), y las migraciones corren como `medicore_owner` (dueño del esquema). Hazlo en producción y en la demo, cada una en su propia base, fuera de horario (los cambios de dueño toman bloqueos `ACCESS EXCLUSIVE` breves):
+>
+> 0. Haz un `pg_dump` de la base.
+> 1. Genera dos contraseñas con `openssl rand -hex 24` cada una (URL-safe, porque van dentro de las URLs de conexión).
+> 2. Ejecuta el script de roles en el contenedor `db` como su superusuario. Crea los roles y pasa las tablas a `medicore_owner`:
+>    ```sh
+>    docker exec -i <contenedor-db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f -' < backend/scripts/db_roles.sql
+>    docker exec -it <contenedor-db> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+>    ```
+>    En la sesión interactiva escribe `\password medicore_owner` y `\password medicore_app`, con las contraseñas generadas.
+> 3. Verifica el resultado con las consultas de [Roles de base de datos](backend/README.es.md#roles-de-base-de-datos).
+> 4. En Coolify, define `DB_OWNER_PASSWORD` y `DB_APP_PASSWORD`. El stack no arranca sin ellas.
+> 5. Despliega. El entrypoint aplica las migraciones como dueño y después arranca la API como `medicore_app`.
+> 6. Comprueba: inicia sesión; firma o enmienda un expediente; cierra una receta; abre *Monitoreo*; ejecuta `python scripts/seed_demo.py --reset` y `python scripts/purge_expired_sessions.py` a mano en el contenedor `backend` (ambos usan el dueño); y `SELECT usename, count(*) FROM pg_stat_activity GROUP BY 1` muestra `medicore_app` para la API. Las sesiones de otros roles aparecen como `other` en *Monitoreo*; es lo esperado.
+>
+> En una base nueva, ejecuta el paso 2 cuando el contenedor `db` ya esté levantado, despliega (la primera migración crea las tablas) y vuelve a ejecutar el paso 2 para que apliquen los grants de solo inserción.
+>
+> **Rollback:** redespliega el commit anterior y quita `DB_OWNER_PASSWORD` y `DB_APP_PASSWORD` de Coolify. Los roles se quedan, y el código anterior sigue funcionando como superusuario. Para quitar también los roles, como superusuario, en cada base donde sean dueños o tengan algo (en este proyecto, la base de la aplicación):
+> ```sql
+> REASSIGN OWNED BY medicore_owner TO <POSTGRES_USER>;
+> DROP OWNED BY medicore_owner, medicore_app;
+> DROP ROLE medicore_owner;
+> DROP ROLE medicore_app;
+> GRANT CONNECT, TEMPORARY ON DATABASE <POSTGRES_DB> TO PUBLIC;
+> ```
+>
+> `MFA_ENCRYPTION_KEY` tiene que llegar al servicio `backend`. Defínela en Coolify y declárala en `docker-compose.yml` (`MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY}`), porque en producción la app no arranca sin ella. La migración `e1f2a3b4c5d7` añade las columnas de MFA a `platform_admins` y la tabla `platform_admin_recovery_codes`.
 
 > **Antes de desplegar esta versión:** todos los usuarios, incluidos los superadmins, vuelven a iniciar sesión una vez: los tokens emitidos antes no tienen audiencia.
 >

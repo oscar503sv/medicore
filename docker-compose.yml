@@ -4,9 +4,17 @@
 #   backend   FastAPI; runs `alembic upgrade head` on start
 #   frontend  nginx: serves the SPA and proxies /api/ → backend (single origin)
 #
+# Database roles: POSTGRES_USER is the bootstrap superuser and stays inside `db`. The backend
+# connects as medicore_app (DML only) and migrates as medicore_owner, created by
+# backend/scripts/db_roles.sql, which a superuser runs inside `db` by hand: once before the first
+# deploy of this version (creates the roles; set their passwords with \password), and once more
+# after a brand-new volume's first migration (the append-only grants need the tables to exist).
+# It is idempotent. Generate each password with `openssl rand -hex 24` (URL-safe, they go
+# inside the connection URLs).
+#
 # Only `frontend` gets a public domain (in Coolify: assign https://<your-domain> to it).
 # Required variables (set them in Coolify → Environment Variables, or in a local .env):
-#   POSTGRES_PASSWORD, JWT_SECRET, MFA_ENCRYPTION_KEY, APP_ORIGIN (e.g. https://medicore.ozkkar.dev)
+#   POSTGRES_PASSWORD, DB_OWNER_PASSWORD, DB_APP_PASSWORD, JWT_SECRET, MFA_ENCRYPTION_KEY, APP_ORIGIN (e.g. https://medicore.ozkkar.dev)
 # And before running the demo seed: DEMO_PASSWORD (≥ 8 chars, not the public default) and
 # DEMO_ADMIN_PASSWORD (≥ 8 chars, different: the clinic admins' private password).
 
@@ -35,7 +43,11 @@ services:
         condition: service_healthy
     environment:
       ENVIRONMENT: production
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-medicore}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-medicore}
+      # The API runs as the DML-only role. The owner URL is only for the entrypoint's
+      # migrations (it removes it before starting uvicorn) and for `docker exec` scripts such as
+      # seed_demo.py --reset.
+      DATABASE_URL: postgresql+psycopg://medicore_app:${DB_APP_PASSWORD:?set DB_APP_PASSWORD}@db:5432/${POSTGRES_DB:-medicore}
+      MIGRATIONS_DATABASE_URL: postgresql+psycopg://medicore_owner:${DB_OWNER_PASSWORD:?set DB_OWNER_PASSWORD}@db:5432/${POSTGRES_DB:-medicore}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (openssl rand -hex 32)}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
       # Seals superadmins' TOTP secrets; losing it disables their MFA (reset_platform_mfa.py).

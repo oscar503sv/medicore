@@ -10,6 +10,9 @@ caller's rollback restores the triggers along with the rest of the transaction.
 It only ever receives the ids the caller chose, and it is not reachable from the API.
 Lifting a trigger takes a lock that blocks writes to that table until the transaction ends, so
 run it where that is acceptable (a nightly demo reset).
+
+Disabling a trigger needs table ownership, which the API role deliberately lacks: call it with
+a session from ``owner_session()`` (MIGRATIONS_DATABASE_URL).
 """
 
 from __future__ import annotations
@@ -18,6 +21,7 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import Connection, text
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 # (table, row trigger that refuses DELETE) for the tables a purge has to empty.
@@ -33,6 +37,7 @@ _DATA_TABLES = (
     "medical_records",
 )
 _ALWAYS = "A"
+_INSUFFICIENT_PRIVILEGE = "42501"
 
 
 def purge_tenants(conn: Session | Connection, tenant_ids: Sequence[UUID]) -> None:
@@ -41,7 +46,14 @@ def purge_tenants(conn: Session | Connection, tenant_ids: Sequence[UUID]) -> Non
         return
     params = {"ids": ids}
     for table, trigger in _GUARDED:
-        conn.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER {trigger}"))
+        try:
+            conn.execute(text(f"ALTER TABLE {table} DISABLE TRIGGER {trigger}"))
+        except ProgrammingError as exc:
+            if getattr(exc.orig, "sqlstate", None) == _INSUFFICIENT_PRIVILEGE:
+                raise RuntimeError(
+                    "purge_tenants needs the schema owner (MIGRATIONS_DATABASE_URL)"
+                ) from exc
+            raise
     for table in _DATA_TABLES:
         conn.execute(text(f"DELETE FROM {table} WHERE tenant_id = ANY(CAST(:ids AS uuid[]))"),
                      params)

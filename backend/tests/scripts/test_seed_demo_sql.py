@@ -60,6 +60,7 @@ def test_three_clinics_seed_idempotence_and_nightly_reset(monkeypatch):
     engine = create_engine(url)
     factory = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(seed, "get_session", factory)
+    monkeypatch.setattr(seed, "owner_session", factory)
     monkeypatch.setattr(seed, "get_session_factory", lambda: factory)
     monkeypatch.setattr(seed, "RNG", random.Random(42))
     monkeypatch.setattr(seed, "datetime", DemoDateTime)

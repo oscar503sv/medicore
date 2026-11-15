@@ -178,3 +178,50 @@ def test_development_derives_a_stable_mfa_key_from_the_jwt_secret():
 
 def test_mfa_issuer_defaults_to_medicore():
     assert make_settings().mfa_issuer == "Medicore"
+
+
+def production(**overrides) -> Settings:
+    return make_settings(
+        environment="production",
+        jwt_secret=STRONG_SECRET,
+        mfa_encryption_key=MFA_KEY,
+        cors_origins="https://a.example",
+        **overrides,
+    )
+
+
+def test_development_migrates_with_the_application_url_by_default():
+    settings = make_settings(database_url="postgresql+psycopg://dev@localhost/medicore")
+    assert settings.owner_database_url == settings.database_url
+
+
+def test_the_owner_url_wins_when_set():
+    settings = make_settings(migrations_database_url="postgresql+psycopg://owner@db/medicore")
+    assert settings.owner_database_url == "postgresql+psycopg://owner@db/medicore"
+
+
+def test_production_needs_the_owner_url_when_something_asks_for_it():
+    settings = production(database_url="postgresql+psycopg://app@db/medicore")
+    with pytest.raises(ValueError, match="MIGRATIONS_DATABASE_URL"):
+        settings.owner_database_url  # noqa: B018
+
+
+def test_production_serves_without_the_owner_url():
+    # The entrypoint strips it before starting the API.
+    production(database_url="postgresql+psycopg://app@db/medicore")
+
+
+def test_production_rejects_one_role_for_both_urls():
+    with pytest.raises(ValueError, match="different database roles"):
+        production(
+            database_url="postgresql+psycopg://same:pw1@db/medicore",
+            migrations_database_url="postgresql+psycopg://same:pw2@db/medicore",
+        )
+
+
+def test_production_accepts_distinct_roles():
+    settings = production(
+        database_url="postgresql+psycopg://app@db/medicore",
+        migrations_database_url="postgresql+psycopg://owner@db/medicore",
+    )
+    assert settings.owner_database_url.startswith("postgresql+psycopg://owner@")

@@ -170,7 +170,8 @@ Copia `.env.example` a `.env` y ajusta los valores:
 | Variable | Descripción | Default |
 |----------|-------------|---------|
 | `ENVIRONMENT` | `development` o `production`. En producción se activan validaciones estrictas. | `development` |
-| `DATABASE_URL` | Cadena de conexión PostgreSQL (psycopg3) | `postgresql+psycopg://localhost/medicore` |
+| `DATABASE_URL` | Cadena de conexión PostgreSQL (psycopg3) del rol de la API, solo DML (`medicore_app` en producción) | `postgresql+psycopg://localhost/medicore` |
+| `MIGRATIONS_DATABASE_URL` | Cadena de conexión del dueño del esquema (`medicore_owner`), que usan las migraciones y la purga de la demo. **Obligatoria en producción**, con un rol distinto de `DATABASE_URL`; el entrypoint la quita antes de arrancar la API | `DATABASE_URL` (solo desarrollo) |
 | `JWT_SECRET` | Secreto para firmar tokens. **Obligatorio en producción, de al menos 32 bytes** (`openssl rand -hex 32`). | `change-me` (solo dev) |
 | `JWT_ALGORITHM` | Algoritmo JWT: solo `HS256`, `HS384` o `HS512` | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Expiración del token | `1440` (24 h) |
@@ -282,7 +283,7 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **1789 tests** (385 dominio · 766 aplicación · 401 presentación · 233 infraestructura · 4 scripts), casi
+Suite de **1821 tests** (385 dominio · 766 aplicación · 401 presentación · 265 infraestructura · 4 scripts), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
@@ -293,10 +294,10 @@ Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_aud
 `test_procedure_sign_sql.py` — firmas concurrentes y guardados tardíos de un procedimiento —
 `test_appointment_locks_sql.py` — transiciones de cita frente a firmas y arranques de consulta —
 `test_notification_repository_sql.py` — JSONB y UPDATE/DELETE masivos de la bandeja —
-`test_record_summaries_sql.py` — listado de expedientes (resúmenes, filtros y paginación) — `test_record_amend_sql.py` — la cadena de enmiendas (lock de fila, índice único, CHECK del motivo) — `test_patient_search_sql.py` — búsqueda sin acentos, dígitos del teléfono, últimas visitas — `test_prescription_sql.py` — los campos de cierre, el CHECK del motivo de cancelación y el lock de fila, y `test_document_repository_sql.py` — el recorrido de ida y vuelta de los documentos y la clave única de almacenamiento — y `test_record_integrity_sql.py` — el recorrido de ida y vuelta del sello, los triggers de solo inserción (`UPDATE`, `DELETE`, `TRUNCATE`, también con `session_replication_role = replica`), las claves foráneas RESTRICT y la detección de un expediente alterado) usan `TEST_DATABASE_URL`
+`test_record_summaries_sql.py` — listado de expedientes (resúmenes, filtros y paginación) — `test_record_amend_sql.py` — la cadena de enmiendas (lock de fila, índice único, CHECK del motivo) — `test_patient_search_sql.py` — búsqueda sin acentos, dígitos del teléfono, últimas visitas — `test_prescription_sql.py` — los campos de cierre, el CHECK del motivo de cancelación y el lock de fila, y `test_document_repository_sql.py` — el recorrido de ida y vuelta de los documentos y la clave única de almacenamiento — y `test_record_integrity_sql.py` — el recorrido de ida y vuelta del sello, los triggers de solo inserción (`UPDATE`, `DELETE`, `TRUNCATE`, también con `session_replication_role = replica`), las claves foráneas RESTRICT y la detección de un expediente alterado — y `test_db_roles_sql.py` — los privilegios de `medicore_app` bajo `SET ROLE`) usan `TEST_DATABASE_URL`
 (o `DATABASE_URL` de la configuración),
 corren dentro de una transacción que siempre se revierte —no dejan rastro en la BD de desarrollo—
-y se **saltan automáticamente** si no hay PostgreSQL accesible.
+y se **saltan automáticamente** si no hay PostgreSQL accesible. `TEST_DATABASE_URL` debe conectarse como dueño del esquema o como superusuario, porque los tests de purga de tenants desactivan triggers.
 
 ```bash
 .venv/bin/pytest
@@ -357,7 +358,7 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 - `ENVIRONMENT=production`
 - `JWT_SECRET` fuerte de al menos 32 bytes (`openssl rand -hex 32`) — la app no arranca si es inseguro o más corto.
 - `MFA_ENCRYPTION_KEY` definida (32 bytes en base64url) — la app no arranca sin ella.
-- `DATABASE_URL` apuntando a la base de datos real.
+- `DATABASE_URL` apuntando a la base de datos real como `medicore_app`, y `MIGRATIONS_DATABASE_URL` como `medicore_owner` (ver **Roles de base de datos**).
 - `CORS_ORIGINS` con los orígenes del frontend (no `*`).
 - `TRUSTED_PROXIES` con la IP del reverse-proxy (p. ej. `127.0.0.1` si nginx corre en el
   mismo host) para que la auditoría registre la IP real del cliente.
@@ -366,6 +367,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 
 > **Nota de actualización:** tras aplicar la migración `d0e1f2a3b4c6` (límites de la sesión de consola), los usuarios de clínica y los superadmins deben volver a iniciar sesión una vez.
 
+> **Antes de desplegar esta versión** (OZK-113, sin migración): crea los roles y define las contraseñas como se describe en **Roles de base de datos**. El README raíz tiene el orden de los pasos.
+>
 > **Antes de desplegar esta versión:** define `MFA_ENCRYPTION_KEY` (32 bytes en base64url). La migración `e1f2a3b4c5d7` añade las columnas de MFA a `platform_admins` y la tabla `platform_admin_recovery_codes`.
 
 > **Antes de desplegar esta versión:** todos los usuarios, incluidos los superadmins, vuelven a iniciar sesión una vez (los tokens anteriores no tienen audiencia).
@@ -396,6 +399,68 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 > confiables); en cualquier otro caso se registra la IP del socket. La imagen arranca
 > uvicorn con `--no-proxy-headers` para que la app sea la única que interprete la
 > cabecera — mantenlo así si sobreescribes el `CMD`.
+
+## Roles de base de datos
+
+La base tiene dos roles, creados por [`scripts/db_roles.sql`](scripts/db_roles.sql). El script es idempotente, corre como el superusuario que creó la base (`POSTGRES_USER` en el stack de compose) y nunca contiene una contraseña: defínelas con `\password`, o pasa `-v owner_password=... -v app_password=...` para una sola ejecución.
+
+| Rol | Se conecta por | Privilegios |
+|---|---|---|
+| `medicore_owner` | `MIGRATIONS_DATABASE_URL`: migraciones y purga de la demo | Dueño de todos los objetos de `public`; `CREATE` en `public`; `CONNECT` y `TEMPORARY` en la base |
+| `medicore_app` | `DATABASE_URL`: la API y los scripts | `SELECT`, `INSERT`, `UPDATE`, `DELETE` sobre las tablas; `USAGE`, `SELECT` sobre las secuencias. Nada más: sin `TRUNCATE`, `TRIGGER`, `REFERENCES`, `TEMPORARY` ni `CREATE`, y sin ser dueño, así que no puede alterar el esquema ni desactivar un trigger |
+
+Algunas tablas restringen aún más a `medicore_app`:
+
+| Tabla | `medicore_app` puede |
+|---|---|
+| `medical_records` | `SELECT`, `INSERT`, y `UPDATE` solo sobre la columna `id`. Los bloqueos de fila (`SELECT ... FOR UPDATE`) necesitan algún privilegio `UPDATE`, y el trigger de solo inserción sigue rechazando un update real. Sin `DELETE` |
+| `prescriptions` | Todo excepto `DELETE` |
+| `audit_logs`, `platform_audit_logs` | `SELECT`, `INSERT` |
+| `alembic_version` | `SELECT` |
+
+Cómo encaja:
+
+- El entrypoint aplica las migraciones como dueño y luego arranca la API con `exec env -u MIGRATIONS_DATABASE_URL`, así que el proceso de la API nunca tiene la URL del dueño. Las tareas programadas que van por `docker exec` conservan la variable: `seed_demo.py --reset` la necesita para la purga, y `purge_tenants` falla con un mensaje claro sin ella.
+- En producción la API se niega a arrancar si su rol es superusuario, tiene `CREATEROLE` o `BYPASSRLS`, o es dueño de objetos en `public` (`infrastructure/database/role_guard.py`). Las migraciones se niegan a correr como superusuario. En desarrollo no se comprueba nada.
+- Las tablas nuevas heredan DML completo por los privilegios por defecto. Una tabla que deba ser de solo inserción lleva su propio `REVOKE` en la migración que la crea, por ejemplo `REVOKE UPDATE, DELETE ON <tabla> FROM medicore_app`.
+- En la página de Monitoreo, las sesiones de otros roles aparecen con estado `other`. Es cosmético: la página no necesita `pg_read_all_stats`.
+
+### Verificar los roles
+
+Ejecútalas después de desplegar, como superusuario o como `medicore_owner`:
+
+```sql
+SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolbypassrls, rolinherit, rolcanlogin FROM pg_roles WHERE rolname LIKE 'medicore%';
+SELECT r.rolname, m.rolname AS member_of FROM pg_auth_members a JOIN pg_roles r ON r.oid=a.member JOIN pg_roles m ON m.oid=a.roleid WHERE r.rolname LIKE 'medicore%';
+SELECT pg_get_userbyid(relowner), relkind, count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE nspname='public' GROUP BY 1,2 ORDER BY 1,2;
+SELECT p.oid::regprocedure, pg_get_userbyid(proowner) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE nspname='public' AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid=p.oid AND d.deptype='e');
+SELECT t.tablename, has_table_privilege('medicore_app','public.'||t.tablename,'SELECT') s, has_table_privilege('medicore_app','public.'||t.tablename,'INSERT') i, has_table_privilege('medicore_app','public.'||t.tablename,'UPDATE') u, has_table_privilege('medicore_app','public.'||t.tablename,'DELETE') d, has_table_privilege('medicore_app','public.'||t.tablename,'TRUNCATE') tr FROM pg_tables t WHERE schemaname='public' ORDER BY 1;
+SELECT has_column_privilege('medicore_app','medical_records','id','UPDATE'), has_column_privilege('medicore_app','medical_records','seal','UPDATE');
+SELECT has_database_privilege('medicore_app', current_database(), 'TEMPORARY'), has_schema_privilege('medicore_app','public','CREATE');
+SELECT has_sequence_privilege('medicore_app','addon_pricing_id_seq','USAGE');
+SELECT defaclrole::regrole, defaclobjtype, defaclacl FROM pg_default_acl;
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgname LIKE 'trg_%' AND NOT tgisinternal;
+-- prueba de humo: debe fallar con "must be owner of table"
+BEGIN;
+SET LOCAL ROLE medicore_app;
+ALTER TABLE medical_records DISABLE TRIGGER trg_medical_records_append_only;
+ROLLBACK;
+```
+
+Resultado esperado: `medicore_app` no es superusuario, no crea roles ni salta RLS, y no es miembro de ningún rol. Todas las tablas de `public` son de `medicore_owner`, y la consulta de rutinas no devuelve filas. En la consulta de tablas, `tr` es falso en todas, y `d` es falso en `medical_records`, `prescriptions`, `audit_logs`, `platform_audit_logs` y `alembic_version`; `u` es falso en `medical_records` (solo `id` es actualizable, como muestra la penúltima consulta), `audit_logs`, `platform_audit_logs` y `alembic_version`. `has_database_privilege` y `has_schema_privilege` devuelven falso para `TEMPORARY` y `CREATE`. Todos los triggers de la última consulta están activos (`O` o `A`, nunca `D`). La prueba de humo debe fallar.
+
+### Preparar una base local para los tests de roles
+
+`tests/infrastructure/test_db_roles_sql.py` se salta hasta que la base tenga los roles. Usa una base desechable, porque el script pasa las tablas a `medicore_owner`:
+
+```bash
+createdb -h localhost -U <superusuario> medicore_test
+DATABASE_URL=postgresql+psycopg://<superusuario>:<contraseña>@localhost:5432/medicore_test .venv/bin/alembic upgrade head
+psql "postgresql://<superusuario>:<contraseña>@localhost:5432/medicore_test" -v ON_ERROR_STOP=1 -f scripts/db_roles.sql
+TEST_DATABASE_URL=postgresql+psycopg://<superusuario>:<contraseña>@localhost:5432/medicore_test .venv/bin/pytest tests/infrastructure/test_db_roles_sql.py
+```
+
+Ejecuta el script después de las migraciones, para que se aplique el endurecimiento por tabla. Los roles no necesitan contraseña para estos tests. `DEMO_TEST_DATABASE_URL` tiene el mismo requisito que `TEST_DATABASE_URL`: dueño o superusuario.
 
 ## Expedientes duplicados por doble firma
 

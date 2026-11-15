@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 # Secrets that must never reach production (the dev default + the .env.example placeholder).
 _INSECURE_SECRETS = {
@@ -47,6 +48,9 @@ class Settings(BaseSettings):
 
     environment: str = "development"
     database_url: str = "postgresql+psycopg://localhost/medicore"
+    # Schema owner: runs migrations and the demo purge. Production gives it to the entrypoint
+    # only (which drops it before starting the API), so the serving role never holds it.
+    migrations_database_url: str = ""
     jwt_secret: str = "change-me"
     jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
     jwt_expire_minutes: int = 1440
@@ -77,6 +81,17 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment.strip().lower() == "production"
+
+    @property
+    def owner_database_url(self) -> str:
+        if self.migrations_database_url.strip():
+            return self.migrations_database_url.strip()
+        if self.is_production:
+            raise ValueError(
+                "MIGRATIONS_DATABASE_URL must be set in production: migrations and the demo "
+                "purge run as the schema owner (medicore_owner), never as the API role."
+            )
+        return self.database_url
 
     @property
     def secure_cookies(self) -> bool:
@@ -137,6 +152,19 @@ class Settings(BaseSettings):
             raise ValueError(
                 "CORS_ORIGINS cannot be '*' in production — list the frontend "
                 "origins explicitly (e.g. https://app.example.com)."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _enforce_separate_database_roles(self) -> Settings:
+        # A single role for both would defeat the point of the split.
+        if not (self.is_production and self.migrations_database_url.strip()):
+            return self
+        owner = make_url(self.migrations_database_url.strip()).username
+        if owner == make_url(self.database_url).username:
+            raise ValueError(
+                "MIGRATIONS_DATABASE_URL and DATABASE_URL must use different database roles "
+                "in production (schema owner vs. DML-only application role)."
             )
         return self
 

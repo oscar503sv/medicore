@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -9,6 +12,8 @@ from fastapi.responses import JSONResponse
 from medicore.application.common.request_stats import RequestRecorder
 from medicore.application.use_cases.monitoring import CheckReadiness
 from medicore.infrastructure.config import get_settings
+from medicore.infrastructure.database.engine import get_engine
+from medicore.infrastructure.database.role_guard import assert_app_role_is_unprivileged
 from medicore.presentation.dependencies import get_uow_factory
 from medicore.presentation.error_handlers import register_error_handlers
 from medicore.presentation.request_metrics import RequestMetricsMiddleware
@@ -44,6 +49,15 @@ from medicore.presentation.routers import (
 API_PREFIX = "/api/v1"
 
 
+@asynccontextmanager
+async def _check_database_role(_: FastAPI) -> AsyncIterator[None]:
+    # Production only: refuse to serve with a role that could rewrite signed clinical data.
+    if get_settings().is_production:
+        with get_engine().connect() as conn:
+            assert_app_role_is_unprivileged(conn)
+    yield
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     docs_enabled = settings.enable_docs
@@ -52,6 +66,7 @@ def create_app() -> FastAPI:
         title="Medicore API",
         description="Multi-tenant clinical management system",
         version="0.1.0",
+        lifespan=_check_database_role,
         docs_url=f"{API_PREFIX}/docs" if docs_enabled else None,
         redoc_url=f"{API_PREFIX}/redoc" if docs_enabled else None,
         openapi_url=f"{API_PREFIX}/openapi.json" if docs_enabled else None,

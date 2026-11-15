@@ -107,6 +107,7 @@ A separate session (`platform`-scoped token, with its own `mc_console` cookie) t
 - **Medical documents** (OZK-101): metadata only for now. The server chooses each file's storage key (`{tenant_id}/{patient_id}/{document_id}`) and never returns it; a support session can't register documents; a document can only be linked to a record of the same patient.
 - **Procedures and appointments serialized** (OZK-106): the second signature of a procedure answers 409 `procedure.already_signed`, and so does any write to a signed one; a cancelled procedure still answers 422 `procedure.closed`. Appointment transitions lock the appointment, so the loser of a race gets 422 `invalid_transition`, and an in-progress or completed appointment can't be cancelled.
 - **Signed records protected in the database** (OZK-99): every version of a record carries a SHA-256 seal over its immutable content and over the seal of the previous version. Signed records can't be updated, deleted or truncated, and a prescription can only be closed. Reads, printed copies and certificates check the seal: a tampered record still shows, with a red banner and a visible notice on its printed copy, the event is audited as `record.integrity_failed`, and the record can't be amended (409 `record.tampered`). The foreign keys of records, prescriptions and documents restrict deleting the patient, user, consultation, appointment or clinic they point to. The seal shows that the content hasn't changed since it was sealed; it doesn't protect against someone who can write to the database (see [Signed records protection](backend/README.md#signed-records-protection-and-dangling-references-before-ozk-99)).
+- **Database roles split** (OZK-113): the API connects as `medicore_app`, which only reads and writes rows (SELECT, INSERT, UPDATE, DELETE). It cannot alter the schema, disable the append-only triggers, truncate or create temporary tables. Migrations and the demo purge run as `medicore_owner`, the schema owner. In production the API refuses to start with a superuser, or with a role that can create roles, bypass row security or own objects. See [Database roles](backend/README.md#database-roles).
 - **Consultation audit**: `consultation.viewed` (scope `full` or `vitals`), `consultation.note_updated`, `consultation.vitals_updated`, `consultation.template_changed` and `consultation.draft_changed` store section and field names only, never clinical text. Reads, note and vitals updates by the same actor within 10 minutes are merged per key, so autosave and polling don't fill the log.
 - **Granular permissions** enforced in the application layer (not just the UI) — see the next section.
 - Temporary password with a forced change on first sign-in: until it is replaced, the backend only allows changing it, reading the profile and signing out; anything else answers 403 `auth.password_change_required`. Support (impersonation) sessions are exempt.
@@ -420,7 +421,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1789 tests)
+.venv/bin/pytest                          # full suite (1821 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -474,20 +475,21 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1789 passing tests
+1821 passing tests
    385  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching, prescriptions, medical documents, record seal)
    766  — application (auth, sessions, appointments, consultations, records and amendments, record integrity, prescriptions, notifications,
             dashboard, platform (support actions land in the clinic's audit and are notified), granular permissions, multi-tenant isolation)
    401  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform, record integrity)
-   233  — infrastructure (SQLAlchemy repositories against PostgreSQL, including the amendment chain, prescription closure and the append-only triggers)
+   265  — infrastructure (SQLAlchemy repositories against PostgreSQL, including the amendment chain, prescription closure, the append-only triggers and the database roles)
      4  — scripts (demo seed; its PostgreSQL test runs only with DEMO_TEST_DATABASE_URL)
 ```
 
 Among other things, the tests verify:
 - `SignConsultation` atomicity: a failure rolls back the record, prescriptions and appointment status. Concurrent signs of one consultation store a single record.
 - Signed records: the seal of every version recomputes from its content, a tampered version is detected and audited, and the triggers reject `UPDATE`, `DELETE` and `TRUNCATE`, also under `session_replication_role = replica`.
+- Database roles: the API role gets only DML and no `TRUNCATE`, `TEMPORARY` or `CREATE`, the append-only triggers can't be lifted by it, and production refuses to start with a privileged role (against a database prepared with `scripts/db_roles.sql`; skipped otherwise).
 - Only doctors read the clinical content of records, and the records list paginates and filters on the server.
 - Consultations: only the owning doctor reads or edits one, nurses only write vital signs, administrators and support never read clinical content, and the audit keeps names, not text.
 - Medical documents: the storage key is generated by the server, is neither accepted from nor returned to the client, and a record of another patient is refused.
@@ -506,7 +508,8 @@ Among other things, the tests verify:
 | Variable | Description | Default |
 |---|---|---|
 | `ENVIRONMENT` | `development` or `production`. Production enables strict validation. | `development` |
-| `DATABASE_URL` | PostgreSQL connection URL (psycopg3) | `postgresql+psycopg://localhost/medicore` |
+| `DATABASE_URL` | PostgreSQL connection URL (psycopg3) of the DML-only API role (`medicore_app` in production) | `postgresql+psycopg://localhost/medicore` |
+| `MIGRATIONS_DATABASE_URL` | URL of the schema owner (`medicore_owner`), used by the migrations and the demo purge. **Required in production**, with a different role from `DATABASE_URL`; the entrypoint removes it before starting the API | `DATABASE_URL` (dev only) |
 | `JWT_SECRET` | HMAC key for tokens. **Required in production, at least 32 bytes** (`openssl rand -hex 32`); the app won't start otherwise | `change-me` (dev only) |
 | `JWT_ALGORITHM` | JWT algorithm: `HS256`, `HS384` or `HS512` only | `HS256` |
 | `JWT_EXPIRE_MINUTES` | Token lifetime in minutes | `1440` (24 h) |
@@ -536,9 +539,9 @@ The backend ships a production-ready `Dockerfile` (non-root user, uvicorn on por
 
 The root [`docker-compose.yml`](docker-compose.yml) runs the whole stack on a **single origin**: `db` (PostgreSQL 16, persistent volume), `backend` (applies `alembic upgrade head` on start) and `frontend` (nginx serving the SPA, proxying `/api/` to the backend and adding the security headers). Only `frontend` gets a public domain; TLS is terminated by the edge proxy (Traefik in Coolify).
 
-1. Generate the secrets: `openssl rand -hex 32` (`JWT_SECRET`, at least 32 bytes) and `openssl rand -base64 24` (`POSTGRES_PASSWORD`), the MFA key (`MFA_ENCRYPTION_KEY`, command in the backend environment variables table), and choose `DEMO_PASSWORD` (shared with whoever tries the demo) and `DEMO_ADMIN_PASSWORD` (private, for the clinic admins).
+1. Generate the secrets: `openssl rand -hex 32` (`JWT_SECRET`, at least 32 bytes) `openssl rand -base64 24` (`POSTGRES_PASSWORD`), `openssl rand -hex 24` for each of `DB_OWNER_PASSWORD` and `DB_APP_PASSWORD` (see the note on this version below), the MFA key (`MFA_ENCRYPTION_KEY`, command in the backend environment variables table), and choose `DEMO_PASSWORD` (shared with whoever tries the demo) and `DEMO_ADMIN_PASSWORD` (private, for the clinic admins).
 2. In Coolify: **New Resource → Public Repository** → this repo, branch `main`, **Build Pack: Docker Compose**, compose file `/docker-compose.yml`.
-3. Environment variables: `POSTGRES_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (e.g. `https://medicore.example.com`), `DEMO_PASSWORD`, `DEMO_ADMIN_PASSWORD` and `MFA_ENCRYPTION_KEY`. Optional: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`, `WEB_CONCURRENCY` (uvicorn workers, default 2). If a required one is missing the stack doesn't start, on purpose.
+3. Environment variables: `POSTGRES_PASSWORD`, `DB_OWNER_PASSWORD`, `DB_APP_PASSWORD`, `JWT_SECRET`, `APP_ORIGIN` (e.g. `https://medicore.example.com`), `DEMO_PASSWORD`, `DEMO_ADMIN_PASSWORD` and `MFA_ENCRYPTION_KEY`. Optional: `POSTGRES_DB`, `POSTGRES_USER`, `ENABLE_DOCS`, `JWT_EXPIRE_MINUTES`, `WEB_CONCURRENCY` (uvicorn workers, default 2). If a required one is missing the stack doesn't start, on purpose.
 4. Assign the domain to the **frontend** service only, then **Deploy**.
 5. One-time data load, in a terminal of the `backend` container:
    ```sh
@@ -552,7 +555,33 @@ Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on s
 
 > **Note:** migration `d0e1f2a3b4c6` (console session limits) makes clinic users and superadmins sign in again once after deploying.
 
-> **Before deploying this version:** `MFA_ENCRYPTION_KEY` has to reach the `backend` service. Set it in Coolify and declare it in `docker-compose.yml` (`MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY}`), since production won't start without it. Migration `e1f2a3b4c5d7` adds the MFA columns to `platform_admins` and the `platform_admin_recovery_codes` table.
+> **Before deploying this version** (OZK-113, database roles; no Alembic migration): the API stops connecting as the database superuser. It connects as `medicore_app` (rows only), and migrations run as `medicore_owner` (schema owner). Do it in production and in the demo, each on its own database, outside opening hours (the ownership changes take short `ACCESS EXCLUSIVE` locks):
+>
+> 0. Take a `pg_dump` of the database.
+> 1. Generate two passwords with `openssl rand -hex 24` each (URL-safe, because they go inside the connection URLs).
+> 2. Run the role script in the `db` container as its superuser. It creates the roles and hands the tables over to `medicore_owner`:
+>    ```sh
+>    docker exec -i <db-container> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f -' < backend/scripts/db_roles.sql
+>    docker exec -it <db-container> sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+>    ```
+>    In the interactive session type `\password medicore_owner` and `\password medicore_app`, and use the generated passwords.
+> 3. Check the result with the queries in [Database roles](backend/README.md#database-roles).
+> 4. In Coolify, set `DB_OWNER_PASSWORD` and `DB_APP_PASSWORD`. The stack doesn't start without them.
+> 5. Deploy. The entrypoint applies the migrations as the owner and then starts the API as `medicore_app`.
+> 6. Check: sign in; sign or amend a record; close a prescription; open *Monitoring*; run `python scripts/seed_demo.py --reset` and `python scripts/purge_expired_sessions.py` in the `backend` container (both use the owner); and `SELECT usename, count(*) FROM pg_stat_activity GROUP BY 1` shows `medicore_app` for the API. Sessions of other roles appear as `other` on *Monitoring*; that is expected.
+>
+> On a brand-new database, run step 2 once the `db` container is up, deploy (the first migration creates the tables), and run step 2 again so the append-only grants apply.
+>
+> **Rollback:** redeploy the previous commit and remove `DB_OWNER_PASSWORD` and `DB_APP_PASSWORD` from Coolify. The roles stay, and the previous code keeps working as the superuser. To remove the roles as well, as the superuser, in each database where they own or hold something (in this project, the application database):
+> ```sql
+> REASSIGN OWNED BY medicore_owner TO <POSTGRES_USER>;
+> DROP OWNED BY medicore_owner, medicore_app;
+> DROP ROLE medicore_owner;
+> DROP ROLE medicore_app;
+> GRANT CONNECT, TEMPORARY ON DATABASE <POSTGRES_DB> TO PUBLIC;
+> ```
+>
+> `MFA_ENCRYPTION_KEY` has to reach the `backend` service. Set it in Coolify and declare it in `docker-compose.yml` (`MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?set MFA_ENCRYPTION_KEY}`), since production won't start without it. Migration `e1f2a3b4c5d7` adds the MFA columns to `platform_admins` and the `platform_admin_recovery_codes` table.
 
 > **Before deploying this version:** every user, including superadmins, signs in again once, because tokens issued earlier have no audience.
 >
