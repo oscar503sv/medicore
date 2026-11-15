@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, fields, replace
 from decimal import Decimal
 
 from medicore.domain.shared.errors import InvalidValueObject
@@ -55,16 +56,19 @@ class Vitals:
         return (self.weight / (height_m * height_m)).quantize(Decimal("0.1"))
 
     def is_empty(self) -> bool:
-        return all(
-            getattr(self, f) is None
-            for f in (
-                "blood_pressure",
-                "heart_rate",
-                "spo2",
-                "temperature",
-                "weight",
-                "glucose",
-                "height",
-                "fetal_heart_rate",
+        return all(getattr(self, f) is None for f in VITAL_FIELDS)
+
+    def with_changes(self, changes: Mapping[str, object]) -> Vitals:
+        """A copy with only the given fields replaced (None clears one), revalidated."""
+        unknown = sorted(set(changes) - set(VITAL_FIELDS))
+        if unknown:
+            raise InvalidValueObject(
+                "unknown vitals: " + ", ".join(unknown), code="vitals.unknown_field"
             )
-        )
+        return replace(self, **changes)  # type: ignore[arg-type]
+
+    def changed_fields(self, other: Vitals) -> tuple[str, ...]:
+        return tuple(n for n in VITAL_FIELDS if getattr(self, n) != getattr(other, n))
+
+
+VITAL_FIELDS = tuple(f.name for f in fields(Vitals))

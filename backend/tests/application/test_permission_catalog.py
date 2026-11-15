@@ -32,7 +32,7 @@ EXPECTED_MATRIX: dict[Role, set[str]] = {
         "patients.view", "patients.create", "patients.edit", "patients.archive",
         "appointments.view", "appointments.manage",
         "availability.manage", "fees.manage_all",
-        "consultations.start", "consultations.edit",
+        "consultations.start",
         "records.view", "records.upload",
         "vaccinations.view",
         "applications.view",
@@ -65,7 +65,7 @@ EXPECTED_MATRIX: dict[Role, set[str]] = {
     Role.NURSE: {
         "patients.view", "patients.create",
         "appointments.view",
-        "consultations.edit",
+        "consultations.vitals",
         "records.view", "records.upload",
         "vaccinations.view", "vaccinations.record",
         "applications.view", "applications.administer",

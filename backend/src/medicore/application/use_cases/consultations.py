@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
-from medicore.application.common.audit import audit_entry, subject
+from medicore.application.common.audit import append_coalesced, audit_entry, subject
 from medicore.application.common.context import ActorContext
-from medicore.application.common.errors import EntityNotFound, ValidationError
+from medicore.application.common.errors import (
+    ConsultationNotStarted,
+    EntityNotFound,
+    ValidationError,
+)
 from medicore.application.common.fees import ensure_can_price
-from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.permissions import Permission, ensure_permission, has_permission
 from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
@@ -36,12 +41,12 @@ from medicore.domain.shared.identifiers import (
     LocationId,
     ProcedureTypeId,
     RecordId,
+    UserId,
 )
 from medicore.domain.value_objects.clinical_note import ClinicalNote
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.note_settings import NoteSettings
-from medicore.domain.value_objects.vitals import Vitals
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,12 +60,44 @@ class SignConsultationCommand:
 class ConsultationPatch:
     """An idempotent autosave patch for the live consultation."""
 
-    vitals: Vitals | None = None
+    vitals: Mapping[str, object] | None = None  # only the fields to change
     note: dict[str, str] | None = None  # section key -> text
 
 
-def _owns(actor: ActorContext, doctor_id: object) -> bool:
+@dataclass(frozen=True, slots=True)
+class ConsultationVitalsView:
+    """What nursing sees of a consultation: the patient, the booking and the vitals, never
+    the note. The router serializes only these non-clinical fields."""
+
+    consultation: Consultation
+    patient: Patient | None
+    appointment: Appointment | None
+    doctor_name: str | None
+
+
+def _ensure_not_support(actor: ActorContext) -> None:
+    # Support sessions act as an admin for operations, never on clinical content.
+    if actor.impersonated_by is not None:
+        raise PermissionDenied(
+            "support sessions don't reach clinical content", code="support.clinical_forbidden"
+        )
+
+
+def _ensure_author(actor: ActorContext, doctor_id: UserId, verb: str) -> None:
+    """Clinical content belongs to the consultation's doctor; no grant reaches it."""
+    _ensure_not_support(actor)
+    if actor.role != Role.DOCTOR or actor.user_id != doctor_id:
+        raise PermissionDenied(
+            f"only the consultation's doctor may {verb} it", code="consultation.not_own"
+        )
+
+
+def _may_start(actor: ActorContext, doctor_id: UserId) -> bool:
     return actor.role != Role.DOCTOR or actor.user_id == doctor_id
+
+
+def _patient_subject(patient: Patient | None) -> str | None:
+    return subject(patient.code, patient.full_name) if patient else None
 
 
 class StartConsultation:
@@ -72,13 +109,14 @@ class StartConsultation:
 
     def execute(self, actor: ActorContext, appointment_id: AppointmentId) -> Consultation:
         ensure_permission(actor, Permission.CONSULTATIONS_START)
+        _ensure_not_support(actor)
         with self._uow:
             # Two starts queue here; the second finds the first's consultation instead of
             # inserting a duplicate.
             appointment = self._uow.appointments.get_for_update(appointment_id)
             if appointment is None:
                 raise EntityNotFound("Appointment", appointment_id)
-            if not _owns(actor, appointment.doctor_id):
+            if not _may_start(actor, appointment.doctor_id):
                 raise PermissionDenied(
                     "doctors may only start their own consultations", code="consultation.not_own"
                 )
@@ -104,12 +142,11 @@ class StartConsultation:
                 audit_entry(
                     actor, self._clock.now(), "consultation.started", "Consultation",
                     str(consultation.id),
-                    subject=subject(patient.code, patient.full_name) if patient else None,
+                    subject=_patient_subject(patient),
                 )
             )
             self._uow.commit()
         return consultation
-
 
     def _opening_note(self, actor: ActorContext, appointment: Appointment,
                       patient: Patient | None) -> ClinicalNote:
@@ -128,7 +165,8 @@ class StartConsultation:
 
 
 class GetConsultation:
-    """Load a single consultation for viewing in the live consultation screen."""
+    """Load a single consultation for the doctor who owns it. Opening it is audited, once
+    per window: the screen polls to pick up nursing's vitals."""
 
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
@@ -136,14 +174,88 @@ class GetConsultation:
 
     def execute(self, actor: ActorContext, consultation_id: ConsultationId) -> Consultation:
         ensure_permission(actor, Permission.CONSULTATIONS_EDIT)
-        consultation = self._uow.consultations.get_by_id(consultation_id)
-        if consultation is None:
-            raise EntityNotFound("Consultation", consultation_id)
-        if not _owns(actor, consultation.doctor_id):
-            raise PermissionDenied(
-                "doctors may only view their own consultations", code="consultation.not_own"
+        with self._uow:
+            consultation = self._uow.consultations.get_by_id(consultation_id)
+            if consultation is None:
+                raise EntityNotFound("Consultation", consultation_id)
+            _ensure_author(actor, consultation.doctor_id, "view")
+            patient = self._uow.patients.get_by_id(consultation.patient_id)
+            append_coalesced(
+                self._uow,
+                audit_entry(
+                    actor, self._clock.now(), "consultation.viewed", "Consultation",
+                    str(consultation.id), scope="full", subject=_patient_subject(patient),
+                ),
+                keys=("full",),
             )
+            self._uow.commit()
         return consultation
+
+
+class GetConsultationVitals:
+    """The non-clinical view of a consultation, found from its appointment (the agenda does
+    not carry the consultation id). For whoever records vitals."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(
+        self, actor: ActorContext, appointment_id: AppointmentId
+    ) -> ConsultationVitalsView:
+        _ensure_vitals_access(actor)
+        with self._uow:
+            consultation = self._uow.consultations.get_by_appointment(appointment_id)
+            if consultation is None:
+                raise ConsultationNotStarted(appointment_id)
+            _ensure_vitals_author(actor, consultation)
+            patient = self._uow.patients.get_by_id(consultation.patient_id)
+            append_coalesced(
+                self._uow,
+                audit_entry(
+                    actor, self._clock.now(), "consultation.viewed", "Consultation",
+                    str(consultation.id), scope="vitals", subject=_patient_subject(patient),
+                ),
+                keys=("vitals",),
+            )
+            self._uow.commit()
+            view = _vitals_view(self._uow, consultation, patient)
+        return view
+
+
+def _vitals_view(
+    uow: UnitOfWork, consultation: Consultation, patient: Patient | None
+) -> ConsultationVitalsView:
+    doctor = uow.users.get_by_id(consultation.doctor_id)
+    return ConsultationVitalsView(
+        consultation,
+        patient,
+        uow.appointments.get_by_id(consultation.appointment_id),
+        doctor.name if doctor else None,
+    )
+
+
+def _ensure_vitals_access(actor: ActorContext) -> None:
+    """Checked before loading anything, so a refused actor learns nothing about the
+    consultation."""
+    _ensure_not_support(actor)
+    if not has_permission(actor, Permission.CONSULTATIONS_VITALS):
+        ensure_permission(actor, Permission.CONSULTATIONS_EDIT)
+
+
+def _ensure_vitals_author(actor: ActorContext, consultation: Consultation) -> None:
+    # Whoever holds the vitals permission records them in any open consultation of the
+    # clinic (there is no nurse-to-doctor assignment); otherwise only the doctor's own.
+    if not has_permission(actor, Permission.CONSULTATIONS_VITALS):
+        _ensure_author(actor, consultation.doctor_id, "edit")
+
+
+@dataclass(frozen=True, slots=True)
+class _Audit:
+    action: str
+    meta: Mapping[str, object]
+    keys: tuple[str, ...] = ()
+    coalesce: bool = False  # autosave-driven: skip repeats of the same keys in a window
 
 
 class _ConsultationEditor:
@@ -160,16 +272,39 @@ class _ConsultationEditor:
         consultation = self._uow.consultations.get_for_update(consultation_id)
         if consultation is None:
             raise EntityNotFound("Consultation", consultation_id)
-        if not _owns(actor, consultation.doctor_id):
-            raise PermissionDenied(
-                "doctors may only edit their own consultations", code="consultation.not_own"
-            )
+        _ensure_author(actor, consultation.doctor_id, "edit")
         return consultation
 
-    def _save(self, consultation: Consultation) -> None:
+    def _save(
+        self,
+        actor: ActorContext,
+        consultation: Consultation,
+        *audits: _Audit,
+    ) -> None:
+        """Persist and audit in one transaction. Audit metadata carries names (sections,
+        fields, template keys), never clinical text."""
         with self._uow:
             self._uow.consultations.save(consultation)
+            if audits:
+                patient = self._uow.patients.get_by_id(consultation.patient_id)
+                for item in audits:
+                    entry = audit_entry(
+                        actor, self._clock.now(), item.action, "Consultation",
+                        str(consultation.id), subject=_patient_subject(patient), **item.meta,
+                    )
+                    if item.coalesce:
+                        append_coalesced(self._uow, entry, item.keys)
+                    else:
+                        self._uow.audit.append(entry)
             self._uow.commit()
+
+    def _save_draft(
+        self, actor: ActorContext, consultation: Consultation, section: str, op: str
+    ) -> None:
+        self._save(
+            actor, consultation,
+            _Audit("consultation.draft_changed", {"section": section, "op": op}),
+        )
 
 
 class AutosaveConsultation(_ConsultationEditor):
@@ -177,9 +312,44 @@ class AutosaveConsultation(_ConsultationEditor):
         self, actor: ActorContext, consultation_id: ConsultationId, patch: ConsultationPatch
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
-        consultation.autosave(vitals=patch.vitals, note=patch.note, when=self._clock.now())
-        self._save(consultation)
+        changes = consultation.autosave(
+            vitals=patch.vitals, note=patch.note, when=self._clock.now()
+        )
+        audits = []
+        if changes.note_keys:
+            audits.append(
+                _Audit("consultation.note_updated", {}, keys=changes.note_keys, coalesce=True)
+            )
+        if changes.vitals:
+            audits.append(
+                _Audit("consultation.vitals_updated", {}, keys=changes.vitals, coalesce=True)
+            )
+        self._save(actor, consultation, *audits)
         return consultation
+
+
+class UpdateConsultationVitals(_ConsultationEditor):
+    """Record vitals: nursing (``consultations.vitals``) in any open consultation, or the
+    doctor in their own. Only the given fields change."""
+
+    def execute(
+        self, actor: ActorContext, consultation_id: ConsultationId,
+        changes: Mapping[str, object],
+    ) -> ConsultationVitalsView:
+        _ensure_vitals_access(actor)
+        consultation = self._uow.consultations.get_for_update(consultation_id)
+        if consultation is None:
+            raise EntityNotFound("Consultation", consultation_id)
+        _ensure_vitals_author(actor, consultation)
+        changed = consultation.update_vitals(changes, self._clock.now())
+        if changed:
+            self._save(
+                actor, consultation,
+                _Audit("consultation.vitals_updated", {}, keys=changed, coalesce=True),
+            )
+        return _vitals_view(
+            self._uow, consultation, self._uow.patients.get_by_id(consultation.patient_id)
+        )
 
 
 class ChangeNoteTemplate(_ConsultationEditor):
@@ -193,7 +363,8 @@ class ChangeNoteTemplate(_ConsultationEditor):
         template = find_template(self._uow, template_key)
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         settings = tenant.note_settings if tenant else NoteSettings()
-        if template.key != consultation.note.template:
+        previous = consultation.note.template
+        if template.key != previous:
             if settings.locked:
                 raise PermissionDenied(
                     "the clinic made its note format mandatory", code="note.template_locked"
@@ -206,7 +377,11 @@ class ChangeNoteTemplate(_ConsultationEditor):
         patient = self._uow.patients.get_by_id(consultation.patient_id)
         if patient is not None:
             consultation.note = problems_prefill(consultation.note, patient.tags)
-        self._save(consultation)
+        audits = (
+            [_Audit("consultation.template_changed", {"from": previous, "to": template.key})]
+            if template.key != previous else []
+        )
+        self._save(actor, consultation, *audits)
         return consultation
 
 
@@ -216,7 +391,7 @@ class AddDiagnosis(_ConsultationEditor):
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
         consultation.add_diagnosis(diagnosis)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "diagnoses", "added")
         return consultation
 
 
@@ -226,7 +401,7 @@ class RemoveDiagnosis(_ConsultationEditor):
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
         consultation.remove_diagnosis(code)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "diagnoses", "removed")
         return consultation
 
 
@@ -236,7 +411,7 @@ class AddPrescriptionDraft(_ConsultationEditor):
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
         consultation.add_prescription_draft(draft)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "prescriptions", "added")
         return consultation
 
 
@@ -246,7 +421,7 @@ class RemovePrescriptionDraft(_ConsultationEditor):
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
         consultation.remove_prescription_draft(index)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "prescriptions", "removed")
         return consultation
 
 
@@ -260,7 +435,7 @@ class AddApplicationDraft(_ConsultationEditor):
         ensure_permission(actor, Permission.APPLICATIONS_VIEW)
         consultation = self._load(actor, consultation_id)
         consultation.add_application_draft(draft)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "applications", "added")
         return consultation
 
 
@@ -270,7 +445,7 @@ class RemoveApplicationDraft(_ConsultationEditor):
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
         consultation.remove_application_draft(index)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "applications", "removed")
         return consultation
 
 
@@ -294,7 +469,7 @@ class AddProcedureDraft(_ConsultationEditor):
         if not kind.active:
             raise ValidationError("the procedure type is archived", code="procedure.type_inactive")
         consultation.add_procedure_draft(ProcedureDraft.of(kind, indication, included))
-        self._save(consultation)
+        self._save_draft(actor, consultation, "procedures", "added")
         return consultation
 
 
@@ -304,7 +479,7 @@ class RemoveProcedureDraft(_ConsultationEditor):
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
         consultation.remove_procedure_draft(index)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "procedures", "removed")
         return consultation
 
 
@@ -316,7 +491,7 @@ class AddExam(_ConsultationEditor):
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
         consultation.add_exam(exam)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "exams", "added")
         return consultation
 
 
@@ -326,7 +501,7 @@ class RemoveExam(_ConsultationEditor):
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
         consultation.remove_exam(index)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "exams", "removed")
         return consultation
 
 
@@ -336,7 +511,7 @@ class AttachDocument(_ConsultationEditor):
     ) -> Consultation:
         consultation = self._load(actor, consultation_id)
         consultation.attach_document(ref)
-        self._save(consultation)
+        self._save_draft(actor, consultation, "attachments", "added")
         return consultation
 
 
@@ -357,10 +532,7 @@ class SignConsultation:
             consultation = self._uow.consultations.get_for_update(cmd.consultation_id)
             if consultation is None:
                 raise EntityNotFound("Consultation", cmd.consultation_id)
-            if not _owns(actor, consultation.doctor_id):
-                raise PermissionDenied(
-                    "doctors may only sign their own consultations", code="consultation.not_own"
-                )
+            _ensure_author(actor, consultation.doctor_id, "sign")
             appointment = self._uow.appointments.get_by_id(consultation.appointment_id)
             if appointment is None:
                 raise EntityNotFound("Appointment", consultation.appointment_id)

@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  HeartPulse,
   Plus,
   Printer,
   Search,
@@ -25,6 +26,7 @@ import { appointmentsApi } from '@/api/appointments'
 import { openPrint } from '@/api/printing'
 import { consultationsApi } from '@/api/consultations'
 import { errorMessage } from '@/api/client'
+import { ConsultationVitalsModal } from '@/components/consultation/ConsultationVitalsModal'
 import { NewAppointmentModal } from '@/components/appointments/NewAppointmentModal'
 import { RescheduleAppointmentModal } from '@/components/appointments/RescheduleAppointmentModal'
 import { AdjustFeeModal } from '@/components/fees/AdjustFeeModal'
@@ -68,6 +70,9 @@ export function AppointmentsPage() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const canConsult = useAuthStore((s) => s.can('consultations.start'))
+  const canEditConsult = useAuthStore((s) => s.can('consultations.edit'))
+  const canVitals = useAuthStore((s) => s.can('consultations.vitals'))
+  const myId = useAuthStore((s) => s.session?.user_id)
   const canManage = useAuthStore((s) => s.can('appointments.manage'))
   const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
   const today = clinicToday()
@@ -81,6 +86,7 @@ export function AppointmentsPage() {
   const [noShowTarget, setNoShowTarget] = useState<Appointment | null>(null)
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)
   const [feeTarget, setFeeTarget] = useState<Appointment | null>(null)
+  const [vitalsTarget, setVitalsTarget] = useState<Appointment | null>(null)
   const canPrice = useCanPrice()
   const [statusFilter, setStatusFilter] = useState<'all' | AppointmentStatus>('all')
   const [doctorId, setDoctorId] = useState('')
@@ -138,7 +144,13 @@ export function AppointmentsPage() {
     mutationFn: (appointmentId: string) => consultationsApi.start(appointmentId),
     onSuccess: (consultation) => {
       qc.invalidateQueries({ queryKey: ['appointments'] })
-      navigate(`/consultation/${consultation.id}`)
+      // Starting is operational (the admin may open it for the doctor); only the doctor
+      // it belongs to goes on into the note.
+      if (canEditConsult && consultation.doctor_id === myId) {
+        navigate(`/consultation/${consultation.id}`)
+      } else {
+        toast(t('consult.started_ok'))
+      }
     },
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
@@ -457,13 +469,19 @@ export function AppointmentsPage() {
                               {t('appt.start_consult')}
                             </Button>
                           )}
-                          {canConsult && a.status === 'in_progress' && (
+                          {canEditConsult && a.doctor_id === myId && a.status === 'in_progress' && (
                             <Button
                               size="sm"
                               variant="subtle"
                               onClick={() => startConsult.mutate(a.id)}
                             >
                               {t('appt.continue')}
+                            </Button>
+                          )}
+                          {canVitals && a.status === 'in_progress' && (
+                            <Button size="sm" variant="outline" onClick={() => setVitalsTarget(a)}>
+                              <HeartPulse className="h-3.5 w-3.5" />
+                              {t('appt.vitals')}
                             </Button>
                           )}
                           <span className="w-8">
@@ -551,6 +569,8 @@ export function AppointmentsPage() {
           </div>
         </div>
       </Modal>
+
+      <ConsultationVitalsModal appointment={vitalsTarget} onClose={() => setVitalsTarget(null)} />
 
       <Modal
         open={!!cancelTarget}

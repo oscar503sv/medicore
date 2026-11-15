@@ -21,6 +21,10 @@ class VitalsSchema(BaseModel):
     fetal_heart_rate: int | None = None
 
 
+class VitalsUpdateRequest(VitalsSchema):
+    """Only the fields sent change; null clears one."""
+
+
 class AutosaveRequest(BaseModel):
     vitals: VitalsSchema | None = None
     note: dict[str, str] | None = None  # section key -> text
@@ -89,5 +93,31 @@ class ConsultationResponse(BaseModel):
     completion_percent: int
     last_saved_at: datetime | None
     # Context for the live consultation header (patient summary + booked appointment).
+    patient: dict[str, Any] | None = None
+    appointment: dict[str, Any] | None = None
+
+
+class ConsultationRefResponse(BaseModel):
+    """What starting a consultation returns: no clinical content, so whoever may start one
+    (the admin included) learns nothing of the note."""
+
+    id: str
+    appointment_id: str
+    patient_id: str
+    doctor_id: str
+    status: str
+    started_at: datetime
+
+
+class ConsultationVitalsResponse(BaseModel):
+    id: str
+    appointment_id: str
+    patient_id: str
+    doctor_id: str
+    doctor_name: str | None
+    status: str
+    started_at: datetime
+    vitals: dict[str, Any]
+    last_saved_at: datetime | None
     patient: dict[str, Any] | None = None
     appointment: dict[str, Any] | None = None

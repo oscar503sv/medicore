@@ -34,7 +34,6 @@ from medicore.domain.shared.errors import (
     PermissionDenied,
 )
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.vitals import Vitals
 from tests.support.builders import seed_clinic, soap_note
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
@@ -64,7 +63,7 @@ def fill(seed, uow, consultation):
         consultation.id,
         ConsultationPatch(
             note=soap_note("subjetivo", "objetivo", "evaluación", "plan").texts(),
-            vitals=Vitals(heart_rate=72, weight=Decimal("70")),
+            vitals={"heart_rate": 72, "weight": Decimal("70")},
         ),
     )
     AddDiagnosis(uow, clock).execute(

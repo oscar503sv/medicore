@@ -67,6 +67,19 @@ class TestRule:
             Role.NURSE, ["records.read_clinical"], frozenset(AddonModule), adj
         )
 
+    def test_consultation_edit_is_never_granted_to_others(self):
+        adj = PermissionAdjustments(granted=frozenset({"consultations.edit"}))
+        stored = ["consultations.start", "consultations.edit"]
+        assert Permission.CONSULTATIONS_EDIT not in granted(
+            Role.NURSE, stored, frozenset(AddonModule), adj
+        )
+
+    def test_vitals_can_be_granted_to_a_receptionist(self):
+        adj = PermissionAdjustments(granted=frozenset({"consultations.vitals"}))
+        assert Permission.CONSULTATIONS_VITALS in granted(
+            Role.RECEPTIONIST, None, frozenset(AddonModule), adj
+        )
+
     def test_uncontracted_modules_stay_locked(self):
         adj = PermissionAdjustments(granted=frozenset({"procedures.view"}))
         assert Permission.PROCEDURES_VIEW not in granted(Role.NURSE, None, frozenset(), adj)

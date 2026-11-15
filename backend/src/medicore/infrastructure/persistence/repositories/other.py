@@ -195,6 +195,22 @@ class SqlAuditLogRepository:
         )
         self._s.add(row)
 
+    def last_for(
+        self, entity_type: str, entity_id: str, action: str, actor_id: UserId
+    ) -> AuditLog | None:
+        row = (
+            self._q()
+            .filter(
+                AuditLogModel.entity_type == entity_type,
+                AuditLogModel.entity_id == entity_id,
+                AuditLogModel.action == action,
+                AuditLogModel.actor_id == actor_id.value,
+            )
+            .order_by(AuditLogModel.timestamp.desc())
+            .first()
+        )
+        return to_audit_log(row) if row is not None else None
+
     def query(self, **criteria: object) -> list[AuditLog]:
         q = self._q().order_by(AuditLogModel.timestamp)
         for key, value in criteria.items():

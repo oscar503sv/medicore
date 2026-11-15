@@ -181,3 +181,57 @@ class TestQuery:
     def test_query_ignores_unknown_keys(self, seeded):
         repo, *_ = seeded
         assert len(repo.query(not_a_column="x")) == 4
+
+
+class TestLastFor:
+    def _entry_on(self, tenant, actor, entity_id, hour, action="consultation.viewed"):
+        return AuditLog(
+            id=AuditLogId.new(), tenant_id=tenant, actor_id=actor, action=action,
+            entity_type="Consultation", entity_id=entity_id, metadata={"keys": ["full"]},
+            timestamp=datetime(2026, 6, 1, hour, 0, tzinfo=UTC),
+        )
+
+    def test_returns_the_most_recent_per_entity_action_and_actor(self, session):
+        tenant = _tenant(session)
+        repo = SqlAuditLogRepository(session, tenant)
+        actor, other_actor = UserId.new(), UserId.new()
+        repo.append(self._entry_on(tenant, actor, "c1", 9))
+        repo.append(self._entry_on(tenant, actor, "c1", 11))
+        repo.append(self._entry_on(tenant, actor, "c1", 12, action="consultation.note_updated"))
+        repo.append(self._entry_on(tenant, other_actor, "c1", 13))
+        repo.append(self._entry_on(tenant, actor, "c2", 14))
+        session.flush()
+
+        last = repo.last_for("Consultation", "c1", "consultation.viewed", actor)
+        assert last is not None and last.timestamp == datetime(2026, 6, 1, 11, 0, tzinfo=UTC)
+        assert repo.last_for("Consultation", "c3", "consultation.viewed", actor) is None
+
+    def test_is_isolated_by_tenant(self, session):
+        tenant, other_tenant = _tenant(session), _tenant(session)
+        actor = UserId.new()
+        SqlAuditLogRepository(session, other_tenant).append(
+            self._entry_on(other_tenant, actor, "c1", 9)
+        )
+        session.flush()
+        repo = SqlAuditLogRepository(session, tenant)
+        assert repo.last_for("Consultation", "c1", "consultation.viewed", actor) is None
+
+    def test_coalescing_compares_the_database_timestamps(self, session):
+        from datetime import timedelta
+        from types import SimpleNamespace
+
+        from medicore.application.common.audit import append_coalesced
+
+        tenant = _tenant(session)
+        repo = SqlAuditLogRepository(session, tenant)
+        uow = SimpleNamespace(audit=repo)
+        actor = UserId.new()
+        first = self._entry_on(tenant, actor, "c1", 9)
+        assert append_coalesced(uow, first, ["full"])
+        session.flush()
+        soon = self._entry_on(tenant, actor, "c1", 9)
+        object.__setattr__(soon, "timestamp", first.timestamp + timedelta(minutes=3))
+        assert not append_coalesced(uow, soon, ["full"])
+        later = self._entry_on(tenant, actor, "c1", 9)
+        object.__setattr__(later, "timestamp", first.timestamp + timedelta(minutes=11))
+        assert append_coalesced(uow, later, ["full"])

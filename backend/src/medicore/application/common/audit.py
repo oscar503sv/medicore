@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 
 from medicore.application.common.context import ActorContext, PlatformActorContext
+from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.shared.identifiers import AuditLogId, TenantId, UserId
 
 PLATFORM_SUPPORT = "platform_support"
+AUDIT_COALESCE_WINDOW = timedelta(minutes=10)
 
 
 def subject(*parts: object) -> str:
@@ -44,6 +47,38 @@ def audit_entry(
         ip_address=actor.ip_address,
         user_agent=actor.user_agent,
     )
+
+
+def _as_utc(moment: datetime) -> datetime:
+    # The database hands timestamps back in the session's zone; compare instants, not
+    # wall-clocks. A naive value (tests' FixedClock) is taken as it is.
+    return moment.astimezone(UTC) if moment.tzinfo is not None else moment
+
+
+def append_coalesced(
+    uow: UnitOfWork,
+    entry: AuditLog,
+    keys: Iterable[str],
+    window: timedelta = AUDIT_COALESCE_WINDOW,
+) -> bool:
+    """Append ``entry`` unless the same actor already logged this action on this entity
+    within ``window`` covering the same ``keys``; returns whether it was written.
+
+    Autosave fires every few seconds and the log is append-only: one entry per section
+    first touched in a window keeps the trail readable without losing who changed what.
+    ``keys`` are names (sections, vital fields), never text.
+    """
+    wanted = sorted(set(keys))
+    last = uow.audit.last_for(entry.entity_type, entry.entity_id, entry.action, entry.actor_id)
+    if (
+        last is not None
+        and _as_utc(entry.timestamp) - _as_utc(last.timestamp) < window
+        and set(wanted) <= set(last.metadata.get("keys", ()))  # type: ignore[call-overload]
+    ):
+        return False
+    entry.metadata["keys"] = wanted
+    uow.audit.append(entry)
+    return True
 
 
 def platform_audit_entry(

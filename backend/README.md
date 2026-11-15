@@ -76,7 +76,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/a
 - **Responses**: every `/api/` response carries `Cache-Control: no-store`, except those that set their own (such as CSV downloads).
 - **Plan quotas**: the seat check locks the clinic's row (`FOR NO KEY UPDATE`), so two simultaneous invitations can't exceed the plan.
 - **Last administrator**: no operation, from the clinic or the platform console, can leave a clinic without an active admin (409 `users.last_admin`), even with concurrent changes.
-- **Granular permissions** (`application/common/permissions.py`): a catalog of **38
+- **Granular permissions** (`application/common/permissions.py`): a catalog of **39
   permissions** (`Permission`, `StrEnum`), a default set per role (`ROLE_PERMISSIONS`) and
   **per-tenant overrides** via `RolePermissionOverride`. `effective_permissions(role, stored)`
   resolves defaults vs. override and intersects with the current catalog; the presentation
@@ -135,6 +135,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/a
   of the same consultation are serialized: a second sign or an edit of a signed one answers 409
   (`consultation.already_signed`), a late autosave cannot revert it to a draft, and starting the
   same appointment twice returns the same consultation.
+- **Consultation access** (`application/use_cases/consultations.py`): the note, diagnoses and drafts belong to the owning doctor (`consultations.edit` is `DOCTOR_ONLY`). Another doctor gets 403 `consultation.not_own`, other roles 403 `permission.missing` and support impersonation 403 `support.clinical_forbidden`; admins can start a consultation but not read or change it. Nurses write vitals with `consultations.vitals` (delegable, nurses by default): `GET /consultations/by-appointment/{appointment_id}/vitals` answers 404 `consultation.not_started` when the appointment has no consultation yet, and `PUT /consultations/{id}/vitals` takes partial updates (a field sent as `null` is cleared; a signed consultation answers 409 `consultation.already_signed`). `POST /consultations/start/{appointment_id}` answers a minimal reference (`id`, `appointment_id`, `patient_id`, `doctor_id`, `status`, `started_at`) without the note, and `PATCH /autosave` merges vitals field by field.
 - **Medical records reading** (`application/use_cases/records.py`, `records` router): the clinical content of a record (note, diagnoses, prescriptions, vaccines, exams, full copy, certificates and the clinical history) needs `records.read_clinical`, a doctor-only permission that can't be delegated (`DOCTOR_ONLY`); anyone else gets 403 `permission.missing`. `GET /records` is paginated (`{items, total, offset, limit}`, 25 by default, 100 at most) and filters on the server: `patient_id`, `type`, `date_from`/`date_to` (clinic days) and `q` (record code, patient name or code); a reversed range answers 400 `records.invalid_range`. It returns metadata only (no reason for the visit, note or vitals) and is backed by the index `ix_records_tenant_encounter`. New endpoints: `GET /patients/{id}/records` (clinical history, doctors only) and `GET /patients/{id}/vitals` (`records.view`); `GET /patients/{id}` adds `latest_vitals` and `recent_records` (up to 6, metadata only). Audit: `record.listed` (each page; never the search text), `record.viewed`, `record.history_viewed`, `patient.vitals_listed`, `prescription.listed` and `document.listed`. In printing, `GET /print/records/{id}` includes `document`; for non-doctors the prescription comes without the general instructions, and the full copy, the exam order and certificates (listing and printing) need `records.read_clinical`.
 - **In-app notifications** (`application/common/notifications.py`): use cases emit them inside
   their own transaction — they are saved together with the action or not at all — and never
@@ -154,7 +155,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/a
   metric, it comes back as `null`. Alongside it, `GET /appointments/upcoming` lists the next
   scheduled/confirmed appointments from now on, across days (same doctor scope).
 - **Auditing (HIPAA/GDPR)** per tenant plus a global platform console; every action stores a
-  readable `subject` in its metadata for a useful detail column.
+  readable `subject` in its metadata for a useful detail column. Consultation events: `consultation.viewed` (scope `full` or `vitals`), `consultation.note_updated`, `consultation.vitals_updated` (metadata `keys`), `consultation.template_changed` (`from`/`to`) and `consultation.draft_changed` (`section`/`op`), with names only, never clinical text. Reads, note and vitals updates by the same actor are coalesced in 10-minute windows per key (`append_coalesced`), so autosave and polling don't fill the log.
 - **Platform console** (superadmin): clinic onboarding/management, global stats, consolidated
   audit and **support sessions** (impersonation with a short TTL, a required reason of 5–500 characters and a trail in the clinic's audit). Support actions on a clinic's users (password reset with a reason, edit, role change, suspension, reactivation) are recorded in that clinic's audit as "Platform support", with IP and browser but without the superadmin's identity, and are not duplicated in the global audit.
 
@@ -252,10 +253,11 @@ Every error response has the same shape:
 - Signing a consultation twice, or editing one that is already signed (autosave, diagnoses, drafts),
   answers 409 `consultation.already_signed`. `consultation.incomplete` stays a 422.
 - Reading clinical content without `records.read_clinical` answers 403 `permission.missing`; a records list with `date_from` after `date_to` answers 400 `records.invalid_range`.
+- Consultation access answers 403 `consultation.not_own` (another doctor's consultation), `permission.missing` (other roles) or `support.clinical_forbidden` (support impersonation); vitals of an appointment with no consultation answer 404 `consultation.not_started`.
 
 ## Tests and linting
 
-A suite of **1459 tests** (298 domain · 641 application · 346 presentation · 174 infrastructure),
+A suite of **1537 tests** (305 domain · 695 application · 360 presentation · 177 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
@@ -316,6 +318,8 @@ Production checklist (via environment variables, see the **Configuration** table
 > **Migration `a3b4c5d6e7f9`:** adds a unique partial index so a consultation has at most one original medical record. **Before deploying, run the detection query in [Duplicate records from double signing](#duplicate-records-from-double-signing)**: the migration refuses to run while duplicates exist (it lists only their ids) and never resolves them itself. Creating the index blocks writes to `medical_records` for an instant. The Docker entrypoint runs `alembic upgrade head`, so the migration applies on deploy.
 >
 > **Migration `c4d5e6f7a8b0`:** adds the index `ix_records_tenant_encounter` on `medical_records(tenant_id, encounter_at)` for the records list, and grants `records.read_clinical` to the doctor role of clinics that had customized it. Creating the index blocks writes to `medical_records` for an instant. Its downgrade removes the permission from the doctor's customizations and drops the index.
+
+> **Migration `d5e6f7a8b9c1`** (consultation authorship): gives `consultations.edit` back to the doctor roles that customized it and drops doctors' revocations of it; in nurse and receptionist roles and users, `consultations.edit` becomes `consultations.vitals` (if a grant and a revocation of the same permission would both remain, the revocation wins; admins are untouched). **Before deploying, back up `role_permission_overrides` and the `users` table (column `permission_adjustments`).** Its downgrade turns `vitals` back into `edit`, but it does not restore the doctors' revocations.
 
 > For multiple workers just set `WEB_CONCURRENCY=N` (uvicorn reads it; `docker-compose.yml` uses 2). Each
 > worker holds its own pool of up to 15 connections: keep `N × 15` below Postgres' `max_connections`.

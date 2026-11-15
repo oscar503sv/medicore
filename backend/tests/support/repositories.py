@@ -1076,6 +1076,16 @@ class InMemoryAuditLogRepository(_Scoped):
     def append(self, entry: AuditLog) -> None:
         self._store.audit[entry.id.value] = entry
 
+    def last_for(
+        self, entity_type: str, entity_id: str, action: str, actor_id: UserId
+    ) -> AuditLog | None:
+        matching = [
+            e for e in self._mine(self._store.audit.values())
+            if (e.entity_type, e.entity_id, e.action, e.actor_id)
+            == (entity_type, entity_id, action, actor_id)
+        ]
+        return max(matching, key=lambda e: e.timestamp, default=None)
+
     def query(self, **criteria: object) -> list[AuditLog]:
         entries = self._mine(self._store.audit.values())
         for key, value in criteria.items():

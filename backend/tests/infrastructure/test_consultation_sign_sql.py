@@ -90,7 +90,7 @@ class Clinic:
         )
         self.consultation.autosave(
             note=soap_note("s", "o", "a", "p").texts(),
-            vitals=Vitals(heart_rate=72, weight=Decimal("70")),
+            vitals={"heart_rate": 72, "weight": Decimal("70")},
         )
         self.consultation.add_diagnosis(IcdCode("I10", "Hipertensión"))
         self.consultation.add_prescription_draft(

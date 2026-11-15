@@ -16,6 +16,7 @@ from medicore.application.use_cases.consultations import (
     ChangeNoteTemplate,
     ConsultationPatch,
     GetConsultation,
+    GetConsultationVitals,
     RemoveApplicationDraft,
     RemoveDiagnosis,
     RemoveExam,
@@ -24,34 +25,75 @@ from medicore.application.use_cases.consultations import (
     SignConsultation,
     SignConsultationCommand,
     StartConsultation,
+    UpdateConsultationVitals,
 )
 from medicore.domain.entities.application import ApplicationDraft
 from medicore.domain.entities.prescription import PrescriptionDraft
 from medicore.domain.shared.identifiers import AppointmentId, ConsultationId, ProcedureTypeId
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.vitals import Vitals
 from medicore.presentation.dependencies import Actor, Clock, Codes, UoW
 from medicore.presentation.schemas.consultations import (
     ApplicationDraftRequest,
     AutosaveRequest,
+    ConsultationRefResponse,
     ConsultationResponse,
+    ConsultationVitalsResponse,
     DiagnosisRequest,
     ExamRequestSchema,
     NoteTemplateRequest,
     PrescriptionDraftRequest,
     ProcedureDraftRequest,
     SignRequest,
+    VitalsSchema,
+    VitalsUpdateRequest,
 )
-from medicore.presentation.serializers import ser_consultation, ser_record
+from medicore.presentation.serializers import (
+    ser_consultation,
+    ser_consultation_ref,
+    ser_consultation_vitals,
+    ser_record,
+)
 
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
+_DECIMAL_VITALS = ("temperature", "weight", "height")
 
-@router.post("/start/{appointment_id}", response_model=ConsultationResponse, status_code=201)
+
+def _vital_changes(v: VitalsSchema) -> dict[str, object]:
+    """Only the fields the client sent: an absent field keeps what is stored, an explicit
+    null (or empty string) clears it."""
+    changes: dict[str, object] = {}
+    for name in v.model_fields_set:
+        value = getattr(v, name)
+        if name in _DECIMAL_VITALS:
+            value = Decimal(value) if value else None
+        changes[name] = value
+    return changes
+
+
+@router.post("/start/{appointment_id}", response_model=ConsultationRefResponse, status_code=201)
 def start_consultation(appointment_id: str, actor: Actor, uow: UoW, clock: Clock):
     c = StartConsultation(uow, clock).execute(actor, AppointmentId.parse(appointment_id))
-    return ser_consultation(c, uow)
+    return ser_consultation_ref(c)
+
+
+@router.get(
+    "/by-appointment/{appointment_id}/vitals", response_model=ConsultationVitalsResponse
+)
+def get_consultation_vitals(appointment_id: str, actor: Actor, uow: UoW, clock: Clock):
+    view = GetConsultationVitals(uow, clock).execute(actor, AppointmentId.parse(appointment_id))
+    return ser_consultation_vitals(view)
+
+
+@router.put("/{consultation_id}/vitals", response_model=ConsultationVitalsResponse)
+def update_consultation_vitals(
+    consultation_id: str, body: VitalsUpdateRequest, actor: Actor, uow: UoW, clock: Clock
+):
+    view = UpdateConsultationVitals(uow, clock).execute(
+        actor, ConsultationId.parse(consultation_id), _vital_changes(body)
+    )
+    return ser_consultation_vitals(view)
 
 
 @router.get("/{consultation_id}", response_model=ConsultationResponse)
@@ -62,22 +104,11 @@ def get_consultation(consultation_id: str, actor: Actor, uow: UoW, clock: Clock)
 
 @router.patch("/{consultation_id}/autosave", response_model=ConsultationResponse)
 def autosave(consultation_id: str, body: AutosaveRequest, actor: Actor, uow: UoW, clock: Clock):
-    vitals = None
-    if body.vitals:
-        v = body.vitals
-        vitals = Vitals(
-            blood_pressure=v.blood_pressure,
-            heart_rate=v.heart_rate,
-            spo2=v.spo2,
-            temperature=Decimal(v.temperature) if v.temperature else None,
-            weight=Decimal(v.weight) if v.weight else None,
-            glucose=v.glucose,
-            height=Decimal(v.height) if v.height else None,
-            fetal_heart_rate=v.fetal_heart_rate,
-        )
     c = AutosaveConsultation(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id),
-        ConsultationPatch(vitals=vitals, note=body.note),
+        ConsultationPatch(
+            vitals=_vital_changes(body.vitals) if body.vitals else None, note=body.note
+        ),
     )
     return ser_consultation(c, uow)
 

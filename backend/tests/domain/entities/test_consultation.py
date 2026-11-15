@@ -15,7 +15,11 @@ from medicore.domain.enums import (
     PrescriptionStatus,
     RecordStatus,
 )
-from medicore.domain.shared.errors import ConsultationAlreadySigned, ConsultationNotSignable
+from medicore.domain.shared.errors import (
+    ConsultationAlreadySigned,
+    ConsultationNotSignable,
+    InvalidValueObject,
+)
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     ConsultationId,
@@ -25,7 +29,6 @@ from medicore.domain.shared.identifiers import (
     UserId,
 )
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.vitals import Vitals
 from tests.support.builders import soap_note
 
 
@@ -43,7 +46,7 @@ def make_consultation() -> Consultation:
 def fill_for_signing(c: Consultation) -> None:
     c.autosave(
         note=soap_note("s", "o", "a", "p").texts(),
-        vitals=Vitals(heart_rate=72, weight=Decimal("70")),
+        vitals={"heart_rate": 72, "weight": Decimal("70")},
     )
     c.add_diagnosis(IcdCode("I10", "Hipertensión"))
 
@@ -152,3 +155,57 @@ class TestSigning:
         )
         with pytest.raises(ConsultationNotSignable):
             c.add_diagnosis(IcdCode("E11.9", "Diabetes"))
+
+
+class TestPartialVitals:
+    def test_update_vitals_merges_and_reports_only_changed_fields(self):
+        c = make_consultation()
+        c.update_vitals({"blood_pressure": "120/80", "heart_rate": 70}, datetime(2026, 5, 12, 9, 5))
+        changed = c.update_vitals({"weight": Decimal("70"), "heart_rate": 70})
+        assert changed == ("weight",)
+        assert c.vitals.blood_pressure == "120/80"
+        assert c.vitals.heart_rate == 70
+
+    def test_null_clears_a_field(self):
+        c = make_consultation()
+        c.update_vitals({"heart_rate": 70})
+        assert c.update_vitals({"heart_rate": None}) == ("heart_rate",)
+        assert c.vitals.is_empty()
+
+    def test_no_change_leaves_last_saved_at_alone(self):
+        c = make_consultation()
+        c.update_vitals({"heart_rate": 70}, datetime(2026, 5, 12, 9, 5))
+        assert c.update_vitals({"heart_rate": 70}, datetime(2026, 5, 12, 9, 30)) == ()
+        assert c.last_saved_at == datetime(2026, 5, 12, 9, 5)
+
+    def test_revalidates_and_rejects_unknown_fields(self):
+        c = make_consultation()
+        with pytest.raises(InvalidValueObject) as exc:
+            c.update_vitals({"blood_pressure": "high"})
+        assert exc.value.code == "vitals.invalid_blood_pressure"
+        with pytest.raises(InvalidValueObject) as exc:
+            c.update_vitals({"mood": 3})
+        assert exc.value.code == "vitals.unknown_field"
+
+    def test_refused_once_signed(self):
+        c = make_consultation()
+        c.status = ConsultationStatus.SIGNED
+        with pytest.raises(ConsultationAlreadySigned):
+            c.update_vitals({"heart_rate": 70})
+
+
+class TestAutosaveChanges:
+    def test_reports_only_the_sections_whose_text_changed(self):
+        c = make_consultation()
+        first = c.autosave(note={"subjective": "tos", "plan": "reposo"})
+        assert set(first.note_keys) == {"subjective", "plan"}
+        again = c.autosave(note={"subjective": "tos", "plan": "reposo y líquidos"})
+        assert again.note_keys == ("plan",)
+        assert c.autosave(note={"plan": "reposo y líquidos"}).note_keys == ()
+
+    def test_vitals_in_an_autosave_do_not_erase_the_others(self):
+        c = make_consultation()
+        c.update_vitals({"blood_pressure": "130/85"})
+        changes = c.autosave(vitals={"weight": Decimal("70")})
+        assert changes.vitals == ("weight",)
+        assert c.vitals.blood_pressure == "130/85"

@@ -11,6 +11,7 @@ is orchestrated by the application layer. :meth:`sign` is the pure domain operat
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -56,6 +57,14 @@ class SignResult:
     procedures: list[Procedure] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class AutosaveChanges:
+    """What an autosave actually changed: note section keys and vital field names."""
+
+    note_keys: tuple[str, ...] = ()
+    vitals: tuple[str, ...] = ()
+
+
 @dataclass(slots=True)
 class Consultation:
     """The mutable state of an in-progress consultation."""
@@ -79,21 +88,38 @@ class Consultation:
     last_saved_at: datetime | None = None
 
     # ── draft editing ──
+    def update_vitals(
+        self, changes: Mapping[str, object], when: datetime | None = None
+    ) -> tuple[str, ...]:
+        """Merge only the given vital fields (nursing and the doctor write the same snapshot
+        at different times, so replacing it whole would erase the other's readings).
+        Returns the fields that changed."""
+        self._assert_draft()
+        merged = self.vitals.with_changes(changes)
+        changed = self.vitals.changed_fields(merged)
+        if changed:
+            self.vitals = merged
+            self.last_saved_at = when or datetime.now(UTC)
+        return changed
+
     def autosave(
         self,
         *,
-        vitals: Vitals | None = None,
+        vitals: Mapping[str, object] | None = None,
         note: dict[str, str] | None = None,
         when: datetime | None = None,
-    ) -> None:
-        """Persist a draft patch (idempotent): vitals and the text of note sections by
-        key. Only allowed while in draft."""
+    ) -> AutosaveChanges:
+        """Persist a draft patch (idempotent): the given vital fields and the text of note
+        sections by key. Only allowed while in draft."""
         self._assert_draft()
-        if vitals is not None:
-            self.vitals = vitals
+        vitals_changed = self.update_vitals(vitals, when) if vitals else ()
+        note_changed: tuple[str, ...] = ()
         if note:
+            before = self.note.texts()
             self.note = self.note.with_texts(note)
+            note_changed = tuple(k for k, text in self.note.texts().items() if before[k] != text)
         self.last_saved_at = when or datetime.now(UTC)
+        return AutosaveChanges(note_keys=note_changed, vitals=vitals_changed)
 
     def change_template(self, template: NoteTemplate, when: datetime | None = None) -> None:
         """Rewrite the note in another template, carrying the text over by role."""

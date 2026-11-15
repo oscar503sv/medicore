@@ -21,7 +21,12 @@ import type { Permission } from '@/types'
 
 // Clinical/legal guardrail mirrored from the backend: only doctors may hold these,
 // and they cannot be taken away from them.
-export const DOCTOR_ONLY: Permission[] = ['records.sign', 'records.amend', 'records.read_clinical']
+export const DOCTOR_ONLY: Permission[] = [
+  'records.sign',
+  'records.amend',
+  'records.read_clinical',
+  'consultations.edit',
+]
 
 // Mirrored from the backend: handing out permissions stays with administrators.
 export const ADMIN_ONLY: Permission[] = ['permissions.manage']

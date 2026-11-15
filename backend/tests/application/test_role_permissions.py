@@ -114,6 +114,27 @@ class TestUpdate:
                 seed.actor(seed.admin), Role.DOCTOR, no_sign
             )
 
+    def test_consultation_edit_is_doctor_only_and_vitals_can_be_delegated(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        with pytest.raises(ValidationError) as exc:
+            UpdateRolePermissions(uow, FixedClock()).execute(
+                seed.actor(seed.admin), Role.NURSE, ["records.view", "consultations.edit"]
+            )
+        assert exc.value.code == "roles.doctor_only"
+        no_edit = [
+            str(p) for p in permissions_for(Role.DOCTOR) if p != Permission.CONSULTATIONS_EDIT
+        ]
+        with pytest.raises(ValidationError) as exc:
+            UpdateRolePermissions(uow, FixedClock()).execute(
+                seed.actor(seed.admin), Role.DOCTOR, no_edit
+            )
+        assert exc.value.code == "roles.doctor_must_keep"
+        UpdateRolePermissions(uow, FixedClock()).execute(
+            seed.actor(seed.admin), Role.RECEPTIONIST,
+            [*_receptionist_defaults(), "consultations.vitals"],
+        )
+
     def test_read_clinical_cannot_be_granted_to_nurse_nor_removed_from_doctor(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)

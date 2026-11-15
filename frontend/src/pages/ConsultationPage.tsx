@@ -9,6 +9,7 @@ import { noteTemplatesApi } from '@/api/noteTemplates'
 import { ConsultationApplications } from '@/components/applications/ConsultationApplications'
 import { ConsultationRail, type RailSection } from '@/components/consultation/ConsultationRail'
 import { NoteEditor } from '@/components/consultation/NoteEditor'
+import { VITAL_FIELDS } from '@/components/consultation/vitalFields'
 import { ConsultationProcedures } from '@/components/procedures/ConsultationProcedures'
 import { ConsultationExams } from '@/components/records/ConsultationExams'
 import { RecordPrintActions } from '@/components/records/RecordDocuments'
@@ -25,26 +26,16 @@ import { sectionTitle } from '@/lib/notes'
 import { useAuthStore } from '@/stores/auth'
 import type { ClinicalNote, Consultation, MedicalRecord, Vitals } from '@/types'
 
-const VITAL_FIELDS: {
-  key: keyof Vitals
-  labelKey: string
-  placeholder: string
-  unit: string // literal unit or a `vital.unit_*` i18n key
-}[] = [
-  { key: 'blood_pressure', labelKey: 'vital.blood_pressure', placeholder: '120/80', unit: 'mmHg' },
-  { key: 'heart_rate', labelKey: 'vital.heart_rate', placeholder: '72', unit: 'vital.unit_bpm' },
-  { key: 'spo2', labelKey: 'vital.spo2', placeholder: '98', unit: '%' },
-  { key: 'temperature', labelKey: 'vital.temperature', placeholder: '36.5', unit: '°C' },
-  { key: 'weight', labelKey: 'vital.weight', placeholder: '70', unit: 'kg' },
-  { key: 'glucose', labelKey: 'vital.glucose_full', placeholder: '90', unit: 'mg/dL' },
-]
-
 // Same rule as the backend: required note sections 60%, a diagnosis 20%, any vital 20%;
 // signing needs at least MIN_TO_SIGN.
 const MIN_TO_SIGN = 60
 const SAVE_DELAY_MS = 800
 
-type Patch = { vitals?: Vitals; note?: Record<string, string> }
+// Vitals travel as the fields that changed: nursing records some of them in parallel.
+type Patch = { vitals?: Partial<Vitals>; note?: Record<string, string> }
+
+// How often the screen looks for vitals nursing recorded meanwhile.
+const VITALS_POLL_MS = 30_000
 type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error'
 
 const hasVitals = (v: Vitals) => Object.values(v).some((x) => x !== null && x !== '')
@@ -89,7 +80,9 @@ function useAutosave(id: string, onSaved: (c: Consultation) => void) {
       .catch((err) => {
         // Keep what failed, under anything typed since, to retry.
         pending.current = {
-          vitals: pending.current.vitals ?? patch.vitals,
+          vitals: patch.vitals || pending.current.vitals
+            ? { ...patch.vitals, ...pending.current.vitals }
+            : undefined,
           note: { ...patch.note, ...pending.current.note },
         }
         if (stateRef.current !== 'error') toast(errorMessage(err), 'danger')
@@ -107,7 +100,10 @@ function useAutosave(id: string, onSaved: (c: Consultation) => void) {
   const queue = useCallback(
     (patch: Patch) => {
       pending.current = {
-        vitals: patch.vitals ?? pending.current.vitals,
+        vitals:
+          patch.vitals || pending.current.vitals
+            ? { ...pending.current.vitals, ...patch.vitals }
+            : undefined,
         note: patch.note ? { ...pending.current.note, ...patch.note } : pending.current.note,
       }
       if (stateRef.current !== 'error') setBoth('pending')
@@ -132,7 +128,10 @@ function useAutosave(id: string, onSaved: (c: Consultation) => void) {
     }
   }, [flush, t])
 
-  return { state, queue, flush }
+  /** Vitals typed but not yet sent: a refresh from the server must not overwrite them. */
+  const pendingVitals = useCallback(() => pending.current.vitals, [])
+
+  return { state, queue, flush, pendingVitals }
 }
 
 export function ConsultationPage() {
@@ -145,9 +144,12 @@ export function ConsultationPage() {
   const canApplications = useAuthStore((s) => s.can('applications.view'))
   const canProcedures = useAuthStore((s) => s.can('procedures.view'))
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['consultation', id],
-    queryFn: () => consultationsApi.get(id).catch(() => null),
+    queryFn: () => consultationsApi.get(id),
+    // A failed refresh keeps the data on screen; only a failed first load is "not found".
+    retry: false,
+    refetchInterval: VITALS_POLL_MS,
   })
   const { data: catalog } = useQuery({
     queryKey: ['note-catalog'],
@@ -192,6 +194,20 @@ export function ConsultationPage() {
     [qc, id],
   )
   const save = useAutosave(id, onSaved)
+
+  // Vitals nursing recorded while the doctor is here: take the fields the doctor is not
+  // typing right now. Syncs with the server (an external system), hence the effect.
+  const serverVitals = data?.vitals
+  const { pendingVitals } = save
+  useEffect(() => {
+    if (!serverVitals) return
+    const typing = pendingVitals() ?? {}
+    setVitals((prev) => {
+      if (prev === null) return prev
+      const kept = Object.fromEntries(Object.keys(typing).map((k) => [k, prev[k as keyof Vitals]]))
+      return { ...serverVitals, ...kept }
+    })
+  }, [serverVitals, pendingVitals])
 
   const switchTemplate = useMutation({
     mutationFn: async (template: string) => {
@@ -251,7 +267,12 @@ export function ConsultationPage() {
 
   if (isLoading) return <PageLoader />
   if (!data || !vitals || !note) {
-    return <div className="p-8 text-sm text-tx-3">{t('consult.not_found')}</div>
+    // A refusal (another doctor's consultation, a role without access) says so, not "not found".
+    return (
+      <div role="alert" className="p-8 text-sm text-tx-3">
+        {error ? errorMessage(error) : t('consult.not_found')}
+      </div>
+    )
   }
 
   const elapsed = Math.max(0, Math.floor((now - Date.parse(data.started_at)) / 1000))
@@ -399,9 +420,9 @@ export function ConsultationPage() {
                     <input
                       value={(vitals[f.key] as string | number | null) ?? ''}
                       onChange={(e) => {
-                        const next = { ...vitals, [f.key]: e.target.value || null }
-                        setVitals(next)
-                        save.queue({ vitals: next })
+                        const value = e.target.value || null
+                        setVitals({ ...vitals, [f.key]: value })
+                        save.queue({ vitals: { [f.key]: value } })
                       }}
                       placeholder={f.placeholder}
                       inputMode={f.key === 'blood_pressure' ? 'text' : 'decimal'}

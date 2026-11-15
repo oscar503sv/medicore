@@ -12,6 +12,7 @@ export type Permission =
   | 'fees.manage_all'
   | 'consultations.start'
   | 'consultations.edit'
+  | 'consultations.vitals'
   | 'records.view'
   | 'records.read_clinical'
   | 'records.upload'
@@ -654,6 +655,25 @@ export interface Consultation {
   completion_percent: number
   last_saved_at: string | null
   // Header context for the live consultation screen (immutable for its lifetime).
+  patient: Patient | null
+  appointment: Appointment | null
+}
+
+/** What starting a consultation returns: no clinical content. */
+export interface ConsultationRef {
+  id: string
+  appointment_id: string
+  patient_id: string
+  doctor_id: string
+  status: ConsultationStatus
+  started_at: string
+}
+
+/** The non-clinical view of a consultation, for whoever records vitals. */
+export interface ConsultationVitals extends ConsultationRef {
+  doctor_name: string | null
+  vitals: Vitals
+  last_saved_at: string | null
   patient: Patient | null
   appointment: Appointment | null
 }

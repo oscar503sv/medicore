@@ -100,6 +100,8 @@ Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que
 - **Aplicaciones en la clínica** (inyecciones, sueros, nebulizaciones…): el médico las indica en la consulta y se vuelven órdenes para enfermería al firmarla; las que llegan sin cita con receta externa registran al médico que receta y su número de JVPM. Cada dosis se registra con lote, sitio y signos vitales, no se edita (una errónea se anula con motivo) y abre una observación (30 min por defecto, configurable por orden) que se cierra "sin reacción" o como reacción adversa, lo que notifica al médico que la indicó. Aplicar un medicamento que choca con las alergias del paciente exige una justificación escrita y auditada.
 - **Procedimientos menores** (suturas, biopsias, curaciones, DIU, electrocardiograma…): cada clínica tiene un catálogo configurable, precargado con los más comunes, que dice quién puede realizar cada uno (solo médico, o médico o enfermería), si requiere consentimiento informado, si suele tomar muestra para patología y el control sugerido. Se indican en la consulta (quedan pendientes al firmarla) o se registran directamente, opcionalmente ligados a una cita de procedimiento. Antes de realizarlo: revisión de alergias, anticoagulantes, ayuno y signos vitales; el consentimiento firmado en papel se registra con quién firmó y un testigo (sin archivo). La nota (anestesia, técnica, hallazgos, materiales, complicaciones, indicaciones, muestra enviada a patología) no se edita una vez firmada — las correcciones son enmiendas — y al firmar se sugiere la fecha de control y se notifica al médico que lo indicó si lo realizó otra persona.
 - **El contenido clínico de los expedientes es para médicos**: la nota, los diagnósticos, las recetas del expediente, las vacunas, los exámenes, la copia completa, las constancias y el historial clínico requieren `records.read_clinical` (exclusivo de médicos, no delegable). El listado de expedientes está paginado y se filtra en el servidor, y muestra solo metadatos (código, fecha, tipo, médico, sede, estado, paciente; nunca el motivo de consulta, la nota ni los signos vitales). `records.view` cubre ese listado, las recetas, los signos vitales y los documentos. El backend responde 403 `permission.missing` en `GET /records/{id}` a quien no es médico, y cada página del listado queda en la auditoría (`record.listed`, nunca el texto buscado).
+- **El contenido de la consulta es del médico**: la nota, los diagnósticos y los borradores (recetas, exámenes, aplicaciones, procedimientos), así como la firma, pertenecen al médico dueño de la consulta. `consultations.edit` es exclusivo de médicos (`DOCTOR_ONLY`, no delegable). Otro médico recibe 403 `consultation.not_own`, otros roles 403 `permission.missing` y la suplantación de soporte 403 `support.clinical_forbidden`. La enfermería registra signos vitales con `consultations.vitals` (delegable, por defecto enfermería), desde **Citas** (el botón *Signos vitales* en las citas en curso) o dentro de la consulta. El admin puede iniciar una consulta pero no abrirla, y solo el médico dueño pasa a la nota. La pantalla de consulta se actualiza cada 30 s para mostrar los signos vitales de enfermería.
+- **Auditoría de consultas**: `consultation.viewed` (alcance `full` o `vitals`), `consultation.note_updated`, `consultation.vitals_updated`, `consultation.template_changed` y `consultation.draft_changed` guardan solo nombres de secciones y campos, nunca texto clínico. Las lecturas y las ediciones de nota y vitales de un mismo actor dentro de 10 minutos se agregan por clave, para que el autoguardado y el sondeo no llenen la bitácora.
 - **Permisos granulares** validados en la capa de aplicación (no solo en UI) — ver sección siguiente.
 - Contraseña temporal con cambio forzado en el primer ingreso: mientras no se reemplace, el backend solo permite cambiarla, ver el perfil y cerrar sesión; cualquier otra cosa responde 403 `auth.password_change_required`. Las sesiones de soporte (impersonación) están exentas.
 - **Política de contraseñas** (`domain/services/password_policy.py`, al estilo NIST SP 800-63B) en todos los puntos donde se fija una contraseña — invitar, restablecer (clínica o consola), cambiarla, alta de clínica, script de superadmin: al menos 10 caracteres (máximo 72 bytes, el límite de bcrypt), letras y un número o símbolo, que no sea una contraseña común, nada del nombre, correo o clínica de la persona, y distinta de la actual. Sin caducidad periódica; la fuerza bruta la cubre el bloqueo de inicio de sesión. La UI muestra los requisitos en vivo y genera contraseñas temporales que siempre cumplen.
@@ -111,7 +113,7 @@ Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que
 
 El control de acceso es **granular y personalizable por clínica** (`application/common/permissions.py`):
 
-- **Catálogo de 38 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (`view`, y `read_clinical`, `sign` y `amend`, exclusivos de médicos), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `locations.manage`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
+- **Catálogo de 39 permisos** (`Permission`, `StrEnum`) agrupados por recurso: `patients.*`, `appointments.*`, `availability.manage`, `consultations.*`, `records.*` (`view`, y `read_clinical`, `sign` y `amend`, exclusivos de médicos), `prescriptions.manage`, `diagnoses.view`, `insurers.*`, `users.*`, `organization.*`, `locations.manage`, `audit.view`, `permissions.manage`, `vaccinations.*`, `applications.*`, `procedures.*`.
 - **4 roles** — `admin`, `doctor`, `nurse`, `receptionist` — con un conjunto de permisos por defecto en `ROLE_PERMISSIONS`.
 - **Overrides por tenant**: cada clínica puede personalizar el set de un rol mediante una fila `RolePermissionOverride`. `effective_permissions(role, stored)` resuelve defaults vs. override (e intersecta con el catálogo vigente para tolerar permisos retirados).
 - En cada request, la capa de presentación coloca los permisos efectivos en `ActorContext.permissions`, de modo que toda comprobación `ensure_permission(...)` honra la personalización de la clínica.
@@ -122,8 +124,8 @@ El control de acceso es **granular y personalizable por clínica** (`application
 
 **Salvaguardas** (aplicadas en el backend y reflejadas en la UI):
 
-- El rol `admin` no es personalizable y siempre tiene acceso completo (salvo el contenido clínico de los expedientes, firmar y enmendar).
-- `records.sign`, `records.amend` y `records.read_clinical` son exclusivos de médicos: nunca se otorgan a otros roles o usuarios ni se les quitan a los médicos.
+- El rol `admin` no es personalizable y siempre tiene acceso completo (salvo el contenido clínico de los expedientes y de las consultas, firmar y enmendar; puede iniciar una consulta pero no abrirla).
+- `records.sign`, `records.amend`, `records.read_clinical` y `consultations.edit` son exclusivos de médicos: nunca se otorgan a otros roles o usuarios ni se les quitan a los médicos.
 - `permissions.manage` es exclusivo de administradores: no se puede delegar a un rol ni a un usuario.
 - Solo un admin actúa sobre cuentas de admin o de médico (editar, cambiar rol, desactivar, restablecer contraseña, cerrar sesiones) o asigna esos roles. Un `users.manage` delegado gestiona al resto del personal (enfermería, recepción).
 - Nadie gestiona su propia cuenta desde **Usuarios** (cambiar su rol, editarse, suspenderse, reactivarse, restablecer su contraseña o cerrar sus sesiones): su perfil, contraseña y sesiones se gestionan en **Ajustes**. Esto aplica también a los admins.
@@ -272,7 +274,7 @@ medicore/
 │   ├── .env                  # Variables reales — gitignoreado, nunca commitear
 │   ├── Dockerfile            # Imagen de producción (usuario no-root, uvicorn :8000)
 │   ├── alembic.ini           # Config de Alembic (URL inyectada desde .env)
-│   ├── migrations/           # 14 migraciones Alembic
+│   ├── migrations/           # 37 migraciones Alembic
 │   ├── scripts/
 │   │   ├── seed_demo.py            # Datos demo: ~8 semanas de historia + 4 de agenda, vía casos de uso
 │   │   ├── import_icd.py           # Carga del catálogo CIE-10/CIE-11
@@ -397,7 +399,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1459 tests)
+.venv/bin/pytest                          # suite completa (1537 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -451,19 +453,20 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1459 tests en verde
-   298  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1537 tests en verde
+   305  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   641  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   695  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma (las acciones de soporte quedan en la auditoría de la clínica y se notifican), permisos granulares, aislamiento multi-tenant)
-   346  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   360  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    174  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    177  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:
 - Atomicidad de `SignConsultation`: un fallo revierte record, recetas y estado de cita. Las firmas concurrentes de una consulta dejan un único record.
 - Solo los médicos leen el contenido clínico de los expedientes; el listado pagina y filtra en el servidor.
+- Consultas: solo el médico dueño lee o edita una consulta, la enfermería solo escribe signos vitales, admin y soporte no leen contenido clínico, y la auditoría guarda nombres y no texto.
 - Aislamiento multi-tenant: los repos de un tenant no filtran datos de otro.
 - Permisos efectivos por rol y override por tenant, y de scope de plataforma.
 - Revocación de sesiones, protección CSRF y caducidad de la sesión de consola.
@@ -535,7 +538,9 @@ Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migr
 
 > **Migración `c4d5e6f7a8b0`:** añade el índice `ix_records_tenant_encounter` sobre `medical_records(tenant_id, encounter_at)` para el listado de expedientes, y otorga `records.read_clinical` al rol médico de las clínicas que lo habían personalizado. Crear el índice bloquea escrituras en `medical_records` un instante. Su downgrade quita el permiso de las personalizaciones del médico y elimina el índice.
 
-> **Cambios visibles para los usuarios en esta versión** (avísalos a las clínicas): admin y enfermería ya no ven el motivo de consulta en Expedientes ni en el resumen del paciente; en Expedientes la columna Motivo pasa a Médico y solo el médico puede abrir un expediente; la línea de medicación muestra al médico que la prescribió en vez del código del expediente; admin y enfermería reimprimen recetas sin indicaciones; las pestañas abiertas con la versión anterior fallan en Expedientes hasta recargarlas. **Pendiente** (siguiente entrega, OZK-95): hoy enfermería y admin aún pueden editar la consulta en curso; esta versión no lo resuelve.
+> **Migración `d5e6f7a8b9c1`** (autoría de la consulta): devuelve `consultations.edit` a los roles médicos personalizados y elimina las revocaciones de `edit` a médicos; en roles y usuarios de enfermería y recepción, `consultations.edit` pasa a `consultations.vitals` (si quedan a la vez concedido y revocado, gana la revocación; admin no se toca). **Antes de desplegar, respalda `role_permission_overrides` y la tabla `users` (columna `permission_adjustments`).** Su downgrade convierte `vitals` de nuevo en `edit`, pero no restaura las revocaciones de los médicos.
+
+> **Cambios visibles para los usuarios en esta versión** (avísalos a las clínicas): admin y enfermería ya no ven el motivo de consulta en Expedientes ni en el resumen del paciente; en Expedientes la columna Motivo pasa a Médico y solo el médico puede abrir un expediente; la línea de medicación muestra al médico que la prescribió en vez del código del expediente; admin y enfermería reimprimen recetas sin indicaciones; las pestañas abiertas con la versión anterior fallan en Expedientes hasta recargarlas. Enfermería solo registra signos vitales en la consulta en curso, y admin ya no puede abrirla: solo el médico que la inició pasa a la nota. Para clientes de la API: `POST /consultations/start/{id}` ya no devuelve la nota (devuelve una referencia mínima).
 
 Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma. Cada ejecución queda registrada y la página *Monitoreo* marca la tarea si falla o si pasan más de 26 h sin un reset exitoso.
 

@@ -38,7 +38,7 @@ from __future__ import annotations
 import argparse
 import os
 import random
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -1076,7 +1076,7 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
     dx = RNG.sample(spec.diagnoses, 1 if RNG.random() < 0.75 else 2)
     AutosaveConsultation(c.uow(), c.at(start + timedelta(minutes=6))).execute(
         me, consultation.id,
-        ConsultationPatch(vitals=vitals_for(patient, start.date()), note=note_for(
+        ConsultationPatch(vitals=asdict(vitals_for(patient, start.date())), note=note_for(
             consultation.note, appt.reason, dx[0][1])),
     )
     for code, label in dx:

@@ -24,6 +24,15 @@ class EntityNotFound(ApplicationError):
         super().__init__(f"{entity} not found: {identifier}", entity=entity)
 
 
+class ConsultationNotStarted(EntityNotFound):
+    """The appointment has no consultation yet (nursing asked for its vitals too early)."""
+
+    code = "consultation.not_started"
+
+    def __init__(self, appointment_id: object) -> None:
+        super().__init__("Consultation", appointment_id)
+
+
 class AuthenticationFailed(ApplicationError):
     """Invalid organization, credentials, or inactive account — answered with HTTP 401.
 

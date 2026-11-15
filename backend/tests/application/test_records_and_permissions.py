@@ -41,7 +41,6 @@ from medicore.domain.repositories._support import Paging
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import PatientId
 from medicore.domain.value_objects.icd_code import IcdCode
-from medicore.domain.value_objects.vitals import Vitals
 from tests.support.builders import build_tenant, build_user, seed_clinic, soap_note
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
@@ -67,7 +66,7 @@ def _sign_a_record(seed, uow):
         consultation.id,
         ConsultationPatch(
             note=soap_note("s", "o", "a", "p").texts(),
-            vitals=Vitals(heart_rate=70, weight=Decimal("68")),
+            vitals={"heart_rate": 70, "weight": Decimal("68")},
         ),
     )
     AddDiagnosis(uow, FixedClock()).execute(
