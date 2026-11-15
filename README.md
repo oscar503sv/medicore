@@ -156,7 +156,22 @@ Each clinic has a **subscription** (`Subscription` value object on `Tenant`): pl
 - **Payments and renewal** (`subscription_payments`): recording a payment extends the paid period by 1–24 months. After the period ends the clinic keeps working for the grace days; then it becomes **read-only** (`plan.read_only`: it can view but not change data until renewed). The app shows banners as expiry approaches.
 - Clinics see their plan, usage and payment history in **Settings → Organization**.
 
-The public demo shows two plans: `clinica-demo` on **Clínica Plus** with every clinical module (its plan already includes operational metrics), and `centro-norte` on **Clínica** with vaccination only (3 doctors, support seats full), so locked modules and quota messages can be tried too.
+The public demo has three clinics, one per plan. Existing slugs and email addresses stay the same.
+
+| Clinic (slug) | Plan | Doctor seats | Support seats¹ | Clinical modules | Analytics |
+|---|---|---|---|---|---|
+| Policlínica Escalón (`clinica-demo`) | Clínica Plus | 5/5 | 4/6 | All three | Operational |
+| Centro Médico Familiar del Norte (`centro-norte`) | Clínica | 3/3 | 3/3 | Vaccination | Clinic |
+| Consultorio Médico Dra. Sofía Alvarenga (`doc-demo`) | Profesional independiente | 1/1 | 1/1 | None | Basic |
+
+¹ The first admin does not use a support seat. Escalón includes an invited receptionist.
+Sofía sees adults and children; Yesenia Ramos schedules appointments. Sign in with
+`sofia.alvarenga@doc-demo.test` or `yesenia.ramos@doc-demo.test`; its admin is `admin@doc-demo.test`.
+Passwords still come from `DEMO_PASSWORD` and `DEMO_ADMIN_PASSWORD`.
+
+The nightly reset recreates only these three slugs; it leaves real clinics such as `clinica-loida` alone.
+Before deploying, confirm that `doc-demo` is unused in production (checked absent on 2026-11-15).
+Test the seed and `--reset` only against a disposable database, never the local working database.
 
 ---
 

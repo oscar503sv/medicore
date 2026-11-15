@@ -156,7 +156,22 @@ Cada clínica tiene una **suscripción** (value object `Subscription` en `Tenant
 - **Pagos y renovación** (`subscription_payments`): registrar un pago extiende el periodo de 1 a 24 meses. Al vencer, la clínica sigue operando durante los días de gracia; después queda en **solo lectura** (`plan.read_only`: puede consultar pero no modificar hasta renovar). La app muestra avisos al acercarse el vencimiento.
 - Las clínicas ven su plan, uso e historial de pagos en **Ajustes → Organización**.
 
-La demo pública muestra dos planes: `clinica-demo` en **Clínica Plus** con todos los módulos clínicos (su plan ya incluye las métricas operativas), y `centro-norte` en **Clínica** solo con vacunación (3 médicos, cupos de apoyo llenos), para probar también los módulos bloqueados y los mensajes de cupo.
+La demo pública tiene tres clínicas, una por plan. Los slugs y correos existentes se conservan.
+
+| Clínica (slug) | Plan | Asientos médicos | Asientos de apoyo¹ | Módulos clínicos | Analítica |
+|---|---|---|---|---|---|
+| Policlínica Escalón (`clinica-demo`) | Clínica Plus | 5/5 | 4/6 | Los tres | Operativa |
+| Centro Médico Familiar del Norte (`centro-norte`) | Clínica | 3/3 | 3/3 | Vacunación | Clínica |
+| Consultorio Médico Dra. Sofía Alvarenga (`doc-demo`) | Profesional independiente | 1/1 | 1/1 | Ninguno | Básica |
+
+¹ El primer admin no ocupa asiento de apoyo. Escalón incluye una recepcionista invitada.
+Sofía atiende a adultos y niños; Yesenia Ramos agenda. Accede con
+`sofia.alvarenga@doc-demo.test` o `yesenia.ramos@doc-demo.test`; su admin es `admin@doc-demo.test`.
+Las contraseñas siguen saliendo de `DEMO_PASSWORD` y `DEMO_ADMIN_PASSWORD`.
+
+El reset nocturno recrea solo esos tres slugs; conserva las clínicas reales como `clinica-loida`.
+Antes de desplegar, confirma que `doc-demo` no esté ocupado en producción (se comprobó ausente el 2026-11-15).
+Prueba el seed y `--reset` solo en una BD desechable, nunca en la BD local de trabajo.
 
 ---
 

@@ -202,7 +202,7 @@ python -m venv .venv
 # 3) (opcional) catálogo de diagnósticos CIE-10/CIE-11
 .venv/bin/python scripts/import_icd.py
 
-# 4) Datos de demo: 2 clínicas con ~8 semanas de historia y 4 de agenda, generadas ejecutando
+# 4) Datos de demo: 3 clínicas con ~8 semanas de historia y 4 de agenda, generadas ejecutando
 #    los casos de uso reales con un reloj simulado (incluye auditoría y notificaciones)
 .venv/bin/python scripts/seed_demo.py            # idempotente
 .venv/bin/python scripts/seed_demo.py --reset    # borra los tenants demo y los recrea
@@ -227,6 +227,23 @@ python -m venv .venv
   (**`demo1234`** en desarrollo si no se define) y los admins de clínica la de
   `DEMO_ADMIN_PASSWORD` (la misma `DEMO_PASSWORD` si no se define). En producción ambas son
   obligatorias: el seed rechaza la contraseña por defecto y una de admins igual a la compartida.
+
+La demo pública tiene tres clínicas, una por plan. Los slugs y correos existentes se conservan.
+
+| Clínica (slug) | Plan | Asientos médicos | Asientos de apoyo¹ | Módulos clínicos | Analítica |
+|---|---|---|---|---|---|
+| Policlínica Escalón (`clinica-demo`) | Clínica Plus | 5/5 | 4/6 | Los tres | Operativa |
+| Centro Médico Familiar del Norte (`centro-norte`) | Clínica | 3/3 | 3/3 | Vacunación | Clínica |
+| Consultorio Médico Dra. Sofía Alvarenga (`doc-demo`) | Profesional independiente | 1/1 | 1/1 | Ninguno | Básica |
+
+¹ El primer admin no ocupa asiento de apoyo. Escalón incluye una recepcionista invitada.
+Sofía atiende a adultos y niños; Yesenia Ramos agenda. Accede con
+`sofia.alvarenga@doc-demo.test` o `yesenia.ramos@doc-demo.test`; su admin es `admin@doc-demo.test`.
+Las contraseñas siguen saliendo de `DEMO_PASSWORD` y `DEMO_ADMIN_PASSWORD`.
+
+El reset nocturno recrea solo esos tres slugs; conserva las clínicas reales como `clinica-loida`.
+Antes de desplegar, confirma que `doc-demo` no esté ocupado en producción (se comprobó ausente el 2026-11-15).
+Prueba el seed y `--reset` solo en una BD desechable, nunca en la BD local de trabajo.
 
 ## Formato de errores
 
@@ -276,6 +293,15 @@ y se **saltan automáticamente** si no hay PostgreSQL accesible.
 ```bash
 .venv/bin/pytest
 .venv/bin/ruff check src tests
+```
+
+El test de integración del seed hace commits y prueba el reset nocturno. Se omite salvo que
+`DEMO_TEST_DATABASE_URL` apunte expresamente a una **BD desechable vacía, con migraciones**;
+nunca usa la BD de trabajo por defecto. Tras crear esa BD desechable, ejecuta:
+
+```bash
+DATABASE_URL="$DEMO_TEST_DATABASE_URL" .venv/bin/alembic upgrade head
+.venv/bin/pytest tests/scripts -q
 ```
 
 ## Despliegue

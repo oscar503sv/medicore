@@ -1,7 +1,8 @@
 """Seed rich, up-to-date demo data by replaying the clinic's history through the real use cases.
 
-Per tenant: 2 admins, 5 doctors (each with a specialty and working hours), 1 nurse,
-1 receptionist, 5 Salvadoran insurers and ~70 patients (some children and babies for
+Three clinics, one per plan: Clínica Plus (5 doctors), Clínica (3 doctors) and
+Profesional independiente (1 doctor and a receptionist). Each has an admin,
+5 Salvadoran insurers and 70/70/40 patients respectively (including children and babies for
 pediatrics, a few registered this week) with their vaccination histories (El Salvador's
 national scheme), in-clinic applications (ordered at consultations or walk-ins with an
 outside prescription) and minor procedures (catalog, orders from consultations, nursing
@@ -158,7 +159,13 @@ from medicore.domain.services.immunization import (
     add_months,
     applies_to,
 )
-from medicore.domain.services.plan_catalog import CLINICA, CLINICA_PLUS
+from medicore.domain.services.plan_catalog import (
+    CLINICA,
+    CLINICA_PLUS,
+    INDEPENDIENTE,
+    default_plans,
+)
+from medicore.domain.services.seat_usage import SeatUsage, ensure_seats, seat_usage
 from medicore.domain.shared.errors import DomainError
 from medicore.domain.shared.identifiers import (
     AvailabilityId,
@@ -206,10 +213,6 @@ TIMEZONE = "America/El_Salvador"
 
 PAST_WEEKS = 8
 FUTURE_WEEKS = 4
-PATIENTS_PER_TENANT = 70
-CHILDREN_PER_TENANT = 12
-INFANTS_PER_TENANT = 5  # under 2: the busiest part of the vaccination scheme
-NEW_PATIENTS_THIS_WEEK = 5
 
 # ── reference data ────────────────────────────────────────────────────────────────────────
 LAST_NAMES = [
@@ -334,32 +337,79 @@ SPECIALTIES: dict[str, Specialty] = {
     ),
 }
 
-# Per tenant: (name, email_local, role, specialty, works_afternoons). Admin is added apart.
-STAFF = {
-    "clinica-demo": [
-        ("Dra. Elena Ruiz", "elena.ruiz", Role.DOCTOR, "Cardiología", True),
-        ("Dr. Marco Vidal", "marco.vidal", Role.DOCTOR, "Medicina General", True),
-        ("Dra. Paula Méndez", "paula.mendez", Role.DOCTOR, "Pediatría", False),
-        ("Dr. Andrés Soto", "andres.soto", Role.DOCTOR, "Dermatología", True),
-        ("Dra. Carla Núñez", "carla.nunez", Role.DOCTOR, "Ginecología", False),
-        ("Lucía Méndez", "lucia.mendez", Role.NURSE, None, True),
-        ("Sara Gil", "sara.gil", Role.RECEPTIONIST, None, True),
-        ("Raúl Herrera", "raul.herrera", Role.ADMIN, None, True),
-    ],
-    "centro-norte": [
-        ("Dra. Karla Henríquez", "karla.henriquez", Role.DOCTOR, "Pediatría", False),
-        ("Dr. José Alfaro", "jose.alfaro", Role.DOCTOR, "Traumatología", True),
-        ("Dr. Mauricio Cruz", "mauricio.cruz", Role.DOCTOR, "Medicina General", True),
-        ("Marta Ayala", "marta.ayala", Role.NURSE, None, True),
-        ("Jorge Pleitez", "jorge.pleitez", Role.RECEPTIONIST, None, True),
-        ("Carolina Guevara", "carolina.guevara", Role.ADMIN, None, True),
-    ],
-}
-# A user invited a few days ago by the second admin (as nurse, then corrected to reception).
-# Centro Norte has no free support seat on its plan, so nobody is invited there.
-INVITED = {
-    "clinica-demo": ("Andrea Molina", "andrea.molina"),
-}
+@dataclass(frozen=True)
+class PatientMix:
+    total: int
+    children: int
+    infants: int
+    new_this_week: int
+
+
+@dataclass(frozen=True)
+class DemoClinic:
+    slug: str
+    legal_name: str
+    tax_id: str
+    location: str
+    subscription: Subscription
+    practice_model: PracticeModel
+    note_settings: NoteSettings
+    # (name, email_local, role, specialty, works_afternoons); primary admin added apart.
+    staff: tuple[tuple[str, str, Role, str | None, bool], ...]
+    patients: PatientMix = PatientMix(70, 12, 5, 5)
+    invited: tuple[str, str] | None = None
+
+
+# Keep the original clinics first to preserve their Random(42) activity sequence.
+# Fictitious NITs; passwords still come from DEMO_PASSWORD / DEMO_ADMIN_PASSWORD.
+DEMO_CLINICS = (
+    DemoClinic(
+        slug="clinica-demo", legal_name="Policlínica Escalón", tax_id="0614-150318-101-4",
+        location="San Salvador · Escalón",
+        subscription=Subscription(plan_code=CLINICA_PLUS, modules=CLINICAL_MODULES),
+        practice_model=PracticeModel.ASSOCIATED,
+        note_settings=NoteSettings(rules={"first_visit": "history", "follow_up": "evolution"}),
+        staff=(
+            ("Dra. Elena Ruiz", "elena.ruiz", Role.DOCTOR, "Cardiología", True),
+            ("Dr. Marco Vidal", "marco.vidal", Role.DOCTOR, "Medicina General", True),
+            ("Dra. Paula Méndez", "paula.mendez", Role.DOCTOR, "Pediatría", False),
+            ("Dr. Andrés Soto", "andres.soto", Role.DOCTOR, "Dermatología", True),
+            ("Dra. Carla Núñez", "carla.nunez", Role.DOCTOR, "Ginecología", False),
+            ("Lucía Méndez", "lucia.mendez", Role.NURSE, None, True),
+            ("Sara Gil", "sara.gil", Role.RECEPTIONIST, None, True),
+            ("Raúl Herrera", "raul.herrera", Role.ADMIN, None, True),
+        ),
+        invited=("Andrea Molina", "andrea.molina"),
+    ),
+    DemoClinic(
+        slug="centro-norte", legal_name="Centro Médico Familiar del Norte",
+        tax_id="0511-020719-102-7", location="Mejicanos · Zacamil",
+        subscription=Subscription(plan_code=CLINICA, modules=frozenset({AddonModule.VACCINATION})),
+        practice_model=PracticeModel.EMPLOYED,
+        note_settings=NoteSettings(enabled=("psoap",), default="psoap", locked=True),
+        staff=(
+            ("Dra. Karla Henríquez", "karla.henriquez", Role.DOCTOR, "Pediatría", False),
+            ("Dr. José Alfaro", "jose.alfaro", Role.DOCTOR, "Traumatología", True),
+            ("Dr. Mauricio Cruz", "mauricio.cruz", Role.DOCTOR, "Medicina General", True),
+            ("Marta Ayala", "marta.ayala", Role.NURSE, None, True),
+            ("Jorge Pleitez", "jorge.pleitez", Role.RECEPTIONIST, None, True),
+            ("Carolina Guevara", "carolina.guevara", Role.ADMIN, None, True),
+        ),
+    ),
+    DemoClinic(
+        slug="doc-demo", legal_name="Consultorio Médico Dra. Sofía Alvarenga",
+        tax_id="0511-120820-103-2", location="Antiguo Cuscatlán · Merliot",
+        subscription=Subscription(plan_code=INDEPENDIENTE),
+        practice_model=PracticeModel.ASSOCIATED, note_settings=NoteSettings(),
+        staff=(
+            ("Dra. Sofía Alvarenga", "sofia.alvarenga", Role.DOCTOR, "Medicina General", True),
+            ("Yesenia Ramos", "yesenia.ramos", Role.RECEPTIONIST, None, True),
+        ),
+        patients=PatientMix(40, 8, 3, 3),
+    ),
+)
+
+
 DOCUMENTS = [
     (DocumentKind.LAB, "Hemograma completo.pdf", "application/pdf"),
     (DocumentKind.LAB, "Perfil lipídico.pdf", "application/pdf"),
@@ -553,17 +603,30 @@ class Clinic:
     clock: SimClock
     now: datetime  # clinic wall-clock when the script runs
     admin: User
-    second_admin: User
+    second_admin: User | None
     doctors: list[User]
     specialty: dict[UserId, str]
-    nurse: User
-    reception: User
+    nurse: User | None
+    reception: User | None
+    demo: DemoClinic
     insurer_ids: list[InsurerId]
     patients: list[Patient] = field(default_factory=list)
     signed: list[MedicalRecord] = field(default_factory=list)
     taken: set[tuple[UserId, datetime]] = field(default_factory=set)
     procedure_types: dict[str, ProcedureType] = field(default_factory=dict)
     stats: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def nursing(self) -> User:
+        return self.nurse or self.doctors[0]
+
+    @property
+    def front_desk(self) -> User:
+        return self.reception or self.doctors[0]
+
+    @property
+    def has_pediatrician(self) -> bool:
+        return "Pediatría" in self.specialty.values()
 
     @property
     def tid(self) -> TenantId:
@@ -627,36 +690,8 @@ def make_user(tid: TenantId, name: str, email: str, role: Role, specialty=None) 
     )
 
 
-# How each demo clinic's doctors work: Clínica Demo shows associated doctors (each sets their
-# prices and sees their income), Centro Norte employed ones (the administration does).
-# Clínica Demo opens first visits as a full clinical history and follow-ups as an
-# evolution note; Centro Norte uses the problem-oriented SOAP (P-SOAP) as its mandatory
-# format, like institutions audited on it.
-DEMO_NOTE_SETTINGS = {
-    "clinica-demo": NoteSettings(rules={"first_visit": "history", "follow_up": "evolution"}),
-    "centro-norte": NoteSettings(enabled=("psoap",), default="psoap", locked=True),
-}
-
-DEMO_PRACTICE_MODELS = {
-    "clinica-demo": PracticeModel.ASSOCIATED,
-    "centro-norte": PracticeModel.EMPLOYED,
-}
-
-# The public demo clinics never expire. Clínica Demo shows every feature; Centro Norte shows
-# a smaller plan (Clínica: 3 doctors, 3 support seats, per-user permissions) with one module,
-# so the demo also shows locked modules, full seats and the clinic analytics tier (Clínica
-# Plus already includes operations, so the analytics add-on is not sold to it).
-DEMO_SUBSCRIPTIONS = {
-    "clinica-demo": Subscription(plan_code=CLINICA_PLUS, modules=CLINICAL_MODULES),
-    "centro-norte": Subscription(
-        plan_code=CLINICA, modules=frozenset({AddonModule.VACCINATION})
-    ),
-}
-
-
-def get_or_create_tenant(
-    session, slug: str, legal_name: str, tax_id: str, location: str
-) -> Tenant:
+def get_or_create_tenant(session, demo: DemoClinic) -> Tenant:
+    slug = demo.slug
     row = session.query(TenantModel).filter(TenantModel.slug == slug).first()
     if row:
         print(f"  tenant '{slug}' ya existe")
@@ -664,17 +699,17 @@ def get_or_create_tenant(
         uow = SqlAlchemyUnitOfWork(session, tid)
         with uow:
             tenant = uow.tenants.get_by_id(tid)
-            if tenant.subscription != DEMO_SUBSCRIPTIONS[slug]:
-                tenant.subscription = DEMO_SUBSCRIPTIONS[slug]
+            if tenant.subscription != demo.subscription:
+                tenant.subscription = demo.subscription
                 uow.tenants.save(tenant)
                 uow.commit()
         return tenant
     tid = TenantId.new()
     tenant = Tenant(
-        id=tid, legal_name=legal_name, tax_id=tax_id, slug=Slug(slug), timezone=TIMEZONE,
-        subscription=DEMO_SUBSCRIPTIONS[slug], practice_model=DEMO_PRACTICE_MODELS[slug],
-        note_settings=DEMO_NOTE_SETTINGS[slug],
-        locations=[Location(id=LocationId.new(), tenant_id=tid, name=location, is_primary=True,
+        id=tid, legal_name=demo.legal_name, tax_id=demo.tax_id, slug=Slug(slug), timezone=TIMEZONE,
+        subscription=demo.subscription, practice_model=demo.practice_model,
+        note_settings=demo.note_settings,
+        locations=[Location(id=LocationId.new(), tenant_id=tid, name=demo.location, is_primary=True,
                             phone=f"2{RNG.randint(200, 299)}-{RNG.randint(1000, 9999)}")],
     )
     uow = SqlAlchemyUnitOfWork(session, tid)
@@ -685,7 +720,7 @@ def get_or_create_tenant(
     return tenant
 
 
-def seed_staff(session, tenant: Tenant) -> dict:
+def seed_staff(session, tenant: Tenant, demo: DemoClinic) -> dict:
     tid = tenant.id
     uow = SqlAlchemyUnitOfWork(session, tid)
     out: dict = {"doctors": [], "specialty": {}, "admins": []}
@@ -696,7 +731,7 @@ def seed_staff(session, tenant: Tenant) -> dict:
             admin = make_user(tid, "Admin Demo", email, Role.ADMIN)
             uow.users.save(admin)
         out["admins"].append(admin)
-        for name, local, role, specialty, afternoons in STAFF[str(tenant.slug)]:
+        for name, local, role, specialty, afternoons in demo.staff:
             email = f"{local}@{tenant.slug}.test"
             user = uow.users.get_by_email(email)
             if user is None:
@@ -735,11 +770,12 @@ def seed_insurers(session, tid: TenantId) -> list[InsurerId]:
 
 # ── patients ──────────────────────────────────────────────────────────────────────────────
 def seed_patients(c: Clinic) -> None:
-    pediatrician = next(d for d in c.doctors if c.specialty[d.id] == "Pediatría")
-    adult_doctors = [d for d in c.doctors if d.id != pediatrician.id]
+    mix = c.demo.patients
+    pediatrician = next((d for d in c.doctors if c.specialty[d.id] == "Pediatría"), None)
+    adult_doctors = [d for d in c.doctors if (pediatrician is None or d.id != pediatrician.id)]
     used: set[str] = set()
-    for i in range(PATIENTS_PER_TENANT):
-        child = i < CHILDREN_PER_TENANT
+    for i in range(mix.total):
+        child = i < mix.children
         female = RNG.random() < (0.5 if child else 0.58)
         names = (CHILD_FEMALE if female else CHILD_MALE) if child else (
             FEMALE_NAMES if female else MALE_NAMES)
@@ -749,19 +785,19 @@ def seed_patients(c: Clinic) -> None:
             if f"{first} {last}" not in used:
                 used.add(f"{first} {last}")
                 break
-        if child and i < INFANTS_PER_TENANT:
+        if child and i < mix.infants:
             born = c.today - timedelta(days=RNG.randint(45, 700))
         else:
             age = RNG.randint(2, 13) if child else RNG.randint(18, 84)
             born = c.today - timedelta(days=age * 365 + RNG.randint(0, 364))
         if child:
-            doctor = pediatrician
+            doctor = pediatrician or c.doctors[0]
         elif not female:
             doctor = RNG.choice([d for d in adult_doctors if c.specialty[d.id] != "Ginecología"])
         else:
             doctor = RNG.choice(adult_doctors)
         # Most patients registered months ago; a handful this week (dashboard growth).
-        if i >= PATIENTS_PER_TENANT - NEW_PATIENTS_THIS_WEEK:
+        if i >= mix.total - mix.new_this_week:
             created = c.now - timedelta(days=RNG.randint(0, 6), hours=RNG.randint(1, 8))
         else:
             created = c.now - timedelta(days=RNG.randint(PAST_WEEKS * 7 + 5, 240))
@@ -788,10 +824,10 @@ def seed_patients(c: Clinic) -> None:
             ),
         )
         patient = CreatePatient(c.uow(), c.codes(), c.at(created)).execute(
-            actor(c, c.reception), cmd)
+            actor(c, c.front_desk), cmd)
         c.patients.append(patient)
-    print(f"    + {len(c.patients)} pacientes ({CHILDREN_PER_TENANT} niños, "
-          f"{NEW_PATIENTS_THIS_WEEK} registrados esta semana)")
+    print(f"    + {len(c.patients)} pacientes ({mix.children} niños, "
+          f"{mix.new_this_week} registrados esta semana)")
 
 
 # ── vaccination ───────────────────────────────────────────────────────────────────────────
@@ -808,7 +844,7 @@ def seed_vaccinations(c: Clinic) -> None:
     more often than not, and over-60s their yearly influenza (a few refused it). Finally, a
     couple of doses given this morning and one entry voided and re-recorded.
     """
-    nurse = actor(c, c.nurse)
+    nurse = actor(c, c.nursing)
     lots = {code: f"{code[:3]}{RNG.randint(100, 999)}{RNG.choice('ABCDEFGH')}"
             for code in VACCINES}
     latest = c.now - timedelta(minutes=5)
@@ -914,12 +950,14 @@ def seed_exceptions(c: Clinic) -> None:
     general = next(d for d in c.doctors if c.specialty[d.id] == "Medicina General")
     # Vacation (3 weekdays the week after next), a past congress day and an extra Saturday.
     for k in range(3):
-        add(c.doctors[2], monday + timedelta(weeks=2, days=k), AvailabilityExceptionKind.OFF,
+        add(c.doctors[min(2, len(c.doctors) - 1)], monday + timedelta(weeks=2, days=k),
+            AvailabilityExceptionKind.OFF,
             "Vacaciones")
     add(c.doctors[0], monday - timedelta(weeks=2) + timedelta(days=2),
         AvailabilityExceptionKind.OFF, "Congreso médico")
     saturday = monday + timedelta(days=5 if c.today.weekday() <= 5 else 12)
-    add(general, saturday, AvailabilityExceptionKind.EXTRA, "Jornada de vacunación",
+    add(general, saturday, AvailabilityExceptionKind.EXTRA,
+        "Jornada de vacunación" if c.has(AddonModule.VACCINATION) else "Jornada de consulta",
         [TimeRange(time(9, 0), time(13, 0))])
 
 
@@ -961,7 +999,7 @@ def pick_patient(c: Clinic, doctor: User, before: datetime) -> Patient | None:
                 if p.created_at.astimezone(c.clock.tz).replace(tzinfo=None) < before]
     if specialty == "Pediatría":
         eligible = [p for p in eligible if p.age(c.today) < 14]
-    else:
+    elif specialty != "Medicina General" or c.has_pediatrician:
         eligible = [p for p in eligible if p.age(c.today) >= 14]
         if specialty == "Ginecología":
             eligible = [p for p in eligible if p.sex == Sex.FEMALE]
@@ -969,6 +1007,13 @@ def pick_patient(c: Clinic, doctor: User, before: datetime) -> Patient | None:
         return None
     own = [p for p in eligible if p.primary_doctor_id == doctor.id]
     return RNG.choice(own if own and RNG.random() < 0.6 else eligible)
+
+
+def specialty_for(c: Clinic, doctor: User, patient: Patient, on: date) -> str:
+    # A general practitioner also sees children; use the pediatric examples for them.
+    if not c.has_pediatrician and patient.age(on) < 14:
+        return "Pediatría"
+    return c.specialty[doctor.id]
 
 
 def insurer_for(c: Clinic, patient: Patient):
@@ -999,12 +1044,12 @@ def book(c: Clinic, doctor: User, start: datetime):
         patient_id=patient.id, doctor_id=doctor.id,
         location_id=c.tenant.primary_location.id,
         type=kind, scheduled_start=start,
-        reason=RNG.choice(SPECIALTIES[c.specialty[doctor.id]].reasons),
+        reason=RNG.choice(SPECIALTIES[specialty_for(c, doctor, patient, start.date())].reasons),
         insurance_id=insurer_for(c, patient),
     )
     try:
         appt = CreateAppointment(c.uow(), c.codes(), c.at(booked)).execute(
-            actor(c, c.reception), cmd)
+            actor(c, c.front_desk), cmd)
     except (ApplicationError, DomainError):
         return None
     c.taken.add((doctor.id, start))
@@ -1073,7 +1118,8 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
     me = actor(c, doctor)
     start = appt.scheduled_start + timedelta(minutes=RNG.randint(0, 12))
     consultation = StartConsultation(c.uow(), c.at(start)).execute(me, appt.id)
-    spec = SPECIALTIES[c.specialty[doctor.id]]
+    specialty = specialty_for(c, doctor, patient, start.date())
+    spec = SPECIALTIES[specialty]
     dx = RNG.sample(spec.diagnoses, 1 if RNG.random() < 0.75 else 2)
     AutosaveConsultation(c.uow(), c.at(start + timedelta(minutes=6))).execute(
         me, consultation.id,
@@ -1099,7 +1145,7 @@ def attend(c: Clinic, doctor: User, appt, patient: Patient) -> None:
             ApplicationDraft(drug=drug, dose=dose, route=route, doses_total=n,
                              interval_hours=every, observation_minutes=obs, instructions=notes),
         )
-    exams = EXAM_ORDERS.get(c.specialty[doctor.id], EXAM_ORDERS["Medicina General"])
+    exams = EXAM_ORDERS.get(specialty, EXAM_ORDERS["Medicina General"])
     if RNG.random() < 0.3:
         for name, kind, notes in RNG.sample(exams, min(len(exams), RNG.choice([1, 1, 2, 3]))):
             AddExam(c.uow(), c.at(start + timedelta(minutes=15))).execute(
@@ -1184,7 +1230,7 @@ def seed_agenda(c: Clinic) -> None:
 
 def play_out(c: Clinic, doctor: User, appt, patient: Patient, booked_at: datetime) -> None:
     """What happened (or is expected to happen) to an appointment after it was booked."""
-    rec = actor(c, c.reception)
+    rec = actor(c, c.front_desk)
     start = appt.scheduled_start
     roll = RNG.random()
     finished = start + timedelta(minutes=30) <= c.now
@@ -1252,7 +1298,7 @@ def seed_applications(c: Clinic) -> None:
     prescription, then the nurse applying every dose already due: observation closed without
     reaction, except a mild reaction, a refused dose, an allergy override and a voided entry.
     Today some doses are still to apply and one patient is under observation right now."""
-    nurse = actor(c, c.nurse)
+    nurse = actor(c, c.nursing)
     latest = c.now - timedelta(minutes=2)
 
     def external(patient: Patient, when: datetime, item, prescriber=None):
@@ -1396,7 +1442,7 @@ def _perform(c: Clinic, p: Procedure, patient: Patient, user: User, at: datetime
     if p.requires_consent:
         signer, relationship = (patient.full_name, None) if adult else (
             f"{RNG.choice(['María', 'Ana', 'Rosa', 'Carmen'])} {patient.last_name}", "Madre")
-        witness = c.nurse if user.id != c.nurse.id else c.reception
+        witness = c.nursing if user.id != c.nursing.id else c.front_desk
         RecordProcedureConsent(c.uow(), c.at(at)).execute(
             me, p.id, signer, relationship, witness.name)
     bp = (lambda: f"{RNG.randint(108, 138)}/{RNG.randint(66, 88)}") if adult else (lambda: None)
@@ -1427,7 +1473,7 @@ def seed_procedures(c: Clinic) -> None:
     latest = c.now - timedelta(minutes=40)
     by_id = {p.id: p for p in c.patients}
     doctors = {d.id: d for d in c.doctors}
-    nurse = actor(c, c.nurse)
+    nurse = actor(c, c.nursing)
 
     adults = [p for p in c.patients if p.age(c.today) >= 14]
     for name, indication in WALK_IN_PROCEDURES * 2:
@@ -1437,7 +1483,7 @@ def seed_procedures(c: Clinic) -> None:
         p = CreateProcedure(c.uow(), c.at(when)).execute(nurse, CreateProcedureCommand(
             patient_id=patient.id, type_id=c.procedure_types[name].id, indication=indication))
         c.count("procedimientos directos")
-        _perform(c, p, patient, c.nurse, when + timedelta(minutes=5))
+        _perform(c, p, patient, c.nursing, when + timedelta(minutes=5))
 
     uow = c.uow()
     with uow:
@@ -1466,7 +1512,7 @@ def seed_procedures(c: Clinic) -> None:
         if at > latest:
             continue
         nursing = p.performer == ProcedurePerformer.DOCTOR_OR_NURSE and RNG.random() < 0.7
-        user = c.nurse if nursing else doctor
+        user = c.nursing if nursing else doctor
         override = None
         anesthesia = PROCEDURE_NOTES.get(p.type_name, (None,))[0]
         if anesthesia and allergy_conflicts(anesthesia, patient.allergies):
@@ -1490,10 +1536,11 @@ def seed_procedures(c: Clinic) -> None:
 
 def seed_procedure_appointments(c: Clinic) -> None:
     """Today's procedure appointments: two already done (one by nursing) and one later."""
-    rec = actor(c, c.reception)
+    rec = actor(c, c.front_desk)
     general = next((d for d in c.doctors if c.specialty[d.id] == "Medicina General"), None)
     derma = next((d for d in c.doctors if c.specialty[d.id] == "Dermatología"), None)
-    plan = [(general, "Retiro de puntos", "Retiro de puntos de sutura en antebrazo", c.nurse, True),
+    plan = [(general, "Retiro de puntos", "Retiro de puntos de sutura en antebrazo",
+             c.nursing, True),
             (derma, "Crioterapia de lesión cutánea", "Crioterapia de verruga", None, True),
             (general, "Curación de herida", "Curación de herida en pie", None, False)]
     adults = [p for p in c.patients if p.age(c.today) >= 14 and not p.allergies]
@@ -1577,7 +1624,7 @@ def seed_documents(c: Clinic) -> None:
         when = min(signed_local + timedelta(days=RNG.randint(0, 5), hours=RNG.randint(1, 6)),
                    c.now - timedelta(minutes=RNG.randint(20, 300)))
         # Mostly the nurse; sometimes another doctor (e.g. the one who ordered the test).
-        uploader = c.nurse if RNG.random() < 0.7 else RNG.choice(c.doctors)
+        uploader = c.nursing if RNG.random() < 0.7 else RNG.choice(c.doctors)
         UploadDocument(c.uow(), c.at(when)).execute(actor(c, uploader), UploadDocumentCommand(
             patient_id=record.patient_id, file_name=name, kind=kind, mime_type=mime,
             size_bytes=RNG.randint(80_000, 3_500_000),
@@ -1588,8 +1635,10 @@ def seed_documents(c: Clinic) -> None:
 
 
 def seed_users(c: Clinic) -> None:
-    name, local = INVITED[str(c.tenant.slug)]
-    second = actor(c, c.second_admin)
+    if c.demo.invited is None:
+        return
+    name, local = c.demo.invited
+    second = actor(c, c.second_admin or c.admin)
     # Invited with a temporary password that meets the policy; demo users then share the
     # public demo password, like everyone else seeded.
     user = InviteUser(c.uow(), HASHER, c.at(c.now - timedelta(days=4, hours=3))).execute(
@@ -1606,7 +1655,8 @@ def seed_users(c: Clinic) -> None:
 
 
 def seed_logins(c: Clinic) -> None:
-    staff = [c.admin, c.second_admin, c.nurse, c.reception, *c.doctors]
+    staff = [u for u in [c.admin, c.second_admin, c.nurse, c.reception, *c.doctors]
+             if u is not None]
     uow = c.uow()
     with uow:
         for back in range(14, -1, -1):
@@ -1657,10 +1707,10 @@ def finish(c: Clinic) -> None:
 
 
 # ── orchestration ─────────────────────────────────────────────────────────────────────────
-def seed_tenant(session, slug: str, legal_name: str, tax_id: str, location: str) -> None:
-    print(f"Tenant: {slug}")
-    tenant = get_or_create_tenant(session, slug, legal_name, tax_id, location)
-    staff = seed_staff(session, tenant)
+def seed_tenant(session, demo: DemoClinic) -> None:
+    print(f"Tenant: {demo.slug}")
+    tenant = get_or_create_tenant(session, demo)
+    staff = seed_staff(session, tenant, demo)
     insurer_ids = seed_insurers(session, tenant.id)
     has_activity = session.query(AppointmentModel).filter(
         AppointmentModel.tenant_id == tenant.id.value).first()
@@ -1671,8 +1721,10 @@ def seed_tenant(session, slug: str, legal_name: str, tax_id: str, location: str)
     now = datetime.now(tz).replace(tzinfo=None, second=0, microsecond=0)
     c = Clinic(
         session=session, tenant=tenant, clock=SimClock(tz), now=now,
-        admin=staff["admins"][0], second_admin=staff["admins"][1], doctors=staff["doctors"],
-        specialty=staff["specialty"], nurse=staff["nurse"], reception=staff["reception"],
+        admin=staff["admins"][0], second_admin=next(iter(staff["admins"][1:]), None),
+        doctors=staff["doctors"],
+        specialty=staff["specialty"], nurse=staff.get("nurse"), reception=staff.get("reception"),
+        demo=demo,
         insurer_ids=insurer_ids,
     )
     seed_patients(c)
@@ -1691,14 +1743,14 @@ def seed_tenant(session, slug: str, legal_name: str, tax_id: str, location: str)
         seed_procedures(c)
     seed_amendments(c)
     seed_documents(c)
-    if str(c.tenant.slug) in INVITED:
-        seed_users(c)
+    seed_users(c)
     seed_logins(c)
     finish(c)
     print("    + " + ", ".join(f"{v} {k}" for k, v in c.stats.items()))
 
 
-def reset_demo(session, slugs: list[str]) -> None:
+def reset_demo(session) -> None:
+    slugs = [demo.slug for demo in DEMO_CLINICS]
     session.execute(delete(TenantModel).where(TenantModel.slug.in_(slugs)))
     session.commit()
     print(f"Reset: tenants {slugs} borrados (cascada)")
@@ -1723,12 +1775,23 @@ def _check_demo_password() -> None:
         )
 
 
+def _check_demo_seats() -> None:
+    plans = {plan.code: plan for plan in default_plans()}
+    for demo in DEMO_CLINICS:
+        counts = {role: sum(member[2] == role for member in demo.staff) for role in Role}
+        counts[Role.ADMIN] += 1  # the primary admin is created separately
+        if demo.invited:
+            counts[Role.RECEPTIONIST] += 1
+        ensure_seats(plans[demo.subscription.plan_code].limits, SeatUsage(0, 0), seat_usage(counts))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reset", action="store_true",
                         help="borra los tenants demo antes de sembrar")
     args = parser.parse_args()
     _check_demo_password()
+    _check_demo_seats()
 
     # Recorded for the console's Monitoring page: the nightly --reset is a scheduled task,
     # so a failed or missing run shows up there. Only the outcome, never data.
@@ -1741,21 +1804,15 @@ def main() -> None:
     except BaseException as exc:
         jobs.execute(job, started, ok=False, detail=type(exc).__name__)
         raise
-    jobs.execute(job, started, ok=True, detail="clinica-demo, centro-norte")
+    jobs.execute(job, started, ok=True, detail=", ".join(demo.slug for demo in DEMO_CLINICS))
 
 
 def _seed(reset: bool) -> None:
-    session = get_session()
-    # Fictitious NITs in the Salvadoran format (municipality-birth-correlative-check).
-    demo = [("clinica-demo", "Clínica Demo, S.A. de C.V.", "0614-150318-101-4",
-             "San Salvador · Centro"),
-            ("centro-norte", "Centro Médico Norte, S.A. de C.V.", "0511-020719-102-7",
-             "Santa Tecla · Las Palmas")]
-    if reset:
-        reset_demo(session, [d[0] for d in demo])
-    for slug, legal_name, tax_id, location in demo:
-        seed_tenant(session, slug, legal_name, tax_id, location)
-    session.close()
+    with get_session() as session:
+        if reset:
+            reset_demo(session)
+        for demo in DEMO_CLINICS:
+            seed_tenant(session, demo)
     if PASSWORD == ADMIN_PASSWORD == _DEFAULT_DEMO_PASSWORD:
         print("\nListo. Contraseña de todos los usuarios demo:", PASSWORD)
     else:
