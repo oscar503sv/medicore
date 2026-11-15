@@ -15,7 +15,7 @@ from medicore.domain.enums import (
     PrescriptionStatus,
     RecordStatus,
 )
-from medicore.domain.shared.errors import ConsultationNotSignable
+from medicore.domain.shared.errors import ConsultationAlreadySigned, ConsultationNotSignable
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     ConsultationId,
@@ -79,6 +79,22 @@ class TestEditingGuards:
 
 
 class TestSigning:
+    def test_signing_twice_raises_already_signed(self):
+        c = make_consultation()
+        fill_for_signing(c)
+        kwargs = dict(
+            record_id=RecordId.new(),
+            record_code="REC-2026-0512-EV",
+            record_type=ClinicalRecordType.CONSULTATION,
+            location_name="Madrid",
+            chief_complaint="x",
+            signed_by_id=c.doctor_id,
+        )
+        c.sign(**kwargs)
+        with pytest.raises(ConsultationAlreadySigned) as exc:
+            c.sign(**kwargs)
+        assert exc.value.code == "consultation.already_signed"
+
     def test_blocks_when_incomplete(self):
         c = make_consultation()
         c.autosave(note={"subjective": "x"})

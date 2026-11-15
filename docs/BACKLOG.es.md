@@ -146,5 +146,6 @@ Resueltos en nov 2026:
 - **Excepciones de permisos**: se borran al cambiar de rol; los admins conservan el conjunto completo de su rol.
 - **Cupos**: la comprobación de asientos bloquea la fila de la clínica, así que las altas simultáneas no exceden el plan.
 - **Purga de sesiones**: tarea programada que borra sesiones caducadas o revocadas, vigilada en Monitoreo como el job `session_purge`.
+- **Firma de consultas serializada por consulta**: la firma bloquea la fila de la consulta, y un índice único parcial permite un solo expediente original por consulta (OZK-93).
 
 No quedan hallazgos pendientes en esta lista.

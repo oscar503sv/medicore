@@ -94,7 +94,7 @@ Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que
 ### Reglas de negocio críticas
 - Citas solo dentro de la disponibilidad del doctor, sin solapes, respetando las reglas de reserva.
 - `MedicalRecord` firmado es **inmutable**; las correcciones son **enmiendas versionadas** (`status=amended` que referencia al original).
-- `SignConsultation` es **atómico**: record + recetas + cita `completed` en una sola transacción.
+- `SignConsultation` es **atómico**: record + recetas + cita `completed` en una sola transacción. La firma bloquea primero la fila de la consulta, así que una segunda firma (doble clic, reintento, otra pestaña) responde 409 `consultation.already_signed` y editar una consulta ya firmada también responde 409; un índice único parcial mantiene un solo expediente original por consulta.
 - Diagnósticos en consulta limitados al catálogo de la **versión CIE configurada por cada clínica** (CIE-10 / CIE-11), con autocompletado.
 - **Vacunación** según el esquema nacional de El Salvador (MINSAL), para niños, adolescentes y adultos: el carné de cada paciente calcula el estado de cada dosis (aplicada, toca, atrasada, próxima…) a partir de su edad y sus registros; los registros no se editan, uno erróneo se anula con motivo. Una lista de trabajo muestra las dosis atrasadas y próximas de toda la clínica.
 - **Aplicaciones en la clínica** (inyecciones, sueros, nebulizaciones…): el médico las indica en la consulta y se vuelven órdenes para enfermería al firmarla; las que llegan sin cita con receta externa registran al médico que receta y su número de JVPM. Cada dosis se registra con lote, sitio y signos vitales, no se edita (una errónea se anula con motivo) y abre una observación (30 min por defecto, configurable por orden) que se cierra "sin reacción" o como reacción adversa, lo que notifica al médico que la indicó. Aplicar un medicamento que choca con las alergias del paciente exige una justificación escrita y auditada.
@@ -396,7 +396,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1396 tests)
+.venv/bin/pytest                          # suite completa (1411 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -421,7 +421,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `appointments` | Citas con FSM de estado y su cobro (tarifa vigente al agendar, monto cobrado y motivo del ajuste) |
 | `doctor_fees` | Tarifa de cada médico por tipo de cita (USD) |
 | `consultations` | Consulta en curso (borrador mutable) |
-| `medical_records` | Historiales firmados e inmutables |
+| `medical_records` | Historiales firmados e inmutables (como máximo un original por consulta) |
 | `prescriptions` | Recetas emitidas |
 | `medical_documents` | Archivos médicos (metadata) |
 | `insurers` | Aseguradoras de la clínica |
@@ -450,18 +450,18 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1396 tests en verde
-   297  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1411 tests en verde
+   298  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   604  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   610  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
             plataforma (las acciones de soporte quedan en la auditoría de la clínica y se notifican), permisos granulares, aislamiento multi-tenant)
-   328  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   330  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    167  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    173  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
 ```
 
 Los tests verifican, entre otras cosas:
-- Atomicidad de `SignConsultation`: un fallo revierte record, recetas y estado de cita.
+- Atomicidad de `SignConsultation`: un fallo revierte record, recetas y estado de cita. Las firmas concurrentes de una consulta dejan un único record.
 - Aislamiento multi-tenant: los repos de un tenant no filtran datos de otro.
 - Permisos efectivos por rol y override por tenant, y de scope de plataforma.
 - Revocación de sesiones, protección CSRF y caducidad de la sesión de consola.
@@ -528,6 +528,8 @@ Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migr
 > **Antes de desplegar esta versión:** todos los usuarios, incluidos los superadmins, vuelven a iniciar sesión una vez: los tokens emitidos antes no tienen audiencia.
 >
 > **Migración `f2a3b4c5d6e8`:** añade `last_success_at` a `login_attempts` (lockout de login). No requiere variables de entorno nuevas.
+>
+> **Migración `a3b4c5d6e7f9`:** añade un índice único parcial para que una consulta tenga como máximo un expediente original. **Antes de desplegar, ejecuta la consulta de detección de [`backend/README.es.md`](backend/README.es.md#expedientes-duplicados-por-doble-firma)**: la migración se niega a correr mientras existan duplicados (lista solo sus ids) y nunca los resuelve por sí misma. Crear el índice bloquea escrituras en `medical_records` un instante. El entrypoint de Docker ejecuta `alembic upgrade head`, así que la migración se aplica al desplegar.
 
 Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma. Cada ejecución queda registrada y la página *Monitoreo* marca la tarea si falla o si pasan más de 26 h sin un reset exitoso.
 

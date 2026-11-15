@@ -1,6 +1,7 @@
 """Shared domain primitives: errors and identifiers."""
 
 from medicore.domain.shared.errors import (
+    ConsultationAlreadySigned,
     ConsultationNotSignable,
     DomainError,
     InvalidStateTransition,
@@ -28,6 +29,7 @@ from medicore.domain.shared.identifiers import (
 )
 
 __all__ = [
+    "ConsultationAlreadySigned",
     "ConsultationNotSignable",
     "DomainError",
     "InvalidStateTransition",

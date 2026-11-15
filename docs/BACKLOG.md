@@ -143,5 +143,6 @@ Resolved in November 2026:
 - **Permission exceptions** are cleared on role change; admins keep their role's full set.
 - **Seat checks** lock the clinic's row, so simultaneous invitations can't exceed the plan.
 - **Session purge**: a scheduled job deletes expired or revoked sessions and is monitored (`session_purge`).
+- **Consultation signing serialized per consultation**: the sign locks the consultation row, and a partial unique index allows a single original record per consultation (OZK-93).
 
 No pending findings remain in this list.

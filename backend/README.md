@@ -130,7 +130,11 @@ UnitOfWork), **20 use-case groups** and **26 routers / 181 endpoints** under `/a
 - **Scheduling**: per-doctor availability, slot resolution, appointment lifecycle
   (scheduled → confirmed → in progress → completed).
 - **Consultation → record**: signing a consultation issues an immutable `MedicalRecord` plus
-  the prescriptions and completes the appointment, all in one transaction.
+  the prescriptions and completes the appointment, all in one transaction. The sign locks the
+  consultation row before validating and taking the record number, so concurrent signs and edits
+  of the same consultation are serialized: a second sign or an edit of a signed one answers 409
+  (`consultation.already_signed`), a late autosave cannot revert it to a draft, and starting the
+  same appointment twice returns the same consultation.
 - **In-app notifications** (`application/common/notifications.py`): use cases emit them inside
   their own transaction — they are saved together with the action or not at all — and never
   to the author themselves. Events: appointment created/rescheduled/cancelled/no-show (to the
@@ -244,16 +248,19 @@ Every error response has the same shape:
 - 401 is only for "who are you?" failures (credentials, session): the client drops the session
   on a 401. A wrong current password when changing it is a 400 (`password.current_incorrect`).
 - Validation errors (422) no longer include the submitted value (`input`) in their details.
+- Signing a consultation twice, or editing one that is already signed (autosave, diagnoses, drafts),
+  answers 409 `consultation.already_signed`. `consultation.incomplete` stays a 422.
 
 ## Tests and linting
 
-A suite of **1396 tests** (297 domain · 604 application · 328 presentation · 167 infrastructure),
+A suite of **1411 tests** (298 domain · 610 application · 330 presentation · 173 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
 The integration tests against real PostgreSQL (`tests/infrastructure/test_audit_repository_sql.py`,
 `test_diagnosis_catalog_sql.py` — ranking and trigram search for the diagnosis autocomplete —
-`test_login_throttle_sql.py` — atomic UPSERT of the login lockout — and
+`test_login_throttle_sql.py` — atomic UPSERT of the login lockout —
+`test_consultation_sign_sql.py` — concurrent signs and edits of one consultation — and
 `test_notification_repository_sql.py` — JSONB and bulk UPDATE/DELETE of the inbox —
 `test_patient_search_sql.py` — accent-insensitive search, phone digits, last visits) use
 `TEST_DATABASE_URL` (or the configured `DATABASE_URL`), run inside a transaction that is always
@@ -303,6 +310,8 @@ Production checklist (via environment variables, see the **Configuration** table
 > **Before deploying this version:** every user, including superadmins, signs in again once (tokens issued earlier have no audience).
 >
 > **Migration `f2a3b4c5d6e8`:** adds `last_success_at` to `login_attempts` (login lockout). It needs no new environment variables.
+>
+> **Migration `a3b4c5d6e7f9`:** adds a unique partial index so a consultation has at most one original medical record. **Before deploying, run the detection query in [Duplicate records from double signing](#duplicate-records-from-double-signing)**: the migration refuses to run while duplicates exist (it lists only their ids) and never resolves them itself. Creating the index blocks writes to `medical_records` for an instant. The Docker entrypoint runs `alembic upgrade head`, so the migration applies on deploy.
 
 > For multiple workers just set `WEB_CONCURRENCY=N` (uvicorn reads it; `docker-compose.yml` uses 2). Each
 > worker holds its own pool of up to 15 connections: keep `N × 15` below Postgres' `max_connections`.
@@ -311,3 +320,25 @@ Production checklist (via environment variables, see the **Configuration** table
 > `TRUSTED_PROXIES` (walking the chain right to left and discarding trusted hops); otherwise
 > the socket IP is recorded. The image starts uvicorn with `--no-proxy-headers` so the app is
 > the only one interpreting the header — keep it that way if you override the `CMD`.
+
+## Duplicate records from double signing
+
+Before migration `a3b4c5d6e7f9`, a consultation signed twice at the same time (double click, retry, two tabs) could end up with two original medical records. Signing now locks the consultation, and the migration adds a unique partial index on `medical_records(consultation_id)` for original records (amendments repeat `consultation_id` and are excluded), so the database refuses a second original. The migration never deduplicates: each duplicate is a clinical document, and deciding which one stands is a clinical decision. It therefore refuses to run while duplicates exist and lists only their ids.
+
+Run this query against the production database before deploying:
+
+```sql
+SELECT r.tenant_id, r.consultation_id, r.id AS record_id, r.code, r.signed_at,
+       (SELECT count(*) FROM prescriptions p WHERE p.record_id = r.id) AS prescriptions,
+       (SELECT count(*) FROM application_orders a WHERE a.consultation_id = r.consultation_id) AS application_orders,
+       (SELECT count(*) FROM procedures pr WHERE pr.consultation_id = r.consultation_id) AS procedures
+FROM medical_records r
+WHERE r.amends_record_id IS NULL AND r.consultation_id IN (
+  SELECT consultation_id FROM medical_records
+  WHERE consultation_id IS NOT NULL AND amends_record_id IS NULL
+  GROUP BY consultation_id HAVING count(*) > 1)
+ORDER BY r.consultation_id, r.signed_at;
+```
+
+- **No rows**: there are no duplicates, and the migration applies on deploy.
+- **Rows**: resolve each consultation by hand before deploying. Void the duplicate prescriptions, application orders and procedures, and the surplus record, keeping the one that stands. Each row shows how many prescriptions the record has, and how many application orders and procedures the consultation has. The migration does not run until no duplicates remain.

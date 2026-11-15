@@ -47,4 +47,10 @@ class AppointmentRepository(Protocol):
         """Appointments for the doctor intersecting ``[start, end)`` (for slot checks)."""
         ...
 
+    def get_for_update(self, appointment_id: AppointmentId) -> Appointment | None:
+        """Load the appointment and hold its row until the transaction ends, so concurrent
+        starts of the same appointment run one after another. Taken last in the lock
+        order (consultation, record-code counter, appointment)."""
+        ...
+
     def save(self, appointment: Appointment) -> None: ...

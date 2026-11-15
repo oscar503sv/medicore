@@ -72,29 +72,31 @@ class StartConsultation:
 
     def execute(self, actor: ActorContext, appointment_id: AppointmentId) -> Consultation:
         ensure_permission(actor, Permission.CONSULTATIONS_START)
-        appointment = self._uow.appointments.get_by_id(appointment_id)
-        if appointment is None:
-            raise EntityNotFound("Appointment", appointment_id)
-        if not _owns(actor, appointment.doctor_id):
-            raise PermissionDenied(
-                "doctors may only start their own consultations", code="consultation.not_own"
-            )
-
-        existing = self._uow.consultations.get_by_appointment(appointment_id)
-        if existing is not None:
-            return existing
-
-        patient = self._uow.patients.get_by_id(appointment.patient_id)
-        consultation = Consultation(
-            id=ConsultationId.new(),
-            tenant_id=actor.tenant_id,
-            appointment_id=appointment_id,
-            patient_id=appointment.patient_id,
-            doctor_id=appointment.doctor_id,
-            started_at=self._clock.now(),
-            note=self._opening_note(actor, appointment, patient),
-        )
         with self._uow:
+            # Two starts queue here; the second finds the first's consultation instead of
+            # inserting a duplicate.
+            appointment = self._uow.appointments.get_for_update(appointment_id)
+            if appointment is None:
+                raise EntityNotFound("Appointment", appointment_id)
+            if not _owns(actor, appointment.doctor_id):
+                raise PermissionDenied(
+                    "doctors may only start their own consultations", code="consultation.not_own"
+                )
+
+            existing = self._uow.consultations.get_by_appointment(appointment_id)
+            if existing is not None:
+                return existing
+
+            patient = self._uow.patients.get_by_id(appointment.patient_id)
+            consultation = Consultation(
+                id=ConsultationId.new(),
+                tenant_id=actor.tenant_id,
+                appointment_id=appointment_id,
+                patient_id=appointment.patient_id,
+                doctor_id=appointment.doctor_id,
+                started_at=self._clock.now(),
+                note=self._opening_note(actor, appointment, patient),
+            )
             appointment.start()
             self._uow.appointments.save(appointment)
             self._uow.consultations.save(consultation)
@@ -153,7 +155,9 @@ class _ConsultationEditor:
 
     def _load(self, actor: ActorContext, consultation_id: ConsultationId) -> Consultation:
         ensure_permission(actor, Permission.CONSULTATIONS_EDIT)
-        consultation = self._uow.consultations.get_by_id(consultation_id)
+        # Locked: an edit that read the draft before a sign committed would otherwise save
+        # status=draft back over the signed consultation.
+        consultation = self._uow.consultations.get_for_update(consultation_id)
         if consultation is None:
             raise EntityNotFound("Consultation", consultation_id)
         if not _owns(actor, consultation.doctor_id):
@@ -347,26 +351,29 @@ class SignConsultation:
 
     def execute(self, actor: ActorContext, cmd: SignConsultationCommand) -> MedicalRecord:
         ensure_permission(actor, Permission.RECORDS_SIGN)
-        consultation = self._uow.consultations.get_by_id(cmd.consultation_id)
-        if consultation is None:
-            raise EntityNotFound("Consultation", cmd.consultation_id)
-        if not _owns(actor, consultation.doctor_id):
-            raise PermissionDenied(
-                "doctors may only sign their own consultations", code="consultation.not_own"
-            )
-        appointment = self._uow.appointments.get_by_id(consultation.appointment_id)
-        if appointment is None:
-            raise EntityNotFound("Appointment", consultation.appointment_id)
-        patient = self._uow.patients.get_by_id(consultation.patient_id)
-
-        now = self._clock.now()
-        # A signed consultation is always a CONSULTATION clinical record — the type is inferred,
-        # never chosen. Other clinical record types come from their own future modules.
-        record_type = ClinicalRecordType.CONSULTATION
-        record_code = self._codes.next_record_code(record_type, now.date())
-        location_name = self._location_name(appointment.location_id)
-
         with self._uow:
+            # Lock before validating or drawing a code: a second sign of the same
+            # consultation waits here and then finds it signed.
+            consultation = self._uow.consultations.get_for_update(cmd.consultation_id)
+            if consultation is None:
+                raise EntityNotFound("Consultation", cmd.consultation_id)
+            if not _owns(actor, consultation.doctor_id):
+                raise PermissionDenied(
+                    "doctors may only sign their own consultations", code="consultation.not_own"
+                )
+            appointment = self._uow.appointments.get_by_id(consultation.appointment_id)
+            if appointment is None:
+                raise EntityNotFound("Appointment", consultation.appointment_id)
+            patient = self._uow.patients.get_by_id(consultation.patient_id)
+
+            now = self._clock.now()
+            # A signed consultation is always a CONSULTATION clinical record — the type is
+            # inferred, never chosen. Other clinical record types come from their own future
+            # modules.
+            record_type = ClinicalRecordType.CONSULTATION
+            record_code = self._codes.next_record_code(record_type, now.date())
+            location_name = self._location_name(appointment.location_id)
+
             result = consultation.sign(
                 record_id=RecordId.new(),
                 record_code=record_code,

@@ -28,7 +28,11 @@ from medicore.domain.enums import (
     PrescriptionStatus,
     RecordStatus,
 )
-from medicore.domain.shared.errors import ConsultationNotSignable, PermissionDenied
+from medicore.domain.shared.errors import (
+    ConsultationAlreadySigned,
+    ConsultationNotSignable,
+    PermissionDenied,
+)
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.vitals import Vitals
 from tests.support.builders import seed_clinic, soap_note
@@ -156,3 +160,107 @@ def test_nurse_cannot_sign():
         SignConsultation(uow, SequentialCodeGenerator(), FixedClock()).execute(
             seed.actor(seed.nurse), SignConsultationCommand(consultation_id=consultation.id)
         )
+
+
+def _signable(seed, uow):
+    appt = booked(seed, uow)
+    consultation = StartConsultation(uow, FixedClock()).execute(seed.doctor_actor, appt.id)
+    fill(seed, uow, consultation)
+    return appt, consultation
+
+
+def _sign(seed, uow, consultation):
+    return SignConsultation(uow, SequentialCodeGenerator(), FixedClock()).execute(
+        seed.doctor_actor, SignConsultationCommand(consultation_id=consultation.id)
+    )
+
+
+def test_sign_locks_the_consultation():
+    seed = seed_clinic()
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    _, consultation = _signable(seed, uow)
+    seed.factory.store.consultation_locks.clear()
+
+    _sign(seed, uow, consultation)
+
+    assert seed.factory.store.consultation_locks == {consultation.id.value: 1}
+
+
+def test_second_sign_is_refused_and_writes_nothing():
+    seed = seed_clinic()
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    _, consultation = _signable(seed, uow)
+    AddPrescriptionDraft(uow, FixedClock()).execute(
+        seed.doctor_actor,
+        consultation.id,
+        PrescriptionDraft(drug="Enalapril", dose="20 mg", schedule="1× día", duration_days=30),
+    )
+    _sign(seed, uow, consultation)
+
+    with pytest.raises(ConsultationAlreadySigned):
+        _sign(seed, uow, consultation)
+
+    assert len(uow.medical_records.list_by_patient(seed.patient.id)) == 1
+    assert len(uow.prescriptions.list_by_patient(seed.patient.id)) == 1
+    assert len(uow.audit.query(action="consultation.signed")) == 1
+
+
+def test_failed_sign_releases_nothing_persistent():
+    seed = seed_clinic()
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    appt = booked(seed, uow)
+    consultation = StartConsultation(uow, FixedClock()).execute(seed.doctor_actor, appt.id)
+    seed.factory.store.consultation_locks.clear()
+
+    with pytest.raises(ConsultationNotSignable):
+        _sign(seed, uow, consultation)
+
+    assert seed.factory.store.consultation_locks == {}
+
+
+def test_edit_after_sign_is_refused():
+    seed = seed_clinic()
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    _, consultation = _signable(seed, uow)
+    _sign(seed, uow, consultation)
+
+    with pytest.raises(ConsultationAlreadySigned):
+        AutosaveConsultation(uow, FixedClock()).execute(
+            seed.doctor_actor, consultation.id, ConsultationPatch(note={"plan": "late"})
+        )
+
+    assert uow.consultations.get_by_id(consultation.id).status == ConsultationStatus.SIGNED
+
+
+def test_editors_lock_the_consultation():
+    seed = seed_clinic()
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    appt = booked(seed, uow)
+    consultation = StartConsultation(uow, FixedClock()).execute(seed.doctor_actor, appt.id)
+    locks = seed.factory.store.consultation_locks
+    locks.clear()
+
+    AutosaveConsultation(uow, FixedClock()).execute(
+        seed.doctor_actor, consultation.id, ConsultationPatch(note={"plan": "p"})
+    )
+    AddDiagnosis(uow, FixedClock()).execute(
+        seed.doctor_actor, consultation.id, IcdCode("I10", "Hipertensión")
+    )
+
+    assert locks == {consultation.id.value: 2}
+
+
+def test_start_locks_the_appointment_and_returns_the_same_consultation():
+    seed = seed_clinic()
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    appt = booked(seed, uow)
+    start = StartConsultation(uow, FixedClock())
+
+    first = start.execute(seed.doctor_actor, appt.id)
+    assert seed.factory.store.appointment_locks == {appt.id.value: 1}
+    second = start.execute(seed.doctor_actor, appt.id)
+
+    assert first.id == second.id
+    # the second start returns without committing, so the fake rolls its lock back
+    assert seed.factory.store.appointment_locks == {appt.id.value: 1}
+    assert len(seed.factory.store.consultations) == 1

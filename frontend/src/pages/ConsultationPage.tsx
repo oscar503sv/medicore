@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Clock, Plus, RotateCw, Save, Search, Trash2, X } from 'lucide-react'
-import { errorMessage } from '@/api/client'
+import { errorCode, errorMessage } from '@/api/client'
 import { consultationsApi } from '@/api/consultations'
 import { diagnosesApi } from '@/api/diagnoses'
 import { noteTemplatesApi } from '@/api/noteTemplates'
@@ -215,6 +215,9 @@ export function ConsultationPage() {
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
+  // Synchronous guard: isPending only shows after a render, and the flush before the POST
+  // leaves room for a second click.
+  const signing = useRef(false)
   const sign = useMutation({
     mutationFn: async () => {
       await save.flush() // never sign without the last keystrokes
@@ -227,7 +230,19 @@ export function ConsultationPage() {
       setSignOpen(false)
       setSigned(record) // offer the patient's documents before leaving
     },
-    onError: (err) => toast(errorMessage(err), 'danger'),
+    onError: (err) => {
+      if (errorCode(err) === 'consultation.already_signed') {
+        // Signed elsewhere (another tab, a retry): show the signed state instead.
+        qc.invalidateQueries({ queryKey: ['consultation', id] })
+        qc.invalidateQueries({ queryKey: ['appointments'] })
+        qc.invalidateQueries({ queryKey: ['records'] })
+        setSignOpen(false)
+      }
+      toast(errorMessage(err), 'danger')
+    },
+    onSettled: () => {
+      signing.current = false
+    },
   })
 
   if (isLoading) return <PageLoader />
@@ -463,7 +478,11 @@ export function ConsultationPage() {
             <Button
               loading={sign.isPending}
               disabled={completion < MIN_TO_SIGN}
-              onClick={() => sign.mutate()}
+              onClick={() => {
+                if (signing.current) return
+                signing.current = true
+                sign.mutate()
+              }}
             >
               {t('consult.sign')}
             </Button>

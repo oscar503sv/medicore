@@ -82,6 +82,9 @@ class InMemoryStore:
     login_successes: dict[str, datetime] = field(default_factory=dict)
     # Times each clinic's row was locked for a quota check (tenant id -> count).
     tenant_locks: dict[UUID, int] = field(default_factory=dict)
+    # Times a consultation / appointment row was locked (id -> count).
+    consultation_locks: dict[UUID, int] = field(default_factory=dict)
+    appointment_locks: dict[UUID, int] = field(default_factory=dict)
     # Global revocable sessions (tenant and platform scopes share the store).
     sessions: dict[UUID, AuthSession] = field(default_factory=dict)
     # Recorded server errors (platform monitoring).

@@ -43,6 +43,17 @@ class SqlAppointmentRepository:
         row = self._q().filter(AppointmentModel.id == appointment_id.value).first()
         return to_appointment(row) if row else None
 
+    def get_for_update(self, appointment_id: AppointmentId) -> Appointment | None:
+        # FOR NO KEY UPDATE lets the consultation insert through (its FK takes FOR KEY SHARE).
+        row = (
+            self._q()
+            .filter(AppointmentModel.id == appointment_id.value)
+            .with_for_update(key_share=True)
+            .populate_existing()
+            .first()
+        )
+        return to_appointment(row) if row else None
+
     def list_by_day(self, on: date, doctor_id: UserId | None = None) -> list[Appointment]:
         q = (
             self._q()

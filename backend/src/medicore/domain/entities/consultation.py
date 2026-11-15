@@ -25,7 +25,7 @@ from medicore.domain.enums import (
     ConsultationStatus,
 )
 from medicore.domain.services.note_templates import SOAP
-from medicore.domain.shared.errors import ConsultationNotSignable
+from medicore.domain.shared.errors import ConsultationAlreadySigned, ConsultationNotSignable
 from medicore.domain.shared.identifiers import (
     ApplicationOrderId,
     AppointmentId,
@@ -290,8 +290,5 @@ class Consultation:
 
     def _assert_draft(self) -> None:
         if self.status != ConsultationStatus.DRAFT:
-            raise ConsultationNotSignable(
-                "Consultation is already signed and cannot be modified",
-                code="consultation.already_signed",
-            )
+            raise ConsultationAlreadySigned("Consultation is already signed and cannot be modified")
 

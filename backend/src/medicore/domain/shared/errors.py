@@ -66,6 +66,13 @@ class ConsultationNotSignable(DomainError):
     code = "consultation_not_signable"
 
 
+class ConsultationAlreadySigned(ConsultationNotSignable):
+    """The consultation was already signed: a conflict with its current state, not a
+    completeness problem (two signs racing, a stale tab, an autosave after signing)."""
+
+    code = "consultation.already_signed"
+
+
 class SlotUnavailable(DomainError):
     """An appointment slot is not bookable (out of hours, overlapping, or breaks rules)."""
 

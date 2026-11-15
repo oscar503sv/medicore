@@ -33,6 +33,7 @@ from medicore.application.use_cases.monitoring import (
 )
 from medicore.domain.shared.errors import (
     CodedError,
+    ConsultationAlreadySigned,
     ConsultationNotSignable,
     DomainError,
     InvalidStateTransition,
@@ -176,6 +177,12 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(InvalidStateTransition)
     async def handle_state_transition(request: Request, exc: InvalidStateTransition):
         return _json(422, exc)
+
+    @app.exception_handler(ConsultationAlreadySigned)
+    async def handle_already_signed(request: Request, exc: ConsultationAlreadySigned):
+        # Signed already (a double click, a retry, another tab): a conflict with the
+        # consultation's current state, not an incomplete one.
+        return _json(409, exc)
 
     @app.exception_handler(ConsultationNotSignable)
     async def handle_not_signable(request: Request, exc: ConsultationNotSignable):

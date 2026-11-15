@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String
+from sqlalchemy import DateTime, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,6 +16,14 @@ class MedicalRecordModel(Base):
     __tablename__ = "medical_records"
     __table_args__ = (
         Index("ix_records_tenant_patient", "tenant_id", "patient_id"),
+        # One original record per consultation (amendments repeat consultation_id): the
+        # database backstop behind the sign lock.
+        Index(
+            "uq_medical_records_consultation",
+            "consultation_id",
+            unique=True,
+            postgresql_where=text("consultation_id IS NOT NULL AND amends_record_id IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

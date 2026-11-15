@@ -94,7 +94,7 @@ A separate session (`platform`-scoped token, with its own `mc_console` cookie) t
 ### Critical business rules
 - Appointments only within the doctor's availability, with no overlaps, honoring the booking rules.
 - A signed `MedicalRecord` is **immutable**; corrections are **versioned amendments** (`status=amended` referencing the original).
-- `SignConsultation` is **atomic**: record + prescriptions + appointment `completed` in a single transaction.
+- `SignConsultation` is **atomic**: record + prescriptions + appointment `completed` in a single transaction. The sign first locks the consultation row, so a second sign (double click, retry, another tab) answers 409 `consultation.already_signed` and editing a signed consultation answers 409 too; a partial unique index keeps a single original record per consultation.
 - Consultation diagnoses are limited to the catalog of the **ICD version configured per clinic** (ICD-10 / ICD-11), with autocomplete.
 - **Vaccination** following El Salvador's national scheme (MINSAL), for children, adolescents and adults: each patient's card computes every dose's status (given, due, overdue, upcoming…) from their age and records; records are never edited, a wrong one is voided with a reason. A worklist shows overdue and upcoming doses across the clinic.
 - **In-clinic applications** (injections, IV fluids, nebulizations…): the doctor indicates them in the consultation and they become orders for nursing when it is signed; walk-ins with an outside prescription record the prescribing doctor and their JVPM number. Each dose is recorded with lot, site and vitals, never edited (a wrong one is voided with a reason), and opens an observation window (30 min by default, configurable per order) closed as "no reaction" or as an adverse reaction, which notifies the ordering doctor. Applying a drug that clashes with the patient's allergies requires a written, audited justification.
@@ -396,7 +396,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1396 tests)
+.venv/bin/pytest                          # full suite (1411 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -421,7 +421,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `appointments` | Appointments with a status FSM and their charge (fee in force when booked, amount charged and the reason for an adjustment) |
 | `doctor_fees` | Each doctor's fee per appointment type (USD) |
 | `consultations` | Consultation in progress (mutable draft) |
-| `medical_records` | Signed, immutable medical records |
+| `medical_records` | Signed, immutable medical records (at most one original per consultation) |
 | `prescriptions` | Issued prescriptions |
 | `medical_documents` | Medical files (metadata) |
 | `insurers` | The clinic's insurers |
@@ -450,18 +450,18 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1396 passing tests
-   297  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1411 passing tests
+   298  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   604  — application (auth, sessions, appointments, consultations, records, notifications,
+   610  — application (auth, sessions, appointments, consultations, records, notifications,
             dashboard, platform (support actions land in the clinic's audit and are notified), granular permissions, multi-tenant isolation)
-   328  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   330  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    167  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    173  — infrastructure (SQLAlchemy repositories against PostgreSQL)
 ```
 
 Among other things, the tests verify:
-- `SignConsultation` atomicity: a failure rolls back the record, prescriptions and appointment status.
+- `SignConsultation` atomicity: a failure rolls back the record, prescriptions and appointment status. Concurrent signs of one consultation store a single record.
 - Multi-tenant isolation: one tenant's repos never leak another tenant's data.
 - Effective permissions per role and per-tenant override, plus platform scope.
 - Session revocation, CSRF protection and console session timeouts.
@@ -528,6 +528,8 @@ Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on s
 > **Before deploying this version:** every user, including superadmins, signs in again once, because tokens issued earlier have no audience.
 >
 > **Migration `f2a3b4c5d6e8`:** adds `last_success_at` to `login_attempts` (login lockout). It needs no new environment variables.
+>
+> **Migration `a3b4c5d6e7f9`:** adds a unique partial index so a consultation has at most one original medical record. **Before deploying, run the detection query in [`backend/README.md`](backend/README.md#duplicate-records-from-double-signing)**: the migration refuses to run while duplicates exist (it lists only their ids) and never resolves them itself. Creating the index blocks writes to `medical_records` for an instant. The Docker entrypoint runs `alembic upgrade head`, so the migration applies on deploy.
 
 For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched. Each run is recorded, and the *Monitoring* page flags the task when it fails or when more than 26 h pass without a successful reset.
 

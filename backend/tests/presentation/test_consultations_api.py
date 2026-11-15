@@ -161,3 +161,47 @@ def test_nurse_cannot_sign(seed, client):
         headers=nurse_headers,
     )
     assert resp.status_code == 403
+
+
+def _fill_for_signing(client, headers, cid):
+    client.patch(
+        f"/api/v1/consultations/{cid}/autosave",
+        json={
+            "vitals": {"heart_rate": 72, "weight": "70"},
+            "note": {"subjective": "s", "objective": "o", "assessment": "a", "plan": "p"},
+        },
+        headers=headers,
+    )
+    client.post(
+        f"/api/v1/consultations/{cid}/diagnoses",
+        json={"code": "I10", "label": "Hipertensión"},
+        headers=headers,
+    )
+
+
+def test_second_sign_returns_409(seed, client, auth_headers):
+    _, cid = _book_and_start(seed, client, auth_headers)
+    _fill_for_signing(client, auth_headers, cid)
+    url = f"/api/v1/consultations/{cid}/sign"
+    assert client.post(url, json={"chief_complaint": "x"}, headers=auth_headers).status_code == 200
+
+    resp = client.post(url, json={"chief_complaint": "x"}, headers=auth_headers)
+
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "consultation.already_signed"
+
+
+def test_autosave_after_sign_returns_409(seed, client, auth_headers):
+    _, cid = _book_and_start(seed, client, auth_headers)
+    _fill_for_signing(client, auth_headers, cid)
+    client.post(
+        f"/api/v1/consultations/{cid}/sign", json={"chief_complaint": "x"}, headers=auth_headers
+    )
+
+    resp = client.patch(
+        f"/api/v1/consultations/{cid}/autosave", json={"note": {"plan": "late"}},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "consultation.already_signed"

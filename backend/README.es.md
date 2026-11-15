@@ -132,7 +132,11 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
 - **Agenda**: disponibilidad por médico, resolución de slots, ciclo de vida de la cita
   (agendada → confirmada → en curso → completada).
 - **Consulta → historial**: al firmar una consulta se emite un `MedicalRecord` inmutable + las
-  recetas, y se completa la cita, todo en una transacción.
+  recetas, y se completa la cita, todo en una transacción. La firma bloquea la fila de la consulta
+  antes de validar y de tomar el número de expediente, así que las firmas y ediciones concurrentes
+  de una misma consulta se serializan: una segunda firma, o editar una ya firmada, responde 409
+  (`consultation.already_signed`); un autoguardado tardío no puede devolverla a borrador, y iniciar
+  dos veces la misma cita devuelve la misma consulta.
 - **Notificaciones in-app** (`application/common/notifications.py`): los casos de uso las
   emiten dentro de su propia transacción —se guardan junto con la acción o no se guardan—,
   nunca al propio autor. Eventos: cita creada/reprogramada/cancelada/no-show (al médico de la
@@ -244,16 +248,19 @@ Toda respuesta de error tiene la misma forma:
 - 401 solo para "¿quién eres?" (credenciales, sesión): el cliente cierra la sesión ante un 401. Una
   contraseña actual incorrecta al cambiarla es un 400 (`password.current_incorrect`).
 - Los errores de validación (422) ya no incluyen el valor enviado (`input`) en su detalle.
+- Firmar una consulta dos veces, o editar una ya firmada (autoguardado, diagnósticos, borradores),
+  responde 409 `consultation.already_signed`. `consultation.incomplete` sigue siendo un 422.
 
 ## Pruebas y linting
 
-Suite de **1396 tests** (297 dominio · 604 aplicación · 328 presentación · 167 infraestructura), casi
+Suite de **1411 tests** (298 dominio · 610 aplicación · 330 presentación · 173 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
 Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_audit_repository_sql.py`,
 `test_diagnosis_catalog_sql.py` — ranking y búsqueda por trigram del autocomplete de diagnósticos —
-`test_login_throttle_sql.py` — UPSERT atómico del lockout de login — y
+`test_login_throttle_sql.py` — UPSERT atómico del lockout de login —
+`test_consultation_sign_sql.py` — firmas y ediciones concurrentes de una consulta — y
 `test_notification_repository_sql.py` — JSONB y UPDATE/DELETE masivos de la bandeja —
 `test_patient_search_sql.py` — búsqueda sin acentos, dígitos del teléfono, últimas visitas) usan `TEST_DATABASE_URL`
 (o `DATABASE_URL` de la configuración),
@@ -303,6 +310,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 > **Antes de desplegar esta versión:** todos los usuarios, incluidos los superadmins, vuelven a iniciar sesión una vez (los tokens anteriores no tienen audiencia).
 >
 > **Migración `f2a3b4c5d6e8`:** añade `last_success_at` a `login_attempts` (lockout de login). No requiere variables de entorno nuevas.
+>
+> **Migración `a3b4c5d6e7f9`:** añade un índice único parcial para que una consulta tenga como máximo un expediente original. **Antes de desplegar, ejecuta la consulta de detección de [Expedientes duplicados por doble firma](#expedientes-duplicados-por-doble-firma)**: la migración se niega a correr mientras existan duplicados (lista solo sus ids) y nunca los resuelve por sí misma. Crear el índice bloquea escrituras en `medical_records` un instante. El entrypoint de Docker ejecuta `alembic upgrade head`, así que la migración se aplica al desplegar.
 
 > Para varios workers basta con `WEB_CONCURRENCY=N` (uvicorn la lee; el `docker-compose.yml` usa 2). Cada
 > worker tiene su propio pool de hasta 15 conexiones: mantén `N × 15` por debajo de `max_connections` de Postgres.
@@ -312,3 +321,25 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 > confiables); en cualquier otro caso se registra la IP del socket. La imagen arranca
 > uvicorn con `--no-proxy-headers` para que la app sea la única que interprete la
 > cabecera — mantenlo así si sobreescribes el `CMD`.
+
+## Expedientes duplicados por doble firma
+
+Antes de la migración `a3b4c5d6e7f9`, una consulta firmada dos veces a la vez (doble clic, reintento, dos pestañas) podía acabar con dos expedientes originales. Ahora la firma bloquea la consulta, y la migración añade un índice único parcial sobre `medical_records(consultation_id)` para los expedientes originales (las enmiendas repiten `consultation_id` y quedan fuera), así que la base de datos rechaza un segundo original. La migración nunca deduplica: cada duplicado es un documento clínico, y decidir cuál queda es una decisión clínica. Por eso se niega a correr mientras existan duplicados y solo lista sus ids.
+
+Ejecuta esta consulta sobre la base de datos de producción antes de desplegar:
+
+```sql
+SELECT r.tenant_id, r.consultation_id, r.id AS record_id, r.code, r.signed_at,
+       (SELECT count(*) FROM prescriptions p WHERE p.record_id = r.id) AS prescriptions,
+       (SELECT count(*) FROM application_orders a WHERE a.consultation_id = r.consultation_id) AS application_orders,
+       (SELECT count(*) FROM procedures pr WHERE pr.consultation_id = r.consultation_id) AS procedures
+FROM medical_records r
+WHERE r.amends_record_id IS NULL AND r.consultation_id IN (
+  SELECT consultation_id FROM medical_records
+  WHERE consultation_id IS NOT NULL AND amends_record_id IS NULL
+  GROUP BY consultation_id HAVING count(*) > 1)
+ORDER BY r.consultation_id, r.signed_at;
+```
+
+- **Sin filas**: no hay duplicados, y la migración se aplica al desplegar.
+- **Con filas**: resuelve a mano cada consulta antes de desplegar. Anula las recetas, órdenes de aplicación y procedimientos duplicados, y el expediente sobrante, conservando el que queda. Cada fila indica cuántas recetas tiene el expediente y cuántas órdenes de aplicación y procedimientos tiene la consulta. La migración no corre hasta que no queden duplicados.

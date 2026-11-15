@@ -56,6 +56,18 @@ class SqlConsultationRepository:
         row = self._q().filter(ConsultationModel.id == consultation_id.value).first()
         return to_consultation(row) if row else None
 
+    def get_for_update(self, consultation_id: ConsultationId) -> Consultation | None:
+        # FOR NO KEY UPDATE: blocks other signs/edits (and plain UPDATEs) of this row; under
+        # READ COMMITTED the waiter gets the committed row, so it sees status=signed.
+        row = (
+            self._q()
+            .filter(ConsultationModel.id == consultation_id.value)
+            .with_for_update(key_share=True)
+            .populate_existing()
+            .first()
+        )
+        return to_consultation(row) if row else None
+
     def get_by_appointment(self, appointment_id: AppointmentId) -> Consultation | None:
         row = self._q().filter(ConsultationModel.appointment_id == appointment_id.value).first()
         return to_consultation(row) if row else None
