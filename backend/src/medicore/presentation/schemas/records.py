@@ -21,13 +21,15 @@ class AmendRequest(BaseModel):
 
 
 class UploadDocumentRequest(BaseModel):
-    patient_id: str
-    file_name: str
+    # Where the file lives is the server's call: a client-sent storage_key is rejected.
+    model_config = ConfigDict(extra="forbid")
+
+    patient_id: str = Field(max_length=64)
+    file_name: str = Field(max_length=255)
     kind: DocumentKind
-    mime_type: str
+    mime_type: str = Field(max_length=100)
     size_bytes: int
-    storage_key: str
-    record_id: str | None = None
+    record_id: str | None = Field(None, max_length=64)
 
 
 class RecordResponse(BaseModel):
@@ -80,7 +82,6 @@ class DocumentResponse(BaseModel):
     kind: str
     mime_type: str
     size_bytes: int
-    storage_key: str
     uploaded_by_id: str
     uploaded_at: datetime
     record_id: str | None

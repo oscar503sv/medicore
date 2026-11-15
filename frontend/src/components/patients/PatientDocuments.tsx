@@ -35,15 +35,11 @@ function fmtBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// storage_key must satisfy the backend pattern ^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$ (no "..").
-function safeKeyName(name: string): string {
-  return name.replace(/[^A-Za-z0-9._-]/g, '_').replace(/\.{2,}/g, '.')
-}
-
 export function PatientDocuments({ patientId }: { patientId: string }) {
   const t = useT()
   const qc = useQueryClient()
-  const canUpload = useAuthStore((s) => s.can('records.upload'))
+  // Support sessions never write clinical content; the server refuses them too.
+  const canUpload = useAuthStore((s) => s.can('records.upload') && !s.session?.impersonating)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [kind, setKind] = useState<DocumentKind>('lab')
@@ -68,7 +64,6 @@ export function PatientDocuments({ patientId }: { patientId: string }) {
         kind,
         mime_type: file!.type,
         size_bytes: file!.size,
-        storage_key: `${patientId}/${Date.now()}-${safeKeyName(file!.name)}`,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['documents', patientId] })

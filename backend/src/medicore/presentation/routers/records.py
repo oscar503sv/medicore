@@ -136,7 +136,6 @@ def upload_document(body: UploadDocumentRequest, actor: Actor, uow: UoW, clock: 
         kind=body.kind,
         mime_type=body.mime_type,
         size_bytes=body.size_bytes,
-        storage_key=body.storage_key,
         record_id=RecordId.parse(body.record_id) if body.record_id else None,
     )
     doc = UploadDocument(uow, clock).execute(actor, cmd)

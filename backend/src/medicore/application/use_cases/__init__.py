@@ -31,7 +31,6 @@ from medicore.application.use_cases.availability import (
 from medicore.application.use_cases.consultations import (
     AddDiagnosis,
     AddPrescriptionDraft,
-    AttachDocument,
     AutosaveConsultation,
     ConsultationPatch,
     RemoveDiagnosis,
@@ -103,7 +102,6 @@ __all__ = [
     # consultations
     "AddDiagnosis",
     "AddPrescriptionDraft",
-    "AttachDocument",
     "AutosaveConsultation",
     "ConsultationPatch",
     "RemoveDiagnosis",

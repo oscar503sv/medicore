@@ -463,7 +463,6 @@ def ser_document(d: MedicalDocument) -> dict:
         "kind": str(d.kind),
         "mime_type": d.mime_type,
         "size_bytes": d.size_bytes,
-        "storage_key": d.storage_key,
         "uploaded_by_id": str(d.uploaded_by_id),
         "uploaded_at": d.uploaded_at,
         "record_id": str(d.record_id) if d.record_id else None,

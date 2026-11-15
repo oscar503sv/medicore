@@ -1625,10 +1625,11 @@ def seed_documents(c: Clinic) -> None:
                    c.now - timedelta(minutes=RNG.randint(20, 300)))
         # Mostly the nurse; sometimes another doctor (e.g. the one who ordered the test).
         uploader = c.nursing if RNG.random() < 0.7 else RNG.choice(c.doctors)
+        size = RNG.randint(80_000, 3_500_000)
+        RNG.randint(1000, 9999)  # former storage-key suffix: keeps the demo's random sequence
         UploadDocument(c.uow(), c.at(when)).execute(actor(c, uploader), UploadDocumentCommand(
             patient_id=record.patient_id, file_name=name, kind=kind, mime_type=mime,
-            size_bytes=RNG.randint(80_000, 3_500_000),
-            storage_key=f"demo/{c.tenant.slug}/{record.code.lower()}-{RNG.randint(1000, 9999)}",
+            size_bytes=size,
             record_id=record.id if RNG.random() < 0.6 else None,
         ))
         c.count("documentos")

@@ -45,7 +45,6 @@ export const recordsApi = {
     kind: string
     mime_type: string
     size_bytes: number
-    storage_key: string
     record_id?: string | null
   }) => api.post<MedicalDocument>('/documents', payload).then((r) => r.data),
 }

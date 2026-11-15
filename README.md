@@ -104,6 +104,7 @@ A separate session (`platform`-scoped token, with its own `mc_console` cookie) t
 - **Clinical content of records is for doctors**: the note, diagnoses, the record's prescriptions, vaccines, exams, the full copy, certificates and the clinical history need `records.read_clinical` (doctor-only, not delegable). The records list is paginated and filtered on the server and shows metadata only (code, date, type, doctor, site, status, patient; never the reason for the visit, the note or the vitals). `records.view` covers that list, prescriptions, vitals and documents. The backend answers 403 `permission.missing` on `GET /records/{id}` to anyone who is not a doctor, and each page of the list is audited (`record.listed`, never the search text).
 - **Consultation content is the doctor's** (OZK-95): the note, the diagnoses and the drafts (prescriptions, exams, applications, procedures), and signing, belong to the doctor who owns the consultation. `consultations.edit` is doctor-only (`DOCTOR_ONLY`, not delegable). Another doctor gets 403 `consultation.not_own`, other roles 403 `permission.missing` and support impersonation 403 `support.clinical_forbidden`. Nurses record vital signs with `consultations.vitals` (delegable, nurses by default), from **Appointments** (the *Vital signs* button on appointments in progress) or inside the consultation. Administrators can start a consultation but not open it, and only the owning doctor continues to the note. The consultation screen refreshes every 30 s to show the nurse's vitals.
 - **Prescriptions are closed by their prescriber** (OZK-100): only the doctor who issued a prescription completes or cancels it. Cancelling asks for a reason of 10 to 500 characters; it stays on the prescription, visible to clinical readers only, and the audit log keeps just its length. Nobody else is notified. A cancelled prescription leaves the record's printed prescription.
+- **Medical documents** (OZK-101): metadata only for now. The server chooses each file's storage key (`{tenant_id}/{patient_id}/{document_id}`) and never returns it; a support session can't register documents; a document can only be linked to a record of the same patient.
 - **Consultation audit**: `consultation.viewed` (scope `full` or `vitals`), `consultation.note_updated`, `consultation.vitals_updated`, `consultation.template_changed` and `consultation.draft_changed` store section and field names only, never clinical text. Reads, note and vitals updates by the same actor within 10 minutes are merged per key, so autosave and polling don't fill the log.
 - **Granular permissions** enforced in the application layer (not just the UI) — see the next section.
 - Temporary password with a forced change on first sign-in: until it is replaced, the backend only allows changing it, reading the profile and signing out; anything else answers 403 `auth.password_change_required`. Support (impersonation) sessions are exempt.
@@ -417,7 +418,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1639 tests)
+.venv/bin/pytest                          # full suite (1657 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -471,14 +472,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1639 passing tests
-   328  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
-            immunization schedule, applications, procedures, allergy matching, prescriptions)
-   735  — application (auth, sessions, appointments, consultations, records and amendments, prescriptions, notifications,
+1657 passing tests
+   331  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+            immunization schedule, applications, procedures, allergy matching, prescriptions, medical documents)
+   742  — application (auth, sessions, appointments, consultations, records and amendments, prescriptions, notifications,
             dashboard, platform (support actions land in the clinic's audit and are notified), granular permissions, multi-tenant isolation)
-   385  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   390  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-   187  — infrastructure (SQLAlchemy repositories against PostgreSQL, including the amendment chain and prescription closure)
+   190  — infrastructure (SQLAlchemy repositories against PostgreSQL, including the amendment chain and prescription closure)
      4  — scripts (demo seed; its PostgreSQL test runs only with DEMO_TEST_DATABASE_URL)
 ```
 
@@ -486,6 +487,7 @@ Among other things, the tests verify:
 - `SignConsultation` atomicity: a failure rolls back the record, prescriptions and appointment status. Concurrent signs of one consultation store a single record.
 - Only doctors read the clinical content of records, and the records list paginates and filters on the server.
 - Consultations: only the owning doctor reads or edits one, nurses only write vital signs, administrators and support never read clinical content, and the audit keeps names, not text.
+- Medical documents: the storage key is generated by the server, is neither accepted from nor returned to the client, and a record of another patient is refused.
 - Multi-tenant isolation: one tenant's repos never leak another tenant's data.
 - Effective permissions per role and per-tenant override, plus platform scope.
 - Session revocation, CSRF protection and console session timeouts.
@@ -561,7 +563,9 @@ Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on s
 
 > **Migration `f7a8b9c0d1e3`** (prescription closure): adds `closed_at`, `closed_by_id` and `cancel_reason`, with a CHECK that every cancelled prescription has a reason, and moves `prescriptions.manage` to doctors only. **Before deploying, run the queries in [`backend/README.md`](backend/README.md#prescriptions-closed-by-someone-else)**, and deploy the backend and the frontend together. Its downgrade does not restore the permissions.
 
-> **Visible changes in this version** (tell the clinics' users): administrators and nurses no longer see the reason for the visit in Records or in the patient summary; in Records the Reason column becomes Doctor, and only the doctor can open a record; the medication line shows the prescribing doctor instead of the record code; administrators and nurses reprint prescriptions without general instructions; tabs opened with the previous version fail in Records until they are reloaded. Nurses only record vital signs in the consultation in progress, and administrators can no longer open it: only the doctor who started it continues to the note. API clients: `POST /consultations/start/{id}` no longer returns the note (a minimal reference instead). Record amendments: only the record's author can amend it, from its current version and with a reason of 10 to 1000 characters (`POST /records/{id}/amend` takes `reason`, and rejects unknown fields); the records list and the patient summary show only current versions, so their totals can be lower than before; amendments no longer notify the author. Prescriptions: only the doctor who issued one can complete or cancel it, and `prescriptions.manage` is now doctor-only, so administrator and staff customizations lose it; cancelling asks for a reason (10 to 500 characters) that only doctors see, cancelled prescriptions lose their print icon and are left out of the record's printed prescription. `POST /prescriptions/{id}/cancel` now takes `{"reason"}`, so deploy the frontend together with the backend.
+> **Migration `f8a9b0c1d2e4`** (medical document storage keys): unlinks the documents whose record belongs to another patient or no longer exists (the file stays with its patient), rewrites every `storage_key` to `{tenant_id}/{patient_id}/{id}` and creates the unique index `uq_medical_documents_storage_key`. **Before deploying, run the queries in [`backend/README.md`](backend/README.md#document-storage-keys)**, and deploy the backend and the frontend together: `POST /documents` no longer accepts `storage_key`. Its downgrade only drops the index; the unlinked records and the previous keys are not recovered.
+
+> **Visible changes in this version** (tell the clinics' users): administrators and nurses no longer see the reason for the visit in Records or in the patient summary; in Records the Reason column becomes Doctor, and only the doctor can open a record; the medication line shows the prescribing doctor instead of the record code; administrators and nurses reprint prescriptions without general instructions; tabs opened with the previous version fail in Records until they are reloaded. Nurses only record vital signs in the consultation in progress, and administrators can no longer open it: only the doctor who started it continues to the note. API clients: `POST /consultations/start/{id}` no longer returns the note (a minimal reference instead). Record amendments: only the record's author can amend it, from its current version and with a reason of 10 to 1000 characters (`POST /records/{id}/amend` takes `reason`, and rejects unknown fields); the records list and the patient summary show only current versions, so their totals can be lower than before; amendments no longer notify the author. Prescriptions: only the doctor who issued one can complete or cancel it, and `prescriptions.manage` is now doctor-only, so administrator and staff customizations lose it; cancelling asks for a reason (10 to 500 characters) that only doctors see, cancelled prescriptions lose their print icon and are left out of the record's printed prescription. `POST /prescriptions/{id}/cancel` now takes `{"reason"}`, so deploy the frontend together with the backend. Medical documents (OZK-101): support sessions can't register documents, so the *Register document* button is hidden for them. API clients no longer send `storage_key` (the server chooses it, and a request that includes it gets 422) and responses no longer include it, so the backend and the frontend deploy together.
 
 For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched. Each run is recorded, and the *Monitoring* page flags the task when it fails or when more than 26 h pass without a successful reset.
 

@@ -24,6 +24,8 @@ from medicore.domain.shared.identifiers import TenantId, UserId
 from medicore.infrastructure.persistence.models.application import ApplicationOrderModel
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.error_event import JobRunModel
+from medicore.infrastructure.persistence.models.medical_document import MedicalDocumentModel
+from medicore.infrastructure.persistence.models.medical_record import MedicalRecordModel
 from medicore.infrastructure.persistence.models.patient import PatientModel
 from medicore.infrastructure.persistence.models.procedure import ProcedureModel
 from medicore.infrastructure.persistence.models.tenant import TenantModel
@@ -118,6 +120,15 @@ def assert_clinics(session: Session) -> dict:
             AppointmentModel.tenant_id == tenant_id)).all()
         assert appts
         result[demo.slug] = (tenant_id, len(appts), len(users))
+        documents = session.scalars(select(MedicalDocumentModel).where(
+            MedicalDocumentModel.tenant_id == tenant_id)).all()
+        for document in documents:
+            assert document.storage_key == f"{tenant_id}/{document.patient_id}/{document.id}"
+            if document.record_id is not None:
+                record_patient = session.scalar(select(MedicalRecordModel.patient_id).where(
+                    MedicalRecordModel.id == document.record_id,
+                    MedicalRecordModel.tenant_id == tenant_id))
+                assert record_patient == document.patient_id
         expected_emails = {f"{member[1]}@{demo.slug}.test" for member in demo.staff}
         expected_emails.add(f"admin@{demo.slug}.test")
         if demo.invited:

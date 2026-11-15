@@ -51,7 +51,6 @@ def _cases(seed) -> list[tuple[str, str, str, str, dict]]:
                 "kind": "x",
                 "mime_type": "application/pdf",
                 "size_bytes": 10,
-                "storage_key": "k/a.pdf",
             },
         ),
         (

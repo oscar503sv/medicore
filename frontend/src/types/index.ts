@@ -765,7 +765,6 @@ export interface MedicalDocument {
   kind: DocumentKind
   mime_type: string
   size_bytes: number
-  storage_key: string
   uploaded_by_id: string
   uploaded_at: string
   record_id: string | null

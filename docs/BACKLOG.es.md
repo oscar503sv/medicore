@@ -17,24 +17,25 @@ Canales externos y recordatorios quedan planificados como evolución futura (ver
 [A futuro](#a-futuro)).
 
 ### Otros cabos sueltos
-- Caso de uso `AttachDocument` (`application/use_cases/consultations.py`) sin endpoint:
-  adjuntar documentos a una consulta en curso no es alcanzable vía API.
+- Se retiró el caso de uso `AttachDocument` (no tenía endpoint, así que adjuntar documentos a una consulta en curso no era alcanzable vía API). Cuando exista ese endpoint, debe cargar el documento con `documents.get_by_id` dentro del tenant (hoy el puerto solo tiene `list_by_patient`, `save` y `delete`, así que habrá que añadirlo), exigir `document.patient_id == consultation.patient_id` y construir la referencia con `document.as_ref()`, nunca aceptarla del cliente.
 - Value object `Money` (`domain/value_objects/money.py`) sin uso — presumiblemente
   reservado para facturación.
-- El almacenamiento de documentos médicos guarda **solo metadata** (nombre, mime, tamaño,
-  `storage_key`); no hay backend de archivos (S3/disco). La UI lo comunica explícitamente.
+- El almacenamiento de documentos médicos guarda **solo metadata** (nombre, mime, tamaño). El servidor genera la `storage_key` (`{tenant_id}/{patient_id}/{document_id}`) y nunca la devuelve. No hay backend de archivos (S3/disco) todavía, y la UI lo comunica explícitamente. El futuro puerto `DocumentStorage` (R2/S3, adaptador en infrastructure) usará esta clave.
 - Seguimientos de enmiendas (OZK-94, OZK-98): `procedure.amended` y `certificate.voided` guardan el
   texto del motivo en la auditoría, a diferencia de las enmiendas de expedientes y de las
   cancelaciones de recetas (que guardan solo su longitud, `reason_chars`); hay que alinearlas. `platform_reads.signed_records` y `signed_per_week` (consola de
   plataforma) cuentan las enmiendas como expedientes firmados nuevos; deben excluirlas.
 - OZK-99 (trigger de inmutabilidad de `medical_records`) debe ir en una migración posterior a
-  `f7a8b9c0d1e3`.
+  `f8a9b0c1d2e4`.
 - Recetas activas que nadie puede cerrar: desde OZK-100 solo el médico que las emitió las completa o
   cancela, y los administradores no tienen `prescriptions.manage`, así que una receta de un médico que
   se fue de la clínica (o fue borrado) sigue activa (consulta 5 del [README del backend](../backend/README.es.md#recetas-cerradas-por-otra-persona)).
   Decidir si el médico tratante o un administrador puede cerrarla, con motivo y entrada de auditoría.
 - Avisar al médico tratante cuando una receta la emitió otro médico (por ejemplo, si quien recetó sale
   de la clínica). OZK-100 no notifica a nadie, porque solo actúa quien recetó.
+- Una enmienda no mueve a la versión nueva los documentos ligados a la anterior: se quedan en la versión reemplazada. Decidir si deben seguir a la vigente.
+- Caracteres de control en el nombre de archivo: la subida solo rechaza `/`, `\`, `..` y NUL, así que un nombre con saltos de línea u otros caracteres de control se acepta.
+- Coherencia extensión/MIME: no se comprueba que la extensión del archivo corresponda a su `mime_type`.
 
 ## A futuro
 
@@ -174,5 +175,6 @@ Resueltos en nov 2026:
   caracteres, que queda en la receta; la auditoría solo registra su longitud, y el motivo llega solo a
   quien lee contenido clínico. La migración `f7a8b9c0d1e3` añade los campos de cierre y el CHECK, y
   traslada el permiso (ver [Recetas cerradas por otra persona](../backend/README.es.md#recetas-cerradas-por-otra-persona)).
+- **Documentos médicos sin claves elegidas por el cliente** (OZK-101): el servidor genera cada `storage_key` (`{tenant_id}/{patient_id}/{document_id}`), nunca se acepta del cliente ni se devuelve, y es única en la base. Un documento solo puede ligarse a un expediente del mismo paciente (su versión vigente), y las sesiones de soporte no pueden registrarlos. La migración `f8a9b0c1d2e4` desliga los documentos de un expediente ajeno y reescribe las claves (ver [Claves de almacenamiento de documentos](../backend/README.es.md#claves-de-almacenamiento-de-documentos)).
 
 No quedan hallazgos pendientes en esta lista.

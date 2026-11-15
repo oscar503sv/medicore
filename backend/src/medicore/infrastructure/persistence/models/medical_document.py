@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, text
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,8 @@ from medicore.infrastructure.database.base import Base
 
 class MedicalDocumentModel(Base):
     __tablename__ = "medical_documents"
+    # Safety net before the files move to object storage: two documents never share a key.
+    __table_args__ = (Index("uq_medical_documents_storage_key", "storage_key", unique=True),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(

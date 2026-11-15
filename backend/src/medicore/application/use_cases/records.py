@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -25,7 +24,6 @@ from medicore.domain.enums import ClinicalRecordType, DocumentKind
 from medicore.domain.repositories._support import Page, Paging, RecordFilter, RecordSummary
 from medicore.domain.shared.errors import PermissionDenied, RecordSuperseded
 from medicore.domain.shared.identifiers import (
-    DocumentId,
     PatientId,
     RecordId,
     UserId,
@@ -43,7 +41,6 @@ class UploadDocumentCommand:
     kind: DocumentKind
     mime_type: str
     size_bytes: int
-    storage_key: str
     record_id: RecordId | None = None
 
 
@@ -345,7 +342,6 @@ _ALLOWED_MIME_TYPES = frozenset(
     {"application/pdf", "image/png", "image/jpeg", "image/webp", "text/plain"}
 )
 _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024
-_STORAGE_KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$")
 _FILE_NAME_FORBIDDEN = ("/", "\\", "..", "\x00")
 
 
@@ -365,8 +361,6 @@ def _validate_upload(cmd: UploadDocumentCommand) -> None:
     name = cmd.file_name.strip()
     if not name or len(name) > 255 or any(seq in name for seq in _FILE_NAME_FORBIDDEN):
         raise ValidationError("invalid file name", code="document.invalid_name")
-    if ".." in cmd.storage_key or not _STORAGE_KEY_RE.match(cmd.storage_key):
-        raise ValidationError("invalid storage key", code="document.invalid_storage_key")
 
 
 class UploadDocument:
@@ -376,25 +370,23 @@ class UploadDocument:
 
     def execute(self, actor: ActorContext, cmd: UploadDocumentCommand) -> MedicalDocument:
         ensure_permission(actor, Permission.RECORDS_UPLOAD)
+        ensure_not_support(actor)
         _validate_upload(cmd)
         patient = self._uow.patients.get_by_id(cmd.patient_id)
         if patient is None:
             raise EntityNotFound("Patient", cmd.patient_id)
-        if cmd.record_id is not None and self._uow.medical_records.get_by_id(cmd.record_id) is None:
-            raise EntityNotFound("MedicalRecord", cmd.record_id)
-        document = MedicalDocument(
-            id=DocumentId.new(),
+        document = MedicalDocument.register(
             tenant_id=actor.tenant_id,
             patient_id=cmd.patient_id,
-            file_name=cmd.file_name,
+            file_name=cmd.file_name.strip(),
             kind=cmd.kind,
             mime_type=cmd.mime_type,
             size_bytes=cmd.size_bytes,
-            storage_key=cmd.storage_key,
             uploaded_by_id=actor.user_id,
             uploaded_at=self._clock.now(),
-            record_id=cmd.record_id,
         )
+        if cmd.record_id is not None:
+            document.link_to(self._current_record(cmd.record_id))
         with self._uow:
             self._uow.documents.save(document)
             self._uow.audit.append(
@@ -414,6 +406,16 @@ class UploadDocument:
             )
             self._uow.commit()
         return document
+
+
+    def _current_record(self, record_id: RecordId) -> MedicalRecord:
+        """Any version of the chain is accepted; the document attaches to the live one."""
+        record = self._uow.medical_records.get_by_id(record_id)
+        if record is None:
+            raise EntityNotFound("MedicalRecord", record_id)
+        if self._uow.medical_records.successor_id(record.id) is not None:
+            return self._uow.medical_records.versions(record.id)[-1]
+        return record
 
 
 class ListPatientDocuments:

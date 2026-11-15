@@ -16,19 +16,17 @@ full inbox page at `/notifications` (filters by status and category, grouped by 
 External channels and reminders are planned as a future evolution (see [Future](#future)).
 
 ### Other loose ends
-- The `AttachDocument` use case (`application/use_cases/consultations.py`) has no endpoint:
-  attaching documents to a consultation in progress isn't reachable through the API.
+- The `AttachDocument` use case was removed (it had no endpoint, so attaching documents to a consultation in progress wasn't reachable through the API). When that endpoint exists, it must load the document with `documents.get_by_id` inside the tenant (the port only has `list_by_patient`, `save` and `delete` today, so add it), require `document.patient_id == consultation.patient_id`, and build the reference with `document.as_ref()`, never accepting it from the client.
 - The `Money` value object (`domain/value_objects/money.py`) is unused — presumably reserved
   for billing.
-- Medical document storage keeps **metadata only** (name, mime type, size, `storage_key`);
-  there is no file backend (S3/disk). The UI says so explicitly.
+- Medical document storage keeps **metadata only** (name, mime type, size). The server generates the `storage_key` (`{tenant_id}/{patient_id}/{document_id}`) and never returns it. There is no file backend (S3/disk) yet, and the UI says so explicitly. The future `DocumentStorage` port (R2/S3, adapter in `infrastructure`) will use this key.
 - Amendment follow-ups (OZK-94, OZK-98): `procedure.amended` and `certificate.voided` store the
   reason text in the audit log, unlike record amendments and prescription cancellations (which keep
   only its length, `reason_chars`); align them.
   `platform_reads.signed_records` and `signed_per_week` (platform console) count amendments as new
   signed records; they should exclude them.
 - OZK-99 (immutability trigger on `medical_records`) must go in a migration after
-  `f7a8b9c0d1e3`.
+  `f8a9b0c1d2e4`.
 - Active prescriptions that nobody can close: since OZK-100 only the prescriber completes or cancels
   a prescription, and administrators don't hold `prescriptions.manage`, so a prescription of a doctor
   who left the clinic (or was deleted) stays active (query 5 in the
@@ -36,6 +34,9 @@ External channels and reminders are planned as a future evolution (see [Future](
   treating doctor or an administrator may close it, with a reason and an audit entry.
 - Notify the treating doctor when a prescription was issued by another doctor (for example, when the
   prescriber leaves the clinic). OZK-100 notifies no one, since only the prescriber acts.
+- An amendment does not move the documents linked to the previous version to the new one: they stay on the replaced version. Decide whether they should follow the current one.
+- Control characters in file names: the upload only rejects `/`, `\`, `..` and NUL, so a name with line breaks or other control characters is accepted.
+- Extension and MIME type consistency: an upload does not check that the file extension matches its `mime_type`.
 
 ## Future
 
@@ -179,5 +180,6 @@ Resolved in November 2026:
   500 characters, kept on the prescription and only its length in the audit log; the reason reaches
   clinical readers only. Migration `f7a8b9c0d1e3` adds the closing fields and the CHECK, and moves the
   permission (see [Prescriptions closed by someone else](../backend/README.md#prescriptions-closed-by-someone-else)).
+- **Medical documents without client-chosen keys** (OZK-101): the server generates each `storage_key` (`{tenant_id}/{patient_id}/{document_id}`), it is never accepted from or returned to the client, and it is unique in the database. A document can be linked only to a record of the same patient (its current version), and support sessions can't register documents. Migration `f8a9b0c1d2e4` unlinks the documents of another patient's record and rewrites the keys (see [Document storage keys](../backend/README.md#document-storage-keys)).
 
 No pending findings remain in this list.

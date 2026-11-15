@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -38,25 +38,32 @@ from medicore.application.use_cases.records import (
 )
 from medicore.domain.enums import AppointmentType, DocumentKind, RecordStatus, Sex
 from medicore.domain.repositories._support import Paging
-from medicore.domain.shared.errors import PermissionDenied
-from medicore.domain.shared.identifiers import PatientId
+from medicore.domain.shared.errors import InvalidValueObject, PermissionDenied
+from medicore.domain.shared.identifiers import PatientId, RecordId
 from medicore.domain.value_objects.icd_code import IcdCode
-from tests.support.builders import build_tenant, build_user, seed_clinic, soap_note
+from tests.support.builders import (
+    build_patient,
+    build_tenant,
+    build_user,
+    seed_clinic,
+    soap_note,
+)
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
 MONDAY_9AM = datetime(2026, 6, 1, 9, 0)
 
 
-def _sign_a_record(seed, uow):
+def _sign_a_record(seed, uow, patient=None, start=MONDAY_9AM):
+    patient = patient or seed.patient
     create = CreateAppointment(uow, SequentialCodeGenerator(), FixedClock())
     appt = create.execute(
         seed.doctor_actor,
         CreateAppointmentCommand(
-            patient_id=seed.patient.id,
+            patient_id=patient.id,
             doctor_id=seed.doctor.id,
             location_id=seed.tenant.primary_location.id,
             type=AppointmentType.CONSULT,
-            scheduled_start=MONDAY_9AM,
+            scheduled_start=start,
             reason="Control",
         ),
     )
@@ -159,7 +166,6 @@ def _upload_cmd(seed, **overrides) -> UploadDocumentCommand:
         kind=DocumentKind.LAB,
         mime_type="application/pdf",
         size_bytes=1024,
-        storage_key=f"{seed.patient.id}/analitica.pdf",
     )
     defaults.update(overrides)
     return UploadDocumentCommand(**defaults)
@@ -207,14 +213,96 @@ class TestUploadDocument:
                     seed.doctor_actor, _upload_cmd(seed, file_name=name)
                 )
 
-    def test_malformed_storage_key_is_rejected(self):
+    def test_the_server_chooses_the_storage_key(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)
-        for key in ("../secret", "/abs/path", "a/../b", "con espacios", ""):
-            with pytest.raises(ValidationError):
-                UploadDocument(uow, FixedClock()).execute(
-                    seed.doctor_actor, _upload_cmd(seed, storage_key=key)
-                )
+        upload = UploadDocument(uow, FixedClock())
+        first = upload.execute(seed.doctor_actor, _upload_cmd(seed))
+        second = upload.execute(seed.doctor_actor, _upload_cmd(seed))
+        assert first.storage_key == f"{seed.tenant.id}/{seed.patient.id}/{first.id}"
+        assert first.storage_key != second.storage_key
+
+    def test_file_name_is_stored_trimmed(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        document = UploadDocument(uow, FixedClock()).execute(
+            seed.doctor_actor, _upload_cmd(seed, file_name="  analitica.pdf  ")
+        )
+        assert document.file_name == "analitica.pdf"
+
+    def test_document_links_to_a_record_of_the_same_patient(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        record = _sign_a_record(seed, uow)
+        document = UploadDocument(uow, FixedClock()).execute(
+            seed.doctor_actor, _upload_cmd(seed, record_id=record.id)
+        )
+        assert document.record_id == record.id
+
+    def test_an_old_version_links_to_the_current_one(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        original = _sign_a_record(seed, uow)
+        amendment = AmendMedicalRecord(uow, FixedClock()).execute(
+            seed.doctor_actor, original.id, reason="Se corrige el motivo", chief_complaint="X"
+        )
+        document = UploadDocument(uow, FixedClock()).execute(
+            seed.doctor_actor, _upload_cmd(seed, record_id=original.id)
+        )
+        assert document.record_id == amendment.id
+
+    def test_record_of_another_patient_is_rejected_and_leaves_no_trace(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        other = build_patient(seed.tenant.id, code="P-00200", primary_doctor_id=seed.doctor.id)
+        seed.factory.store.patients[other.id.value] = other
+        record = _sign_a_record(seed, uow, patient=other, start=MONDAY_9AM + timedelta(hours=2))
+        audits = len(uow.audit.query(action="document.uploaded"))
+        notifications = len(seed.factory.store.notifications)
+        with pytest.raises(InvalidValueObject) as exc:
+            UploadDocument(uow, FixedClock()).execute(
+                seed.doctor_actor, _upload_cmd(seed, record_id=record.id)
+            )
+        assert exc.value.code == "document.record_mismatch"
+        assert uow.documents.list_by_patient(seed.patient.id) == []
+        assert len(uow.audit.query(action="document.uploaded")) == audits
+        assert len(seed.factory.store.notifications) == notifications
+
+    def test_unknown_record_is_not_found(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        with pytest.raises(EntityNotFound):
+            UploadDocument(uow, FixedClock()).execute(
+                seed.doctor_actor, _upload_cmd(seed, record_id=RecordId.new())
+            )
+
+    def test_record_of_another_clinic_is_not_found(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        record = _sign_a_record(seed, uow)
+        other_tenant = build_tenant(slug="otra-clinica")
+        other_admin = build_user(other_tenant.id, role=seed.admin.role)
+        other_patient = build_patient(other_tenant.id)
+        store = seed.factory.store
+        store.tenants[other_tenant.id.value] = other_tenant
+        store.users[other_admin.id.value] = other_admin
+        store.patients[other_patient.id.value] = other_patient
+        actor = ActorContext(
+            user_id=other_admin.id, tenant_id=other_tenant.id, role=other_admin.role
+        )
+        with pytest.raises(EntityNotFound):
+            UploadDocument(seed.factory.for_tenant(other_tenant.id), FixedClock()).execute(
+                actor, _upload_cmd(seed, patient_id=other_patient.id, record_id=record.id)
+            )
+
+    def test_support_sessions_cannot_upload(self):
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        support = replace(seed.actor(seed.admin), impersonated_by=seed.platform_admin.id)
+        with pytest.raises(PermissionDenied) as exc:
+            UploadDocument(uow, FixedClock()).execute(support, _upload_cmd(seed))
+        assert exc.value.code == "support.clinical_forbidden"
+        assert uow.documents.list_by_patient(seed.patient.id) == []
 
 
 class TestAmendment:

@@ -31,7 +31,6 @@ from medicore.application.use_cases.note_templates import (
 from medicore.domain.entities.application import ApplicationDraft
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.consultation import Consultation
-from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.medical_record import MedicalRecord, VaccineAdministration
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.prescription import PrescriptionDraft
@@ -499,16 +498,6 @@ class RemoveExam(_ConsultationEditor):
         consultation = self._load(actor, consultation_id)
         consultation.remove_exam(index)
         self._save_draft(actor, consultation, "exams", "removed")
-        return consultation
-
-
-class AttachDocument(_ConsultationEditor):
-    def execute(
-        self, actor: ActorContext, consultation_id: ConsultationId, ref: AttachmentRef
-    ) -> Consultation:
-        consultation = self._load(actor, consultation_id)
-        consultation.attach_document(ref)
-        self._save_draft(actor, consultation, "attachments", "added")
         return consultation
 
 

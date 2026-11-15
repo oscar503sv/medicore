@@ -10,7 +10,7 @@ import pytest
 
 from medicore.domain.enums import Role
 from medicore.domain.value_objects.vitals import Vitals
-from tests.support.builders import PASSWORD, build_user
+from tests.support.builders import PASSWORD, build_patient, build_user
 from tests.support.records import store_record
 
 RECORDS = "/api/v1/records"
@@ -311,3 +311,54 @@ class TestPrintingAmendments:
         resp = client.get(f"/api/v1/print/records/{rx.id}", headers=auth_headers)
         assert resp.status_code == 200
         assert REASON not in resp.text
+
+
+class TestDocuments:
+    @staticmethod
+    def _body(seed, **extra) -> dict:
+        return {
+            "patient_id": str(seed.patient.id),
+            "file_name": "analitica.pdf",
+            "kind": "lab",
+            "mime_type": "application/pdf",
+            "size_bytes": 1024,
+            **extra,
+        }
+
+    def test_upload_answers_201_without_the_storage_key(self, seed, client, auth_headers):
+        resp = client.post("/api/v1/documents", json=self._body(seed), headers=auth_headers)
+        assert resp.status_code == 201
+        assert "storage_key" not in resp.json()
+
+    def test_a_client_sent_storage_key_is_rejected(self, seed, client, auth_headers):
+        resp = client.post(
+            "/api/v1/documents", json=self._body(seed, storage_key="x/y.pdf"), headers=auth_headers
+        )
+        assert resp.status_code == 422
+        assert resp.json()["code"] == "request_invalid"
+
+    def test_a_record_of_another_patient_is_a_422(self, seed, client, auth_headers):
+        other = build_patient(seed.tenant.id, code="P-00200")
+        seed.factory.store.patients[other.id.value] = other
+        foreign = store_record(
+            seed, code="REC-2026-0009", encounter_at=datetime(2026, 5, 20, 9), patient=other
+        )
+        resp = client.post(
+            "/api/v1/documents",
+            json=self._body(seed, record_id=str(foreign.id)),
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+        assert resp.json()["code"] == "document.record_mismatch"
+
+    def test_the_listing_does_not_expose_the_storage_key(self, seed, client, auth_headers):
+        client.post("/api/v1/documents", json=self._body(seed), headers=auth_headers)
+        resp = client.get(f"/api/v1/patients/{seed.patient.id}/documents", headers=auth_headers)
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+        assert "storage_key" not in resp.json()[0]
+
+    def test_support_cannot_upload(self, seed, client, support_headers):
+        resp = client.post("/api/v1/documents", json=self._body(seed), headers=support_headers)
+        assert resp.status_code == 403
+        assert resp.json()["code"] == "support.clinical_forbidden"
