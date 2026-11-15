@@ -25,7 +25,7 @@ in-app notifications come out exactly as in real use. Older notifications are ma
 the last couple of days stay mostly unread.
 
 Idempotent: re-running skips tenants that already have appointments. ``--reset`` wipes the
-demo tenants first (cascade) and recreates them.
+demo tenants first and recreates them.
 
 Demo users get the password from ``DEMO_PASSWORD`` (``demo1234`` in development when unset)
 and the clinic admins the one from ``DEMO_ADMIN_PASSWORD`` (``DEMO_PASSWORD`` when unset). In
@@ -45,7 +45,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 
 from medicore.application.common.audit import audit_entry
 from medicore.application.common.context import ActorContext
@@ -192,6 +192,7 @@ from medicore.infrastructure.auth.code_generator import DbSequentialCodeGenerato
 from medicore.infrastructure.auth.system_clock import SystemClock
 from medicore.infrastructure.config import get_settings
 from medicore.infrastructure.database.engine import get_session, get_session_factory
+from medicore.infrastructure.database.tenant_purge import purge_tenants
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.models.notification import NotificationModel
 from medicore.infrastructure.persistence.models.tenant import TenantModel
@@ -1751,10 +1752,13 @@ def seed_tenant(session, demo: DemoClinic) -> None:
 
 
 def reset_demo(session) -> None:
+    # Only the demo slugs: a real clinic on the same database is never touched, and its
+    # signed records are append-only for everyone, this script included.
     slugs = [demo.slug for demo in DEMO_CLINICS]
-    session.execute(delete(TenantModel).where(TenantModel.slug.in_(slugs)))
+    tenant_ids = session.scalars(select(TenantModel.id).where(TenantModel.slug.in_(slugs))).all()
+    purge_tenants(session, tenant_ids)
     session.commit()
-    print(f"Reset: tenants {slugs} borrados (cascada)")
+    print(f"Reset: tenants {slugs} borrados")
 
 
 def _check_demo_password() -> None:

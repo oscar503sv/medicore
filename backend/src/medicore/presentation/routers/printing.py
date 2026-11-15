@@ -95,6 +95,9 @@ def print_record(
         "context": _context(doc.context), "document": doc.document, "record": record,
         "indications": doc.indications, "amends_code": doc.amends_code,
         "version": doc.version, "original_signed_at": doc.original_signed_at,
+        "integrity": doc.integrity,
+        "seal_version": doc.seal.version if doc.seal else None,
+        "seal_fingerprint": doc.seal.fingerprint if doc.seal else None,
     }
 
 
@@ -110,6 +113,7 @@ def print_certificate(certificate_id: str, actor: Actor, uow: UoW, clock: Clock)
             "diagnosis": c.diagnosis, "remarks": c.remarks, "addressee": c.addressee,
         },
         "encounter_at": doc.encounter_at, "ended_at": doc.ended_at,
+        "integrity": doc.integrity,
     }
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -12,7 +13,8 @@ from medicore.domain.entities.medical_record import (
     AMENDMENT_REASON_MIN,
     MedicalRecord,
 )
-from medicore.domain.enums import ClinicalRecordType, RecordStatus
+from medicore.domain.enums import ClinicalRecordType, RecordStatus, SealStatus
+from medicore.domain.services.record_seal import compute_seal, verify_chain
 from medicore.domain.shared.errors import InvalidValueObject, PermissionDenied, RecordAlreadySigned
 from medicore.domain.shared.identifiers import (
     PatientId,
@@ -23,10 +25,11 @@ from medicore.domain.shared.identifiers import (
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.vitals import Vitals
 from tests.support.builders import soap_note
+from tests.support.records import sealed
 
 
 def make_record() -> MedicalRecord:
-    return MedicalRecord(
+    return sealed(MedicalRecord(
         id=RecordId.new(),
         tenant_id=TenantId.new(),
         code="REC-2026-0512-CR",
@@ -41,7 +44,7 @@ def make_record() -> MedicalRecord:
         signed_at=datetime(2026, 5, 12, 9, 30),
         signed_by_id=UserId.new(),
         diagnoses=[IcdCode("I10", "Hipertensión")],
-    )
+    ))
 
 
 class TestMedicalRecordImmutability:
@@ -86,6 +89,18 @@ class TestAmendment:
         amended = amend(original)
         assert amended.author_id == original.author_id
         assert amended.signed_by_id == original.author_id
+
+    def test_the_amendment_is_sealed_on_top_of_the_original_seal(self):
+        original = make_record()
+        amended = amend(original)
+        assert amended.seal is not None and amended.seal != original.seal
+        assert amended.seal == compute_seal(replace(amended, seal=None), original.seal)
+        assert verify_chain([original, amended]) == (SealStatus.OK, SealStatus.OK)
+
+    def test_an_unsealed_record_is_not_amended(self):
+        with pytest.raises(InvalidValueObject) as exc:
+            amend(replace(make_record(), seal=None))
+        assert exc.value.code == "record.unsealed"
 
     def test_amend_does_not_mutate_original(self):
         original = make_record()

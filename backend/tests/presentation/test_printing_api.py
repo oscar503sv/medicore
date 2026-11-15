@@ -10,10 +10,11 @@ from medicore.domain.enums import ClinicalRecordType
 from medicore.domain.shared.identifiers import RecordId
 from medicore.domain.value_objects.vitals import Vitals
 from tests.support.builders import soap_note
+from tests.support.records import sealed
 
 
 def _record(seed):
-    record = MedicalRecord(
+    record = sealed(MedicalRecord(
         id=RecordId.new(), tenant_id=seed.tenant.id, code="REC-1", patient_id=seed.patient.id,
         author_id=seed.doctor.id, type=ClinicalRecordType.CONSULTATION,
         encounter_at=datetime(2026, 5, 20, 9), location_name="Sede", chief_complaint="Fiebre",
@@ -21,7 +22,7 @@ def _record(seed):
         signed_by_id=seed.doctor.id,
         prescriptions=(PrescriptionSnapshot("Paracetamol", "500 mg", "c/8 h",
                                             date(2026, 5, 20)),),
-    )
+    ))
     seed.factory.store.medical_records[record.id.value] = record
     return record
 

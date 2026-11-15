@@ -387,6 +387,12 @@ const es: Dict = {
   'record.current': 'Vigente',
   'record.superseded_banner': 'Versión reemplazada por una enmienda posterior.',
   'record.view_current': 'Ver versión vigente',
+  'record.integrity_tampered':
+    'Este expediente no coincide con su sello de integridad: su contenido pudo alterarse después de la firma. No lo uses como referencia y avisa al administrador de la clínica.',
+  'record.integrity_unverifiable':
+    'No se pudo verificar el sello de integridad de este expediente (versión de sello desconocida).',
+  'record.integrity_badge_tampered': 'Sello inválido',
+  'record.integrity_badge_unverifiable': 'Sin verificar',
   'record.view_version': 'Ver esta versión',
   'record.amend_superseded': 'Alguien enmendó este historial antes que tú.',
   'record.reason_label': 'Motivo',
@@ -639,6 +645,10 @@ const es: Dict = {
   'err.record.amend_empty': 'Cambia algo del historial para poder enmendarlo.',
   'err.record.amend_reason_invalid': 'El motivo debe tener entre {min} y {max} caracteres.',
   'err.record.superseded': 'El historial ya tiene una versión más reciente. Ábrela para enmendarla.',
+  'err.record.tampered':
+    'Este expediente no coincide con su sello de integridad, así que no se puede enmendar. Avisa al administrador de la clínica.',
+  'err.record.seal_invalid': 'El sello del expediente no es válido.',
+  'err.record.unsealed': 'El expediente no tiene sello de integridad.',
   'err.document.unsupported_type': 'Tipo de archivo no permitido ({mime_type}).',
   'err.document.too_large': 'El archivo supera el tamaño máximo de {max_mb} MB.',
   'err.document.invalid_name': 'El nombre del archivo no es válido.',
@@ -994,6 +1004,7 @@ const es: Dict = {
   'audit.action.document.listed': 'Documentos consultados',
   'audit.action.record.amended': 'Expediente enmendado',
   'audit.action.record.versions_viewed': 'Versiones de un expediente consultadas',
+  'audit.action.record.integrity_failed': 'Sello de expediente no coincide',
   'audit.action.document.uploaded': 'Documento subido',
   'audit.action.vaccination.recorded': 'Vacuna registrada',
   'audit.action.vaccination.voided': 'Registro de vacuna anulado',
@@ -1501,6 +1512,12 @@ const en: Dict = {
   'record.current': 'Current',
   'record.superseded_banner': 'This version was replaced by a later amendment.',
   'record.view_current': 'View current version',
+  'record.integrity_tampered':
+    'This record does not match its integrity seal: its content may have been altered after signing. Do not rely on it and tell the clinic administrator.',
+  'record.integrity_unverifiable':
+    'The integrity seal of this record could not be verified (unknown seal version).',
+  'record.integrity_badge_tampered': 'Invalid seal',
+  'record.integrity_badge_unverifiable': 'Not verified',
   'record.view_version': 'View this version',
   'record.amend_superseded': 'Someone amended this record before you.',
   'record.reason_label': 'Reason',
@@ -1748,6 +1765,10 @@ const en: Dict = {
   'err.record.amend_empty': 'Change something in the record to amend it.',
   'err.record.amend_reason_invalid': 'The reason must be between {min} and {max} characters.',
   'err.record.superseded': 'The record already has a newer version. Open it to amend it.',
+  'err.record.tampered':
+    'This record does not match its integrity seal, so it cannot be amended. Tell the clinic administrator.',
+  'err.record.seal_invalid': 'The record seal is not valid.',
+  'err.record.unsealed': 'The record has no integrity seal.',
   'err.document.unsupported_type': 'File type not allowed ({mime_type}).',
   'err.document.too_large': 'The file exceeds the {max_mb} MB limit.',
   'err.document.invalid_name': 'The file name is not valid.',
@@ -2103,6 +2124,7 @@ const en: Dict = {
   'audit.action.document.listed': 'Documents viewed',
   'audit.action.record.amended': 'Record amended',
   'audit.action.record.versions_viewed': 'Record versions viewed',
+  'audit.action.record.integrity_failed': 'Record seal mismatch',
   'audit.action.document.uploaded': 'Document uploaded',
   'audit.action.vaccination.recorded': 'Vaccine recorded',
   'audit.action.vaccination.voided': 'Vaccine record voided',

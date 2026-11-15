@@ -10,11 +10,11 @@ from sqlalchemy.exc import IntegrityError
 
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.enums import DocumentKind
-from medicore.domain.shared.identifiers import ConsultationId
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from tests.infrastructure.test_consultation_sign_sql import (  # noqa: F401
     NOW,
     _record,
+    _save_the_booking,
     clinic_session,
     engine,
 )
@@ -36,15 +36,13 @@ def _document(clinic) -> MedicalDocument:
 def _uow(clinic_session):  # noqa: F811
     clinic, session = clinic_session
     uow = SqlAlchemyUnitOfWork(session, clinic.tenant.id)
-    uow.users.save(clinic.doctor)
-    uow.patients.save(clinic.patient)
-    session.flush()
+    _save_the_booking(uow, session, clinic)
     return clinic, session, uow
 
 
 def test_a_document_round_trips_with_its_key_and_record(clinic_session):  # noqa: F811
     clinic, session, uow = _uow(clinic_session)
-    record = _record(clinic, ConsultationId.new())
+    record = _record(clinic, clinic.consultation.id)
     uow.medical_records.save(record)
     document = _document(clinic)
     document.link_to(record)

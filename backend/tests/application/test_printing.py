@@ -46,6 +46,7 @@ from tests.application.test_consultations import booked
 from tests.application.test_procedures import _create
 from tests.support.builders import build_user, seed_clinic, soap_note
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
+from tests.support.records import sealed
 
 NOW = datetime(2026, 5, 20, 12, 0)
 
@@ -56,7 +57,7 @@ def _uow(seed):
 
 def _record(seed, *, plan="Reposo relativo, abundantes líquidos.", prescriptions=True,
             exams=()):
-    record = MedicalRecord(
+    record = sealed(MedicalRecord(
         id=RecordId.new(), tenant_id=seed.tenant.id, code="REC-2026-0520-CO-1",
         patient_id=seed.patient.id, author_id=seed.doctor.id,
         type=ClinicalRecordType.CONSULTATION, encounter_at=datetime(2026, 5, 20, 9),
@@ -67,7 +68,7 @@ def _record(seed, *, plan="Reposo relativo, abundantes líquidos.", prescription
                                             date(2026, 5, 20), duration_days=3),)
         if prescriptions else (),
         exams=tuple(exams),
-    )
+    ))
     seed.factory.store.medical_records[record.id.value] = record
     return record
 
@@ -127,10 +128,10 @@ class TestRecordDocuments:
 
     def _two_prescriptions(self, seed):
         record = _record(seed)
-        record = replace(record, prescriptions=(
+        record = sealed(replace(record, seal=None, prescriptions=(
             *record.prescriptions,
             PrescriptionSnapshot("Ibuprofeno", "400 mg", "c/8 h", date(2026, 5, 20)),
-        ))
+        )))
         seed.factory.store.medical_records[record.id.value] = record
         return record
 

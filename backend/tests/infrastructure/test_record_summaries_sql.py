@@ -17,6 +17,7 @@ from medicore.domain.value_objects.vitals import Vitals
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from tests.infrastructure.test_patient_search_sql import engine, session  # noqa: F401, F811
 from tests.support.builders import build_patient, build_tenant, build_user, soap_note
+from tests.support.records import sealed
 
 
 def _clinic(session, slug_prefix: str):  # noqa: F811
@@ -30,12 +31,12 @@ def _clinic(session, slug_prefix: str):  # noqa: F811
 
 
 def _record(tenant, patient, doctor, code, when, kind=ClinicalRecordType.CONSULTATION):
-    return MedicalRecord(
+    return sealed(MedicalRecord(
         id=RecordId.new(), tenant_id=tenant.id, code=code, patient_id=patient.id,
         author_id=doctor.id, type=kind, encounter_at=when, location_name="Sede",
         chief_complaint="Control", note=soap_note("s", "o", "a", "p"), vitals=Vitals(),
         signed_at=when, signed_by_id=doctor.id,
-    )
+    ))
 
 
 def _at(day: int, hour: int = 9) -> datetime:

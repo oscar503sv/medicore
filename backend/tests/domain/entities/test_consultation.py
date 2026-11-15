@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
@@ -14,7 +15,9 @@ from medicore.domain.enums import (
     ConsultationStatus,
     PrescriptionStatus,
     RecordStatus,
+    SealStatus,
 )
+from medicore.domain.services.record_seal import compute_seal, verify_chain
 from medicore.domain.shared.errors import (
     ConsultationAlreadySigned,
     ConsultationNotSignable,
@@ -130,6 +133,8 @@ class TestSigning:
         assert c.status == ConsultationStatus.SIGNED
         assert c.ended_at is not None
         assert result.record.status == RecordStatus.SIGNED
+        assert verify_chain([result.record]) == (SealStatus.OK,)
+        assert result.record.seal == compute_seal(replace(result.record, seal=None), None)
         assert result.record.consultation_id == c.id
         assert len(result.record.diagnoses) == 1
         assert len(result.prescriptions) == 1

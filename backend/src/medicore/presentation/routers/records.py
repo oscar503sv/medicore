@@ -20,7 +20,7 @@ from medicore.application.use_cases.records import (
     UploadDocument,
     UploadDocumentCommand,
 )
-from medicore.domain.enums import ClinicalRecordType
+from medicore.domain.enums import ClinicalRecordType, SealStatus
 from medicore.domain.repositories._support import Paging
 from medicore.domain.shared.identifiers import PatientId, RecordId
 from medicore.presentation.dependencies import Actor, Clock, UoW
@@ -84,6 +84,7 @@ def get_record(record_id: str, actor: Actor, uow: UoW, clock: Clock):
         patient_name=patient.full_name if patient else None,
         signed_by_name=signer.name if signer else None,
         superseded_by_id=view.superseded_by_id,
+        integrity=view.integrity,
     )
 
 
@@ -125,7 +126,7 @@ def amend_record(record_id: str, body: AmendRequest, actor: Actor, uow: UoW, clo
         actor, RecordId.parse(record_id),
         reason=body.reason, chief_complaint=body.chief_complaint, note=body.note,
     )
-    return ser_record(amendment)
+    return ser_record(amendment, integrity=SealStatus.OK)
 
 
 @router.post("/documents", response_model=DocumentResponse, status_code=201)

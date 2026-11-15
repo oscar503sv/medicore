@@ -21,13 +21,14 @@ from medicore.domain.entities.medical_certificate import MedicalCertificate
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.enums import CertificateKind
 from medicore.domain.shared.errors import RecordSuperseded
-from medicore.domain.shared.identifiers import CertificateId, ConsultationId, RecordId
+from medicore.domain.shared.identifiers import CertificateId, RecordId
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from tests.infrastructure.test_consultation_sign_sql import (  # noqa: F401
     NOW,
     WAIT,
     Clinic,
     _record,
+    _save_the_booking,
     clinic_session,
     engine,
 )
@@ -37,7 +38,7 @@ REASON = "Se corrige el motivo de consulta"
 
 
 def _amendment(clinic, original: MedicalRecord, reason: str | None = REASON) -> MedicalRecord:
-    amended = _record(clinic, original.consultation_id, amends=original.id)
+    amended = _record(clinic, original.consultation_id, amends=original.id, previous=original)
     object.__setattr__(amended, "amendment_reason", reason)
     return amended
 
@@ -45,10 +46,8 @@ def _amendment(clinic, original: MedicalRecord, reason: str | None = REASON) -> 
 def _prepare(clinic_session):  # noqa: F811
     clinic, session = clinic_session
     uow = SqlAlchemyUnitOfWork(session, clinic.tenant.id)
-    uow.users.save(clinic.doctor)
-    uow.patients.save(clinic.patient)
-    session.flush()
-    original = _record(clinic, ConsultationId.new())
+    consultation_id = _save_the_booking(uow, session, clinic)
+    original = _record(clinic, consultation_id)
     uow.medical_records.save(original)
     session.flush()
     return clinic, session, uow, original

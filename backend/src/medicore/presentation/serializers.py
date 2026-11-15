@@ -22,6 +22,7 @@ from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import User
+from medicore.domain.enums import SealStatus
 from medicore.domain.repositories._support import RecordSummary
 from medicore.domain.services.slot_resolver import Slot
 from medicore.domain.shared.identifiers import RecordId
@@ -369,6 +370,7 @@ def ser_record(
     patient_name: str | None = None,
     signed_by_name: str | None = None,
     superseded_by_id: RecordId | None = None,
+    integrity: SealStatus | None = None,
 ) -> dict:
     return {
         "id": str(r.id),
@@ -399,6 +401,10 @@ def ser_record(
         "amendment_reason": r.amendment_reason,
         "is_current": superseded_by_id is None,
         "superseded_by_id": str(superseded_by_id) if superseded_by_id else None,
+        "integrity": str(integrity) if integrity else None,
+        "seal": (
+            {"version": r.seal.version, "digest": r.seal.digest} if r.seal else None
+        ),
     }
 
 
@@ -412,6 +418,7 @@ def ser_record_version(v: RecordVersion) -> dict:
         "signed_by_name": v.signer_name,
         "amendment_reason": v.record.amendment_reason,
         "is_current": v.is_current,
+        "integrity": str(v.integrity),
     }
 
 

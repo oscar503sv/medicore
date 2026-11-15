@@ -276,7 +276,7 @@ class Consultation:
             vaccines=vaccines,
             exams=tuple(self.draft_exams),
             attachments=tuple(self.attachments),
-        )
+        ).sealed(None)
 
         start = applications_start or now.replace(tzinfo=None)
         orders = [

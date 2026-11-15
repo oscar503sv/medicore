@@ -30,6 +30,13 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
+/** The seal of a printed record, as the sheet's footer shows it. */
+function sealOf(doc: PrescriptionPrint | FullRecordPrint) {
+  return doc.seal_version && doc.seal_fingerprint
+    ? { version: doc.seal_version, fingerprint: doc.seal_fingerprint }
+    : null
+}
+
 function Paragraphs({ text }: { text: string }) {
   return (
     <>
@@ -66,6 +73,8 @@ export function PrescriptionDoc({
       paper={paper}
       title={t('pr.doc.prescription')}
       code={r.code}
+      integrity={doc.integrity}
+      seal={sealOf(doc)}
       doctorInHeader
       fillPage
       footer={<SignatureLine ctx={doc.context} />}
@@ -114,6 +123,8 @@ export function ExamOrderDoc({ doc, paper }: { doc: FullRecordPrint; paper: Pape
       paper={paper}
       title={t('pr.doc.exams')}
       code={r.code}
+      integrity={doc.integrity}
+      seal={sealOf(doc)}
       doctorInHeader
       fillPage
       footer={<SignatureLine ctx={doc.context} />}
@@ -160,6 +171,8 @@ export function RecordCopyDoc({ doc }: { doc: FullRecordPrint }) {
       paper="letter"
       title={t('pr.doc.record')}
       code={r.code}
+      integrity={doc.integrity}
+      seal={sealOf(doc)}
       footer={<SignatureLine ctx={doc.context} />}
     >
       <PatientStrip
@@ -301,6 +314,7 @@ export function CertificateDoc({ doc, paper }: { doc: CertificatePrint; paper: P
       paper={paper}
       title={t('pr.doc.certificate')}
       code={c.code}
+      integrity={doc.integrity}
       doctorInHeader
       fillPage
       footer={<SignatureLine ctx={doc.context} />}

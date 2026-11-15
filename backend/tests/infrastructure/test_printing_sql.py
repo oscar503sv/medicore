@@ -16,6 +16,7 @@ from medicore.domain.value_objects.vitals import Vitals
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from tests.infrastructure.test_analytics_sql import engine, session  # noqa: F401
 from tests.support.builders import build_patient, build_tenant, build_user, soap_note
+from tests.support.records import sealed
 
 NOW = datetime(2026, 5, 20, 15, 0, tzinfo=UTC)
 
@@ -33,13 +34,13 @@ def test_round_trips(session):  # noqa: F811
     patient = build_patient(tenant.id, code="P-00001")
     uow.patients.save(patient)
     session.flush()
-    record = MedicalRecord(
+    record = sealed(MedicalRecord(
         id=RecordId.new(), tenant_id=tenant.id, code="REC-1", patient_id=patient.id,
         author_id=doctor.id, type=ClinicalRecordType.CONSULTATION, encounter_at=NOW,
         location_name="Sede", chief_complaint="Control", note=soap_note(), vitals=Vitals(),
         signed_at=NOW, signed_by_id=doctor.id,
         exams=(ExamRequest("Ultrasonografía pélvica", ExamKind.IMAGING, "transvaginal"),),
-    )
+    ))
     uow.medical_records.save(record)
     session.flush()
     certificate = MedicalCertificate(

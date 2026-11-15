@@ -29,6 +29,11 @@ export const printingEs: Record<string, string> = {
   'pr.signature': 'Firma y sello',
   'pr.printed_at': 'Impreso el {v}',
   'pr.page_of': 'Documento {code}',
+  'pr.seal': 'Sello de integridad v{v} · {fp}…',
+  'pr.integrity.tampered':
+    'AVISO: el expediente de origen no coincide con su sello de integridad. Verifica este documento con la clínica antes de darlo por válido.',
+  'pr.integrity.unverifiable':
+    'AVISO: no se pudo verificar el sello de integridad del expediente de origen.',
 
   'pr.doc.prescription': 'Receta',
   'pr.doc.exams': 'Orden de exámenes',
@@ -230,6 +235,11 @@ export const printingEn: Record<string, string> = {
   'pr.signature': 'Signature and seal',
   'pr.printed_at': 'Printed on {v}',
   'pr.page_of': 'Document {code}',
+  'pr.seal': 'Integrity seal v{v} · {fp}…',
+  'pr.integrity.tampered':
+    'WARNING: the source record does not match its integrity seal. Check this document with the clinic before relying on it.',
+  'pr.integrity.unverifiable':
+    'WARNING: the integrity seal of the source record could not be verified.',
 
   'pr.doc.prescription': 'Prescription',
   'pr.doc.exams': 'Exam order',

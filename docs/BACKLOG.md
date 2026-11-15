@@ -25,8 +25,6 @@ External channels and reminders are planned as a future evolution (see [Future](
   only its length, `reason_chars`); align them.
   `platform_reads.signed_records` and `signed_per_week` (platform console) count amendments as new
   signed records; they should exclude them.
-- OZK-99 (immutability trigger on `medical_records`) must go in a migration after
-  `f8a9b0c1d2e4`.
 - Active prescriptions that nobody can close: since OZK-100 only the prescriber completes or cancels
   a prescription, and administrators don't hold `prescriptions.manage`, so a prescription of a doctor
   who left the clinic (or was deleted) stays active (query 5 in the
@@ -188,4 +186,13 @@ Resolved in November 2026:
 - **Medical documents without client-chosen keys** (OZK-101): the server generates each `storage_key` (`{tenant_id}/{patient_id}/{document_id}`), it is never accepted from or returned to the client, and it is unique in the database. A document can be linked only to a record of the same patient (its current version), and support sessions can't register documents. Migration `f8a9b0c1d2e4` unlinks the documents of another patient's record and rewrites the keys (see [Document storage keys](../backend/README.md#document-storage-keys)).
 - **Procedures and appointments under row locks** (OZK-106): every procedure writer locks the procedure, so a second signature answers 409 `procedure.already_signed` (a cancelled one stays at 422 `procedure.closed`). Appointment transitions and consultation signatures lock the appointment in a fixed order (see [Lock order](../backend/README.md#lock-order)): a cancellation can't race a signature or a start, an in-progress or completed appointment can't be cancelled, and two registrations of a procedure on one appointment can't both succeed. No migration: run the queries in [Inconsistent appointments and procedures before OZK-106](../backend/README.md#inconsistent-appointments-and-procedures-before-ozk-106) before deploying.
 
-No pending findings remain in this list.
+- **Signed records protected in the database** (OZK-99): each version of a record carries a SHA-256 seal over its immutable content and over the previous seal. `medical_records` rejects `UPDATE`, `DELETE` and `TRUNCATE` (also under `session_replication_role = replica`), prescriptions can only be closed, and the foreign keys of records, prescriptions and documents restrict deleting what they point to. Reads, printed copies and certificates verify the seal (`integrity`): a tampered record shows a warning, is audited as `record.integrity_failed`, and can't be amended (409 `record.tampered`). Migration `a9b0c1d2e3f5` seals the existing records and unlinks the dangling prescriptions and documents, and refuses to run while any other dangling reference exists (see [Signed records protection](../backend/README.md#signed-records-protection-and-dangling-references-before-ozk-99)). The seal is unkeyed, so it guards against mistakes rather than against someone with database access.
+
+Pending after OZK-99:
+
+- **Separate database roles**: migrations and scripts run as the schema owner, and the application connects as that same superuser, so it can drop the triggers. Give the application only DML, plus `GRANT UPDATE (id)` on `medical_records`: `SELECT ... FOR NO KEY UPDATE` needs the `UPDATE` privilege on some column, and one column is enough.
+- **Keyed seal (v2)**: an HMAC with a key kept outside the database, so recomputing a seal needs the key too. `seal_version` leaves room for it.
+- **Immutability and RESTRICT beyond records**: procedures, `vaccination_records`, `application_records` and `medical_certificates` still cascade from patient and clinic, and they are not sealed.
+- **Composite foreign keys** `(tenant_id, x_id)`, so a reference can't cross clinics even when the id exists in another one.
+- **Integrity in history and listings**: the patient's history and the records lists leave `integrity` as `null`; verify them too.
+- **Nightly seal check** (a `record_seal_check` job, like `session_purge`): recompute every chain and alert on a mismatch.

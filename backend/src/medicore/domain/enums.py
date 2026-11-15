@@ -84,6 +84,14 @@ class RecordStatus(StrEnum):
     AMENDED = "amended"
 
 
+class SealStatus(StrEnum):
+    """What checking a record's integrity seal found."""
+
+    OK = "ok"
+    TAMPERED = "tampered"
+    UNVERIFIABLE = "unverifiable"  # sealed with a version this build does not know
+
+
 class PrescriptionStatus(StrEnum):
     ACTIVE = "active"
     COMPLETED = "completed"

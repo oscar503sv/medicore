@@ -14,7 +14,7 @@ from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import create_engine, delete, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 import medicore.infrastructure.persistence.models  # noqa: F401  (register all tables)
@@ -39,7 +39,7 @@ from medicore.domain.enums import AppointmentType, ProcedurePerformer, Procedure
 from medicore.domain.shared.identifiers import AppointmentId, ProcedureId, ProcedureTypeId
 from medicore.domain.value_objects.fee import fee
 from medicore.infrastructure.config import get_settings
-from medicore.infrastructure.persistence.models.tenant import TenantModel
+from medicore.infrastructure.database.tenant_purge import purge_tenants
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from tests.support.builders import build_patient, build_tenant, build_user
 from tests.support.fakes import FixedClock
@@ -114,7 +114,7 @@ class Clinic:
 
     def __exit__(self, *exc) -> None:
         with self.engine.begin() as conn:
-            conn.execute(delete(TenantModel).where(TenantModel.id == self.tenant.id.value))
+            purge_tenants(conn, [self.tenant.id.value])
 
     def uow(self, session: Session) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(session, self.tenant.id)

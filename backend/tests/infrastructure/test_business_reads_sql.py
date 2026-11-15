@@ -27,13 +27,14 @@ from medicore.domain.value_objects.money import Money
 from medicore.infrastructure.config import get_settings
 from medicore.infrastructure.persistence.models.medical_record import MedicalRecordModel
 from medicore.infrastructure.persistence.repositories.other import SqlAuditLogRepository
+from medicore.infrastructure.persistence.repositories.patient import SqlPatientRepository
 from medicore.infrastructure.persistence.repositories.platform_reads import SqlPlatformReadModel
 from medicore.infrastructure.persistence.repositories.subscription import (
     SqlSubscriptionPaymentRepository,
 )
 from medicore.infrastructure.persistence.repositories.tenant import SqlTenantRepository
 from medicore.infrastructure.persistence.repositories.user import SqlUserRepository
-from tests.support.builders import build_tenant, build_user
+from tests.support.builders import build_patient, build_tenant, build_user
 
 FUTURE = datetime(2031, 3, 5, 12, 0, tzinfo=UTC)  # a Wednesday no other data reaches
 
@@ -116,12 +117,16 @@ def test_activity_and_weekly_signed(session, clinic):
                        (doctor, FUTURE - timedelta(days=30))):
         actor = ActorContext(user_id=user.id, tenant_id=tenant.id, role=user.role)
         audit.append(audit_entry(actor, when, "auth.login", "User", str(user.id)))
+    patient = build_patient(tenant.id, code="P-00001")
+    SqlPatientRepository(session, tenant.id).save(patient)
+    session.flush()
     for n, signed in enumerate((FUTURE, FUTURE - timedelta(days=1), FUTURE - timedelta(days=8))):
         session.add(MedicalRecordModel(
             id=uuid.uuid4(), tenant_id=tenant.id.value, code=f"REC-BIZ-{n}",
-            patient_id=uuid.uuid4(), author_id=doctor.id.value, type="consultation",
+            patient_id=patient.id.value, author_id=doctor.id.value, type="consultation",
             status="signed", encounter_at=signed, location_name="Sede", chief_complaint="x",
             signed_at=signed, signed_by_id=doctor.id.value,
+            seal=f"{n:064x}", seal_version=1,
         ))
     session.flush()
 

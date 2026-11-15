@@ -16,6 +16,7 @@ from datetime import datetime
 from medicore.domain.entities.medical_document import AttachmentRef
 from medicore.domain.entities.prescription import PrescriptionSnapshot
 from medicore.domain.enums import ClinicalRecordType, RecordStatus
+from medicore.domain.services.record_seal import compute_seal
 from medicore.domain.shared.errors import InvalidValueObject, PermissionDenied, RecordAlreadySigned
 from medicore.domain.shared.identifiers import (
     AppointmentId,
@@ -28,6 +29,7 @@ from medicore.domain.shared.identifiers import (
 from medicore.domain.value_objects.clinical_note import ClinicalNote
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
+from medicore.domain.value_objects.record_seal import RecordSeal
 from medicore.domain.value_objects.vitals import Vitals
 
 AMENDMENT_REASON_MIN = 10
@@ -77,6 +79,7 @@ class MedicalRecord:
     attachments: tuple[AttachmentRef, ...] = ()
     amends_record_id: RecordId | None = None  # set on amendments
     amendment_reason: str | None = None  # why it was amended; set on amendments
+    seal: RecordSeal | None = None  # None only before :meth:`sealed`; stored records have one
 
     def __post_init__(self) -> None:
         # Normalize any list inputs to tuples so the aggregate is truly immutable.
@@ -88,6 +91,11 @@ class MedicalRecord:
     @property
     def is_amendment(self) -> bool:
         return self.amends_record_id is not None
+
+    def sealed(self, previous: RecordSeal | None) -> MedicalRecord:
+        """This record with its integrity seal, chained to the seal of the version it amends
+        (``None`` for an original)."""
+        return replace(self, seal=compute_seal(self, previous))
 
     def amend(
         self,
@@ -110,6 +118,10 @@ class MedicalRecord:
             raise RecordAlreadySigned(
                 "Only a signed (or previously amended) record can be amended",
                 code="record.not_amendable",
+            )
+        if self.seal is None:
+            raise InvalidValueObject(
+                "An unsealed record cannot be amended", code="record.unsealed"
             )
         if by != self.author_id:
             raise PermissionDenied(
@@ -139,8 +151,9 @@ class MedicalRecord:
             signed_at=signed_at,
             amends_record_id=self.id,
             amendment_reason=reason,
+            seal=None,
             **changes,  # type: ignore[arg-type]
-        )
+        ).sealed(self.seal)
 
 
 def _note_changed(current: ClinicalNote, proposed: ClinicalNote) -> bool:

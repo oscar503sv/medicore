@@ -3,7 +3,7 @@ import type { PrintContext } from '@/api/printing'
 import { fmtDate } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { PAPER, useFill } from '@/lib/printing'
-import type { PaperSize } from '@/types'
+import type { PaperSize, SealStatus } from '@/types'
 
 /** The clinic's header (or, on letterhead paper, the blank space it would take). */
 function ClinicHeader({ ctx, doctorInHeader }: { ctx: PrintContext; doctorInHeader: boolean }) {
@@ -103,6 +103,18 @@ export function SignatureLine({ label, ctx }: { label?: string; ctx?: PrintConte
   )
 }
 
+/** A sheet from a record whose integrity seal does not check out still prints, but says so
+ * on the paper itself (the copy that leaves the clinic carries the warning). */
+function IntegrityNotice({ integrity }: { integrity: SealStatus }) {
+  const t = useT()
+  if (integrity === 'ok') return null
+  return (
+    <p role="alert" className="mt-3 border-2 border-neutral-900 px-2 py-1 text-[9pt] font-semibold">
+      {t(integrity === 'tampered' ? 'pr.integrity.tampered' : 'pr.integrity.unverifiable')}
+    </p>
+  )
+}
+
 /** One printed sheet: header, title, body and footer. ``fill`` pushes the footer (usually
  * the signature) to the bottom of a one-page document. */
 export function PrintSheet({
@@ -114,6 +126,8 @@ export function PrintSheet({
   fillPage = false,
   children,
   footer,
+  integrity,
+  seal,
 }: {
   ctx: PrintContext
   paper: PaperSize
@@ -123,6 +137,9 @@ export function PrintSheet({
   fillPage?: boolean
   children: ReactNode
   footer?: ReactNode
+  /** Only the documents that come from a signed record carry the seal check. */
+  integrity?: SealStatus
+  seal?: { version: number; fingerprint: string } | null
 }) {
   const f = useFill()
   const size = PAPER[paper]
@@ -144,8 +161,14 @@ export function PrintSheet({
         <h1 className="mt-3 text-center text-[11pt] font-semibold uppercase tracking-wide">
           {title}
         </h1>
+        {integrity && <IntegrityNotice integrity={integrity} />}
         <div className="flex-1">{children}</div>
         {footer}
+        {seal && (
+          <p className="mt-3 text-[7.5pt] text-neutral-500">
+            {f('pr.seal', { v: seal.version, fp: seal.fingerprint })}
+          </p>
+        )}
         <p className="mt-4 flex justify-between text-[7.5pt] text-neutral-400">
           <span>{code ? f('pr.page_of', { code }) : ''}</span>
           <span>{f('pr.printed_at', { v: fmtDate(ctx.printed_at, 'd MMM yyyy HH:mm') })}</span>

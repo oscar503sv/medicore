@@ -51,6 +51,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/a
   repositories' responsibility, not the caller's.
 - **Clinical immutability**: a signed `MedicalRecord` is never modified; a correction creates an
   **amendment** (a new record with `status=amended` that references the original). Only the record's author amends it, only its current version, and always with a reason; the versions form a single chain (`amends_record_id` is unique) and each version keeps its signer (`signed_by_id`, `signed_at`).
+- **Record seal** (`domain/services/record_seal.py`, OZK-99): each version stores `seal` (SHA-256, `seal_version` 1) over its immutable columns and the seal of the previous version, serialized in a canonical form that version 1 freezes. Signing and amending copy the digest into the audit log (`consultation.signed`, `record.amended`). Reads, versions, printed copies and certificates verify the chain and return `integrity`: `ok`, `tampered` or `unverifiable` (an unknown seal version); the patient's history leaves it `null`. A tampered record still shows, with a warning, its printed copy carries a visible notice, the event is audited as `record.integrity_failed` (version ids only, never content), and amending it answers 409 `record.tampered`. The seal is unkeyed: whoever can write to the database can recompute it, so the triggers in this section guard against mistakes and casual SQL, not against an attacker with database access.
 
 ## Features
 
@@ -138,7 +139,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/a
 - **Consultation access** (`application/use_cases/consultations.py`): the note, diagnoses and drafts belong to the owning doctor (`consultations.edit` is `DOCTOR_ONLY`). Another doctor gets 403 `consultation.not_own`, other roles 403 `permission.missing` and support impersonation 403 `support.clinical_forbidden`; admins can start a consultation but not read or change it. Nurses write vitals with `consultations.vitals` (delegable, nurses by default): `GET /consultations/by-appointment/{appointment_id}/vitals` answers 404 `consultation.not_started` when the appointment has no consultation yet, and `PUT /consultations/{id}/vitals` takes partial updates (a field sent as `null` is cleared; a signed consultation answers 409 `consultation.already_signed`). `POST /consultations/start/{appointment_id}` answers a minimal reference (`id`, `appointment_id`, `patient_id`, `doctor_id`, `status`, `started_at`) without the note, and `PATCH /autosave` merges vitals field by field.
 - **Medical records reading** (`application/use_cases/records.py`, `records` router): the clinical content of a record (note, diagnoses, prescriptions, vaccines, exams, full copy, certificates and the clinical history) needs `records.read_clinical`, a doctor-only permission that can't be delegated (`DOCTOR_ONLY`); anyone else gets 403 `permission.missing`. `GET /records` is paginated (`{items, total, offset, limit}`, 25 by default, 100 at most) and filters on the server: `patient_id`, `type`, `date_from`/`date_to` (clinic days) and `q` (record code, patient name or code); a reversed range answers 400 `records.invalid_range`. It returns metadata only (no reason for the visit, note or vitals) and is backed by the index `ix_records_tenant_encounter`. New endpoints: `GET /patients/{id}/records` (clinical history, doctors only) and `GET /patients/{id}/vitals` (`records.view`); `GET /patients/{id}` adds `latest_vitals` and `recent_records` (up to 6, metadata only). Audit: `record.listed` (each page; never the search text), `record.viewed`, `record.history_viewed`, `patient.vitals_listed`, `prescription.listed` and `document.listed`. In printing, `GET /print/records/{id}` includes `document`; for non-doctors the prescription comes without the general instructions, and the full copy, the exam order and certificates (listing and printing) need `records.read_clinical`.
 - **Record amendments** (`application/use_cases/records.py`, `records` router): `POST /records/{id}/amend` takes `{reason, chief_complaint?, note?}` and rejects unknown fields (422). Only the record's author amends it (403 `record.not_own`; support sessions get 403 `support.clinical_forbidden`), and only the current version (409 `record.superseded`, with `params.current_id`). An amendment with no changes answers 422 `record.amend_empty`; a reason outside 10 to 1000 characters answers 422 `record.amend_reason_invalid` (`params.min`, `params.max`). The reason is stored on the version (`amendment_reason`) and shown in the history and in the printed copy, but it stays out of the audit log, which records the changed sections (`changed`) and the reason's length (`reason_chars`), because administrators read it without clinical access. The check and the insert run under a row lock, and a partial unique index `uq_medical_records_amends` on `amends_record_id` backs it. Currency is derived (a version is current when nothing amends it), so signed records are never updated. `GET /records/{id}/versions` lists the chain (requires `records.read_clinical`, audited as `record.versions_viewed`). `RecordResponse` adds `amendment_reason`, `is_current` and `superseded_by_id`, and `GET /records/{id}` of an older version is still allowed. Lists (`GET /records`, `GET /patients/{id}/records`, vitals, and `recent_records` / `records_count` in `GET /patients/{id}`) show only current versions. `GET /print/records/{id}` resolves to the current version and adds `version` and `original_signed_at`. A certificate issued on a replaced record uses the current version, listing certificates by record walks the whole chain, and a printed certificate ends the consultation at the original signature time.
-- **Prescriptions** (`application/use_cases/prescriptions.py`, `prescriptions` router): only the doctor who issued a prescription completes or cancels it (403 `prescription.not_own`; support sessions get 403, and administrators, who don't hold `prescriptions.manage`, get `permission.missing`). `prescriptions.manage` is `DOCTOR_ONLY`. Completing is the natural end of the treatment; cancelling stops it early and needs a reason of 10 to 500 characters, after stripping (422 `prescription.cancel_reason_invalid`, `params.min`, `params.max`). The reason is kept on the prescription (`cancel_reason`) and the audit log keeps only its length (`reason_chars`). `closed_at` and `closed_by_id` record when and by whom it was closed. `GET /prescriptions?patient_id=` returns `cancel_reason` only to actors with `records.read_clinical`; the others see the status and the date. Both transitions lock the row, so a complete and a cancel at the same time leave the second one with 422 `invalid_transition`. Nobody is notified: only the prescriber can act. Printing a record's prescription (`GET /print/records/{id}?document=prescription`) leaves out the cancelled ones; if all of them are cancelled it answers 400 `print.nothing_to_print`, and the signed record does not change. `POST /prescriptions/{id}/cancel` takes `{"reason": str}` and rejects unknown fields (422), so the backend and the frontend deploy together.
+- **Prescriptions** (`application/use_cases/prescriptions.py`, `prescriptions` router): only the doctor who issued a prescription completes or cancels it (403 `prescription.not_own`; support sessions get 403, and administrators, who don't hold `prescriptions.manage`, get `permission.missing`). `prescriptions.manage` is `DOCTOR_ONLY`. Completing is the natural end of the treatment; cancelling stops it early and needs a reason of 10 to 500 characters, after stripping (422 `prescription.cancel_reason_invalid`, `params.min`, `params.max`). The reason is kept on the prescription (`cancel_reason`) and the audit log keeps only its length (`reason_chars`). `closed_at` and `closed_by_id` record when and by whom it was closed. `GET /prescriptions?patient_id=` returns `cancel_reason` only to actors with `records.read_clinical`; the others see the status and the date. Both transitions lock the row, so a complete and a cancel at the same time leave the second one with 422 `invalid_transition`. Nobody is notified: only the prescriber can act. Printing a record's prescription (`GET /print/records/{id}?document=prescription`) leaves out the cancelled ones; if all of them are cancelled it answers 400 `print.nothing_to_print`, and the signed record does not change. `POST /prescriptions/{id}/cancel` takes `{"reason": str}` and rejects unknown fields (422), so the backend and the frontend deploy together. Since OZK-99 a database trigger allows only the closing itself (`active` to `completed` or `cancelled`, with nothing else changed) and rejects `DELETE` and `TRUNCATE`.
 - **Medical documents** (`application/use_cases/records.py`, `records` router; `MedicalDocument.register` and `link_to` in `domain/entities/medical_document.py`): `POST /documents` takes `patient_id`, `file_name`, `kind`, `mime_type`, `size_bytes` and an optional `record_id`, with length limits, and rejects unknown fields (422 `request_invalid`, so a client that still sends `storage_key` fails). The server generates the storage key as `{tenant_id}/{patient_id}/{document_id}`; it is unique in the database (`uq_medical_documents_storage_key`) and never returned: `DocumentResponse` and `GET /patients/{id}/documents` omit it. Only metadata is stored; there is no file upload yet. Support sessions can't register documents (`support.clinical_forbidden`). A `record_id` must belong to the same patient; if the record has been amended, the document links to its current version. `AttachDocument`, the use case with no endpoint, was removed.
 - **In-app notifications** (`application/common/notifications.py`): use cases emit them inside
   their own transaction — they are saved together with the action or not at all — and never
@@ -276,11 +277,12 @@ Every error response has the same shape:
 - Consultation access answers 403 `consultation.not_own` (another doctor's consultation), `permission.missing` (other roles) or `support.clinical_forbidden` (support impersonation); vitals of an appointment with no consultation answer 404 `consultation.not_started`.
 - Record amendments answer 403 `record.not_own` (not the author) or `support.clinical_forbidden`, 409 `record.superseded` (`params.current_id`), 422 `record.amend_reason_invalid` (`params.min`, `params.max`) and 422 `record.amend_empty`.
 - Closing a prescription answers 403 `prescription.not_own` (not the prescriber), 422 `prescription.cancel_reason_invalid` (`params.min`, `params.max`) when the reason is out of range, and 422 `invalid_transition` when it is already closed.
+- Amending a record whose seal doesn't match answers 409 `record.tampered`. `record.unsealed` (amending a record that has no seal) and `record.seal_invalid` (a malformed seal) guard invariants that normal use doesn't reach.
 - Uploading a document answers 403 `support.clinical_forbidden` (support sessions) or `permission.missing` (roles without `records.upload`), 422 `document.record_mismatch` (the record belongs to another patient), 404 `not_found` (missing patient, or missing record or one from another clinic), 400 `document.unsupported_type`, `document.too_large` or `document.invalid_name`, and 422 `request_invalid` for unknown fields such as `storage_key`.
 
 ## Tests and linting
 
-A suite of **1678 tests** (333 domain · 750 application · 392 presentation · 199 infrastructure · 4 scripts),
+A suite of **1789 tests** (385 domain · 766 application · 401 presentation · 233 infrastructure · 4 scripts),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
@@ -291,7 +293,7 @@ The integration tests against real PostgreSQL (`tests/infrastructure/test_audit_
 `test_procedure_sign_sql.py` — concurrent signatures and late saves of one procedure —
 `test_appointment_locks_sql.py` — appointment transitions racing consultation signatures and starts —
 `test_notification_repository_sql.py` — JSONB and bulk UPDATE/DELETE of the inbox —
-`test_record_summaries_sql.py` — the records list (summaries, filters and paging) — `test_record_amend_sql.py` — the amendment chain (row lock, unique index, reason CHECK) — `test_patient_search_sql.py` — accent-insensitive search, phone digits, last visits — `test_prescription_sql.py` — the closing fields, the cancel-reason CHECK and the row lock, and `test_document_repository_sql.py` — the document round trip and the unique storage key) use
+`test_record_summaries_sql.py` — the records list (summaries, filters and paging) — `test_record_amend_sql.py` — the amendment chain (row lock, unique index, reason CHECK) — `test_patient_search_sql.py` — accent-insensitive search, phone digits, last visits — `test_prescription_sql.py` — the closing fields, the cancel-reason CHECK and the row lock, and `test_document_repository_sql.py` — the document round trip and the unique storage key — and `test_record_integrity_sql.py` — the seal round trip, the append-only triggers (`UPDATE`, `DELETE`, `TRUNCATE`, also under `session_replication_role = replica`), the RESTRICT foreign keys and the detection of a tampered record) use
 `TEST_DATABASE_URL` (or the configured `DATABASE_URL`), run inside a transaction that is always
 rolled back — they leave no trace in the development database — and are **skipped
 automatically** when PostgreSQL isn't reachable.
@@ -381,6 +383,8 @@ Production checklist (via environment variables, see the **Configuration** table
 > **Migration `f7a8b9c0d1e3`** (prescription closure): adds `closed_at`, `closed_by_id` and `cancel_reason`, with a CHECK that every cancelled prescription has a reason; the cancelled ones that predate it get the placeholder "Cancelación previa a la exigencia de motivo". `prescriptions.manage` becomes doctor-only: nurse and receptionist overrides and user adjustments lose it, and doctors get it back. **Before deploying, run the queries in [Prescriptions closed by someone else](#prescriptions-closed-by-someone-else)**, and deploy the backend and the frontend together: the cancel endpoint now requires a body with `reason`. Its downgrade drops the columns and the CHECK, but does not restore the permissions.
 
 > **Migration `f8a9b0c1d2e4`** (document storage keys): unlinks (`record_id = NULL`) the documents whose record belongs to another patient or doesn't exist (the file stays with its patient), rewrites every `storage_key` to `{tenant_id}/{patient_id}/{id}` (no file is stored yet, so nothing moves) and creates the unique index `uq_medical_documents_storage_key`. **Before deploying, run the queries in [Document storage keys](#document-storage-keys)**, and deploy the backend and the frontend together: `POST /documents` no longer accepts `storage_key`. Its downgrade only drops the index; the unlinked records and the previous keys are not recovered.
+
+> **Migration `a9b0c1d2e3f5`** (signed records protection, OZK-99): seals every version (`seal`, `seal_version` 1), so the seal certifies the content as it stood on the migration date, not when it was signed. It makes `medical_records` append-only (triggers that reject `UPDATE`, `DELETE` and `TRUNCATE`), lets prescriptions only be closed, changes the foreign keys of `medical_records`, `prescriptions` and `medical_documents` to RESTRICT and creates the indexes that back them. It unlinks (`record_id = NULL`) the prescriptions and documents whose record doesn't exist. It refuses to run, listing only ids, while any other dangling reference exists. **Before deploying, run the queries in [Signed records protection and dangling references before OZK-99](#signed-records-protection-and-dangling-references-before-ozk-99)**, and deploy the backend and the frontend together. Going back needs `alembic downgrade f8a9b0c1d2e4` as well as the previous code: the code alone leaves the triggers and the seal columns in the database.
 
 > **Before deploying this version** (OZK-106, no migration): a signed procedure answers 409 `procedure.already_signed` instead of 422, so deploy the backend and the frontend together. Run the queries in [Inconsistent appointments and procedures before OZK-106](#inconsistent-appointments-and-procedures-before-ozk-106) first: they only report, and nothing is changed automatically.
 
@@ -518,3 +522,70 @@ WHERE p.status = 'completed' AND a.status <> 'completed';
 - **Query 5**: signed procedures that are no longer completed, reopened or cancelled after the signature.
 - **Query 6**: appointments with more than one live procedure: a duplicate procedure, and its fee, from two registrations at once. Decide which one stands and void the other.
 - **Query 7**: signed procedures whose appointment is not completed. It includes legitimate cases: a procedure signed on a cancelled or no-show appointment stays as it is, by design (see the [backlog](../docs/BACKLOG.md)). Review only the rows that are not that case.
+
+## Signed records protection and dangling references before OZK-99
+
+Until this version nothing in the database prevented an `UPDATE` or a `DELETE` on `medical_records`: the application never sends them, but a bad query could. Its foreign keys to patients, users, consultations, appointments and clinics were missing or cascaded, so deleting a patient or a clinic could take signed records with it. Migration `a9b0c1d2e3f5` closes both gaps, and it needs the production database clean first. Run these queries against it before deploying. They only report; nothing changes.
+
+```sql
+-- 1. Records with a broken or foreign-clinic reference
+SELECT r.tenant_id, r.id, r.code,
+  p.id IS NULL no_patient, p.tenant_id IS DISTINCT FROM r.tenant_id patient_tenant,
+  a.id IS NULL no_author, s.id IS NULL no_signer,
+  (r.consultation_id IS NOT NULL AND c.id IS NULL) no_consultation,
+  (r.appointment_id IS NOT NULL AND ap.id IS NULL) no_appointment
+FROM medical_records r
+LEFT JOIN patients p ON p.id=r.patient_id LEFT JOIN users a ON a.id=r.author_id
+LEFT JOIN users s ON s.id=r.signed_by_id LEFT JOIN consultations c ON c.id=r.consultation_id
+LEFT JOIN appointments ap ON ap.id=r.appointment_id
+WHERE p.id IS NULL OR a.id IS NULL OR s.id IS NULL
+   OR (r.consultation_id IS NOT NULL AND c.id IS NULL) OR (r.appointment_id IS NOT NULL AND ap.id IS NULL)
+   OR p.tenant_id<>r.tenant_id OR a.tenant_id<>r.tenant_id OR s.tenant_id<>r.tenant_id
+   OR c.tenant_id<>r.tenant_id OR ap.tenant_id<>r.tenant_id;
+-- 2. Prescriptions with a broken reference
+SELECT x.tenant_id, x.id, p.id IS NULL no_patient, pr.id IS NULL no_prescriber,
+  (x.closed_by_id IS NOT NULL AND cl.id IS NULL) no_closer, (x.record_id IS NOT NULL AND r.id IS NULL) no_record
+FROM prescriptions x LEFT JOIN patients p ON p.id=x.patient_id LEFT JOIN users pr ON pr.id=x.prescriber_id
+LEFT JOIN users cl ON cl.id=x.closed_by_id LEFT JOIN medical_records r ON r.id=x.record_id
+WHERE p.id IS NULL OR pr.id IS NULL OR (x.closed_by_id IS NOT NULL AND cl.id IS NULL) OR (x.record_id IS NOT NULL AND r.id IS NULL);
+-- 3. Documents with a broken reference
+SELECT d.tenant_id, d.id, p.id IS NULL no_patient, u.id IS NULL no_uploader, (d.record_id IS NOT NULL AND r.id IS NULL) no_record
+FROM medical_documents d LEFT JOIN patients p ON p.id=d.patient_id LEFT JOIN users u ON u.id=d.uploaded_by_id
+LEFT JOIN medical_records r ON r.id=d.record_id
+WHERE p.id IS NULL OR u.id IS NULL OR (d.record_id IS NOT NULL AND r.id IS NULL);
+-- 4. (informative) records whose consultation belongs to another patient
+SELECT r.id, r.patient_id, c.patient_id FROM medical_records r JOIN consultations c ON c.id=r.consultation_id WHERE c.patient_id<>r.patient_id;
+```
+
+- **Query 1 (records)**: a row is a record whose patient, author, signer, consultation or appointment is missing, or belongs to another clinic. The migration refuses to run and lists the ids. Never delete or edit the record. If only the parent is missing, recreate it as an inactive marker with the same `id` and clinic, without clinical data; the migration does the same when it meets that case. If the parent exists in another clinic, stop and investigate before deploying.
+- **Queries 2 and 3 (prescriptions and documents)**: a row where `no_record` is the only `true` column is fine. The migration sets `record_id` to `NULL`, and the prescription or document stays with its patient. Any other `true` column makes the migration stop, as in query 1.
+- **Query 4**: informative, and it doesn't block the migration. Review those records with the clinic, since the consultation and the record disagree about the patient.
+
+### Demo reset
+
+`python scripts/seed_demo.py --reset` deletes only the demo clinics, selected by slug, through `purge_tenants` (`infrastructure/database/tenant_purge.py`). `clinica-loida` is never in that list. Inside its own transaction, the purge disables the row triggers of `medical_records` and `prescriptions`, deletes the data of those clinics in dependency order, enables both triggers again with `ENABLE ALWAYS` and checks that they are enabled before the commit. A rollback undoes everything, the triggers included. While the purge runs, writes to those two tables wait for it in every clinic: run the reset outside opening hours.
+
+There is no back door for the purge, on purpose. A session setting (`SET`, which any role can run), a `SECURITY DEFINER` function (a permanent object the application could also call) and `session_replication_role = replica` were discarded: the last one also turns off the foreign keys and cascades, and triggers marked `ENABLE ALWAYS` fire under it anyway. The transactional purge is the only path, and it is code that can be read.
+
+### Writing future migrations that touch medical_records
+
+- A migration that changes data in `medical_records` disables the trigger explicitly (`ALTER TABLE medical_records DISABLE TRIGGER trg_medical_records_append_only`), with a comment that says why, and enables it again with `ENABLE ALWAYS TRIGGER` before it ends. Never leave it disabled.
+- Changing what the seal covers means a new `seal_version` with its own canonical form and backfill. Version 1 stays frozen, so existing seals keep verifying.
+- The backfill of `a9b0c1d2e3f5` is the only migration that imports domain code (`record_seal`), and a golden-vector test pins its output. Don't copy that pattern: a later change to the domain would rewrite what an old migration sealed.
+- A data-only restore needs `--disable-triggers` (for example `pg_restore --data-only --disable-triggers`), or the triggers reject the rows.
+
+### Verifying after deploying
+
+```sql
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid IN ('medical_records'::regclass,'prescriptions'::regclass) AND NOT tgisinternal;
+```
+
+Every row must show `A` (always). `D` (disabled) or `O` (origin only) means the protection is off. Then check that the database refuses to change a signed record, inside a transaction that is rolled back (on a database that has records):
+
+```sql
+BEGIN;
+UPDATE medical_records SET amendment_reason = amendment_reason WHERE id = (SELECT id FROM medical_records LIMIT 1); -- must fail: append-only
+ROLLBACK;
+```
+
+There is no nightly job that recomputes the seals yet; it is in the [backlog](../docs/BACKLOG.md).

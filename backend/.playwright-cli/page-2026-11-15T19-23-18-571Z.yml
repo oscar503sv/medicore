@@ -1,0 +1,167 @@
+- generic [ref=f3e3]:
+  - complementary [ref=f3e4]:
+    - generic [ref=f3e5]:
+      - generic [ref=f3e6]:
+        - generic [ref=f3e7]: M
+        - generic [ref=f3e8]: Medicore
+      - button "Contraer menú" [ref=f3e9] [cursor=pointer]
+    - generic [ref=f3e18]:
+      - paragraph [ref=f3e19]: Clínica Demo, S.A. de C.V.
+      - paragraph [ref=f3e20]: Organización
+    - navigation [ref=f3e21]:
+      - generic [ref=f3e22]:
+        - paragraph [ref=f3e23]: General
+        - link "Panel" [ref=f3e24] [cursor=pointer]:
+          - /url: /
+        - link "Métricas" [ref=f3e31] [cursor=pointer]:
+          - /url: /analytics
+        - link "Reportes" [ref=f3e35] [cursor=pointer]:
+          - /url: /reports
+      - generic [ref=f3e40]:
+        - paragraph [ref=f3e41]: Clínico
+        - link "Pacientes" [ref=f3e42] [cursor=pointer]:
+          - /url: /patients
+        - link "Citas" [ref=f3e49] [cursor=pointer]:
+          - /url: /appointments
+        - link "Agenda" [ref=f3e53] [cursor=pointer]:
+          - /url: /schedule
+        - link "Historiales" [ref=f3e57] [cursor=pointer]:
+          - /url: /records
+        - link "Aplicaciones" [ref=f3e62] [cursor=pointer]:
+          - /url: /applications
+        - link "Procedimientos" [ref=f3e67] [cursor=pointer]:
+          - /url: /procedures
+        - link "Vacunación" [ref=f3e71] [cursor=pointer]:
+          - /url: /vaccination
+      - generic [ref=f3e80]:
+        - paragraph [ref=f3e81]: Gestión
+        - link "Mi disponibilidad" [ref=f3e82] [cursor=pointer]:
+          - /url: /availability
+        - link "Tarifas" [ref=f3e88] [cursor=pointer]:
+          - /url: /fees
+        - link "Ajustes" [ref=f3e93] [cursor=pointer]:
+          - /url: /settings
+  - generic [ref=f3e98]:
+    - banner [ref=f3e99]:
+      - button "ES" [ref=f3e100] [cursor=pointer]
+      - button "system" [ref=f3e101] [cursor=pointer]
+      - button "Abrir notificaciones" [ref=f3e105] [cursor=pointer]:
+        - generic [ref=f3e116]: "5"
+      - button "DM" [ref=f3e110] [cursor=pointer]
+    - main [ref=f3e112]:
+      - generic [ref=f3e117]:
+        - link "Pacientes" [ref=f3e118] [cursor=pointer]:
+          - /url: /patients
+        - generic [ref=f3e121]:
+          - generic [ref=f3e122]: MB
+          - generic [ref=f3e123]:
+            - heading "Mateo Martínez Bonilla" [level=1] [ref=f3e124]
+            - generic [ref=f3e125]:
+              - generic [ref=f3e126]: P-00011
+              - generic [ref=f3e127]: 12 años
+              - generic [ref=f3e128]: Masculino
+              - generic [ref=f3e129]: Grupo O-
+            - generic [ref=f3e130]: ⚠ Penicilina
+          - generic [ref=f3e132]:
+            - button "Editar" [ref=f3e133] [cursor=pointer]
+            - button "Archivar" [ref=f3e137] [cursor=pointer]
+        - generic [ref=f3e141]:
+          - button "Resumen" [ref=f3e142] [cursor=pointer]
+          - button "Historial médico" [active] [ref=f3e143] [cursor=pointer]
+          - button "Recetas" [ref=f3e144] [cursor=pointer]
+          - button "Signos vitales" [ref=f3e145] [cursor=pointer]
+          - button "Documentos" [ref=f3e146] [cursor=pointer]
+          - button "Vacunas" [ref=f3e147] [cursor=pointer]
+          - button "Aplicaciones" [ref=f3e148] [cursor=pointer]
+          - button "Procedimientos" [ref=f3e149] [cursor=pointer]
+        - generic [ref=f3e292]:
+          - button "Fiebre Firmado REC-2026-1030-CO-1072 · 30 oct 2026" [ref=f3e293] [cursor=pointer]:
+            - generic [ref=f3e294]:
+              - paragraph [ref=f3e295]: Fiebre
+              - generic [ref=f3e296]: Firmado
+            - paragraph [ref=f3e297]: REC-2026-1030-CO-1072 · 30 oct 2026
+          - button "Vacunación Firmado REC-2026-1028-CO-1001 · 28 oct 2026" [ref=f3e298] [cursor=pointer]:
+            - generic [ref=f3e299]:
+              - paragraph [ref=f3e300]: Vacunación
+              - generic [ref=f3e301]: Firmado
+            - paragraph [ref=f3e302]: REC-2026-1028-CO-1001 · 28 oct 2026
+          - button "Fiebre Firmado REC-2026-1027-CO-968 · 27 oct 2026" [ref=f3e303] [cursor=pointer]:
+            - generic [ref=f3e304]:
+              - paragraph [ref=f3e305]: Fiebre
+              - generic [ref=f3e306]: Firmado
+            - paragraph [ref=f3e307]: REC-2026-1027-CO-968 · 27 oct 2026
+          - button "Control de niño sano Firmado REC-2026-1022-CO-862 · 22 oct 2026" [ref=f3e308] [cursor=pointer]:
+            - generic [ref=f3e309]:
+              - paragraph [ref=f3e310]: Control de niño sano
+              - generic [ref=f3e311]: Firmado
+            - paragraph [ref=f3e312]: REC-2026-1022-CO-862 · 22 oct 2026
+          - button "Dolor de oído Firmado REC-2026-1022-CO-859 · 22 oct 2026" [ref=f3e313] [cursor=pointer]:
+            - generic [ref=f3e314]:
+              - paragraph [ref=f3e315]: Dolor de oído
+              - generic [ref=f3e316]: Firmado
+            - paragraph [ref=f3e317]: REC-2026-1022-CO-859 · 22 oct 2026
+          - button "Dolor de oído Firmado REC-2026-1021-CO-828 · 21 oct 2026" [ref=f3e318] [cursor=pointer]:
+            - generic [ref=f3e319]:
+              - paragraph [ref=f3e320]: Dolor de oído
+              - generic [ref=f3e321]: Firmado
+            - paragraph [ref=f3e322]: REC-2026-1021-CO-828 · 21 oct 2026
+          - button "Erupción en la piel Firmado REC-2026-1021-CO-824 · 21 oct 2026" [ref=f3e323] [cursor=pointer]:
+            - generic [ref=f3e324]:
+              - paragraph [ref=f3e325]: Erupción en la piel
+              - generic [ref=f3e326]: Firmado
+            - paragraph [ref=f3e327]: REC-2026-1021-CO-824 · 21 oct 2026
+          - button "Fiebre Enmendado REC-2026-1020-CO-786 · 20 oct 2026" [ref=f3e328] [cursor=pointer]:
+            - generic [ref=f3e329]:
+              - paragraph [ref=f3e330]: Fiebre
+              - generic [ref=f3e331]: Enmendado
+            - paragraph [ref=f3e332]: REC-2026-1020-CO-786 · 20 oct 2026
+          - button "Control de niño sano Firmado REC-2026-1016-CO-713 · 16 oct 2026" [ref=f3e333] [cursor=pointer]:
+            - generic [ref=f3e334]:
+              - paragraph [ref=f3e335]: Control de niño sano
+              - generic [ref=f3e336]: Firmado
+            - paragraph [ref=f3e337]: REC-2026-1016-CO-713 · 16 oct 2026
+          - button "Fiebre Firmado REC-2026-1008-CO-571 · 8 oct 2026" [ref=f3e338] [cursor=pointer]:
+            - generic [ref=f3e339]:
+              - paragraph [ref=f3e340]: Fiebre
+              - generic [ref=f3e341]: Firmado
+            - paragraph [ref=f3e342]: REC-2026-1008-CO-571 · 8 oct 2026
+          - button "Fiebre Firmado REC-2026-1007-CO-548 · 7 oct 2026" [ref=f3e343] [cursor=pointer]:
+            - generic [ref=f3e344]:
+              - paragraph [ref=f3e345]: Fiebre
+              - generic [ref=f3e346]: Firmado
+            - paragraph [ref=f3e347]: REC-2026-1007-CO-548 · 7 oct 2026
+          - button "Vacunación Firmado REC-2026-0916-CO-192 · 16 sep 2026" [ref=f3e348] [cursor=pointer]:
+            - generic [ref=f3e349]:
+              - paragraph [ref=f3e350]: Vacunación
+              - generic [ref=f3e351]: Firmado
+            - paragraph [ref=f3e352]: REC-2026-0916-CO-192 · 16 sep 2026
+          - button "Erupción en la piel Firmado REC-2026-0916-CO-189 · 16 sep 2026" [ref=f3e353] [cursor=pointer]:
+            - generic [ref=f3e354]:
+              - paragraph [ref=f3e355]: Erupción en la piel
+              - generic [ref=f3e356]: Firmado
+            - paragraph [ref=f3e357]: REC-2026-0916-CO-189 · 16 sep 2026
+          - button "Dolor de oído Firmado REC-2026-0915-CO-167 · 15 sep 2026" [ref=f3e358] [cursor=pointer]:
+            - generic [ref=f3e359]:
+              - paragraph [ref=f3e360]: Dolor de oído
+              - generic [ref=f3e361]: Firmado
+            - paragraph [ref=f3e362]: REC-2026-0915-CO-167 · 15 sep 2026
+          - button "Tos Firmado REC-2026-0911-CO-110 · 11 sep 2026" [ref=f3e363] [cursor=pointer]:
+            - generic [ref=f3e364]:
+              - paragraph [ref=f3e365]: Tos
+              - generic [ref=f3e366]: Firmado
+            - paragraph [ref=f3e367]: REC-2026-0911-CO-110 · 11 sep 2026
+          - button "Fiebre Firmado REC-2026-0910-CO-88 · 10 sep 2026" [ref=f3e368] [cursor=pointer]:
+            - generic [ref=f3e369]:
+              - paragraph [ref=f3e370]: Fiebre
+              - generic [ref=f3e371]: Firmado
+            - paragraph [ref=f3e372]: REC-2026-0910-CO-88 · 10 sep 2026
+          - button "Fiebre Firmado REC-2026-0909-CO-63 · 9 sep 2026" [ref=f3e373] [cursor=pointer]:
+            - generic [ref=f3e374]:
+              - paragraph [ref=f3e375]: Fiebre
+              - generic [ref=f3e376]: Firmado
+            - paragraph [ref=f3e377]: REC-2026-0909-CO-63 · 9 sep 2026
+          - button "Erupción en la piel Firmado REC-2026-0907-CO-14 · 7 sep 2026" [ref=f3e378] [cursor=pointer]:
+            - generic [ref=f3e379]:
+              - paragraph [ref=f3e380]: Erupción en la piel
+              - generic [ref=f3e381]: Firmado
+            - paragraph [ref=f3e382]: REC-2026-0907-CO-14 · 7 sep 2026

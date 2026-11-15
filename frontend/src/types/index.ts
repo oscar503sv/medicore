@@ -683,6 +683,10 @@ export interface ConsultationVitals extends ConsultationRef {
 }
 
 // ── Medical Records ───────────────────────────────────────────────────────────
+/** What checking a record's integrity seal found; "unverifiable" is a seal this build
+ * does not know how to check. */
+export type SealStatus = 'ok' | 'tampered' | 'unverifiable'
+
 export interface MedicalRecord {
   id: string
   tenant_id: string
@@ -713,6 +717,9 @@ export interface MedicalRecord {
   /** False once a newer version amends it; only the current version is amended or printed. */
   is_current: boolean
   superseded_by_id: string | null
+  /** Set where the seal is checked (detail, sign, amend); null in lists. */
+  integrity: SealStatus | null
+  seal: { version: number; digest: string } | null
 }
 
 export interface RecordVersion {
@@ -724,6 +731,7 @@ export interface RecordVersion {
   signed_by_name: string | null
   amendment_reason: string | null
   is_current: boolean
+  integrity: SealStatus
 }
 
 /** What lists show of a record to anyone with records.view: never the clinical content. */

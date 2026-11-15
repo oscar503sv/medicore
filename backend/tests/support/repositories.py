@@ -985,6 +985,10 @@ class InMemoryMedicalRecordRepository(_Scoped):
         )
 
     def save(self, record: MedicalRecord) -> None:
+        if record.seal is None:
+            raise ValueError("a record is sealed before it is saved")
+        if record.id.value in self._store.medical_records:
+            raise RuntimeError("signed records are append-only")
         self._store.medical_records[record.id.value] = record
 
 

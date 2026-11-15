@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FilePen, ShieldCheck } from 'lucide-react'
+import { FilePen, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { recordsApi } from '@/api/records'
 import { AmendRecordModal } from '@/components/records/AmendRecordModal'
 import { RecordCertificates, RecordPrintActions } from '@/components/records/RecordDocuments'
@@ -87,6 +87,30 @@ export function RecordDrawer({
               </Badge>
             </div>
           </div>
+
+          {record.integrity && record.integrity !== 'ok' && (
+            <div
+              role="alert"
+              className={cn(
+                'mt-4 flex items-start gap-2 rounded-lg border px-3 py-2 text-sm text-tx',
+                record.integrity === 'tampered' ? 'border-danger' : 'border-warn',
+              )}
+            >
+              <ShieldAlert
+                className={cn(
+                  'mt-0.5 h-4 w-4 shrink-0',
+                  record.integrity === 'tampered' ? 'text-danger' : 'text-warn',
+                )}
+              />
+              <span>
+                {t(
+                  record.integrity === 'tampered'
+                    ? 'record.integrity_tampered'
+                    : 'record.integrity_unverifiable',
+                )}
+              </span>
+            </div>
+          )}
 
           {!record.is_current && (
             <div
@@ -266,6 +290,15 @@ function VersionRow({
           {f('record.version_n', { n: version.version })}
         </span>
         {version.is_current && <Badge tone="ok">{t('record.current')}</Badge>}
+        {version.integrity !== 'ok' && (
+          <Badge tone={version.integrity === 'tampered' ? 'danger' : 'warn'}>
+            {t(
+              version.integrity === 'tampered'
+                ? 'record.integrity_badge_tampered'
+                : 'record.integrity_badge_unverifiable',
+            )}
+          </Badge>
+        )}
       </span>
       <span className="mt-0.5 block text-xs text-tx-3">
         {version.signed_by_name ?? '—'} · {fmtDateTimeTz(version.signed_at)}

@@ -29,6 +29,7 @@ from medicore.application.use_cases.consultations import (
 )
 from medicore.domain.entities.application import ApplicationDraft
 from medicore.domain.entities.prescription import PrescriptionDraft
+from medicore.domain.enums import SealStatus
 from medicore.domain.shared.identifiers import AppointmentId, ConsultationId, ProcedureTypeId
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
@@ -232,4 +233,4 @@ def sign_consultation(
         chief_complaint=body.chief_complaint,
     )
     record = SignConsultation(uow, codes, clock).execute(actor, cmd)
-    return ser_record(record)
+    return ser_record(record, integrity=SealStatus.OK)

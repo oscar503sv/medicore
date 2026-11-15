@@ -256,10 +256,12 @@ class SqlMedicalRecordRepository:
         )
 
     def save(self, record: MedicalRecord) -> None:
-        # Records are immutable once signed; amendments are new rows.
-        row = self._s.get(MedicalRecordModel, record.id.value)
-        if row is not None:
-            return  # never overwrite a stored signed record
+        # Records are immutable once signed; amendments are new rows. Saving one that exists
+        # is a bug, and the database trigger would refuse the UPDATE anyway.
+        if record.seal is None:
+            raise ValueError("a record is sealed before it is saved")
+        if self._s.get(MedicalRecordModel, record.id.value) is not None:
+            raise RuntimeError("signed records are append-only")
         row = MedicalRecordModel(id=record.id.value)
         self._s.add(row)
         row.tenant_id = record.tenant_id.value
@@ -285,6 +287,8 @@ class SqlMedicalRecordRepository:
         row.consultation_id = record.consultation_id.value if record.consultation_id else None
         row.amends_record_id = record.amends_record_id.value if record.amends_record_id else None
         row.amendment_reason = record.amendment_reason
+        row.seal = record.seal.digest
+        row.seal_version = record.seal.version
 
 
 class SqlPrescriptionRepository:

@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from medicore.domain.enums import PaperSize
+from medicore.domain.enums import PaperSize, SealStatus
 
 
 class PrintClinicSchema(BaseModel):
@@ -51,6 +51,9 @@ class RecordPrintResponse(BaseModel):
     amends_code: str | None
     version: int
     original_signed_at: datetime | None
+    integrity: SealStatus
+    seal_version: int | None
+    seal_fingerprint: str | None  # the first 16 hex characters of the seal
 
 
 class CertificatePrintResponse(BaseModel):
@@ -58,6 +61,7 @@ class CertificatePrintResponse(BaseModel):
     certificate: dict[str, Any]
     encounter_at: datetime
     ended_at: datetime
+    integrity: SealStatus
 
 
 class ProcedurePrintResponse(BaseModel):

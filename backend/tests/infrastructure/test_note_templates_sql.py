@@ -16,6 +16,7 @@ from medicore.domain.value_objects.vitals import Vitals
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from tests.infrastructure.test_analytics_sql import engine, session  # noqa: F401
 from tests.support.builders import build_patient, build_tenant, build_user
+from tests.support.records import sealed
 
 NOW = datetime(2026, 5, 20, 15, 0, tzinfo=UTC)
 
@@ -35,12 +36,12 @@ def test_round_trips(session):  # noqa: F811
     uow.patients.save(patient)
     session.flush()
     note = ClinicalNote.blank(HISTORY).with_texts({"anamnesis": "Cefalea", "treatment": "AINE"})
-    record = MedicalRecord(
+    record = sealed(MedicalRecord(
         id=RecordId.new(), tenant_id=tenant.id, code="REC-1", patient_id=patient.id,
         author_id=doctor.id, type=ClinicalRecordType.CONSULTATION, encounter_at=NOW,
         location_name="Sede", chief_complaint="Control", note=note, vitals=Vitals(),
         signed_at=NOW, signed_by_id=doctor.id,
-    )
+    ))
     uow.medical_records.save(record)
     session.flush()
     session.expire_all()

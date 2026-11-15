@@ -66,6 +66,12 @@ class RecordSuperseded(DomainError):
     code = "record.superseded"
 
 
+class RecordTampered(DomainError):
+    """The record's integrity seal does not match its content: nothing builds on it."""
+
+    code = "record.tampered"
+
+
 class ConsultationNotSignable(DomainError):
     """A consultation cannot be signed yet (e.g. minimum completeness not met)."""
 

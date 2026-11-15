@@ -7,7 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from medicore.domain.enums import DocumentKind
+from medicore.domain.enums import DocumentKind, SealStatus
 
 
 class AmendRequest(BaseModel):
@@ -30,6 +30,11 @@ class UploadDocumentRequest(BaseModel):
     mime_type: str = Field(max_length=100)
     size_bytes: int
     record_id: str | None = Field(None, max_length=64)
+
+
+class RecordSealResponse(BaseModel):
+    version: int
+    digest: str
 
 
 class RecordResponse(BaseModel):
@@ -61,6 +66,10 @@ class RecordResponse(BaseModel):
     amendment_reason: str | None = None
     is_current: bool = True
     superseded_by_id: str | None = None
+    # Set where the seal was checked (the detail and the sign/amend answers); lists leave
+    # it null.
+    integrity: SealStatus | None = None
+    seal: RecordSealResponse | None = None
 
 
 class RecordVersionResponse(BaseModel):
@@ -72,6 +81,7 @@ class RecordVersionResponse(BaseModel):
     signed_by_name: str | None = None
     amendment_reason: str | None = None
     is_current: bool
+    integrity: SealStatus
 
 
 class DocumentResponse(BaseModel):

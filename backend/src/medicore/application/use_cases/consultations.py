@@ -563,6 +563,7 @@ class SignConsultation:
                 audit_entry(
                     actor, now, "consultation.signed", "MedicalRecord", str(result.record.id),
                     appointment_id=str(appointment.id),
+                    seal=result.record.seal.digest if result.record.seal else None,
                     prescriptions=len(result.prescriptions),
                     applications=len(result.applications),
                     procedures=len(result.procedures),

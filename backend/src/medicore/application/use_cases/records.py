@@ -15,14 +15,16 @@ from medicore.application.common.permissions import (
     ensure_not_support,
     ensure_permission,
 )
+from medicore.application.common.record_integrity import integrity_failure, upto
 from medicore.application.common.timezone import clinic_instant
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
-from medicore.domain.enums import ClinicalRecordType, DocumentKind
+from medicore.domain.enums import ClinicalRecordType, DocumentKind, SealStatus
 from medicore.domain.repositories._support import Page, Paging, RecordFilter, RecordSummary
-from medicore.domain.shared.errors import PermissionDenied, RecordSuperseded
+from medicore.domain.services.record_seal import verify_chain, worst
+from medicore.domain.shared.errors import PermissionDenied, RecordSuperseded, RecordTampered
 from medicore.domain.shared.identifiers import (
     PatientId,
     RecordId,
@@ -67,6 +69,7 @@ class RecordView:
 
     record: MedicalRecord
     superseded_by_id: RecordId | None
+    integrity: SealStatus  # the record's seal and every seal it rests on
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +78,7 @@ class RecordVersion:
     version: int  # 1 is the original
     signer_name: str | None
     is_current: bool
+    integrity: SealStatus
 
 
 def summarize(
@@ -167,21 +171,28 @@ class GetMedicalRecord:
 
     def execute(self, actor: ActorContext, record_id: RecordId) -> RecordView:
         ensure_permission(actor, Permission.RECORDS_READ_CLINICAL)
-        record = self._uow.medical_records.get_by_id(record_id)
-        if record is None:
+        chain = self._uow.medical_records.versions(record_id)
+        position = next((i for i, r in enumerate(chain) if r.id == record_id), None)
+        if position is None:
             raise EntityNotFound("MedicalRecord", record_id)
-        superseded_by_id = self._uow.medical_records.successor_id(record_id)
+        record = chain[position]
+        superseded_by_id = chain[position + 1].id if position + 1 < len(chain) else None
+        statuses = verify_chain(chain)
         # Accessing patient clinical data is auditable (HIPAA/GDPR).
         patient = self._uow.patients.get_by_id(record.patient_id)
+        label = subject(record.code, patient.full_name if patient else None)
+        now = self._clock.now()
         with self._uow:
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), "record.viewed", "MedicalRecord", str(record_id),
-                    subject=subject(record.code, patient.full_name if patient else None),
+                    actor, now, "record.viewed", "MedicalRecord", str(record_id), subject=label,
                 )
             )
+            failure = integrity_failure(actor, now, chain, statuses, record, label)
+            if failure is not None:
+                self._uow.audit.append(failure)
             self._uow.commit()
-        return RecordView(record, superseded_by_id)
+        return RecordView(record, superseded_by_id, upto(statuses, position))
 
 
 class ListRecordVersions:
@@ -203,18 +214,23 @@ class ListRecordVersions:
                 signer = self._uow.users.get_by_id(r.signed_by_id)
                 names[r.signed_by_id] = signer.name if signer else None
         patient = self._uow.patients.get_by_id(current.patient_id)
+        statuses = verify_chain(chain)
+        label = subject(current.code, patient.full_name if patient else None)
+        now = self._clock.now()
         with self._uow:
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), "record.versions_viewed", "MedicalRecord",
-                    str(current.id), count=len(chain),
-                    subject=subject(current.code, patient.full_name if patient else None),
+                    actor, now, "record.versions_viewed", "MedicalRecord", str(current.id),
+                    count=len(chain), subject=label,
                 )
             )
+            failure = integrity_failure(actor, now, chain, statuses, current, label)
+            if failure is not None:
+                self._uow.audit.append(failure)
             self._uow.commit()
         return [
-            RecordVersion(r, number, names[r.signed_by_id], r is current)
-            for number, r in enumerate(chain, start=1)
+            RecordVersion(r, i + 1, names[r.signed_by_id], r is current, upto(statuses, i))
+            for i, r in enumerate(chain)
         ]
 
 
@@ -300,10 +316,14 @@ class AmendMedicalRecord:
                 raise PermissionDenied(
                     "only the record's author may amend it", code="record.not_own"
                 )
-            if self._uow.medical_records.successor_id(original.id) is not None:
-                current = self._uow.medical_records.versions(original.id)[-1]
+            chain = self._uow.medical_records.versions(original.id)
+            if worst(verify_chain(chain)) != SealStatus.OK:
+                # An amendment would be sealed on top of a record that no longer matches its
+                # seal, certifying it.
+                raise RecordTampered("the record does not match its integrity seal")
+            if chain[-1].id != original.id:
                 raise RecordSuperseded(
-                    "the record has a newer version", current_id=str(current.id)
+                    "the record has a newer version", current_id=str(chain[-1].id)
                 )
             amendment = original.amend(
                 by=actor.user_id,
@@ -329,6 +349,7 @@ class AmendMedicalRecord:
                 audit_entry(
                     actor, self._clock.now(), "record.amended", "MedicalRecord",
                     str(amendment.id), amends=str(original.id), changed=changed,
+                    seal=amendment.seal.digest if amendment.seal else None,
                     reason_chars=len(amendment.amendment_reason or ""),
                     subject=subject(amendment.code, patient.full_name if patient else None),
                 )

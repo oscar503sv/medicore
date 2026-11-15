@@ -1,0 +1,50 @@
+- generic [ref=f4e3]:
+  - complementary [ref=f4e4]:
+    - generic [ref=f4e5]:
+      - generic [ref=f4e6]:
+        - generic [ref=f4e7]: M
+        - generic [ref=f4e8]: Medicore
+      - button "Contraer menú" [ref=f4e9] [cursor=pointer]
+    - generic [ref=f4e18]:
+      - paragraph [ref=f4e19]: Clínica Demo, S.A. de C.V.
+      - paragraph [ref=f4e20]: Organización
+    - navigation [ref=f4e21]:
+      - generic [ref=f4e22]:
+        - paragraph [ref=f4e23]: General
+        - link "Panel" [ref=f4e24] [cursor=pointer]:
+          - /url: /
+        - link "Métricas" [ref=f4e31] [cursor=pointer]:
+          - /url: /analytics
+        - link "Reportes" [ref=f4e35] [cursor=pointer]:
+          - /url: /reports
+      - generic [ref=f4e40]:
+        - paragraph [ref=f4e41]: Clínico
+        - link "Pacientes" [ref=f4e42] [cursor=pointer]:
+          - /url: /patients
+        - link "Citas" [ref=f4e49] [cursor=pointer]:
+          - /url: /appointments
+        - link "Agenda" [ref=f4e53] [cursor=pointer]:
+          - /url: /schedule
+        - link "Historiales" [ref=f4e57] [cursor=pointer]:
+          - /url: /records
+        - link "Aplicaciones" [ref=f4e62] [cursor=pointer]:
+          - /url: /applications
+        - link "Procedimientos" [ref=f4e67] [cursor=pointer]:
+          - /url: /procedures
+        - link "Vacunación" [ref=f4e71] [cursor=pointer]:
+          - /url: /vaccination
+      - generic [ref=f4e80]:
+        - paragraph [ref=f4e81]: Gestión
+        - link "Mi disponibilidad" [ref=f4e82] [cursor=pointer]:
+          - /url: /availability
+        - link "Tarifas" [ref=f4e88] [cursor=pointer]:
+          - /url: /fees
+        - link "Ajustes" [ref=f4e93] [cursor=pointer]:
+          - /url: /settings
+  - generic [ref=f4e98]:
+    - banner [ref=f4e99]:
+      - button "ES" [ref=f4e100] [cursor=pointer]
+      - button "system" [ref=f4e101] [cursor=pointer]
+      - button "Abrir notificaciones" [ref=f4e105] [cursor=pointer]
+      - button "DM" [ref=f4e110] [cursor=pointer]
+    - main [ref=f4e112]

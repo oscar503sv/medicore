@@ -20,16 +20,19 @@ from medicore.application.common.permissions import (
     ensure_permission,
     has_permission,
 )
+from medicore.application.common.record_integrity import integrity_failure, upto
 from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.appointment import Appointment
+from medicore.domain.entities.audit_log import AuditLog
 from medicore.domain.entities.medical_certificate import MedicalCertificate
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.procedure import Procedure
 from medicore.domain.entities.tenant import Location, Tenant
-from medicore.domain.enums import NoteRole, PaperSize, PrescriptionStatus, Role
+from medicore.domain.enums import NoteRole, PaperSize, PrescriptionStatus, Role, SealStatus
+from medicore.domain.services.record_seal import verify_chain
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     CertificateId,
@@ -39,6 +42,7 @@ from medicore.domain.shared.identifiers import (
     RecordId,
     UserId,
 )
+from medicore.domain.value_objects.record_seal import RecordSeal
 
 RecordDocument = Literal["prescription", "exams", "record"]
 ProcedureDocument = Literal["instructions", "consent", "pathology"]
@@ -90,6 +94,8 @@ class RecordPrint:
     amends_code: str | None  # the original record's code, for an amendment
     version: int  # 1 is the original
     original_signed_at: datetime | None  # only for an amendment
+    integrity: SealStatus  # a sheet from a record that fails its seal still prints, flagged
+    seal: RecordSeal | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +104,7 @@ class CertificatePrint:
     certificate: MedicalCertificate
     encounter_at: datetime
     ended_at: datetime
+    integrity: SealStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,7 +196,7 @@ class _Printer:
 
     def _audit(
         self, actor: ActorContext, document: str, entity_type: str, entity_id: str,
-        code: str | None, patient: Patient | None,
+        code: str | None, patient: Patient | None, failure: AuditLog | None = None,
     ) -> None:
         with self._uow:
             self._uow.audit.append(
@@ -199,6 +206,8 @@ class _Printer:
                     subject=subject(code, patient.full_name if patient else None),
                 )
             )
+            if failure is not None:
+                self._uow.audit.append(failure)
             self._uow.commit()
 
 
@@ -224,6 +233,9 @@ class PrintRecordDocument(_Printer):
         if not chain:
             raise EntityNotFound("MedicalRecord", record_id)
         record = chain[-1]
+        # Checked before the sheet is trimmed: the seal covers the record as signed.
+        statuses = verify_chain(chain)
+        integrity = upto(statuses, len(chain) - 1)
         if document == "prescription":
             record = self._without_cancelled(record, chain[0].id)
         if (document == "prescription" and not record.prescriptions) or (
@@ -236,12 +248,18 @@ class PrintRecordDocument(_Printer):
             location_id=self._location_of(record.appointment_id), patient=patient,
             doctor_id=record.signed_by_id, on=record.encounter_at.date(),
         )
-        self._audit(actor, document, "MedicalRecord", str(record.id), record.code, patient)
+        failure = integrity_failure(
+            actor, self._clock.now(), chain, statuses, chain[-1],
+            subject(record.code, patient.full_name),
+        )
+        self._audit(actor, document, "MedicalRecord", str(record.id), record.code, patient,
+                    failure)
         indications = record.note.text_for(NoteRole.PLAN) or None if can_read_clinical else None
         return RecordPrint(
             context=context, document=document, record=record, indications=indications,
             amends_code=amends_code, version=len(chain),
             original_signed_at=chain[0].signed_at if len(chain) > 1 else None,
+            integrity=integrity, seal=chain[-1].seal,
         )
 
 
@@ -277,15 +295,21 @@ class PrintCertificate(_Printer):
         if not chain:
             raise EntityNotFound("MedicalRecord", certificate.record_id)
         record = chain[0]
+        statuses = verify_chain(chain)
         patient = self._load_patient(certificate.patient_id)
         context = self._context(
             location_id=self._location_of(record.appointment_id), patient=patient,
             doctor_id=certificate.doctor_id, on=record.encounter_at.date(),
         )
+        failure = integrity_failure(
+            actor, self._clock.now(), chain, statuses, record,
+            subject(record.code, patient.full_name),
+        )
         self._audit(actor, "certificate", "MedicalCertificate", str(certificate.id),
-                    certificate.code, patient)
+                    certificate.code, patient, failure)
         return CertificatePrint(context=context, certificate=certificate,
-                                encounter_at=record.encounter_at, ended_at=record.signed_at)
+                                encounter_at=record.encounter_at, ended_at=record.signed_at,
+                                integrity=upto(statuses, 0))
 
 
 class PrintProcedureDocument(_Printer):

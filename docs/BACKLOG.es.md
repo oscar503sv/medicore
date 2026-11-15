@@ -25,8 +25,6 @@ Canales externos y recordatorios quedan planificados como evolución futura (ver
   texto del motivo en la auditoría, a diferencia de las enmiendas de expedientes y de las
   cancelaciones de recetas (que guardan solo su longitud, `reason_chars`); hay que alinearlas. `platform_reads.signed_records` y `signed_per_week` (consola de
   plataforma) cuentan las enmiendas como expedientes firmados nuevos; deben excluirlas.
-- OZK-99 (trigger de inmutabilidad de `medical_records`) debe ir en una migración posterior a
-  `f8a9b0c1d2e4`.
 - Recetas activas que nadie puede cerrar: desde OZK-100 solo el médico que las emitió las completa o
   cancela, y los administradores no tienen `prescriptions.manage`, así que una receta de un médico que
   se fue de la clínica (o fue borrado) sigue activa (consulta 5 del [README del backend](../backend/README.es.md#recetas-cerradas-por-otra-persona)).
@@ -183,4 +181,13 @@ Resueltos en nov 2026:
 - **Documentos médicos sin claves elegidas por el cliente** (OZK-101): el servidor genera cada `storage_key` (`{tenant_id}/{patient_id}/{document_id}`), nunca se acepta del cliente ni se devuelve, y es única en la base. Un documento solo puede ligarse a un expediente del mismo paciente (su versión vigente), y las sesiones de soporte no pueden registrarlos. La migración `f8a9b0c1d2e4` desliga los documentos de un expediente ajeno y reescribe las claves (ver [Claves de almacenamiento de documentos](../backend/README.es.md#claves-de-almacenamiento-de-documentos)).
 - **Procedimientos y citas bajo bloqueo de fila** (OZK-106): todo escritor de procedimientos bloquea el procedimiento, así que una segunda firma responde 409 `procedure.already_signed` (uno cancelado sigue en 422 `procedure.closed`). Las transiciones de cita y las firmas de consulta bloquean la cita en un orden fijo (ver [Orden de bloqueos](../backend/README.es.md#orden-de-bloqueos)): una cancelación no puede competir con una firma o un arranque, una cita en curso o completada no se cancela, y dos altas de un procedimiento sobre una misma cita no pueden tener éxito las dos. Sin migración: ejecuta las consultas de [Citas y procedimientos inconsistentes antes de OZK-106](../backend/README.es.md#citas-y-procedimientos-inconsistentes-antes-de-ozk-106) antes de desplegar.
 
-No quedan hallazgos pendientes en esta lista.
+- **Expedientes firmados protegidos en la base de datos** (OZK-99): cada versión de un expediente lleva un sello SHA-256 sobre su contenido inmutable y sobre el sello anterior. `medical_records` rechaza `UPDATE`, `DELETE` y `TRUNCATE` (también con `session_replication_role = replica`), las recetas solo pueden cerrarse, y las claves foráneas de expedientes, recetas y documentos impiden borrar lo que apuntan. Las lecturas, las copias impresas y las constancias verifican el sello (`integrity`): un expediente alterado muestra un aviso, se audita como `record.integrity_failed` y no se puede enmendar (409 `record.tampered`). La migración `a9b0c1d2e3f5` sella los expedientes existentes y desliga las recetas y documentos huérfanos, y se niega a ejecutarse mientras haya otra referencia huérfana (ver [Expedientes protegidos](../backend/README.es.md#expedientes-protegidos-y-referencias-huérfanas-antes-de-ozk-99)). El sello no tiene clave, así que protege frente a errores, no frente a quien tiene acceso a la base de datos.
+
+Pendiente tras OZK-99:
+
+- **Roles de base de datos separados**: las migraciones y los scripts corren como dueño del esquema, y la aplicación se conecta como ese mismo superusuario, así que puede eliminar los triggers. Dale a la aplicación solo DML, más `GRANT UPDATE (id)` sobre `medical_records`: `SELECT ... FOR NO KEY UPDATE` necesita el privilegio `UPDATE` sobre alguna columna, y basta con una.
+- **Sello con clave (v2)**: un HMAC con una clave guardada fuera de la base, de modo que recalcular un sello también necesite la clave. `seal_version` deja sitio para ello.
+- **Inmutabilidad y RESTRICT fuera de expedientes**: procedimientos, `vaccination_records`, `application_records` y `medical_certificates` siguen en cascada desde paciente y clínica, y tampoco están sellados.
+- **Claves foráneas compuestas** `(tenant_id, x_id)`, para que una referencia no cruce clínicas aunque el id exista en otra.
+- **Integridad en historial y listados**: el historial del paciente y los listados de expedientes dejan `integrity` en `null`; verifícalos también.
+- **Barrido nocturno de sellos** (un job `record_seal_check`, como `session_purge`): recalcular cada cadena y alertar ante un desajuste.

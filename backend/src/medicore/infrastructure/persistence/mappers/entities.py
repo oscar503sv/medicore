@@ -56,6 +56,7 @@ from medicore.domain.value_objects.contact_info import ContactInfo
 from medicore.domain.value_objects.note_settings import DEFAULT_TEMPLATE, NoteSettings
 from medicore.domain.value_objects.permission_adjustments import PermissionAdjustments
 from medicore.domain.value_objects.print_settings import PrintSettings
+from medicore.domain.value_objects.record_seal import RecordSeal
 from medicore.domain.value_objects.slug import Slug
 from medicore.domain.value_objects.user_preferences import (
     NotificationPreferences,
@@ -336,6 +337,7 @@ def to_medical_record(row: MedicalRecordModel) -> MedicalRecord:
         consultation_id=ConsultationId.parse(row.consultation_id) if row.consultation_id else None,
         amends_record_id=RecordId.parse(row.amends_record_id) if row.amends_record_id else None,
         amendment_reason=row.amendment_reason,
+        seal=RecordSeal(row.seal_version, row.seal) if row.seal else None,
     )
 
 

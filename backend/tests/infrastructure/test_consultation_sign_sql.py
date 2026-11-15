@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import create_engine, delete, text
+from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -43,10 +43,11 @@ from medicore.domain.shared.identifiers import AppointmentId, ConsultationId, Re
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.vitals import Vitals
 from medicore.infrastructure.config import get_settings
-from medicore.infrastructure.persistence.models.tenant import TenantModel
+from medicore.infrastructure.database.tenant_purge import purge_tenants
 from medicore.infrastructure.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from tests.support.builders import build_patient, build_tenant, build_user, soap_note
 from tests.support.fakes import FixedClock
+from tests.support.records import sealed
 
 NOW = datetime(2026, 6, 1, 9, 0, tzinfo=UTC)
 WAIT = 0.5
@@ -117,7 +118,7 @@ class Clinic:
 
     def __exit__(self, *exc) -> None:
         with self.engine.begin() as conn:
-            conn.execute(delete(TenantModel).where(TenantModel.id == self.tenant.id.value))
+            purge_tenants(conn, [self.tenant.id.value])
 
     def uow(self, session: Session) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(session, self.tenant.id)
@@ -265,24 +266,34 @@ def clinic_session(engine):
     connection.close()
 
 
-def _record(clinic, consultation_id, amends=None) -> MedicalRecord:
-    return MedicalRecord(
+def _record(clinic, consultation_id, amends=None, previous=None) -> MedicalRecord:
+    return sealed(MedicalRecord(
         id=RecordId.new(), tenant_id=clinic.tenant.id, code=f"REC-{uuid.uuid4().hex[:8]}",
         patient_id=clinic.patient.id, author_id=clinic.doctor.id,
         type=ClinicalRecordType.CONSULTATION, encounter_at=NOW, location_name="Sede",
         chief_complaint="x", note=soap_note(), vitals=Vitals(), signed_at=NOW,
         signed_by_id=clinic.doctor.id, consultation_id=consultation_id, amends_record_id=amends,
         amendment_reason="Corrección del motivo" if amends else None,
-    )
+    ), previous)
+
+
+def _save_the_booking(uow, session, clinic) -> ConsultationId:
+    """What the records' foreign keys point at: the people, the appointment and its
+    consultation."""
+    uow.users.save(clinic.doctor)
+    uow.patients.save(clinic.patient)
+    session.flush()
+    uow.appointments.save(clinic.appointment)
+    session.flush()
+    uow.consultations.save(clinic.consultation)
+    session.flush()
+    return clinic.consultation.id
 
 
 def test_index_refuses_a_second_original_record(clinic_session):
     clinic, session = clinic_session
     uow = SqlAlchemyUnitOfWork(session, clinic.tenant.id)
-    uow.users.save(clinic.doctor)
-    uow.patients.save(clinic.patient)
-    session.flush()
-    consultation_id = ConsultationId.new()
+    consultation_id = _save_the_booking(uow, session, clinic)
     uow.medical_records.save(_record(clinic, consultation_id))
     session.flush()
 
@@ -294,13 +305,12 @@ def test_index_refuses_a_second_original_record(clinic_session):
 def test_index_accepts_amendments_and_records_without_consultation(clinic_session):
     clinic, session = clinic_session
     uow = SqlAlchemyUnitOfWork(session, clinic.tenant.id)
-    uow.users.save(clinic.doctor)
-    uow.patients.save(clinic.patient)
-    session.flush()
-    consultation_id = ConsultationId.new()
+    consultation_id = _save_the_booking(uow, session, clinic)
     original = _record(clinic, consultation_id)
     uow.medical_records.save(original)
-    uow.medical_records.save(_record(clinic, consultation_id, amends=original.id))
+    uow.medical_records.save(
+        _record(clinic, consultation_id, amends=original.id, previous=original)
+    )
     uow.medical_records.save(_record(clinic, None))
     uow.medical_records.save(_record(clinic, None))
     session.flush()

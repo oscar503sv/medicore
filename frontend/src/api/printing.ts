@@ -1,5 +1,12 @@
 import { api } from './client'
-import type { ClinicalNote, ExamRequest, PaperSize, PrescriptionSnapshot, Vitals } from '@/types'
+import type {
+  ClinicalNote,
+  ExamRequest,
+  PaperSize,
+  PrescriptionSnapshot,
+  SealStatus,
+  Vitals,
+} from '@/types'
 
 export interface PrintContext {
   clinic: {
@@ -38,6 +45,10 @@ interface RecordPrintBase {
   /** 1 is the original; the server always prints the current version. */
   version: number
   original_signed_at: string | null
+  integrity: SealStatus
+  seal_version: number | null
+  /** The first 16 hex characters of the record's seal. */
+  seal_fingerprint: string | null
 }
 
 /** What reprinting a prescription needs of its record (the server leaves out the rest). */
@@ -95,6 +106,7 @@ export interface CertificatePrint {
   }
   encounter_at: string
   ended_at: string
+  integrity: SealStatus
 }
 
 export interface ProcedurePrint {
