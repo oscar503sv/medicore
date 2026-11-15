@@ -8,7 +8,7 @@ import pytest
 
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.enums import AppointmentStatus, AppointmentType
-from medicore.domain.shared.errors import InvalidStateTransition
+from medicore.domain.shared.errors import DomainError, InvalidStateTransition
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     LocationId,
@@ -87,3 +87,57 @@ class TestAppointmentTransitions:
         appt = make_appointment(AppointmentStatus.IN_PROGRESS)
         with pytest.raises(InvalidStateTransition):
             appt.reschedule(datetime(2026, 6, 2, 10, 0))
+
+
+def make_walk_in() -> Appointment:
+    return Appointment.walk_in(
+        id=AppointmentId.new(),
+        tenant_id=TenantId.new(),
+        code="A-2402",
+        patient_id=PatientId.new(),
+        doctor_id=UserId.new(),
+        location_id=LocationId.new(),
+        type=AppointmentType.EMERGENCY,
+        reason="Dolor torácico",
+        duration_minutes=30,
+        created_by_id=UserId.new(),
+        now=datetime(2026, 6, 1, 22, 13, 45, 999),
+    )
+
+
+class TestWalkIn:
+    def test_starts_now_to_the_minute_and_waits_confirmed(self):
+        appt = make_walk_in()
+
+        assert appt.is_walk_in
+        assert appt.status == AppointmentStatus.CONFIRMED
+        assert appt.scheduled_start == datetime(2026, 6, 1, 22, 13)
+
+    def test_regular_appointments_are_not_walk_ins(self):
+        assert not make_appointment().is_walk_in
+
+    def test_cannot_be_a_no_show(self):
+        appt = make_walk_in()
+
+        with pytest.raises(DomainError) as exc:
+            appt.mark_no_show()
+
+        assert exc.value.code == "appointment.walk_in_no_show"
+        assert appt.status == AppointmentStatus.CONFIRMED
+
+    def test_cannot_be_rescheduled(self):
+        appt = make_walk_in()
+
+        with pytest.raises(DomainError) as exc:
+            appt.reschedule(datetime(2026, 6, 2, 9, 0))
+
+        assert exc.value.code == "appointment.walk_in_reschedule"
+
+    def test_can_be_cancelled_and_attended(self):
+        cancelled = make_walk_in()
+        cancelled.cancel()
+        attended = make_walk_in()
+        attended.start()
+
+        assert cancelled.status == AppointmentStatus.CANCELLED
+        assert attended.status == AppointmentStatus.IN_PROGRESS

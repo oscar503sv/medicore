@@ -70,8 +70,47 @@ class Appointment:
     insurance_id: InsurerId | None = None
     # The doctor's fee for this type when it was booked, and what the visit is charged.
     charge: Charge = field(default_factory=Charge)
+    # Registered on the spot, without a booked slot (emergencies, patients who just arrived).
+    is_walk_in: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    @classmethod
+    def walk_in(
+        cls,
+        *,
+        id: AppointmentId,
+        tenant_id: TenantId,
+        code: str,
+        patient_id: PatientId,
+        doctor_id: UserId,
+        location_id: LocationId,
+        type: AppointmentType,
+        reason: str,
+        duration_minutes: int,
+        created_by_id: UserId,
+        now: datetime,
+        insurance_id: InsurerId | None = None,
+        charge: Charge | None = None,
+    ) -> Appointment:
+        """A patient seen right now: it starts at ``now`` and waits, confirmed, for the doctor."""
+        return cls(
+            id=id,
+            tenant_id=tenant_id,
+            code=code,
+            patient_id=patient_id,
+            doctor_id=doctor_id,
+            location_id=location_id,
+            type=type,
+            scheduled_start=now.replace(second=0, microsecond=0),
+            duration_minutes=duration_minutes,
+            reason=reason,
+            created_by_id=created_by_id,
+            status=AppointmentStatus.CONFIRMED,
+            insurance_id=insurance_id,
+            charge=charge or Charge(),
+            is_walk_in=True,
+        )
 
     @property
     def scheduled_end(self) -> datetime:
@@ -101,6 +140,11 @@ class Appointment:
         self._transition_to(AppointmentStatus.CANCELLED)
 
     def mark_no_show(self) -> None:
+        if self.is_walk_in:
+            # The patient is already in the clinic: there is nobody to miss the visit.
+            raise DomainError(
+                "a walk-in cannot be a no-show", code="appointment.walk_in_no_show"
+            )
         self._transition_to(AppointmentStatus.NO_SHOW)
 
     def reschedule(self, new_start: datetime, new_duration: int | None = None) -> None:
@@ -108,6 +152,10 @@ class Appointment:
 
         Slot re-validation is the application layer's responsibility.
         """
+        if self.is_walk_in:
+            raise DomainError(
+                "a walk-in cannot be rescheduled", code="appointment.walk_in_reschedule"
+            )
         if self.status not in {AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED}:
             raise InvalidStateTransition("Appointment.reschedule", self.status, "reschedule")
         self.scheduled_start = new_start

@@ -38,7 +38,8 @@ class AppointmentRepository(Protocol):
         self, after: datetime, limit: int, doctor_id: UserId | None = None
     ) -> list[Appointment]:
         """Scheduled or confirmed appointments starting at/after ``after`` (clinic
-        wall-clock), soonest first, at most ``limit``."""
+        wall-clock), soonest first, at most ``limit``. Walk-ins (which start when they are
+        registered) also count while they wait, from the start of ``after``'s day."""
         ...
 
     def find_overlapping(

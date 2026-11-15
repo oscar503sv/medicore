@@ -7,25 +7,33 @@ from datetime import date, datetime, timedelta
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
-from medicore.application.common.errors import EntityNotFound
+from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.notifications import (
     APPOINTMENT_CANCELLED,
     APPOINTMENT_CREATED,
     APPOINTMENT_NO_SHOW,
     APPOINTMENT_RESCHEDULED,
+    APPOINTMENT_WALK_IN,
     appointment_payload,
     notify,
 )
-from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.permissions import Permission, ensure_permission, has_permission
 from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.application.use_cases.fees import list_price
 from medicore.domain.entities.appointment import Appointment
+from medicore.domain.entities.availability import BookingRules
 from medicore.domain.entities.tenant import Location
 from medicore.domain.entities.user import User
-from medicore.domain.enums import AppointmentStatus, AppointmentType, Role
+from medicore.domain.enums import (
+    AddonModule,
+    AppointmentStatus,
+    AppointmentType,
+    PatientStatus,
+    Role,
+)
 from medicore.domain.repositories._support import UserFilter
 from medicore.domain.services.slot_resolver import (
     BusyInterval,
@@ -33,7 +41,7 @@ from medicore.domain.services.slot_resolver import (
     is_available,
     resolve_available_slots,
 )
-from medicore.domain.shared.errors import SlotUnavailable
+from medicore.domain.shared.errors import PermissionDenied, SlotUnavailable
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     InsurerId,
@@ -77,6 +85,18 @@ class CreateAppointmentCommand:
 
 
 @dataclass(frozen=True, slots=True)
+class WalkInCommand:
+    """A patient seen right now. No time: it always starts at the clinic's current minute."""
+
+    patient_id: PatientId
+    doctor_id: UserId
+    reason: str
+    type: AppointmentType = AppointmentType.EMERGENCY
+    location_id: LocationId | None = None  # the primary location when omitted
+    insurance_id: InsurerId | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class DoctorOption:
     """A bookable doctor plus the appointment duration their rules impose."""
 
@@ -100,7 +120,12 @@ class GetBookingOptions:
         self._uow = uow
 
     def execute(self, actor: ActorContext) -> BookingOptions:
-        ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
+        # Walk-in registration picks a doctor and a location too.
+        if not (
+            has_permission(actor, Permission.APPOINTMENTS_MANAGE)
+            or has_permission(actor, Permission.APPOINTMENTS_WALK_IN)
+        ):
+            ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
         doctors = self._uow.users.list(UserFilter(role="doctor", status="active")).items
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
         locations = list(tenant.locations) if tenant else []
@@ -255,6 +280,95 @@ class CreateAppointment:
             )
             notify(
                 self._uow, actor, self._clock.now(), APPOINTMENT_CREATED,
+                [appointment.doctor_id], **appointment_payload(self._uow, appointment),
+            )
+            self._uow.commit()
+        return appointment
+
+
+class RegisterWalkIn:
+    """Register a patient who is already in the clinic, without looking for a slot.
+
+    Allowed outside the doctor's hours and over other appointments on purpose: an emergency
+    does not wait for a free slot. The appointment starts now, confirmed, and the doctor
+    starts the consultation with the usual flow."""
+
+    def __init__(self, uow: UnitOfWork, codes: CodeGenerator, clock: Clock) -> None:
+        self._uow = uow
+        self._codes = codes
+        self._clock = clock
+
+    def execute(self, actor: ActorContext, cmd: WalkInCommand) -> Appointment:
+        ensure_permission(actor, Permission.APPOINTMENTS_WALK_IN)
+
+        patient = self._uow.patients.get_by_id(cmd.patient_id)
+        if patient is None:
+            raise EntityNotFound("Patient", cmd.patient_id)
+        if patient.status != PatientStatus.ACTIVE:
+            raise ValidationError(
+                "the patient is not active", code="walk_in.patient_inactive"
+            )
+        doctor = self._uow.users.get_by_id(cmd.doctor_id)
+        if doctor is None or doctor.role != Role.DOCTOR or not doctor.is_active:
+            raise ValidationError(
+                "the doctor must be an active doctor", code="walk_in.invalid_doctor"
+            )
+        tenant = self._uow.tenants.get_by_id(actor.tenant_id)
+        if tenant is None:
+            raise EntityNotFound("Tenant", actor.tenant_id)
+        if cmd.type == AppointmentType.PROCEDURE and not tenant.subscription.has_module(
+            AddonModule.PROCEDURES
+        ):
+            raise PermissionDenied(
+                "the procedures module is not contracted",
+                code="walk_in.module_required", module=str(AddonModule.PROCEDURES),
+            )
+        location_id = cmd.location_id or tenant.primary_location.id
+
+        availability = self._uow.availability.get_by_doctor(cmd.doctor_id)
+        duration = (availability.rules if availability else BookingRules()).slot_minutes
+        now = clinic_now(self._uow, actor.tenant_id, self._clock).replace(second=0, microsecond=0)
+
+        with self._uow:
+            # The counter is locked first: it serializes this tenant's creations, so two
+            # simultaneous registrations of the same patient see each other below.
+            code = self._codes.next_appointment_code()
+            end = now + timedelta(minutes=duration)
+            same_patient = [
+                a
+                for a in self._uow.appointments.find_overlapping(cmd.doctor_id, now, end)
+                if a.patient_id == cmd.patient_id
+            ]
+            if same_patient:
+                raise SlotUnavailable(
+                    "the patient already has an active appointment with this doctor now",
+                    code="walk_in.duplicate", appointment_code=same_patient[0].code,
+                )
+            appointment = Appointment.walk_in(
+                id=AppointmentId.new(),
+                tenant_id=actor.tenant_id,
+                code=code,
+                patient_id=cmd.patient_id,
+                doctor_id=cmd.doctor_id,
+                location_id=location_id,
+                type=cmd.type,
+                reason=cmd.reason,
+                duration_minutes=duration,
+                created_by_id=actor.user_id,
+                now=now,
+                insurance_id=cmd.insurance_id,
+                charge=Charge.at_list_price(list_price(self._uow, cmd.doctor_id, cmd.type)),
+            )
+            appointment.created_at = appointment.updated_at = self._clock.now()
+            self._uow.appointments.save(appointment)
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "appointment.walk_in", "Appointment",
+                    str(appointment.id), subject=_appt_subject(self._uow, appointment),
+                )
+            )
+            notify(
+                self._uow, actor, self._clock.now(), APPOINTMENT_WALK_IN,
                 [appointment.doctor_id], **appointment_payload(self._uow, appointment),
             )
             self._uow.commit()

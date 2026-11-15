@@ -49,6 +49,7 @@ class Permission(StrEnum):
     PATIENTS_ARCHIVE = "patients.archive"
     APPOINTMENTS_VIEW = "appointments.view"
     APPOINTMENTS_MANAGE = "appointments.manage"
+    APPOINTMENTS_WALK_IN = "appointments.walk_in"  # register a patient seen without a booking
     AVAILABILITY_MANAGE = "availability.manage"
     FEES_MANAGE_OWN = "fees.manage_own"  # set one's own fees and adjust one's own charges
     FEES_MANAGE_ALL = "fees.manage_all"  # the same for every doctor
@@ -123,6 +124,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.PATIENTS_ARCHIVE,
         Permission.APPOINTMENTS_VIEW,
         Permission.APPOINTMENTS_MANAGE,
+        Permission.APPOINTMENTS_WALK_IN,
         Permission.AVAILABILITY_MANAGE,
         Permission.FEES_MANAGE_OWN,
         Permission.CONSULTATIONS_START,
@@ -168,6 +170,7 @@ ROLE_PERMISSIONS: dict[Role, frozenset[Permission]] = {
         Permission.PATIENTS_ARCHIVE,
         Permission.APPOINTMENTS_VIEW,
         Permission.APPOINTMENTS_MANAGE,
+        Permission.APPOINTMENTS_WALK_IN,
         Permission.VACCINATIONS_VIEW,
         Permission.APPLICATIONS_VIEW,
         Permission.PROCEDURES_VIEW,
@@ -260,6 +263,9 @@ DOCTOR_ONLY = frozenset({
 # holds it grant themselves (through a colleague) everything else.
 ADMIN_ONLY = frozenset({Permission.PERMISSIONS_MANAGE})
 
+# Acts administration never performs: they are clinical-floor decisions, not management.
+NOT_FOR_ADMIN = frozenset({Permission.APPOINTMENTS_WALK_IN})
+
 
 def _names(perms: Iterable[Permission]) -> str:
     return ",".join(sorted(str(p) for p in perms))
@@ -295,6 +301,11 @@ def validate_for_role(role: Role, permissions: Iterable[str]) -> frozenset[Permi
             "only administrators may hold: " + _names(ADMIN_ONLY & parsed),
             code="roles.admin_only", permissions=_names(ADMIN_ONLY & parsed),
         )
+    if role == Role.ADMIN and NOT_FOR_ADMIN & parsed:
+        raise ValidationError(
+            "administrators may not hold: " + _names(NOT_FOR_ADMIN & parsed),
+            code="roles.not_for_admin", permissions=_names(NOT_FOR_ADMIN & parsed),
+        )
     return parsed
 
 
@@ -317,6 +328,8 @@ def granted(
         perms -= DOCTOR_ONLY
     if role != Role.ADMIN:
         perms -= ADMIN_ONLY
+    else:
+        perms -= NOT_FOR_ADMIN
     return perms - locked_permissions(modules)
 
 

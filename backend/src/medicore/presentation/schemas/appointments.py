@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from medicore.domain.enums import AppointmentType
 from medicore.presentation.schemas.organization import LocationResponse
@@ -20,6 +20,15 @@ class CreateAppointmentRequest(BaseModel):
     scheduled_start: datetime
     reason: str
     room: str | None = None
+    insurance_id: str | None = None
+
+
+class WalkInRequest(BaseModel):
+    patient_id: str
+    doctor_id: str
+    location_id: str | None = None
+    type: AppointmentType = AppointmentType.EMERGENCY
+    reason: str = Field(min_length=1, max_length=500)
     insurance_id: str | None = None
 
 
@@ -50,6 +59,7 @@ class AppointmentResponse(BaseModel):
     listed_fee: str | None = None
     fee: str | None = None
     fee_note: str | None = None
+    is_walk_in: bool = False
     created_at: datetime
     updated_at: datetime
 

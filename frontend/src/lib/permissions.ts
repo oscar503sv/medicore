@@ -32,9 +32,16 @@ export const DOCTOR_ONLY: Permission[] = [
 // Mirrored from the backend: handing out permissions stays with administrators.
 export const ADMIN_ONLY: Permission[] = ['permissions.manage']
 
+// Mirrored from the backend: acts administration never performs.
+export const NOT_FOR_ADMIN: Permission[] = ['appointments.walk_in']
+
 /** Fixed for this role: neither granted nor removed by a customization. */
 export function isFixedFor(role: string, permission: Permission): boolean {
-  return DOCTOR_ONLY.includes(permission) || (role !== 'admin' && ADMIN_ONLY.includes(permission))
+  return (
+    DOCTOR_ONLY.includes(permission) ||
+    (role !== 'admin' && ADMIN_ONLY.includes(permission)) ||
+    (role === 'admin' && NOT_FOR_ADMIN.includes(permission))
+  )
 }
 
 export const GROUP_ICONS: Record<string, typeof Users> = {

@@ -277,6 +277,7 @@ def to_appointment(row: AppointmentModel) -> Appointment:
         insurance_id=InsurerId.parse(row.insurance_id) if row.insurance_id else None,
         created_by_id=UserId.parse(row.created_by_id),
         charge=charge_from(row.listed_fee, row.fee, row.fee_note),
+        is_walk_in=row.is_walk_in,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

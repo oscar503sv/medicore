@@ -87,6 +87,16 @@ class TestRule:
             Role.RECEPTIONIST, None, frozenset(AddonModule), adj
         )
 
+    def test_walk_in_can_be_granted_to_a_nurse_but_admins_never_hold_it(self):
+        adj = PermissionAdjustments(granted=frozenset({"appointments.walk_in"}))
+        assert Permission.APPOINTMENTS_WALK_IN in granted(
+            Role.NURSE, None, frozenset(AddonModule), adj
+        )
+        # Not even a stored override that lists it reaches an administrator.
+        assert Permission.APPOINTMENTS_WALK_IN not in granted(
+            Role.ADMIN, ["appointments.walk_in", "users.manage"], frozenset(AddonModule)
+        )
+
     def test_uncontracted_modules_stay_locked(self):
         adj = PermissionAdjustments(granted=frozenset({"procedures.view"}))
         assert Permission.PROCEDURES_VIEW not in granted(Role.NURSE, None, frozenset(), adj)

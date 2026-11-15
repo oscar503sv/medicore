@@ -11,6 +11,7 @@ import { EditPatientModal } from '@/components/patients/EditPatientModal'
 import { MedicationTimeline } from '@/components/patients/MedicationTimeline'
 import { PrescriptionList } from '@/components/patients/PrescriptionList'
 import { PatientDocuments } from '@/components/patients/PatientDocuments'
+import { WalkInButton } from '@/components/appointments/WalkInButton'
 import { PatientSummary } from '@/components/patients/PatientSummary'
 import { VitalsHistory } from '@/components/patients/VitalsHistory'
 import { PatientVaccinations } from '@/components/vaccination/PatientVaccinations'
@@ -167,6 +168,7 @@ export function PatientDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {p.status === 'active' && <WalkInButton patient={p} />}
           {canEdit && (
             <Button variant="outline" onClick={() => setEditOpen(true)}>
               <Pencil className="h-4 w-4" />

@@ -23,6 +23,15 @@ export interface CreateAppointmentPayload {
   insurance_id?: string | null
 }
 
+export interface WalkInPayload {
+  patient_id: string
+  doctor_id: string
+  type: string
+  reason: string
+  location_id?: string | null
+  insurance_id?: string | null
+}
+
 export const appointmentsApi = {
   bookingOptions: () =>
     api.get<BookingOptions>('/appointments/booking-options').then((r) => r.data),
@@ -52,6 +61,10 @@ export const appointmentsApi = {
 
   create: (payload: CreateAppointmentPayload) =>
     api.post<Appointment>('/appointments', payload).then((r) => r.data),
+
+  /** A patient seen right now: starts at the clinic's current minute, no slot involved. */
+  walkIn: (payload: WalkInPayload) =>
+    api.post<Appointment>('/appointments/walk-in', payload).then((r) => r.data),
 
   adjustFee: (id: string, amount: string, note: string | null) =>
     api.put<Appointment>(`/appointments/${id}/fee`, { amount, note }).then((r) => r.data),

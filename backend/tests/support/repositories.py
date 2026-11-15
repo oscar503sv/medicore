@@ -660,11 +660,15 @@ class InMemoryAppointmentRepository(_Scoped):
         self, after: datetime, limit: int, doctor_id: UserId | None = None
     ) -> list[Appointment]:
         pending = {AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED}
+        day_start = after.replace(hour=0, minute=0, second=0, microsecond=0)
         result = [
             a
             for a in self._mine(self._store.appointments.values())
             if a.status in pending
-            and a.scheduled_start >= after
+            and (
+                a.scheduled_start >= after
+                or (a.is_walk_in and a.scheduled_start >= day_start)
+            )
             and (doctor_id is None or a.doctor_id == doctor_id)
         ]
         result.sort(key=lambda a: (a.scheduled_start, a.code))

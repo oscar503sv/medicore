@@ -152,6 +152,18 @@ class TestUpdate:
             )
         assert exc.value.code == "roles.doctor_must_keep"
 
+    def test_walk_in_can_be_delegated_to_nurses_but_never_to_admins(self):
+        from medicore.application.common.permissions import validate_for_role
+
+        seed = seed_clinic()
+        uow = seed.factory.for_tenant(seed.tenant.id)
+        UpdateRolePermissions(uow, FixedClock()).execute(
+            seed.actor(seed.admin), Role.NURSE, ["patients.view", "appointments.walk_in"]
+        )
+        with pytest.raises(ValidationError) as exc:
+            validate_for_role(Role.ADMIN, ["appointments.walk_in"])
+        assert exc.value.code == "roles.not_for_admin"
+
     def test_unknown_permission_rejected_on_write(self):
         seed = seed_clinic()
         uow = seed.factory.for_tenant(seed.tenant.id)

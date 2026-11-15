@@ -13,22 +13,17 @@ import { appointmentsApi } from '@/api/appointments'
 import { errorMessage } from '@/api/client'
 import { feesApi } from '@/api/fees'
 import { insurersApi } from '@/api/insurers'
-import { patientsApi } from '@/api/patients'
 import { Button } from '@/components/ui/Button'
+import { AppointmentTypeSelect } from '@/components/appointments/AppointmentTypeSelect'
+import { PatientPicker } from '@/components/appointments/PatientPicker'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
-import {
-  APPOINTMENT_TYPES,
-  isAppointmentType,
-  typeHintKey,
-  typeLabelKey,
-} from '@/lib/appointmentTypes'
+import { typeLabelKey } from '@/lib/appointmentTypes'
 import { cn } from '@/lib/cn'
 import { fmtFee } from '@/lib/fees'
 import { clinicToday, fmtDate, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-import { useAuthStore } from '@/stores/auth'
 import type { AppointmentType, Patient, Slot } from '@/types'
 
 const STEPS = ['appt.step_patient', 'appt.step_details', 'appt.step_slot']
@@ -57,14 +52,11 @@ export function NewAppointmentModal({
   const [patient, setPatient] = useState<Patient | null>(null)
   const [doctorId, setDoctorId] = useState('')
   const [type, setType] = useState<AppointmentType>('consult')
-  // Procedure appointments belong to the optional procedures module.
-  const canProcedures = useAuthStore((s) => s.can('procedures.view'))
   const [reason, setReason] = useState('')
   const [withInsurance, setWithInsurance] = useState(false)
   const [insuranceId, setInsuranceId] = useState('')
   const [day, setDay] = useState(date)
   const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
-  const [search, setSearch] = useState('')
 
   // Keep the modal's calendar in sync with the day picked on the page when (re)opening.
   useEffect(() => {
@@ -81,11 +73,6 @@ export function NewAppointmentModal({
     setStep(1)
   }, [open, initialPatient, initialType, initialReason])
 
-  const { data: patients } = useQuery({
-    queryKey: ['patients', { q: search }],
-    queryFn: () => patientsApi.list({ q: search || undefined, limit: 8 }),
-    enabled: open && step === 0,
-  })
   const { data: options } = useQuery({
     queryKey: ['booking-options'],
     queryFn: () => appointmentsApi.bookingOptions(),
@@ -155,7 +142,6 @@ export function NewAppointmentModal({
     setInsuranceId('')
     setDay(date)
     setSelectedSlot(null)
-    setSearch('')
   }
 
   const canNext =
@@ -190,39 +176,7 @@ export function NewAppointmentModal({
 
       <div className="min-h-[280px] p-5">
         {/* Step 1: patient */}
-        {step === 0 && (
-          <div className="space-y-3">
-            <Input
-              placeholder={t('appt.select_patient')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              autoFocus
-            />
-            <div className="max-h-60 space-y-1 overflow-y-auto">
-              {patients?.items.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPatient(p)}
-                  className={cn(
-                    'flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left transition-colors',
-                    patient?.id === p.id
-                      ? 'border-accent bg-[var(--accent-10)]'
-                      : 'border-line hover:bg-surface-2',
-                  )}
-                >
-                  <div>
-                    <p className="text-sm font-medium text-tx">
-                      {p.first_name} {p.last_name}
-                    </p>
-                    <p className="font-mono text-xs text-tx-3">{p.code}</p>
-                  </div>
-                  {patient?.id === p.id && <Check className="h-4 w-4 text-accent" />}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        {step === 0 && <PatientPicker selected={patient} onSelect={setPatient} />}
 
         {/* Step 2: details */}
         {step === 1 && (
@@ -243,22 +197,7 @@ export function NewAppointmentModal({
               ))}
             </Select>
             <div className="grid grid-cols-2 gap-4">
-              <Select
-                label={t('appt.type')}
-                value={type}
-                hint={t(typeHintKey(type))}
-                onChange={(e) => {
-                  if (isAppointmentType(e.target.value)) setType(e.target.value)
-                }}
-              >
-                {APPOINTMENT_TYPES.filter((value) => value !== 'procedure' || canProcedures).map(
-                  (value) => (
-                    <option key={value} value={value}>
-                      {t(typeLabelKey(value))}
-                    </option>
-                  ),
-                )}
-              </Select>
+              <AppointmentTypeSelect value={type} onChange={setType} />
               {/* Duration is the doctor's rule — shown for context, never chosen here. */}
               <div>
                 <span className="mb-1.5 block text-[13px] font-medium text-tx-2">

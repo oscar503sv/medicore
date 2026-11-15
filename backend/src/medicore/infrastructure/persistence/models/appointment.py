@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -50,6 +50,9 @@ class AppointmentModel(Base):
     listed_fee: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     fee: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     fee_note: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_walk_in: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
     )

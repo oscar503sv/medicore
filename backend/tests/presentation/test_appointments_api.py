@@ -152,3 +152,118 @@ def test_an_appointment_in_progress_cannot_be_cancelled_or_marked_no_show(
     for action in ("cancel", "no-show"):
         resp = client.post(f"/api/v1/appointments/{appt_id}/{action}", headers=auth_headers)
         assert resp.status_code == 422 and resp.json()["code"] == "invalid_transition"
+
+
+def _walk_in_payload(seed, **overrides):
+    return {
+        "patient_id": str(seed.patient.id),
+        "doctor_id": str(seed.doctor.id),
+        "reason": "Dolor torácico",
+        **overrides,
+    }
+
+
+def test_walk_in_is_registered_confirmed_and_flagged(seed, client, receptionist_headers):
+    resp = client.post(
+        "/api/v1/appointments/walk-in", json=_walk_in_payload(seed), headers=receptionist_headers
+    )
+
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["is_walk_in"] is True
+    assert data["status"] == "confirmed"
+    assert data["type"] == "emergency"
+    assert data["duration_minutes"] == 30
+
+
+def test_regular_appointments_are_not_flagged(seed, client, auth_headers):
+    resp = client.post("/api/v1/appointments", json=_booking_payload(seed), headers=auth_headers)
+
+    assert resp.json()["is_walk_in"] is False
+
+
+def test_walk_in_is_forbidden_to_administrators(seed, client, admin_headers):
+    resp = client.post(
+        "/api/v1/appointments/walk-in", json=_walk_in_payload(seed), headers=admin_headers
+    )
+
+    assert resp.status_code == 403
+
+
+def test_walk_in_of_a_patient_already_attended_now_is_a_conflict(
+    seed, client, receptionist_headers
+):
+    first = client.post(
+        "/api/v1/appointments/walk-in", json=_walk_in_payload(seed), headers=receptionist_headers
+    ).json()
+
+    resp = client.post(
+        "/api/v1/appointments/walk-in", json=_walk_in_payload(seed), headers=receptionist_headers
+    )
+
+    assert resp.status_code == 409
+    assert resp.json()["code"] == "walk_in.duplicate"
+    assert resp.json()["params"]["appointment_code"] == first["code"]
+
+
+def test_walk_in_requires_a_reason(seed, client, receptionist_headers):
+    resp = client.post(
+        "/api/v1/appointments/walk-in",
+        json=_walk_in_payload(seed, reason=""),
+        headers=receptionist_headers,
+    )
+
+    assert resp.status_code == 422
+
+
+def test_walk_in_of_an_inactive_patient_is_rejected(seed, client, receptionist_headers):
+    seed.patient.archive()
+
+    resp = client.post(
+        "/api/v1/appointments/walk-in", json=_walk_in_payload(seed), headers=receptionist_headers
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "walk_in.patient_inactive"
+
+
+def test_walk_in_cannot_be_marked_no_show_nor_rescheduled(seed, client, receptionist_headers):
+    appt = client.post(
+        "/api/v1/appointments/walk-in", json=_walk_in_payload(seed), headers=receptionist_headers
+    ).json()
+
+    no_show = client.post(
+        f"/api/v1/appointments/{appt['id']}/no-show", headers=receptionist_headers
+    )
+    moved = client.put(
+        f"/api/v1/appointments/{appt['id']}/reschedule",
+        json={"new_start": "2026-06-01T10:00:00"},
+        headers=receptionist_headers,
+    )
+
+    assert no_show.status_code == 422
+    assert no_show.json()["code"] == "appointment.walk_in_no_show"
+    assert moved.status_code == 422
+
+
+def test_a_nurse_granted_walk_in_can_register_one(seed, client, admin_headers, nurse_headers):
+    denied = client.post(
+        "/api/v1/appointments/walk-in", json=_walk_in_payload(seed), headers=nurse_headers
+    )
+    assert denied.status_code == 403
+    from medicore.application.use_cases.role_permissions import UpdateRolePermissions
+    from medicore.domain.enums import Role
+    from tests.support.fakes import FixedClock
+
+    UpdateRolePermissions(
+        seed.factory.for_tenant(seed.tenant.id), FixedClock()
+    ).execute(
+        seed.actor(seed.admin), Role.NURSE,
+        ["patients.view", "appointments.view", "appointments.walk_in"],
+    )
+
+    allowed = client.post(
+        "/api/v1/appointments/walk-in", json=_walk_in_payload(seed), headers=nurse_headers
+    )
+
+    assert allowed.status_code == 201

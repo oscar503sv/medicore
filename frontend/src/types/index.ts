@@ -7,6 +7,7 @@ export type Permission =
   | 'patients.archive'
   | 'appointments.view'
   | 'appointments.manage'
+  | 'appointments.walk_in'
   | 'availability.manage'
   | 'fees.manage_own'
   | 'fees.manage_all'
@@ -519,6 +520,8 @@ export interface Appointment {
   listed_fee: string | null
   fee: string | null
   fee_note: string | null
+  /** Registered on the spot, without a booked slot. */
+  is_walk_in: boolean
   created_at: string
   updated_at: string
 }

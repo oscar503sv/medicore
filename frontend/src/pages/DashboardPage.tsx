@@ -7,6 +7,7 @@ import { appointmentsApi } from '@/api/appointments'
 import { MetricTiles } from '@/components/analytics/MetricTiles'
 import { dashboardApi } from '@/api/dashboard'
 import { patientsApi } from '@/api/patients'
+import { WalkInBadge } from '@/components/appointments/WalkInBadge'
 import { GettingStarted } from '@/components/onboarding/GettingStarted'
 import { PageHeader } from '@/components/PageHeader'
 import { StatCard } from '@/components/StatCard'
@@ -134,6 +135,7 @@ export function DashboardPage() {
                     {session?.role !== 'doctor' && a.doctor_name ? ` · ${a.doctor_name}` : ''}
                   </p>
                 </div>
+                {a.is_walk_in && <WalkInBadge />}
                 <Badge tone={statusTone(a.status)}>{t(`status.${a.status}`)}</Badge>
               </Link>
             ))}

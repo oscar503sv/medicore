@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import Date as SqlDate
-from sqlalchemy import cast, func
+from sqlalchemy import and_, cast, func, or_
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.appointment import Appointment
@@ -108,9 +108,19 @@ class SqlAppointmentRepository:
     def list_upcoming(
         self, after: datetime, limit: int, doctor_id: UserId | None = None
     ) -> list[Appointment]:
+        after = _naive(after)
+        # A walk-in starts "now" and is still waiting minutes later: it stays listed for the
+        # rest of its day instead of dropping off as soon as its start is in the past.
         q = self._q().filter(
             AppointmentModel.status.in_(_PENDING),
-            AppointmentModel.scheduled_start >= _naive(after),
+            or_(
+                AppointmentModel.scheduled_start >= after,
+                and_(
+                    AppointmentModel.is_walk_in.is_(True),
+                    AppointmentModel.scheduled_start
+                    >= after.replace(hour=0, minute=0, second=0, microsecond=0),
+                ),
+            ),
         )
         if doctor_id:
             q = q.filter(AppointmentModel.doctor_id == doctor_id.value)
@@ -189,5 +199,6 @@ class SqlAppointmentRepository:
         row.insurance_id = appointment.insurance_id.value if appointment.insurance_id else None
         row.created_by_id = appointment.created_by_id.value
         row.listed_fee, row.fee, row.fee_note = charge_columns(appointment.charge)
+        row.is_walk_in = appointment.is_walk_in
         row.created_at = appointment.created_at
         row.updated_at = appointment.updated_at

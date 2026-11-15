@@ -11,7 +11,14 @@ import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
-import { DOCTOR_ONLY, GROUP_ICONS, groupByResource, isFixedFor, sameSet } from '@/lib/permissions'
+import {
+  DOCTOR_ONLY,
+  GROUP_ICONS,
+  groupByResource,
+  isFixedFor,
+  NOT_FOR_ADMIN,
+  sameSet,
+} from '@/lib/permissions'
 import type { Permission, User, UserPermissions } from '@/types'
 
 /** A user's permissions as their role's set plus exceptions. Saving the role's exact set
@@ -134,7 +141,9 @@ function PermissionsForm({ data, onClose }: { data: UserPermissions; onClose: ()
                             ? undefined
                             : doctorOnly
                               ? t('permissions.doctor_only')
-                              : t('permissions.admin_only')
+                              : NOT_FOR_ADMIN.includes(p)
+                                ? t('permissions.never_admin')
+                                : t('permissions.admin_only')
                         }
                       >
                         {fixed ? (

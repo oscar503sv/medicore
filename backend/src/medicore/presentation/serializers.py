@@ -281,6 +281,7 @@ def ser_appointment(
         "insurer_name": insurer_name,
         "created_by_id": str(a.created_by_id),
         **ser_charge(a.charge),
+        "is_walk_in": a.is_walk_in,
         "created_at": a.created_at,
         "updated_at": a.updated_at,
     }

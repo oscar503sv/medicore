@@ -6,7 +6,14 @@ import { Checkbox } from '@/components/ui/Checkbox'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { cn } from '@/lib/cn'
 import { useT } from '@/lib/i18n'
-import { DOCTOR_ONLY, GROUP_ICONS, groupByResource, isFixedFor, sameSet } from '@/lib/permissions'
+import {
+  DOCTOR_ONLY,
+  GROUP_ICONS,
+  groupByResource,
+  isFixedFor,
+  NOT_FOR_ADMIN,
+  sameSet,
+} from '@/lib/permissions'
 import type { Permission, PermissionsMatrix, Role } from '@/types'
 
 // Column order: admin first (locked reference), then clinical roles.
@@ -161,7 +168,9 @@ export function PermissionsMatrixTable({ matrix, onSaveRole, onResetRole, busy }
                           onClick={() => !locked && !busy && toggle(role, permission)}
                           title={
                             role === 'admin'
-                              ? t('permissions.full_access')
+                              ? NOT_FOR_ADMIN.includes(permission)
+                                ? t('permissions.never_admin')
+                                : t('permissions.full_access')
                               : DOCTOR_ONLY.includes(permission)
                                 ? t('permissions.doctor_only')
                                 : isFixedFor(role, permission)

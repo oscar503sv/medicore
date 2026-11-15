@@ -333,6 +333,7 @@ Las lecturas simples no bloquean. Cancelar una cita no mira su consulta: una con
 | `CreateProcedure` con cita | cita |
 | `ConfirmAppointment`, `CancelAppointment`, `MarkNoShow`, `RescheduleAppointment`, `AdjustAppointmentFee` | cita |
 | `CreateAppointment`, `CreatePatient`, certificados | su contador |
+| `RegisterWalkIn` | contador de citas (primero, para serializar las altas de la clínica); después lee, sin bloquear, las citas del médico para detectar un duplicado |
 
 ## Despliegue
 
@@ -388,6 +389,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 > **Migración `f8a9b0c1d2e4`** (claves de almacenamiento de documentos): desliga (`record_id = NULL`) los documentos cuyo expediente es de otro paciente o no existe (el archivo sigue en la ficha de su paciente), reescribe cada `storage_key` a `{tenant_id}/{patient_id}/{id}` (todavía no se almacena ningún archivo, así que no se mueve nada) y crea el índice único `uq_medical_documents_storage_key`. **Antes de desplegar, ejecuta las consultas de [Claves de almacenamiento de documentos](#claves-de-almacenamiento-de-documentos)**, y despliega backend y frontend juntos: `POST /documents` ya no acepta `storage_key`. Su downgrade solo quita el índice; los expedientes desligados y las claves anteriores no se recuperan.
 
 > **Migración `a9b0c1d2e3f5`** (protección de expedientes firmados, OZK-99): sella cada versión (`seal`, `seal_version` 1), así que el sello certifica el contenido a la fecha de la migración, no a la de la firma. Convierte `medical_records` en solo inserción (triggers que rechazan `UPDATE`, `DELETE` y `TRUNCATE`), deja que las recetas solo se cierren, cambia a RESTRICT las claves foráneas de `medical_records`, `prescriptions` y `medical_documents`, y crea los índices que las respaldan. Desliga (`record_id = NULL`) las recetas y documentos cuyo expediente no existe. Se niega a ejecutarse, listando solo ids, mientras haya otra referencia huérfana. **Antes de desplegar, ejecuta las consultas de [Expedientes protegidos y referencias huérfanas antes de OZK-99](#expedientes-protegidos-y-referencias-huérfanas-antes-de-ozk-99)**, y despliega backend y frontend juntos. Volver atrás requiere `alembic downgrade f8a9b0c1d2e4` además del código anterior: el código por sí solo deja los triggers y las columnas del sello en la base de datos.
+
+> **Migración `b0c1d2e3f4a6`** (atender sin cita, OZK-111): añade `appointments.is_walk_in` (booleano `NOT NULL`, por defecto `false`, que se conserva para el código anterior) y otorga `appointments.walk_in` a los roles médico y recepción de las clínicas que los habían personalizado (el administrador nunca lo tiene: `NOT_FOR_ADMIN`). No requiere pasos manuales ni bloquea escrituras más que un instante. Su downgrade quita el permiso de esas personalizaciones y elimina la columna.
 
 > **Antes de desplegar esta versión** (OZK-106, sin migración): un procedimiento firmado responde 409 `procedure.already_signed` en vez de 422, así que despliega el backend y el frontend juntos. Ejecuta antes las consultas de [Citas y procedimientos inconsistentes antes de OZK-106](#citas-y-procedimientos-inconsistentes-antes-de-ozk-106): solo informan, no cambian nada automáticamente.
 

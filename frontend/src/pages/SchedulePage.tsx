@@ -5,6 +5,8 @@ import { ChevronLeft, ChevronRight, Printer } from 'lucide-react'
 import { addDays, format, parseISO, startOfWeek } from 'date-fns'
 import { appointmentsApi, type BookingDoctor } from '@/api/appointments'
 import { openPrint } from '@/api/printing'
+import { WalkInBadge } from '@/components/appointments/WalkInBadge'
+import { WalkInButton } from '@/components/appointments/WalkInButton'
 import { PageHeader } from '@/components/PageHeader'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -183,6 +185,7 @@ export function SchedulePage() {
                 {t('pr.btn.agenda')}
               </Button>
             )}
+            <WalkInButton />
             <Button variant="outline" size="sm" onClick={() => go({ date: today })}>
               {t(view === 'week' ? 'sched.this_week' : 'sched.today')}
             </Button>
@@ -490,6 +493,7 @@ function AppointmentCard({
   const name = a.patient_name ?? a.reason
   const tooltip = [
     `${time}–${format(parseISO(a.scheduled_end), 'HH:mm')} · ${t(`status.${a.status}`)}`,
+    a.is_walk_in ? t('appt.walk_in_badge') : null,
     a.patient_name,
     a.reason,
     a.doctor_name,
@@ -529,6 +533,7 @@ function AppointmentCard({
             >
               {name}
             </p>
+            {a.is_walk_in && <WalkInBadge />}
             {detailed && (
               <span className="shrink-0 text-[11px] font-medium leading-tight" style={{ color }}>
                 {t(`status.${a.status}`)}

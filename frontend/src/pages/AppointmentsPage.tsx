@@ -28,6 +28,8 @@ import { consultationsApi } from '@/api/consultations'
 import { errorMessage } from '@/api/client'
 import { ConsultationVitalsModal } from '@/components/consultation/ConsultationVitalsModal'
 import { NewAppointmentModal } from '@/components/appointments/NewAppointmentModal'
+import { WalkInBadge } from '@/components/appointments/WalkInBadge'
+import { WalkInButton } from '@/components/appointments/WalkInButton'
 import { RescheduleAppointmentModal } from '@/components/appointments/RescheduleAppointmentModal'
 import { AdjustFeeModal } from '@/components/fees/AdjustFeeModal'
 import { FeeCell } from '@/components/fees/FeeCell'
@@ -218,6 +220,7 @@ export function AppointmentsPage() {
               <CalendarDays className="h-4 w-4" />
               {t('appt.view_in_schedule')}
             </Button>
+            <WalkInButton />
             {canManage && (
               <Button onClick={() => setModalOpen(true)}>
                 <Plus className="h-4 w-4" />
@@ -386,16 +389,21 @@ export function AppointmentsPage() {
                       : []),
                     ...(manageable
                     ? [
-                        {
-                          label: t('appt.reschedule'),
-                          icon: CalendarClock,
-                          onSelect: () => setRescheduleTarget(a),
-                        },
-                        {
-                          label: t('appt.no_show'),
-                          icon: UserX,
-                          onSelect: () => setNoShowTarget(a),
-                        },
+                        // A walk-in is already in the clinic: nothing to move or to miss.
+                        ...(a.is_walk_in
+                          ? []
+                          : [
+                              {
+                                label: t('appt.reschedule'),
+                                icon: CalendarClock,
+                                onSelect: () => setRescheduleTarget(a),
+                              },
+                              {
+                                label: t('appt.no_show'),
+                                icon: UserX,
+                                onSelect: () => setNoShowTarget(a),
+                              },
+                            ]),
                         {
                           label: t('appt.cancel_appt'),
                           icon: X,
@@ -431,6 +439,11 @@ export function AppointmentsPage() {
                         {a.id === nextId && (
                           <span className="ml-2 align-middle">
                             <Badge tone="accent">{t('appt.next')}</Badge>
+                          </span>
+                        )}
+                        {a.is_walk_in && (
+                          <span className="ml-2 align-middle">
+                            <WalkInBadge />
                           </span>
                         )}
                       </Td>

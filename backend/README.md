@@ -333,6 +333,7 @@ Plain reads take no lock. Cancelling an appointment doesn't look at its consulta
 | `CreateProcedure` with an appointment | appointment |
 | `ConfirmAppointment`, `CancelAppointment`, `MarkNoShow`, `RescheduleAppointment`, `AdjustAppointmentFee` | appointment |
 | `CreateAppointment`, `CreatePatient`, certificates | their counter |
+| `RegisterWalkIn` | appointment counter (first, to serialize the clinic's creations); then reads the doctor's appointments, without locking, to detect a duplicate |
 
 ## Deployment
 
@@ -388,6 +389,8 @@ Production checklist (via environment variables, see the **Configuration** table
 > **Migration `f8a9b0c1d2e4`** (document storage keys): unlinks (`record_id = NULL`) the documents whose record belongs to another patient or doesn't exist (the file stays with its patient), rewrites every `storage_key` to `{tenant_id}/{patient_id}/{id}` (no file is stored yet, so nothing moves) and creates the unique index `uq_medical_documents_storage_key`. **Before deploying, run the queries in [Document storage keys](#document-storage-keys)**, and deploy the backend and the frontend together: `POST /documents` no longer accepts `storage_key`. Its downgrade only drops the index; the unlinked records and the previous keys are not recovered.
 
 > **Migration `a9b0c1d2e3f5`** (signed records protection, OZK-99): seals every version (`seal`, `seal_version` 1), so the seal certifies the content as it stood on the migration date, not when it was signed. It makes `medical_records` append-only (triggers that reject `UPDATE`, `DELETE` and `TRUNCATE`), lets prescriptions only be closed, changes the foreign keys of `medical_records`, `prescriptions` and `medical_documents` to RESTRICT and creates the indexes that back them. It unlinks (`record_id = NULL`) the prescriptions and documents whose record doesn't exist. It refuses to run, listing only ids, while any other dangling reference exists. **Before deploying, run the queries in [Signed records protection and dangling references before OZK-99](#signed-records-protection-and-dangling-references-before-ozk-99)**, and deploy the backend and the frontend together. Going back needs `alembic downgrade f8a9b0c1d2e4` as well as the previous code: the code alone leaves the triggers and the seal columns in the database.
+
+> **Migration `b0c1d2e3f4a6`** (walk-in appointments, OZK-111): adds `appointments.is_walk_in` (boolean `NOT NULL`, default `false`, kept for the previous code) and grants `appointments.walk_in` to the doctor and receptionist roles of clinics that had customized them (administrators never hold it: `NOT_FOR_ADMIN`). It needs no manual steps and blocks writes only for an instant. Its downgrade removes the permission from those customizations and drops the column.
 
 > **Before deploying this version** (OZK-106, no migration): a signed procedure answers 409 `procedure.already_signed` instead of 422, so deploy the backend and the frontend together. Run the queries in [Inconsistent appointments and procedures before OZK-106](#inconsistent-appointments-and-procedures-before-ozk-106) first: they only report, and nothing is changed automatically.
 

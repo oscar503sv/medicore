@@ -17,7 +17,9 @@ from medicore.application.use_cases.appointments import (
     ListAppointmentsForDay,
     ListUpcomingAppointments,
     MarkNoShow,
+    RegisterWalkIn,
     RescheduleAppointment,
+    WalkInCommand,
 )
 from medicore.application.use_cases.fees import AdjustAppointmentFee
 from medicore.domain.shared.identifiers import (
@@ -35,6 +37,7 @@ from medicore.presentation.schemas.appointments import (
     CreateAppointmentRequest,
     RescheduleRequest,
     SlotResponse,
+    WalkInRequest,
     WeeklyScheduleResponse,
 )
 from medicore.presentation.schemas.fees import ChargeRequest
@@ -154,6 +157,19 @@ def create_appointment(
     )
     appt = CreateAppointment(uow, codes, clock).execute(actor, cmd)
     return ser_appointment(appt)
+
+
+@router.post("/walk-in", response_model=AppointmentResponse, status_code=201)
+def register_walk_in(body: WalkInRequest, actor: Actor, uow: UoW, codes: Codes, clock: Clock):
+    cmd = WalkInCommand(
+        patient_id=PatientId.parse(body.patient_id),
+        doctor_id=UserId.parse(body.doctor_id),
+        location_id=LocationId.parse(body.location_id) if body.location_id else None,
+        type=body.type,
+        reason=body.reason,
+        insurance_id=InsurerId.parse(body.insurance_id) if body.insurance_id else None,
+    )
+    return ser_appointment(RegisterWalkIn(uow, codes, clock).execute(actor, cmd))
 
 
 @router.put("/{appointment_id}/reschedule", response_model=AppointmentResponse)

@@ -49,7 +49,7 @@ EXPECTED_MATRIX: dict[Role, set[str]] = {
     },
     Role.DOCTOR: {
         "patients.view", "patients.create", "patients.edit", "patients.archive",
-        "appointments.view", "appointments.manage",
+        "appointments.view", "appointments.manage", "appointments.walk_in",
         "availability.manage", "fees.manage_own",
         "consultations.start", "consultations.edit",
         "records.view", "records.read_clinical", "records.upload", "records.sign", "records.amend",
@@ -75,7 +75,7 @@ EXPECTED_MATRIX: dict[Role, set[str]] = {
     },
     Role.RECEPTIONIST: {
         "patients.view", "patients.create", "patients.edit", "patients.archive",
-        "appointments.view", "appointments.manage",
+        "appointments.view", "appointments.manage", "appointments.walk_in",
         "vaccinations.view", "applications.view",
         "procedures.view",
         "diagnoses.view",
@@ -95,6 +95,21 @@ class TestCatalog:
     def test_every_permission_is_granted_to_someone(self):
         granted = frozenset().union(*ROLE_PERMISSIONS.values())
         assert granted == frozenset(Permission)
+
+    def test_admin_never_holds_walk_in(self):
+        from medicore.application.common.permissions import (
+            NOT_FOR_ADMIN,
+            PRACTICE_MODEL_SHIFTS,
+            role_defaults,
+        )
+
+        assert not NOT_FOR_ADMIN & ROLE_PERMISSIONS[Role.ADMIN]
+        for model in PRACTICE_MODEL_SHIFTS:
+            assert not NOT_FOR_ADMIN & role_defaults(Role.ADMIN, model)
+
+    def test_walk_in_is_a_default_of_doctor_and_receptionist_only(self):
+        holders = {r for r, p in ROLE_PERMISSIONS.items() if Permission.APPOINTMENTS_WALK_IN in p}
+        assert holders == {Role.DOCTOR, Role.RECEPTIONIST}
 
     def test_permissions_for_matches_map(self):
         for role in Role:
