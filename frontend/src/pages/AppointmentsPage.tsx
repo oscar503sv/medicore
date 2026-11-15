@@ -172,7 +172,11 @@ export function AppointmentsPage() {
       qc.invalidateQueries({ queryKey: ['appointments'] })
       toast(t('appt.confirmed_ok'))
     },
-    onError: (err) => toast(errorMessage(err), 'danger'),
+    onError: (err) => {
+      // Someone else may have moved it first: show its real state.
+      qc.invalidateQueries({ queryKey: ['appointments'] })
+      toast(errorMessage(err), 'danger')
+    },
   })
 
   const cancelAppt = useMutation({
@@ -183,7 +187,11 @@ export function AppointmentsPage() {
       setCancelTarget(null)
       toast(t('appt.cancelled_ok'))
     },
-    onError: (err) => toast(errorMessage(err), 'danger'),
+    onError: (err) => {
+      // Someone else may have moved it first: show its real state.
+      qc.invalidateQueries({ queryKey: ['appointments'] })
+      toast(errorMessage(err), 'danger')
+    },
   })
 
   const noShowAppt = useMutation({
@@ -193,7 +201,11 @@ export function AppointmentsPage() {
       setNoShowTarget(null)
       toast(t('appt.no_show_ok'))
     },
-    onError: (err) => toast(errorMessage(err), 'danger'),
+    onError: (err) => {
+      // Someone else may have moved it first: show its real state.
+      qc.invalidateQueries({ queryKey: ['appointments'] })
+      toast(errorMessage(err), 'danger')
+    },
   })
 
   return (

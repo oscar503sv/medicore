@@ -128,6 +128,18 @@ class SqlProcedureRepository:
         row = self._procedures().filter(ProcedureModel.id == procedure_id.value).first()
         return _load(Procedure, row, _PROCEDURE_TYPES) if row else None
 
+    def get_for_update(self, procedure_id: ProcedureId) -> Procedure | None:
+        # FOR NO KEY UPDATE blocks other writers of this row; under READ COMMITTED the waiter
+        # gets the committed row, so it sees status=completed.
+        row = (
+            self._procedures()
+            .filter(ProcedureModel.id == procedure_id.value)
+            .with_for_update(key_share=True)
+            .populate_existing()
+            .first()
+        )
+        return _load(Procedure, row, _PROCEDURE_TYPES) if row else None
+
     def list_by_patient(self, patient_id: PatientId) -> list[Procedure]:
         return self._many(
             self._procedures()

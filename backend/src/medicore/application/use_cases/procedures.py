@@ -76,6 +76,15 @@ def _procedure(uow: UnitOfWork, procedure_id: ProcedureId) -> Procedure:
     return procedure
 
 
+def _locked_procedure(uow: UnitOfWork, procedure_id: ProcedureId) -> Procedure:
+    """The procedure with its row held until the transaction ends: call it inside the
+    ``with uow`` block, before validating, so a concurrent write is seen."""
+    procedure = uow.procedures.get_for_update(procedure_id)
+    if procedure is None:
+        raise EntityNotFound("Procedure", procedure_id)
+    return procedure
+
+
 def _ensure_performer(actor: ActorContext, performer: ProcedurePerformer) -> None:
     ensure_permission(actor, Permission.PROCEDURES_PERFORM)
     if not can_perform(performer, actor.role):
@@ -272,7 +281,9 @@ class CreateProcedure:
         return procedure
 
     def _check_appointment(self, appointment_id: AppointmentId, patient: Patient) -> None:
-        appt = self._uow.appointments.get_by_id(appointment_id)
+        # Locked so two registrations for the same appointment queue and the second sees
+        # the first's procedure.
+        appt = self._uow.appointments.get_for_update(appointment_id)
         if (appt is None or appt.patient_id != patient.id
                 or appt.type != AppointmentType.PROCEDURE or appt.status not in _OPEN_APPOINTMENT):
             raise ValidationError("not an open procedure appointment of this patient",
@@ -290,7 +301,7 @@ class _Editor:
         self._clock = clock
 
     def _load(self, actor: ActorContext, procedure_id: ProcedureId) -> Procedure:
-        procedure = _procedure(self._uow, procedure_id)
+        procedure = _locked_procedure(self._uow, procedure_id)
         _ensure_performer(actor, procedure.performer)
         return procedure
 
@@ -361,7 +372,8 @@ class SignProcedure(_Editor):
         return procedure
 
     def _complete(self, appointment_id: AppointmentId) -> None:
-        appt: Appointment | None = self._uow.appointments.get_by_id(appointment_id)
+        # Lock order: the procedure (taken by ``_load``), then the appointment.
+        appt: Appointment | None = self._uow.appointments.get_for_update(appointment_id)
         if appt is None:
             return
         if appt.status in (AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED):
@@ -401,7 +413,7 @@ class AmendProcedure:
                 reason: str) -> Procedure:
         ensure_permission(actor, Permission.PROCEDURES_PERFORM)
         with self._uow:
-            procedure = _procedure(self._uow, procedure_id)
+            procedure = _locked_procedure(self._uow, procedure_id)
             if actor.role != Role.DOCTOR and actor.user_id != procedure.performed_by_id:
                 raise PermissionDenied("only the performer or a doctor may amend it",
                                        code="procedure.not_performer")

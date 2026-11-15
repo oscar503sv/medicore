@@ -519,7 +519,10 @@ class SignConsultation:
             if consultation is None:
                 raise EntityNotFound("Consultation", cmd.consultation_id)
             _ensure_author(actor, consultation.doctor_id, "sign")
-            appointment = self._uow.appointments.get_by_id(consultation.appointment_id)
+            # The appointment is locked before the record-code counter (lock order:
+            # document, appointment, counter), so a cancellation cannot slip in between and
+            # a waiting sign never holds the counter.
+            appointment = self._uow.appointments.get_for_update(consultation.appointment_id)
             if appointment is None:
                 raise EntityNotFound("Appointment", consultation.appointment_id)
             patient = self._uow.patients.get_by_id(consultation.patient_id)

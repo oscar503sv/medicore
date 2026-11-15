@@ -42,7 +42,11 @@ export function PatientSummary({ detail }: { detail: PatientDetail }) {
       setCancelOpen(false)
       toast(t('appt.cancelled_ok'))
     },
-    onError: (err) => toast(errorMessage(err), 'danger'),
+    onError: (err) => {
+      qc.invalidateQueries({ queryKey: ['appointments'] })
+      refreshPatient()
+      toast(errorMessage(err), 'danger')
+    },
   })
 
   const emergency = [c.emergency_contact_name, c.emergency_contact_phone].filter(Boolean).join(' · ')

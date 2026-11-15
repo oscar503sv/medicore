@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -12,7 +12,7 @@ import {
   Printer,
   XCircle,
 } from 'lucide-react'
-import { errorMessage } from '@/api/client'
+import { errorCode, errorMessage } from '@/api/client'
 import { openPrint } from '@/api/printing'
 import { patientsApi } from '@/api/patients'
 import {
@@ -154,13 +154,24 @@ export function ProcedureDetailPage() {
     qc.invalidateQueries({ queryKey: ['procedures-patient', d.patient.id] })
     if (message) toast(message)
   }
-  const onError = (err: unknown) => toast(errorMessage(err), 'danger')
+  const onError = (err: unknown) => {
+    if (errorCode(err) === 'procedure.already_signed') {
+      // Signed elsewhere (another tab, a retry): show the signed state instead.
+      qc.invalidateQueries({ queryKey: ['procedure', id] })
+      qc.invalidateQueries({ queryKey: ['procedures-worklist'] })
+      qc.invalidateQueries({ queryKey: ['procedures-patient', data?.patient.id] })
+    }
+    toast(errorMessage(err), 'danger')
+  }
 
   const save = useMutation({
     mutationFn: () => proceduresApi.saveProgress(id, toPayload(form!)),
     onSuccess: (d) => applied(d, t('prc.saved_ok')),
     onError,
   })
+  // Synchronous guard: isPending only shows after a render, and the save before the POST
+  // leaves room for a second click.
+  const signing = useRef(false)
   const sign = useMutation({
     mutationFn: async () => {
       await proceduresApi.saveProgress(id, toPayload(form!))
@@ -174,6 +185,9 @@ export function ProcedureDetailPage() {
     onError: (err) => {
       qc.invalidateQueries({ queryKey: ['procedure', id] })
       onError(err)
+    },
+    onSettled: () => {
+      signing.current = false
     },
   })
   const cancel = useMutation({
@@ -305,7 +319,14 @@ export function ProcedureDetailPage() {
           <Button variant="outline" loading={save.isPending} onClick={() => save.mutate()}>
             {t('prc.save')}
           </Button>
-          <Button loading={sign.isPending} onClick={() => sign.mutate()}>
+          <Button
+            loading={sign.isPending}
+            onClick={() => {
+              if (signing.current) return
+              signing.current = true
+              sign.mutate()
+            }}
+          >
             <FileSignature className="h-4 w-4" />
             {t('prc.sign')}
           </Button>

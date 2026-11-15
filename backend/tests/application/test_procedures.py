@@ -19,6 +19,7 @@ from medicore.application.use_cases.consultations import (
     SignConsultationCommand,
     StartConsultation,
 )
+from medicore.application.use_cases.fees import SetProcedureFee
 from medicore.application.use_cases.procedures import (
     AmendProcedure,
     CancelProcedure,
@@ -36,7 +37,7 @@ from medicore.application.use_cases.procedures import (
     SignProcedure,
     UpdateProcedureType,
 )
-from medicore.domain.entities.procedure import ProcedureProgress
+from medicore.domain.entities.procedure import ProcedureAlreadySigned, ProcedureProgress
 from medicore.domain.enums import (
     AppointmentStatus,
     AppointmentType,
@@ -46,6 +47,7 @@ from medicore.domain.enums import (
 )
 from medicore.domain.services.procedure_catalog import DEFAULT_PROCEDURES
 from medicore.domain.shared.errors import PermissionDenied
+from medicore.domain.value_objects.fee import fee
 from tests.application.test_consultations import MONDAY_9AM, booked, fill
 from tests.support.builders import seed_clinic
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
@@ -228,3 +230,73 @@ def test_consultation_orders_become_pending_procedures():
     assert p.consultation_id == consultation.id and p.ordered_by_id == seed.doctor.id
     wl = GetProcedureWorklist(_uow(seed), FixedClock()).execute(seed.actor(seed.nurse))
     assert [i.procedure.id for i in wl.pending] == [p.id]
+
+
+def _lock_log(seed):
+    return seed.factory.store.lock_log
+
+
+def test_signing_locks_the_procedure_before_its_appointment():
+    seed = seed_clinic()
+    appt = _procedure_appointment(seed)
+    p = _create(seed, seed.doctor_actor, "Retiro de puntos", appointment_id=appt.id)
+    SaveProcedureProgress(_uow(seed), FixedClock()).execute(seed.doctor_actor, p.id, _progress())
+    _lock_log(seed).clear()
+
+    SignProcedure(_uow(seed), FixedClock()).execute(seed.doctor_actor, p.id)
+
+    assert _lock_log(seed) == [("procedure", p.id.value), ("appointment", appt.id.value)]
+
+
+def test_a_second_signature_is_refused_and_keeps_the_first_signer():
+    seed = seed_clinic()
+    p = _create(seed, seed.doctor_actor, "Retiro de puntos")
+    nurse = seed.actor(seed.nurse)
+    SaveProcedureProgress(_uow(seed), FixedClock()).execute(nurse, p.id, _progress())
+    SignProcedure(_uow(seed), FixedClock()).execute(nurse, p.id)
+
+    with pytest.raises(ProcedureAlreadySigned):
+        SignProcedure(_uow(seed), FixedClock()).execute(seed.doctor_actor, p.id)
+    with pytest.raises(ProcedureAlreadySigned):
+        SaveProcedureProgress(_uow(seed), FixedClock()).execute(
+            seed.doctor_actor, p.id, _progress())
+
+    stored = _uow(seed).procedures.get(p.id)
+    assert stored.performed_by_id == seed.nurse.id
+    signed = [e for e in seed.factory.store.audit.values() if e.action == "procedure.signed"]
+    assert len(signed) == 1
+    assert len(seed.factory.store.notifications) == 1
+
+
+def test_every_procedure_writer_locks_the_procedure_once():
+    seed = seed_clinic()
+    doc = seed.doctor_actor
+    p = _create(seed, doc)
+    cases = [
+        lambda: SaveProcedureProgress(_uow(seed), FixedClock()).execute(doc, p.id, _progress()),
+        lambda: RecordProcedureConsent(_uow(seed), FixedClock()).execute(
+            doc, p.id, "María López", None, "Lucía Méndez"),
+        lambda: SetProcedureFee(_uow(seed), FixedClock()).execute(
+            doc, p.id, included=False, charged=fee(10), note="Descuento"),
+        lambda: SignProcedure(_uow(seed), FixedClock()).execute(doc, p.id),
+        lambda: AmendProcedure(_uow(seed), FixedClock()).execute(doc, p.id, "4 puntos", "Conteo"),
+    ]
+    for action in cases:
+        _lock_log(seed).clear()
+        action()
+        assert _lock_log(seed) == [("procedure", p.id.value)]
+
+    other = _create(seed, doc)
+    _lock_log(seed).clear()
+    CancelProcedure(_uow(seed), FixedClock()).execute(doc, other.id, "No vino")
+    assert _lock_log(seed) == [("procedure", other.id.value)]
+
+
+def test_registering_a_procedure_on_an_appointment_locks_the_appointment():
+    seed = seed_clinic()
+    appt = _procedure_appointment(seed)
+    _lock_log(seed).clear()
+
+    _create(seed, seed.doctor_actor, "Retiro de puntos", appointment_id=appt.id)
+
+    assert _lock_log(seed) == [("appointment", appt.id.value)]

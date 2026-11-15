@@ -128,9 +128,9 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
   `procedures`: catálogo, lista de trabajo (pendientes, citas de procedimiento de hoy,
   realizados en 30 días), historial del paciente, crear, avance, consentimiento, firmar,
   cancelar y enmendar. Permisos `procedures.view` / `procedures.perform` /
-  `procedures.catalog`.
+  `procedures.catalog`. Todo escritor de procedimientos (guardar, consentimiento, firmar, cancelar, enmendar, cobro) bloquea primero su fila: una segunda firma, o cualquier escritura sobre uno firmado, responde 409 `procedure.already_signed`, mientras que uno cancelado sigue en 422 `procedure.closed`. Firmar bloquea además la cita que completa, y crear un procedimiento sobre una cita bloquea esa cita, así que dos altas a la vez no pueden tener éxito las dos (la segunda responde 422 `procedure.appointment_taken`).
 - **Agenda**: disponibilidad por médico, resolución de slots, ciclo de vida de la cita
-  (agendada → confirmada → en curso → completada).
+  (agendada → confirmada → en curso → completada). Las transiciones (confirmar, cancelar, no asistió, reprogramar, ajuste de cobro) bloquean la cita dentro de la transacción y van una tras otra: quien pierde la carrera ve el estado nuevo y recibe 422 `invalid_transition`. Una cita en curso o completada no se cancela.
 - **Consulta → historial**: al firmar una consulta se emite un `MedicalRecord` inmutable + las
   recetas, y se completa la cita, todo en una transacción. La firma bloquea la fila de la consulta
   antes de validar y de tomar el número de expediente, así que las firmas y ediciones concurrentes
@@ -280,14 +280,16 @@ Toda respuesta de error tiene la misma forma:
 
 ## Pruebas y linting
 
-Suite de **1657 tests** (331 dominio · 742 aplicación · 390 presentación · 190 infraestructura · 4 scripts), casi
+Suite de **1678 tests** (333 dominio · 750 aplicación · 392 presentación · 199 infraestructura · 4 scripts), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
 Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_audit_repository_sql.py`,
 `test_diagnosis_catalog_sql.py` — ranking y búsqueda por trigram del autocomplete de diagnósticos —
 `test_login_throttle_sql.py` — UPSERT atómico del lockout de login —
-`test_consultation_sign_sql.py` — firmas y ediciones concurrentes de una consulta — y
+`test_consultation_sign_sql.py` — firmas y ediciones concurrentes de una consulta —
+`test_procedure_sign_sql.py` — firmas concurrentes y guardados tardíos de un procedimiento —
+`test_appointment_locks_sql.py` — transiciones de cita frente a firmas y arranques de consulta —
 `test_notification_repository_sql.py` — JSONB y UPDATE/DELETE masivos de la bandeja —
 `test_record_summaries_sql.py` — listado de expedientes (resúmenes, filtros y paginación) — `test_record_amend_sql.py` — la cadena de enmiendas (lock de fila, índice único, CHECK del motivo) — `test_patient_search_sql.py` — búsqueda sin acentos, dígitos del teléfono, últimas visitas — `test_prescription_sql.py` — los campos de cierre, el CHECK del motivo de cancelación y el lock de fila, y `test_document_repository_sql.py` — el recorrido de ida y vuelta de los documentos y la clave única de almacenamiento) usan `TEST_DATABASE_URL`
 (o `DATABASE_URL` de la configuración),
@@ -307,6 +309,27 @@ nunca usa la BD de trabajo por defecto. Tras crear esa BD desechable, ejecuta:
 DATABASE_URL="$DEMO_TEST_DATABASE_URL" .venv/bin/alembic upgrade head
 .venv/bin/pytest tests/scripts -q
 ```
+
+## Orden de bloqueos
+
+Quienes escriben documentos clínicos o citas bloquean sus filas dentro de la transacción, en un orden fijo, para que dos transacciones nunca se esperen mutuamente (OZK-106). La forma canónica está en el docstring de `AppointmentRepository.get_for_update`.
+
+1. **Documento clínico (N1)**: una consulta o un procedimiento. Una transacción nunca bloquea los dos.
+2. **Cita (N2)**.
+3. **Contador (N3)**: código de expediente, código de cita, etc. Siempre al final, así que no se bloquea nada mientras se tiene un contador.
+
+Las lecturas simples no bloquean. Cancelar una cita no mira su consulta: una consulta solo existe para citas en curso o completadas, y esas no se cancelan.
+
+| Caso de uso | Bloqueos, en orden |
+|---|---|
+| `SignConsultation` | consulta → cita (antes de tomar el código del expediente) → contador de expedientes |
+| Editores de consulta, `UpdateConsultationVitals` | consulta |
+| `StartConsultation` | cita |
+| `SignProcedure` | procedimiento → cita |
+| `SaveProcedureProgress`, `RecordProcedureConsent`, `CancelProcedure`, `AmendProcedure`, `SetProcedureFee` | procedimiento |
+| `CreateProcedure` con cita | cita |
+| `ConfirmAppointment`, `CancelAppointment`, `MarkNoShow`, `RescheduleAppointment`, `AdjustAppointmentFee` | cita |
+| `CreateAppointment`, `CreatePatient`, certificados | su contador |
 
 ## Despliegue
 
@@ -358,6 +381,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 > **Migración `f7a8b9c0d1e3`** (cierre de recetas): añade `closed_at`, `closed_by_id` y `cancel_reason`, con un CHECK según el cual toda receta cancelada tiene motivo; las canceladas anteriores a él reciben el motivo de relleno "Cancelación previa a la exigencia de motivo". `prescriptions.manage` pasa a ser solo de médicos: las personalizaciones y los ajustes por usuario de enfermería y recepción lo pierden, y los médicos lo recuperan. **Antes de desplegar, ejecuta las consultas de [Recetas cerradas por otra persona](#recetas-cerradas-por-otra-persona)**, y despliega backend y frontend juntos: el endpoint de cancelar exige ahora un cuerpo con `reason`. Su downgrade elimina las columnas y el CHECK, pero no restaura los permisos.
 
 > **Migración `f8a9b0c1d2e4`** (claves de almacenamiento de documentos): desliga (`record_id = NULL`) los documentos cuyo expediente es de otro paciente o no existe (el archivo sigue en la ficha de su paciente), reescribe cada `storage_key` a `{tenant_id}/{patient_id}/{id}` (todavía no se almacena ningún archivo, así que no se mueve nada) y crea el índice único `uq_medical_documents_storage_key`. **Antes de desplegar, ejecuta las consultas de [Claves de almacenamiento de documentos](#claves-de-almacenamiento-de-documentos)**, y despliega backend y frontend juntos: `POST /documents` ya no acepta `storage_key`. Su downgrade solo quita el índice; los expedientes desligados y las claves anteriores no se recuperan.
+
+> **Antes de desplegar esta versión** (OZK-106, sin migración): un procedimiento firmado responde 409 `procedure.already_signed` en vez de 422, así que despliega el backend y el frontend juntos. Ejecuta antes las consultas de [Citas y procedimientos inconsistentes antes de OZK-106](#citas-y-procedimientos-inconsistentes-antes-de-ozk-106): solo informan, no cambian nada automáticamente.
 
 > Para varios workers basta con `WEB_CONCURRENCY=N` (uvicorn la lee; el `docker-compose.yml` usa 2). Cada
 > worker tiene su propio pool de hasta 15 conexiones: mantén `N × 15` por debajo de `max_connections` de Postgres.
@@ -454,3 +479,43 @@ SELECT count(*) FROM medical_documents WHERE storage_key <> tenant_id::text||'/'
 
 - **Filas de la consulta 1**: nada que hacer antes de desplegar. La migración los desliga, cada documento sigue en la ficha de su paciente, y el expediente al que apuntaban no se toca.
 - **Consulta 2**: solo un conteo. La migración reescribe esas claves y nada más.
+
+## Citas y procedimientos inconsistentes antes de OZK-106
+
+Hasta esta versión una cita podía cancelarse, marcarse como no asistida o reprogramarse mientras se firmaba o se iniciaba su consulta, un guardado tardío podía reabrir un procedimiento firmado, y dos altas podían crear dos procedimientos sobre una misma cita. OZK-106 cierra esas carreras sin migración, así que no hay nada que corregir para el despliegue en sí. Las consultas de abajo solo detectan los casos que ya existen. Ejecútalas contra la base de producción antes de desplegar y revisa cada fila con la clínica; ninguna cambia nada.
+
+```sql
+-- 1. Citas canceladas o no asistidas con consulta (y su expediente, si se firmó)
+SELECT a.tenant_id, a.id, a.code, a.status, c.id AS consultation_id, c.status AS consultation_status,
+       r.id AS record_id, r.code AS record_code
+FROM appointments a JOIN consultations c ON c.appointment_id = a.id
+LEFT JOIN medical_records r ON r.consultation_id = c.id AND r.amends_record_id IS NULL
+WHERE a.status IN ('cancelled','no_show');
+-- 2. Consultas firmadas cuya cita no está completada
+SELECT c.tenant_id, c.id, a.code, a.status FROM consultations c JOIN appointments a ON a.id = c.appointment_id
+WHERE c.status = 'signed' AND a.status <> 'completed';
+-- 3. Citas auditadas como canceladas cuyo estado no lo es
+SELECT a.tenant_id, a.id, a.code, a.status, l."timestamp" FROM audit_logs l JOIN appointments a ON a.id::text = l.entity_id
+WHERE l.entity_type = 'Appointment' AND l.action = 'appointment.cancelled' AND a.status <> 'cancelled';
+-- 4. Procedimientos firmados más de una vez
+SELECT tenant_id, entity_id AS procedure_id, count(*), array_agg(actor_id ORDER BY "timestamp") AS signers
+FROM audit_logs WHERE action = 'procedure.signed' GROUP BY 1,2 HAVING count(*) > 1;
+-- 5. Procedimientos firmados que ya no están completados
+SELECT p.tenant_id, p.id, p.status FROM procedures p
+WHERE p.status <> 'completed' AND EXISTS (SELECT 1 FROM audit_logs l
+  WHERE l.entity_type = 'Procedure' AND l.entity_id = p.id::text AND l.action = 'procedure.signed');
+-- 6. Citas con más de un procedimiento vivo
+SELECT tenant_id, appointment_id, count(*), array_agg(id) AS procedure_ids FROM procedures
+WHERE appointment_id IS NOT NULL AND status <> 'cancelled' GROUP BY 1,2 HAVING count(*) > 1;
+-- 7. Procedimientos firmados cuya cita no está completada (incluye casos legítimos)
+SELECT p.tenant_id, p.id, a.code, a.status FROM procedures p JOIN appointments a ON a.id = p.appointment_id
+WHERE p.status = 'completed' AND a.status <> 'completed';
+```
+
+- **Consulta 1**: citas canceladas o no asistidas que tienen consulta (y expediente, si se firmó). Una cancelación compitió con una firma o un arranque: decide cuál estado es el correcto.
+- **Consulta 2**: consultas firmadas cuya cita no está completada: la misma carrera desde el otro lado.
+- **Consulta 3**: citas cuya auditoría dice cancelada pero cuyo estado no lo está: cambiaron después de la cancelación.
+- **Consulta 4**: procedimientos con más de un `procedure.signed` en la auditoría: dos firmas compitieron, así que el realizador y las notificaciones pueden estar duplicados. Decide con la clínica qué firma queda.
+- **Consulta 5**: procedimientos firmados que ya no están completados, reabiertos o cancelados después de la firma.
+- **Consulta 6**: citas con más de un procedimiento vivo: un procedimiento duplicado, y su cobro, por dos altas a la vez. Decide cuál queda y anula el otro.
+- **Consulta 7**: procedimientos firmados cuya cita no está completada. Incluye casos legítimos: un procedimiento firmado sobre una cita cancelada o no asistida se queda como está, por diseño (ver el [backlog](../docs/BACKLOG.es.md)). Revisa solo las filas que no sean ese caso.

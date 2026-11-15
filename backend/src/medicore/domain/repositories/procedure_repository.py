@@ -27,6 +27,16 @@ class ProcedureRepository(Protocol):
     # ── procedures ──
     def get(self, procedure_id: ProcedureId) -> Procedure | None: ...
 
+    def get_for_update(self, procedure_id: ProcedureId) -> Procedure | None:
+        """Load the procedure and hold its row until the transaction ends, so a signature and
+        any other write of the same procedure run one after another and each sees what the
+        other committed.
+
+        Lock order everywhere is documented on ``AppointmentRepository.get_for_update``:
+        a procedure is a clinical document (first level), before its appointment.
+        """
+        ...
+
     def list_by_patient(self, patient_id: PatientId) -> list[Procedure]:
         """Every procedure of the patient, newest first."""
         ...

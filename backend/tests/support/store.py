@@ -82,9 +82,12 @@ class InMemoryStore:
     login_successes: dict[str, datetime] = field(default_factory=dict)
     # Times each clinic's row was locked for a quota check (tenant id -> count).
     tenant_locks: dict[UUID, int] = field(default_factory=dict)
-    # Times a consultation / appointment row was locked (id -> count).
+    # Times a consultation / appointment / procedure row was locked (id -> count).
     consultation_locks: dict[UUID, int] = field(default_factory=dict)
     appointment_locks: dict[UUID, int] = field(default_factory=dict)
+    procedure_locks: dict[UUID, int] = field(default_factory=dict)
+    # Order the document and appointment rows were locked in: (kind, id).
+    lock_log: list[tuple[str, UUID]] = field(default_factory=list)
     # Global revocable sessions (tenant and platform scopes share the store).
     sessions: dict[UUID, AuthSession] = field(default_factory=dict)
     # Recorded server errors (platform monitoring).
@@ -113,6 +116,9 @@ class InMemoryStore:
 
     def restore(self, snap: dict[str, dict]) -> None:
         for name, data in snap.items():
-            store: dict = getattr(self, name)
+            store = getattr(self, name)
             store.clear()
-            store.update(data)
+            if isinstance(store, list):
+                store.extend(data)
+            else:
+                store.update(data)

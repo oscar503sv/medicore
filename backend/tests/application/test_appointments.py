@@ -9,18 +9,21 @@ import pytest
 from medicore.application.common.context import ActorContext
 from medicore.application.use_cases.appointments import (
     CancelAppointment,
+    ConfirmAppointment,
     CreateAppointment,
     CreateAppointmentCommand,
     GetAvailableSlots,
     GetBookingOptions,
     ListAppointmentsForDay,
+    MarkNoShow,
     RescheduleAppointment,
 )
 from medicore.application.use_cases.availability import UpdateBookingRules
+from medicore.application.use_cases.consultations import StartConsultation
 from medicore.domain.entities.availability import BookingRules
 from medicore.domain.enums import AppointmentStatus, AppointmentType, Role
 from medicore.domain.services.slot_resolver import SlotStatus
-from medicore.domain.shared.errors import PermissionDenied, SlotUnavailable
+from medicore.domain.shared.errors import InvalidStateTransition, PermissionDenied, SlotUnavailable
 from medicore.domain.shared.identifiers import UserId
 from tests.support.builders import seed_clinic
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
@@ -114,6 +117,42 @@ def test_cancel_appointment():
 
     cancelled = CancelAppointment(uow, FixedClock()).execute(seed.receptionist_actor, appt.id)
     assert cancelled.status == AppointmentStatus.CANCELLED
+
+
+def test_every_appointment_transition_locks_the_appointment_once():
+    seed = seed_clinic()
+    create, uow = make_create(seed)
+    actor = seed.receptionist_actor
+    clock = FixedClock()
+    log = seed.factory.store.lock_log
+
+    appt = create.execute(actor, booking_cmd(seed))
+    for use_case in (
+        lambda: ConfirmAppointment(uow, clock).execute(actor, appt.id),
+        lambda: RescheduleAppointment(uow, clock).execute(
+            actor, appt.id, datetime(2026, 6, 1, 10, 0)),
+        lambda: CancelAppointment(uow, clock).execute(actor, appt.id),
+    ):
+        log.clear()
+        use_case()
+        assert log == [("appointment", appt.id.value)]
+
+    other = create.execute(actor, booking_cmd(seed, start=datetime(2026, 6, 1, 11, 0)))
+    log.clear()
+    MarkNoShow(uow, clock).execute(actor, other.id)
+    assert log == [("appointment", other.id.value)]
+
+
+def test_an_appointment_in_progress_cannot_be_cancelled_or_marked_no_show():
+    seed = seed_clinic()
+    create, uow = make_create(seed)
+    appt = create.execute(seed.receptionist_actor, booking_cmd(seed))
+    StartConsultation(uow, FixedClock()).execute(seed.doctor_actor, appt.id)
+
+    for use_case in (CancelAppointment, MarkNoShow):
+        with pytest.raises(InvalidStateTransition):
+            use_case(uow, FixedClock()).execute(seed.receptionist_actor, appt.id)
+    assert uow.appointments.get_by_id(appt.id).status == AppointmentStatus.IN_PROGRESS
 
 
 def test_cancelled_slot_frees_up():

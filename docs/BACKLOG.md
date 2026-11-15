@@ -37,6 +37,11 @@ External channels and reminders are planned as a future evolution (see [Future](
 - An amendment does not move the documents linked to the previous version to the new one: they stay on the replaced version. Decide whether they should follow the current one.
 - Control characters in file names: the upload only rejects `/`, `\`, `..` and NUL, so a name with line breaks or other control characters is accepted.
 - Extension and MIME type consistency: an upload does not check that the file extension matches its `mime_type`.
+- **Double booking in the same slot**: `find_overlapping` runs without a lock on the doctor, so two bookings of one free slot at the same moment can both succeed. Lock the doctor's schedule (or the slot) before checking availability.
+- **Signed procedure on a cancelled or no-show appointment**: today the appointment stays as it is and the procedure keeps its fee. Product decision: keep it, or answer 409 `procedure.appointment_closed` when signing.
+- **Unique index on `procedures.appointment_id`** for live procedures (`status <> 'cancelled'`), so the database refuses a second one and not only the lock. Run [query 6](../backend/README.md#inconsistent-appointments-and-procedures-before-ozk-106) first.
+- **409 for appointment transitions**: the loser of a race answers 422 `invalid_transition`, like any other invalid transition. A 409 describes the conflict better, but it changes the contract of confirm, cancel, no-show and reschedule.
+- **Consultation editors lock before the unit of work**: they take the consultation lock before `with self._uow`, so it outlives a failed validation until the session closes. Move it inside the unit of work, as the procedure and appointment writers do.
 
 ## Future
 
@@ -181,5 +186,6 @@ Resolved in November 2026:
   clinical readers only. Migration `f7a8b9c0d1e3` adds the closing fields and the CHECK, and moves the
   permission (see [Prescriptions closed by someone else](../backend/README.md#prescriptions-closed-by-someone-else)).
 - **Medical documents without client-chosen keys** (OZK-101): the server generates each `storage_key` (`{tenant_id}/{patient_id}/{document_id}`), it is never accepted from or returned to the client, and it is unique in the database. A document can be linked only to a record of the same patient (its current version), and support sessions can't register documents. Migration `f8a9b0c1d2e4` unlinks the documents of another patient's record and rewrites the keys (see [Document storage keys](../backend/README.md#document-storage-keys)).
+- **Procedures and appointments under row locks** (OZK-106): every procedure writer locks the procedure, so a second signature answers 409 `procedure.already_signed` (a cancelled one stays at 422 `procedure.closed`). Appointment transitions and consultation signatures lock the appointment in a fixed order (see [Lock order](../backend/README.md#lock-order)): a cancellation can't race a signature or a start, an in-progress or completed appointment can't be cancelled, and two registrations of a procedure on one appointment can't both succeed. No migration: run the queries in [Inconsistent appointments and procedures before OZK-106](../backend/README.md#inconsistent-appointments-and-procedures-before-ozk-106) before deploying.
 
 No pending findings remain in this list.

@@ -263,3 +263,20 @@ def test_start_locks_the_appointment_and_returns_the_same_consultation():
     # the second start returns without committing, so the fake rolls its lock back
     assert seed.factory.store.appointment_locks == {appt.id.value: 1}
     assert len(seed.factory.store.consultations) == 1
+
+
+def test_sign_locks_the_consultation_before_its_appointment():
+    seed = seed_clinic()
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    appt = booked(seed, uow)
+    consultation = StartConsultation(uow, FixedClock()).execute(seed.doctor_actor, appt.id)
+    fill(seed, uow, consultation)
+    seed.factory.store.lock_log.clear()
+
+    SignConsultation(uow, SequentialCodeGenerator(), FixedClock()).execute(
+        seed.doctor_actor, SignConsultationCommand(consultation.id)
+    )
+
+    assert seed.factory.store.lock_log == [
+        ("consultation", consultation.id.value), ("appointment", appt.id.value)
+    ]

@@ -137,3 +137,18 @@ def test_weekly_schedule(seed, client, auth_headers):
     assert resp.status_code == 200
     schedule = resp.json()["schedule"]
     assert len(schedule) == 7
+
+
+def test_an_appointment_in_progress_cannot_be_cancelled_or_marked_no_show(
+    seed, client, auth_headers
+):
+    appt_id = client.post(
+        "/api/v1/appointments", json=_booking_payload(seed), headers=auth_headers
+    ).json()["id"]
+    assert client.post(
+        f"/api/v1/consultations/start/{appt_id}", headers=auth_headers
+    ).status_code == 201
+
+    for action in ("cancel", "no-show"):
+        resp = client.post(f"/api/v1/appointments/{appt_id}/{action}", headers=auth_headers)
+        assert resp.status_code == 422 and resp.json()["code"] == "invalid_transition"

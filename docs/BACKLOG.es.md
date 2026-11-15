@@ -36,6 +36,11 @@ Canales externos y recordatorios quedan planificados como evolución futura (ver
 - Una enmienda no mueve a la versión nueva los documentos ligados a la anterior: se quedan en la versión reemplazada. Decidir si deben seguir a la vigente.
 - Caracteres de control en el nombre de archivo: la subida solo rechaza `/`, `\`, `..` y NUL, así que un nombre con saltos de línea u otros caracteres de control se acepta.
 - Coherencia extensión/MIME: no se comprueba que la extensión del archivo corresponda a su `mime_type`.
+- **Doble reserva en el mismo hueco**: `find_overlapping` corre sin lock sobre el médico, así que dos reservas de un mismo hueco libre en el mismo instante pueden tener éxito las dos. Bloquear la agenda del médico (o el hueco) antes de comprobar la disponibilidad.
+- **Procedimiento firmado sobre cita cancelada o no asistida**: hoy la cita se queda como está y el procedimiento conserva su cobro. Decisión de producto: mantenerlo, o responder 409 `procedure.appointment_closed` al firmar.
+- **Índice único en `procedures.appointment_id`** para los procedimientos vivos (`status <> 'cancelled'`), para que la base rechace un segundo y no solo el lock. Ejecuta antes la [consulta 6](../backend/README.es.md#citas-y-procedimientos-inconsistentes-antes-de-ozk-106).
+- **409 en transiciones de cita**: quien pierde la carrera recibe 422 `invalid_transition`, como cualquier transición inválida. Un 409 describe mejor el conflicto, pero cambia el contrato de confirmar, cancelar, no asistió y reprogramar.
+- **Editores de consulta bloquean antes de la unidad de trabajo**: toman el lock de la consulta antes de `with self._uow`, así que sobrevive a una validación fallida hasta cerrar la sesión. Moverlo dentro de la unidad de trabajo, como lo hacen los escritores de procedimientos y citas.
 
 ## A futuro
 
@@ -176,5 +181,6 @@ Resueltos en nov 2026:
   quien lee contenido clínico. La migración `f7a8b9c0d1e3` añade los campos de cierre y el CHECK, y
   traslada el permiso (ver [Recetas cerradas por otra persona](../backend/README.es.md#recetas-cerradas-por-otra-persona)).
 - **Documentos médicos sin claves elegidas por el cliente** (OZK-101): el servidor genera cada `storage_key` (`{tenant_id}/{patient_id}/{document_id}`), nunca se acepta del cliente ni se devuelve, y es única en la base. Un documento solo puede ligarse a un expediente del mismo paciente (su versión vigente), y las sesiones de soporte no pueden registrarlos. La migración `f8a9b0c1d2e4` desliga los documentos de un expediente ajeno y reescribe las claves (ver [Claves de almacenamiento de documentos](../backend/README.es.md#claves-de-almacenamiento-de-documentos)).
+- **Procedimientos y citas bajo bloqueo de fila** (OZK-106): todo escritor de procedimientos bloquea el procedimiento, así que una segunda firma responde 409 `procedure.already_signed` (uno cancelado sigue en 422 `procedure.closed`). Las transiciones de cita y las firmas de consulta bloquean la cita en un orden fijo (ver [Orden de bloqueos](../backend/README.es.md#orden-de-bloqueos)): una cancelación no puede competir con una firma o un arranque, una cita en curso o completada no se cancela, y dos altas de un procedimiento sobre una misma cita no pueden tener éxito las dos. Sin migración: ejecuta las consultas de [Citas y procedimientos inconsistentes antes de OZK-106](../backend/README.es.md#citas-y-procedimientos-inconsistentes-antes-de-ozk-106) antes de desplegar.
 
 No quedan hallazgos pendientes en esta lista.

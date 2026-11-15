@@ -54,7 +54,10 @@ export function RescheduleAppointmentModal({
       toast(t('appt.reschedule_ok'))
       onClose()
     },
-    onError: (err) => toast(errorMessage(err), 'danger'),
+    onError: (err) => {
+      qc.invalidateQueries({ queryKey: ['appointments'] })
+      toast(errorMessage(err), 'danger')
+    },
   })
 
   return (

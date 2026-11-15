@@ -118,11 +118,12 @@ class AdjustAppointmentFee:
     def execute(self, actor: ActorContext, appointment_id: AppointmentId,
                 charged: Money, note: str | None) -> Appointment:
         ensure_permission(actor, Permission.APPOINTMENTS_VIEW)
-        appointment = self._uow.appointments.get_by_id(appointment_id)
-        if appointment is None:
-            raise EntityNotFound("Appointment", appointment_id)
-        ensure_can_price(actor, appointment.doctor_id)
         with self._uow:
+            # Locked so the save cannot write back a stale status over a concurrent change.
+            appointment = self._uow.appointments.get_for_update(appointment_id)
+            if appointment is None:
+                raise EntityNotFound("Appointment", appointment_id)
+            ensure_can_price(actor, appointment.doctor_id)
             appointment.adjust_fee(charged, note)
             self._uow.appointments.save(appointment)
             patient = self._uow.patients.get_by_id(appointment.patient_id)
@@ -146,13 +147,13 @@ class SetProcedureFee:
     def execute(self, actor: ActorContext, procedure_id: ProcedureId, *, included: bool,
                 charged: Money | None, note: str | None) -> Procedure:
         ensure_permission(actor, Permission.PROCEDURES_VIEW)
-        procedure = self._uow.procedures.get(procedure_id)
-        if procedure is None:
-            raise EntityNotFound("Procedure", procedure_id)
-        if not can_price(actor, procedure.ordered_by_id):
-            raise PermissionDenied("you may not set this procedure's fee",
-                                   code="fee.not_allowed")
         with self._uow:
+            procedure = self._uow.procedures.get_for_update(procedure_id)
+            if procedure is None:
+                raise EntityNotFound("Procedure", procedure_id)
+            if not can_price(actor, procedure.ordered_by_id):
+                raise PermissionDenied("you may not set this procedure's fee",
+                                       code="fee.not_allowed")
             procedure.set_fee(included=included, charged=charged, note=note)
             self._uow.procedures.save(procedure)
             patient = self._uow.patients.get_by_id(procedure.patient_id)

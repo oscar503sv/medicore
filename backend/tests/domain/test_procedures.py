@@ -9,6 +9,7 @@ import pytest
 
 from medicore.domain.entities.procedure import (
     Procedure,
+    ProcedureAlreadySigned,
     ProcedureClosed,
     ProcedureDraft,
     ProcedureNotCompleted,
@@ -148,3 +149,31 @@ def test_cancel_and_amend_guards_and_vitals_validation():
     with pytest.raises(InvalidValueObject) as exc:
         ProcedureProgress(spo2_after=30)
     assert exc.value.code == "procedure.invalid_vitals"
+
+
+def test_a_signed_procedure_refuses_a_second_signature_and_any_edit_with_its_own_code():
+    p = _procedure(requires_consent=False)
+    _ready(p)
+    p.sign(DOCTOR, NOW, TODAY, False)
+    signed_at = p.performed_at
+    with pytest.raises(ProcedureAlreadySigned) as exc:
+        p.sign(UserId.new(), NOW, TODAY, False)
+    assert exc.value.code == "procedure.already_signed"
+    with pytest.raises(ProcedureAlreadySigned):
+        _ready(p)
+    with pytest.raises(ProcedureAlreadySigned):
+        p.record_consent("Ana", None, "Luis", DOCTOR, NOW)
+    with pytest.raises(ProcedureAlreadySigned):
+        p.cancel(DOCTOR, "x", NOW)
+    assert p.performed_by_id == DOCTOR and p.performed_at == signed_at
+    assert issubclass(ProcedureAlreadySigned, ProcedureClosed)
+
+
+def test_a_cancelled_procedure_is_closed_but_not_already_signed():
+    p = _procedure()
+    p.cancel(DOCTOR, "No vino", NOW)
+    for action in (lambda: _ready(p), lambda: p.sign(DOCTOR, NOW, TODAY, False)):
+        with pytest.raises(ProcedureClosed) as exc:
+            action()
+        assert not isinstance(exc.value, ProcedureAlreadySigned)
+        assert exc.value.code == "procedure.closed"

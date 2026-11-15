@@ -130,6 +130,18 @@ def test_adjusting_an_appointment_charge():
     assert e.value.code == "fee.appointment_cancelled"
 
 
+def test_adjusting_a_charge_locks_the_appointment():
+    seed = seed_clinic()
+    _set(seed, seed.doctor_actor)
+    appt = _book(seed)
+    seed.factory.store.lock_log.clear()
+
+    AdjustAppointmentFee(_uow(seed), FixedClock()).execute(
+        seed.doctor_actor, appt.id, ZERO, "Cortesía")
+
+    assert seed.factory.store.lock_log == [("appointment", appt.id.value)]
+
+
 def _price_type(seed, name, price):
     kind = _type(seed, name)
     return UpdateProcedureType(_uow(seed), FixedClock()).execute(

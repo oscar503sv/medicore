@@ -18,8 +18,9 @@ class ConsultationRepository(Protocol):
         any edit of the same consultation run one after another and each sees what the
         other committed.
 
-        Lock order everywhere: consultation, then the record-code counter, then the
-        appointment. Starting a consultation only locks the appointment.
+        Lock order everywhere (see ``AppointmentRepository.get_for_update``): consultation,
+        then the appointment, then the record-code counter. Starting a consultation only
+        locks the appointment.
         """
         ...
 

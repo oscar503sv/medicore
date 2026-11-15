@@ -273,32 +273,34 @@ class RescheduleAppointment:
         new_start: datetime,
     ) -> Appointment:
         ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
-        appointment = self._require(appointment_id)
-
-        availability = self._uow.availability.get_by_doctor(appointment.doctor_id)
-        if availability is None:
-            raise SlotUnavailable(
-                "doctor has no availability configured", code="slot.no_availability"
-            )
-        # Duration is recomputed from the doctor's current rules, not carried over.
-        duration = availability.rules.slot_minutes
-        end = new_start + timedelta(minutes=duration)
-        # Existing appointments excluding the one being moved.
-        overlapping = [
-            a
-            for a in self._uow.appointments.find_overlapping(appointment.doctor_id, new_start, end)
-            if a.id != appointment.id
-        ]
-        if not is_available(
-            availability,
-            new_start,
-            busy=_busy_intervals(overlapping),
-            now=clinic_now(self._uow, actor.tenant_id, self._clock),
-        ):
-            raise SlotUnavailable("new slot is not bookable", code="slot.not_bookable")
-
-        previous_start = appointment.scheduled_start
         with self._uow:
+            appointment = self._require(appointment_id)
+
+            availability = self._uow.availability.get_by_doctor(appointment.doctor_id)
+            if availability is None:
+                raise SlotUnavailable(
+                    "doctor has no availability configured", code="slot.no_availability"
+                )
+            # Duration is recomputed from the doctor's current rules, not carried over.
+            duration = availability.rules.slot_minutes
+            end = new_start + timedelta(minutes=duration)
+            # Existing appointments excluding the one being moved.
+            overlapping = [
+                a
+                for a in self._uow.appointments.find_overlapping(
+                    appointment.doctor_id, new_start, end
+                )
+                if a.id != appointment.id
+            ]
+            if not is_available(
+                availability,
+                new_start,
+                busy=_busy_intervals(overlapping),
+                now=clinic_now(self._uow, actor.tenant_id, self._clock),
+            ):
+                raise SlotUnavailable("new slot is not bookable", code="slot.not_bookable")
+
+            previous_start = appointment.scheduled_start
             appointment.reschedule(new_start, duration)
             self._uow.appointments.save(appointment)
             self._uow.audit.append(
@@ -316,7 +318,9 @@ class RescheduleAppointment:
         return appointment
 
     def _require(self, appointment_id: AppointmentId) -> Appointment:
-        appointment = self._uow.appointments.get_by_id(appointment_id)
+        # Locked inside the unit of work: it is held until the commit or rollback, and a
+        # status change that won the race is seen here.
+        appointment = self._uow.appointments.get_for_update(appointment_id)
         if appointment is None:
             raise EntityNotFound("Appointment", appointment_id)
         return appointment
@@ -338,10 +342,11 @@ class _AppointmentTransition:
 
     def execute(self, actor: ActorContext, appointment_id: AppointmentId) -> Appointment:
         ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
-        appointment = self._uow.appointments.get_by_id(appointment_id)
-        if appointment is None:
-            raise EntityNotFound("Appointment", appointment_id)
         with self._uow:
+            # Locked before deciding: a consultation signed or started meanwhile is seen.
+            appointment = self._uow.appointments.get_for_update(appointment_id)
+            if appointment is None:
+                raise EntityNotFound("Appointment", appointment_id)
             self._apply(appointment)
             self._uow.appointments.save(appointment)
             self._uow.audit.append(

@@ -46,6 +46,13 @@ class ProcedureClosed(DomainError):
     code = "procedure.closed"
 
 
+class ProcedureAlreadySigned(ProcedureClosed):
+    """The note is signed (a double click, a retry, another tab): a conflict with the
+    procedure's current state, so it answers 409 instead of the 422 of a cancelled one."""
+
+    code = "procedure.already_signed"
+
+
 class ProcedureNotCompleted(DomainError):
     code = "procedure.not_completed"
 
@@ -283,6 +290,8 @@ class Procedure:
         return self.consent_at is not None
 
     def _assert_open(self) -> None:
+        if self.status == ProcedureStatus.COMPLETED:
+            raise ProcedureAlreadySigned(f"procedure {self.id} is already signed")
         if not self.is_open:
             raise ProcedureClosed(f"procedure {self.id} is {self.status}")
 

@@ -598,6 +598,7 @@ class InMemoryAppointmentRepository(_Scoped):
     def get_for_update(self, appointment_id: AppointmentId) -> Appointment | None:
         locks = self._store.appointment_locks
         locks[appointment_id.value] = locks.get(appointment_id.value, 0) + 1
+        self._store.lock_log.append(("appointment", appointment_id.value))
         return self.get_by_id(appointment_id)
 
     def list_by_day(self, on: date, doctor_id: UserId | None = None) -> list[Appointment]:
@@ -776,6 +777,12 @@ class InMemoryProcedureRepository(_Scoped):
         p = self._store.procedures.get(procedure_id.value)
         return p if p and p.tenant_id == self._tenant else None
 
+    def get_for_update(self, procedure_id):
+        locks = self._store.procedure_locks
+        locks[procedure_id.value] = locks.get(procedure_id.value, 0) + 1
+        self._store.lock_log.append(("procedure", procedure_id.value))
+        return self.get(procedure_id)
+
     def list_by_patient(self, patient_id) -> list:
         result = [p for p in self._mine(self._store.procedures.values())
                   if p.patient_id == patient_id]
@@ -868,6 +875,7 @@ class InMemoryConsultationRepository(_Scoped):
     def get_for_update(self, consultation_id: ConsultationId) -> Consultation | None:
         locks = self._store.consultation_locks
         locks[consultation_id.value] = locks.get(consultation_id.value, 0) + 1
+        self._store.lock_log.append(("consultation", consultation_id.value))
         return self.get_by_id(consultation_id)
 
     def get_by_appointment(self, appointment_id: AppointmentId) -> Consultation | None:

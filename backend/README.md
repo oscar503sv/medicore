@@ -126,9 +126,9 @@ UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/a
   someone else performs it, without clinical content. `procedures` router: catalog, worklist
   (pending, today's procedure appointments, done in the last 30 days), patient history,
   create, progress, consent, sign, cancel and amend. Permissions `procedures.view` /
-  `procedures.perform` / `procedures.catalog`.
+  `procedures.perform` / `procedures.catalog`. Every writer of a procedure (save, consent, sign, cancel, amend, fee) locks its row first: a second signature, or any write to a signed procedure, answers 409 `procedure.already_signed`, while a cancelled one stays at 422 `procedure.closed`. Signing also locks the appointment it completes, and creating a procedure on an appointment locks that appointment, so two registrations at once can't both succeed (the second answers 422 `procedure.appointment_taken`).
 - **Scheduling**: per-doctor availability, slot resolution, appointment lifecycle
-  (scheduled → confirmed → in progress → completed).
+  (scheduled → confirmed → in progress → completed). Transitions (confirm, cancel, no-show, reschedule, fee adjustment) lock the appointment inside the transaction and run one after another: the loser of a race reads the new status and gets 422 `invalid_transition`. An in-progress or completed appointment can't be cancelled.
 - **Consultation → record**: signing a consultation issues an immutable `MedicalRecord` plus
   the prescriptions and completes the appointment, all in one transaction. The sign locks the
   consultation row before validating and taking the record number, so concurrent signs and edits
@@ -280,14 +280,16 @@ Every error response has the same shape:
 
 ## Tests and linting
 
-A suite of **1657 tests** (331 domain · 742 application · 390 presentation · 190 infrastructure · 4 scripts),
+A suite of **1678 tests** (333 domain · 750 application · 392 presentation · 199 infrastructure · 4 scripts),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
 The integration tests against real PostgreSQL (`tests/infrastructure/test_audit_repository_sql.py`,
 `test_diagnosis_catalog_sql.py` — ranking and trigram search for the diagnosis autocomplete —
 `test_login_throttle_sql.py` — atomic UPSERT of the login lockout —
-`test_consultation_sign_sql.py` — concurrent signs and edits of one consultation — and
+`test_consultation_sign_sql.py` — concurrent signs and edits of one consultation —
+`test_procedure_sign_sql.py` — concurrent signatures and late saves of one procedure —
+`test_appointment_locks_sql.py` — appointment transitions racing consultation signatures and starts —
 `test_notification_repository_sql.py` — JSONB and bulk UPDATE/DELETE of the inbox —
 `test_record_summaries_sql.py` — the records list (summaries, filters and paging) — `test_record_amend_sql.py` — the amendment chain (row lock, unique index, reason CHECK) — `test_patient_search_sql.py` — accent-insensitive search, phone digits, last visits — `test_prescription_sql.py` — the closing fields, the cancel-reason CHECK and the row lock, and `test_document_repository_sql.py` — the document round trip and the unique storage key) use
 `TEST_DATABASE_URL` (or the configured `DATABASE_URL`), run inside a transaction that is always
@@ -307,6 +309,27 @@ it never falls back to the working database. After creating that disposable data
 DATABASE_URL="$DEMO_TEST_DATABASE_URL" .venv/bin/alembic upgrade head
 .venv/bin/pytest tests/scripts -q
 ```
+
+## Lock order
+
+Writers of clinical documents and appointments lock their rows inside the transaction, in a fixed order, so two transactions never wait on each other (OZK-106). The canonical statement is the docstring of `AppointmentRepository.get_for_update`.
+
+1. **Clinical document (N1)**: a consultation or a procedure. A transaction never locks both.
+2. **Appointment (N2)**.
+3. **Counter (N3)**: record code, appointment code and the rest. Always last, so nothing is locked while holding one.
+
+Plain reads take no lock. Cancelling an appointment doesn't look at its consultation: a consultation exists only for appointments in progress or completed, and those can't be cancelled.
+
+| Use case | Locks, in order |
+|---|---|
+| `SignConsultation` | consultation → appointment (before taking the record code) → record counter |
+| Consultation editors, `UpdateConsultationVitals` | consultation |
+| `StartConsultation` | appointment |
+| `SignProcedure` | procedure → appointment |
+| `SaveProcedureProgress`, `RecordProcedureConsent`, `CancelProcedure`, `AmendProcedure`, `SetProcedureFee` | procedure |
+| `CreateProcedure` with an appointment | appointment |
+| `ConfirmAppointment`, `CancelAppointment`, `MarkNoShow`, `RescheduleAppointment`, `AdjustAppointmentFee` | appointment |
+| `CreateAppointment`, `CreatePatient`, certificates | their counter |
 
 ## Deployment
 
@@ -358,6 +381,8 @@ Production checklist (via environment variables, see the **Configuration** table
 > **Migration `f7a8b9c0d1e3`** (prescription closure): adds `closed_at`, `closed_by_id` and `cancel_reason`, with a CHECK that every cancelled prescription has a reason; the cancelled ones that predate it get the placeholder "Cancelación previa a la exigencia de motivo". `prescriptions.manage` becomes doctor-only: nurse and receptionist overrides and user adjustments lose it, and doctors get it back. **Before deploying, run the queries in [Prescriptions closed by someone else](#prescriptions-closed-by-someone-else)**, and deploy the backend and the frontend together: the cancel endpoint now requires a body with `reason`. Its downgrade drops the columns and the CHECK, but does not restore the permissions.
 
 > **Migration `f8a9b0c1d2e4`** (document storage keys): unlinks (`record_id = NULL`) the documents whose record belongs to another patient or doesn't exist (the file stays with its patient), rewrites every `storage_key` to `{tenant_id}/{patient_id}/{id}` (no file is stored yet, so nothing moves) and creates the unique index `uq_medical_documents_storage_key`. **Before deploying, run the queries in [Document storage keys](#document-storage-keys)**, and deploy the backend and the frontend together: `POST /documents` no longer accepts `storage_key`. Its downgrade only drops the index; the unlinked records and the previous keys are not recovered.
+
+> **Before deploying this version** (OZK-106, no migration): a signed procedure answers 409 `procedure.already_signed` instead of 422, so deploy the backend and the frontend together. Run the queries in [Inconsistent appointments and procedures before OZK-106](#inconsistent-appointments-and-procedures-before-ozk-106) first: they only report, and nothing is changed automatically.
 
 > For multiple workers just set `WEB_CONCURRENCY=N` (uvicorn reads it; `docker-compose.yml` uses 2). Each
 > worker holds its own pool of up to 15 connections: keep `N × 15` below Postgres' `max_connections`.
@@ -453,3 +478,43 @@ SELECT count(*) FROM medical_documents WHERE storage_key <> tenant_id::text||'/'
 
 - **Rows from query 1**: nothing to do before deploying. The migration unlinks them, each document stays in its patient's file, and the record they pointed to is not touched.
 - **Query 2**: a count only. The migration rewrites those keys and nothing else.
+
+## Inconsistent appointments and procedures before OZK-106
+
+Before this version an appointment could be cancelled, marked as no-show or rescheduled while its consultation was being signed or started, a late save could reopen a signed procedure, and two registrations could create two procedures on one appointment. OZK-106 closes those races without a migration, so there is nothing to fix for the deploy itself. The queries below only detect the cases that already exist. Run them against the production database before deploying and review each row with the clinic; none of them changes anything.
+
+```sql
+-- 1. Cancelled or no-show appointments with a consultation (and its record, if signed)
+SELECT a.tenant_id, a.id, a.code, a.status, c.id AS consultation_id, c.status AS consultation_status,
+       r.id AS record_id, r.code AS record_code
+FROM appointments a JOIN consultations c ON c.appointment_id = a.id
+LEFT JOIN medical_records r ON r.consultation_id = c.id AND r.amends_record_id IS NULL
+WHERE a.status IN ('cancelled','no_show');
+-- 2. Signed consultations whose appointment is not completed
+SELECT c.tenant_id, c.id, a.code, a.status FROM consultations c JOIN appointments a ON a.id = c.appointment_id
+WHERE c.status = 'signed' AND a.status <> 'completed';
+-- 3. Appointments audited as cancelled whose status is not
+SELECT a.tenant_id, a.id, a.code, a.status, l."timestamp" FROM audit_logs l JOIN appointments a ON a.id::text = l.entity_id
+WHERE l.entity_type = 'Appointment' AND l.action = 'appointment.cancelled' AND a.status <> 'cancelled';
+-- 4. Procedures signed more than once
+SELECT tenant_id, entity_id AS procedure_id, count(*), array_agg(actor_id ORDER BY "timestamp") AS signers
+FROM audit_logs WHERE action = 'procedure.signed' GROUP BY 1,2 HAVING count(*) > 1;
+-- 5. Signed procedures that are no longer completed
+SELECT p.tenant_id, p.id, p.status FROM procedures p
+WHERE p.status <> 'completed' AND EXISTS (SELECT 1 FROM audit_logs l
+  WHERE l.entity_type = 'Procedure' AND l.entity_id = p.id::text AND l.action = 'procedure.signed');
+-- 6. Appointments with more than one live procedure
+SELECT tenant_id, appointment_id, count(*), array_agg(id) AS procedure_ids FROM procedures
+WHERE appointment_id IS NOT NULL AND status <> 'cancelled' GROUP BY 1,2 HAVING count(*) > 1;
+-- 7. Signed procedures whose appointment is not completed (includes legitimate cases)
+SELECT p.tenant_id, p.id, a.code, a.status FROM procedures p JOIN appointments a ON a.id = p.appointment_id
+WHERE p.status = 'completed' AND a.status <> 'completed';
+```
+
+- **Query 1**: cancelled or no-show appointments that have a consultation (and a record, if it was signed). A cancellation raced a signature or a start: decide which status is right.
+- **Query 2**: signed consultations whose appointment is not completed: the same race from the other side.
+- **Query 3**: appointments whose audit log says cancelled but whose status is not: they changed after the cancellation.
+- **Query 4**: procedures with more than one `procedure.signed` in the audit log: two signatures raced, so the performer and the notifications may be duplicated. Decide with the clinic which signature stands.
+- **Query 5**: signed procedures that are no longer completed, reopened or cancelled after the signature.
+- **Query 6**: appointments with more than one live procedure: a duplicate procedure, and its fee, from two registrations at once. Decide which one stands and void the other.
+- **Query 7**: signed procedures whose appointment is not completed. It includes legitimate cases: a procedure signed on a cancelled or no-show appointment stays as it is, by design (see the [backlog](../docs/BACKLOG.md)). Review only the rows that are not that case.

@@ -49,8 +49,17 @@ class AppointmentRepository(Protocol):
 
     def get_for_update(self, appointment_id: AppointmentId) -> Appointment | None:
         """Load the appointment and hold its row until the transaction ends, so concurrent
-        starts of the same appointment run one after another. Taken last in the lock
-        order (consultation, record-code counter, appointment)."""
+        starts, cancellations, signatures and fee changes of the same appointment run one
+        after another and each sees what the other committed.
+
+        Lock order everywhere, so no two transactions wait on each other:
+        1. a clinical document: a consultation or a procedure (never both in one
+           transaction);
+        2. the appointment;
+        3. a counter (record code, appointment code, ...), always last.
+        Never lock a consultation or a procedure while holding an appointment, and never
+        lock anything while holding a counter. Plain reads do not lock.
+        """
         ...
 
     def save(self, appointment: Appointment) -> None: ...

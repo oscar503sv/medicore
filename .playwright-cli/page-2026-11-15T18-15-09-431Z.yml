@@ -1,0 +1,132 @@
+- generic [ref=f4e2]:
+  - generic [ref=f4e3]:
+    - complementary [ref=f4e4]:
+      - generic [ref=f4e5]:
+        - generic [ref=f4e6]:
+          - generic [ref=f4e7]: M
+          - generic [ref=f4e8]: Medicore
+        - button "Contraer menú" [ref=f4e9] [cursor=pointer]
+      - generic [ref=f4e18]:
+        - paragraph [ref=f4e19]: Clínica Demo, S.A. de C.V.
+        - paragraph [ref=f4e20]: Organización
+      - navigation [ref=f4e21]:
+        - generic [ref=f4e22]:
+          - paragraph [ref=f4e23]: General
+          - link "Panel" [ref=f4e24] [cursor=pointer]:
+            - /url: /
+          - link "Métricas" [ref=f4e31] [cursor=pointer]:
+            - /url: /analytics
+          - link "Reportes" [ref=f4e35] [cursor=pointer]:
+            - /url: /reports
+        - generic [ref=f4e40]:
+          - paragraph [ref=f4e41]: Clínico
+          - link "Pacientes" [ref=f4e42] [cursor=pointer]:
+            - /url: /patients
+          - link "Citas" [ref=f4e49] [cursor=pointer]:
+            - /url: /appointments
+          - link "Agenda" [ref=f4e53] [cursor=pointer]:
+            - /url: /schedule
+          - link "Historiales" [ref=f4e57] [cursor=pointer]:
+            - /url: /records
+          - link "Aplicaciones" [ref=f4e62] [cursor=pointer]:
+            - /url: /applications
+          - link "Procedimientos" [ref=f4e67] [cursor=pointer]:
+            - /url: /procedures
+          - link "Vacunación" [ref=f4e71] [cursor=pointer]:
+            - /url: /vaccination
+        - generic [ref=f4e80]:
+          - paragraph [ref=f4e81]: Gestión
+          - link "Mi disponibilidad" [ref=f4e82] [cursor=pointer]:
+            - /url: /availability
+          - link "Tarifas" [ref=f4e88] [cursor=pointer]:
+            - /url: /fees
+          - link "Ajustes" [ref=f4e93] [cursor=pointer]:
+            - /url: /settings
+    - generic [ref=f4e98]:
+      - banner [ref=f4e99]:
+        - button "ES" [ref=f4e100] [cursor=pointer]
+        - button "system" [ref=f4e101] [cursor=pointer]
+        - button "Abrir notificaciones" [ref=f4e105] [cursor=pointer]:
+          - generic [ref=f4e190]: "5"
+        - button "DM" [ref=f4e110] [cursor=pointer]
+      - main [ref=f4e112]:
+        - generic [ref=f4e113]:
+          - generic [ref=f4e114]:
+            - heading "Citas" [level=1] [ref=f4e116]
+            - generic [ref=f4e117]:
+              - button "Ver en agenda" [ref=f4e118] [cursor=pointer]
+              - button "Nueva cita" [ref=f4e121] [cursor=pointer]
+          - generic [ref=f4e123]:
+            - generic [ref=f4e124]:
+              - button "Día anterior" [ref=f4e125] [cursor=pointer]
+              - button "martes, 17 de noviembre 2026" [ref=f4e128] [cursor=pointer]:
+                - textbox [aria-hidden]: 2026-11-17
+              - button "Día siguiente" [ref=f4e132] [cursor=pointer]
+            - button "Hoy" [ref=f4e135] [cursor=pointer]
+            - textbox "Paciente, motivo o código…" [ref=f4e140]
+          - generic [ref=f4e141]:
+            - generic [ref=f4e142]:
+              - generic [ref=f4e143]: Total del día
+              - paragraph [ref=f4e148]: "2"
+            - generic [ref=f4e149]:
+              - generic [ref=f4e150]: Programadas
+              - paragraph [ref=f4e155]: "1"
+            - generic [ref=f4e156]:
+              - generic [ref=f4e157]: Confirmadas
+              - paragraph [ref=f4e161]: "0"
+            - generic [ref=f4e162]:
+              - generic [ref=f4e163]: Completadas
+              - paragraph [ref=f4e168]: "0"
+            - generic [ref=f4e169]:
+              - generic [ref=f4e170]: Inasistencias
+              - paragraph [ref=f4e177]: "0"
+          - generic [ref=f4e178]:
+            - button "Todos2" [ref=f4e191] [cursor=pointer]
+            - button "Agendada1" [ref=f4e250] [cursor=pointer]
+            - button "Confirmada0" [ref=f4e181] [cursor=pointer]
+            - button "En curso0" [ref=f4e182] [cursor=pointer]
+            - button "Completada0" [ref=f4e183] [cursor=pointer]
+            - button "Cancelada1" [ref=f4e251] [cursor=pointer]
+            - button "No asistió0" [ref=f4e185] [cursor=pointer]
+          - table [ref=f4e194]:
+            - rowgroup [ref=f4e195]:
+              - row [ref=f4e196]:
+                - columnheader "Hora" [ref=f4e197]
+                - columnheader "Paciente" [ref=f4e198]
+                - columnheader "Motivo" [ref=f4e199]
+                - columnheader "Estado" [ref=f4e200]
+                - columnheader "Cobro" [ref=f4e201]
+                - columnheader [ref=f4e202]
+            - rowgroup [ref=f4e203]:
+              - row [ref=f4e252]:
+                - cell "09:00–09:30" [ref=f4e205]:
+                  - text: 09:00
+                  - generic [ref=f4e206]: –09:30
+                - cell [ref=f4e207]:
+                  - link "Diego Alvarado Rivera" [ref=f4e208] [cursor=pointer]:
+                    - /url: /patients/96c841f8-032c-4e5c-b587-1e028d33e9eb
+                  - paragraph [ref=f4e209]: A-1467
+                - cell [ref=f4e210]:
+                  - paragraph [ref=f4e211]: Erupción en la piel
+                  - paragraph [ref=f4e212]: Consulta
+                - cell "Cancelada" [ref=f4e253]
+                - cell "—" [ref=f4e254]
+                - cell [ref=f4e255]
+              - row [ref=f4e227]:
+                - cell "12:00–12:30" [ref=f4e228]:
+                  - text: 12:00
+                  - generic [ref=f4e229]: –12:30
+                - cell [ref=f4e230]:
+                  - link "Diego Cruz Martínez" [ref=f4e231] [cursor=pointer]:
+                    - /url: /patients/8140cc11-9363-412a-ae57-13b7abccf5b1
+                  - paragraph [ref=f4e232]: A-1509
+                - cell [ref=f4e233]:
+                  - paragraph [ref=f4e234]: Control de niño sano
+                  - paragraph [ref=f4e235]: Consulta
+                - cell "Agendada" [ref=f4e236]
+                - cell "Sin tarifa" [ref=f4e238]
+                - cell [ref=f4e239]:
+                  - generic [ref=f4e240]:
+                    - button "Confirmar" [ref=f4e241] [cursor=pointer]
+                    - button "Más acciones" [ref=f4e245] [cursor=pointer]
+  - generic [ref=f4e256]: No se puede realizar esta acción en el estado actual (Cancelada).

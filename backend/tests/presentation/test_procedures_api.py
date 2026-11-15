@@ -42,8 +42,15 @@ def test_procedure_lifecycle(seed, client, auth_headers):
     done = resp.json()["procedure"]
     assert done["status"] == "completed" and done["follow_up_on"] and done["performed_by_name"]
 
-    resp = client.put(f"/api/v1/procedures/{pid}", json={"technique": "x"}, headers=auth_headers)
-    assert resp.json()["code"] == "procedure.closed"
+    for resp in (
+        client.put(f"/api/v1/procedures/{pid}", json={"technique": "x"}, headers=auth_headers),
+        client.post(f"/api/v1/procedures/{pid}/sign", headers=auth_headers),
+        client.post(f"/api/v1/procedures/{pid}/consent", json={
+            "signer": "Ana Pérez", "witness": "Lucía Méndez"}, headers=auth_headers),
+        client.post(f"/api/v1/procedures/{pid}/cancel", json={"reason": "x"},
+                    headers=auth_headers),
+    ):
+        assert resp.status_code == 409 and resp.json()["code"] == "procedure.already_signed"
     resp = client.post(f"/api/v1/procedures/{pid}/amendments", json={
         "text": "Fueron 5 puntos", "reason": "Conteo"}, headers=auth_headers)
     assert resp.json()["procedure"]["amendments"][0]["by_name"]
@@ -85,3 +92,16 @@ def test_catalog_admin_only(seed, client, auth_headers, admin_headers):
     resp = client.put(f"/api/v1/procedures/catalog/{tid}",
                       json={**body, "performer": "doctor_or_nurse"}, headers=admin_headers)
     assert resp.json()["performer"] == "doctor_or_nurse" and resp.json()["active"] is False
+
+
+def test_a_cancelled_procedure_answers_closed_not_already_signed(seed, client, auth_headers):
+    types = _catalog(client, auth_headers)
+    resp = client.post("/api/v1/procedures", json={
+        "patient_id": str(seed.patient.id), "indication": "Control",
+        "type_id": types["Lavado de oído"]["id"]}, headers=auth_headers)
+    pid = resp.json()["procedure"]["id"]
+    resp = client.post(f"/api/v1/procedures/{pid}/cancel", json={"reason": "No vino"},
+                       headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    resp = client.put(f"/api/v1/procedures/{pid}", json={"technique": "x"}, headers=auth_headers)
+    assert resp.status_code == 422 and resp.json()["code"] == "procedure.closed"

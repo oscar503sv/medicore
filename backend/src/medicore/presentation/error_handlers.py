@@ -31,6 +31,7 @@ from medicore.application.use_cases.monitoring import (
     RecordServerError,
     RecordServerErrorCommand,
 )
+from medicore.domain.entities.procedure import ProcedureAlreadySigned
 from medicore.domain.shared.errors import (
     CodedError,
     ConsultationAlreadySigned,
@@ -183,6 +184,10 @@ def register_error_handlers(app: FastAPI) -> None:
     async def handle_already_signed(request: Request, exc: ConsultationAlreadySigned):
         # Signed already (a double click, a retry, another tab): a conflict with the
         # consultation's current state, not an incomplete one.
+        return _json(409, exc)
+
+    @app.exception_handler(ProcedureAlreadySigned)
+    async def handle_procedure_signed(request: Request, exc: ProcedureAlreadySigned):
         return _json(409, exc)
 
     @app.exception_handler(ConsultationNotSignable)
