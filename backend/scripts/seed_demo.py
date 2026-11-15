@@ -15,8 +15,9 @@ relative to the day the script runs:
   real numbers and a comparison with last week.
 * Next ~4 weeks: an agenda that thins out with distance, with some reschedules and
   cancellations, a doctor's vacation and an extra Saturday shift.
-* Amendments (some by a covering doctor), uploaded documents (lab results, imaging…), a
-  recently invited user whose role was corrected, and login history.
+* Amendments (by the record's author, with a reason; a few in chains of three versions),
+  uploaded documents (lab results, imaging…), a recently invited user whose role was
+  corrected, and login history.
 
 Because every action goes through its use case with a simulated clock, audit entries and
 in-app notifications come out exactly as in real use. Older notifications are marked as read;
@@ -1525,21 +1526,22 @@ def seed_procedure_appointments(c: Clinic) -> None:
 
 
 # ── amendments, documents, users, logins ──────────────────────────────────────────────────
+AMENDMENT_REASONS = (
+    "Se añade resultado de laboratorio recibido después de la consulta.",
+    "Corrección de la dosis indicada tras llamada de seguimiento.",
+    "Error de transcripción en el plan terapéutico.",
+    "Se completa el plan con la derivación acordada con el paciente.",
+)
+
+
 def seed_amendments(c: Clinic) -> None:
     recent = [r for r in c.signed if r.signed_at.date() >= c.today - timedelta(days=21)
               and r.signed_at.date() < c.today - timedelta(days=1)]
     RNG.shuffle(recent)
     by_id = {d.id: d for d in c.doctors}
-    covering = 0
-    for record in recent[:12]:
+    for number, record in enumerate(recent[:12]):
+        # Only the author amends: the chain keeps their name on every version.
         author = by_id[record.author_id]
-        # About a third are added by a covering colleague → the author gets notified.
-        if covering < 4 and c.specialty[author.id] != "Pediatría":
-            amender = RNG.choice([d for d in c.doctors if d.id != author.id
-                                  and c.specialty[d.id] != "Pediatría"])
-            covering += 1
-        else:
-            amender = author
         when_utc = record.signed_at + timedelta(days=RNG.randint(1, 4), hours=RNG.randint(1, 5))
         when = min(when_utc.astimezone(c.clock.tz).replace(tzinfo=None),
                    c.now - timedelta(hours=1))
@@ -1552,8 +1554,18 @@ def seed_amendments(c: Clinic) -> None:
             "paciente refiere mejoría; se mantiene el tratamiento.",
             "se añade derivación a especialista.",
         ])
-        AmendMedicalRecord(c.uow(), c.at(when)).execute(
-            actor(c, amender), record.id, note={last.key: addendum})
+        amendment = AmendMedicalRecord(c.uow(), c.at(when)).execute(
+            actor(c, author), record.id, reason=RNG.choice(AMENDMENT_REASONS),
+            note={last.key: addendum})
+        c.count("enmiendas")
+        if number >= 2:
+            continue
+        # A couple are amended again, so the demo shows chains of three versions.
+        again = min(when + timedelta(days=1, hours=RNG.randint(0, 3)),
+                    c.now - timedelta(minutes=30))
+        AmendMedicalRecord(c.uow(), c.at(again)).execute(
+            actor(c, author), amendment.id, reason=RNG.choice(AMENDMENT_REASONS),
+            note={last.key: addendum + " Se confirma con el paciente."})
         c.count("enmiendas")
 
 

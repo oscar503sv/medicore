@@ -111,6 +111,13 @@ export function errorCode(error: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined
 }
 
+/** Interpolation params the backend sent with an error (e.g. `current_id`). */
+export function errorParams(error: unknown): Record<string, unknown> {
+  if (!axios.isAxiosError(error)) return {}
+  const params = error.response?.data?.params
+  return typeof params === 'object' && params !== null ? (params as Record<string, unknown>) : {}
+}
+
 /** Extract a human-readable message from an Axios error. */
 // Params whose values are themselves codes get rendered through an existing label, so a
 // message reads "No tienes permiso para esta acción: Enmendar expedientes" rather than

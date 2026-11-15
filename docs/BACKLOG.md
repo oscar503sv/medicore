@@ -9,7 +9,7 @@ that the references are still accurate.
 ## Incomplete functionality (the backend has more than is used)
 
 ### Notification system
-Complete in-app notifications: emitted from appointments, amendments, documents and user
+Complete in-app notifications: emitted from appointments, documents and user
 management; `/notifications` router; a bell in the top bar with an unread counter (polled every
 60 s) and a dropdown with deep links (`/appointments?date=`, `/patients/:id?tab=…&record=…`);
 full inbox page at `/notifications` (filters by status and category, grouped by day).
@@ -22,6 +22,12 @@ External channels and reminders are planned as a future evolution (see [Future](
   for billing.
 - Medical document storage keeps **metadata only** (name, mime type, size, `storage_key`);
   there is no file backend (S3/disk). The UI says so explicitly.
+- Amendment follow-ups (OZK-94, OZK-98): `procedure.amended` and `certificate.voided` store the
+  reason text in the audit log, unlike record amendments (which keep only its length); align them.
+  `platform_reads.signed_records` and `signed_per_week` (platform console) count amendments as new
+  signed records; they should exclude them.
+- OZK-99 (immutability trigger on `medical_records`) must go in a migration after
+  `e6f7a8b9c0d2`.
 
 ## Future
 
@@ -153,5 +159,12 @@ Resolved in November 2026:
 - **Clinical content of records is doctor-only** (OZK-96): `records.read_clinical` (doctor-only, not delegable) gates the note, diagnoses, record prescriptions, vaccines, exams, the full copy, certificates and the clinical history. The backend answers 403 on `GET /records/{id}` for other roles, and the frontend follows the same rule.
 - **Paginated, audited records list** (OZK-97): `GET /records` returns `{items, total, offset, limit}` with server-side filters (patient, type, dates, search), metadata only outside the doctor's clinical reading, an index on `(tenant_id, encounter_at)`, and an audit entry per page (`record.listed`).
 - **Consultation content is the doctor's** (OZK-95): `consultations.edit` is doctor-only (not delegable) and gates the note, diagnoses and drafts, which only the owning doctor reads or edits. Nurses record vital signs with `consultations.vitals` (delegable); administrators can start a consultation but not open it; support impersonation can't touch clinical content. Reads and edits are audited with names only (`consultation.viewed`, `consultation.note_updated`, `consultation.vitals_updated`, `consultation.template_changed`, `consultation.draft_changed`), and migration `d5e6f7a8b9c1` moves the existing grants.
+- **Record amendments** (OZK-94, OZK-98): one line of versions per record. Only the current version
+  is amended, at most once, by the record's author (who never changes), with a reason of 10 to 1000
+  characters; serialized with a row lock and a partial unique index. The reason is stored on the
+  version and shown in the history and in the printed copy, but not in the audit log; lists and
+  summaries show only current versions; amendments no longer notify. The printed certificate uses the
+  original signature time as the end of the consultation. Migration `e6f7a8b9c0d2` enforces the line
+  (see [Branched amendment chains](../backend/README.md#branched-amendment-chains)).
 
 No pending findings remain in this list.

@@ -49,6 +49,8 @@ class RecordPrintResponse(BaseModel):
     record: dict[str, Any]
     indications: str | None
     amends_code: str | None
+    version: int
+    original_signed_at: datetime | None
 
 
 class CertificatePrintResponse(BaseModel):

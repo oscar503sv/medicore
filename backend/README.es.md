@@ -50,7 +50,7 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
 - **Multi-tenant**: toda entidad de negocio lleva `tenant_id`; el filtrado por tenant es
   responsabilidad de los repositorios, no del caller.
 - **Inmutabilidad clínica**: un `MedicalRecord` firmado no se modifica; una corrección genera una
-  **enmienda** (nuevo registro con `status=amended` que referencia al original).
+  **enmienda** (nuevo registro con `status=amended` que referencia al original). Solo el autor del expediente lo enmienda, solo su versión vigente, y siempre con un motivo; las versiones forman una sola cadena (`amends_record_id` es único) y cada versión guarda quién la firmó (`signed_by_id`, `signed_at`).
 
 ## Funcionalidades
 
@@ -139,10 +139,11 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
   dos veces la misma cita devuelve la misma consulta.
 - **Acceso a la consulta** (`application/use_cases/consultations.py`): la nota, los diagnósticos y los borradores son del médico dueño (`consultations.edit` es `DOCTOR_ONLY`). Otro médico recibe 403 `consultation.not_own`, otros roles 403 `permission.missing` y la suplantación de soporte 403 `support.clinical_forbidden`; el admin puede iniciar una consulta pero no leerla ni modificarla. La enfermería escribe vitales con `consultations.vitals` (delegable, por defecto enfermería): `GET /consultations/by-appointment/{appointment_id}/vitals` responde 404 `consultation.not_started` si la cita aún no tiene consulta, y `PUT /consultations/{id}/vitals` acepta actualizaciones parciales (un campo enviado como `null` se limpia; una consulta firmada responde 409 `consultation.already_signed`). `POST /consultations/start/{appointment_id}` responde una referencia mínima (`id`, `appointment_id`, `patient_id`, `doctor_id`, `status`, `started_at`) sin la nota, y `PATCH /autosave` fusiona los vitales campo a campo.
 - **Lectura de expedientes** (`application/use_cases/records.py`, router `records`): el contenido clínico de un expediente (nota, diagnósticos, recetas, vacunas, exámenes, copia completa, constancias e historial clínico) requiere `records.read_clinical`, permiso exclusivo de médicos y no delegable (`DOCTOR_ONLY`); a los demás les responde 403 `permission.missing`. `GET /records` está paginado (`{items, total, offset, limit}`, 25 por defecto, 100 como máximo) y filtra en el servidor: `patient_id`, `type`, `date_from`/`date_to` (días de la clínica) y `q` (código del expediente, nombre o código del paciente); un rango invertido responde 400 `records.invalid_range`. Devuelve solo metadatos (sin motivo de consulta, nota ni signos vitales) y lo respalda el índice `ix_records_tenant_encounter`. Endpoints nuevos: `GET /patients/{id}/records` (historial clínico, solo médicos) y `GET /patients/{id}/vitals` (`records.view`); `GET /patients/{id}` añade `latest_vitals` y `recent_records` (hasta 6, solo metadatos). Auditoría: `record.listed` (cada página; nunca el texto buscado), `record.viewed`, `record.history_viewed`, `patient.vitals_listed`, `prescription.listed` y `document.listed`. En impresión, `GET /print/records/{id}` incluye `document`; para quien no es médico la receta sale sin indicaciones generales, y la copia completa, la orden de exámenes y las constancias (listar e imprimir) requieren `records.read_clinical`.
+- **Enmiendas de expedientes** (`application/use_cases/records.py`, router `records`): `POST /records/{id}/amend` recibe `{reason, chief_complaint?, note?}` y rechaza los campos desconocidos (422). Solo el autor del expediente lo enmienda (403 `record.not_own`; las sesiones de soporte reciben 403 `support.clinical_forbidden`), y solo la versión vigente (409 `record.superseded`, con `params.current_id`). Una enmienda sin cambios responde 422 `record.amend_empty`; un motivo fuera de 10 a 1000 caracteres responde 422 `record.amend_reason_invalid` (`params.min`, `params.max`). El motivo se guarda en la versión (`amendment_reason`) y se muestra en el historial y en la copia impresa, pero queda fuera de la auditoría, que registra las secciones cambiadas (`changed`) y la longitud del motivo (`reason_chars`), porque los administradores la leen sin acceso clínico. La comprobación y la inserción corren bajo un lock de fila, y un índice único parcial `uq_medical_records_amends` sobre `amends_record_id` lo respalda. La vigencia se deriva (una versión es vigente cuando nada la enmienda), así que los expedientes firmados nunca se actualizan. `GET /records/{id}/versions` lista la cadena (requiere `records.read_clinical`, auditado como `record.versions_viewed`). `RecordResponse` añade `amendment_reason`, `is_current` y `superseded_by_id`, y `GET /records/{id}` de una versión antigua sigue permitido. Los listados (`GET /records`, `GET /patients/{id}/records`, vitales, y `recent_records` / `records_count` de `GET /patients/{id}`) muestran solo versiones vigentes. `GET /print/records/{id}` resuelve a la versión vigente y añade `version` y `original_signed_at`. Una constancia emitida sobre un expediente reemplazado usa la versión vigente, listar constancias por expediente recorre toda la cadena, y una constancia impresa termina la consulta en la hora de la firma original.
 - **Notificaciones in-app** (`application/common/notifications.py`): los casos de uso las
   emiten dentro de su propia transacción —se guardan junto con la acción o no se guardan—,
   nunca al propio autor. Eventos: cita creada/reprogramada/cancelada/no-show (al médico de la
-  cita), historial enmendado (al autor original), documento subido (al médico asignado del
+  cita), documento subido (al médico asignado del
   paciente o, si no tiene, al de su última cita completada) y usuario creado/cambio de rol (a los admins activos), y acciones de soporte sobre usuarios de la clínica (a los admins activos y al usuario afectado; la entrada de impersonación, solo a los admins). Se guarda `type` + `data` (ids y etiquetas, nunca contenido clínico ni
   nombres de archivo) y el cliente redacta el texto en su idioma. Router `notifications`:
   listado paginado (filtrable por no leídas y por categoría: `appointment`, `record`,
@@ -254,10 +255,11 @@ Toda respuesta de error tiene la misma forma:
   responde 409 `consultation.already_signed`. `consultation.incomplete` sigue siendo un 422.
 - Leer contenido clínico sin `records.read_clinical` responde 403 `permission.missing`; un listado de expedientes con `date_from` posterior a `date_to` responde 400 `records.invalid_range`.
 - El acceso a la consulta responde 403 `consultation.not_own` (consulta de otro médico), `permission.missing` (otros roles) o `support.clinical_forbidden` (suplantación de soporte); los vitales de una cita sin consulta responden 404 `consultation.not_started`.
+- Las enmiendas de expedientes responden 403 `record.not_own` (no es el autor) o `support.clinical_forbidden`, 409 `record.superseded` (`params.current_id`), 422 `record.amend_reason_invalid` (`params.min`, `params.max`) y 422 `record.amend_empty`.
 
 ## Pruebas y linting
 
-Suite de **1537 tests** (305 dominio · 695 aplicación · 360 presentación · 177 infraestructura), casi
+Suite de **1602 tests** (319 dominio · 721 aplicación · 378 presentación · 184 infraestructura), casi
 toda independiente de la base de datos gracias a adaptadores en memoria que ejercen el mismo
 contrato multi-tenant que los repos SQLAlchemy.
 
@@ -266,7 +268,7 @@ Los tests de integración contra PostgreSQL real (`tests/infrastructure/test_aud
 `test_login_throttle_sql.py` — UPSERT atómico del lockout de login —
 `test_consultation_sign_sql.py` — firmas y ediciones concurrentes de una consulta — y
 `test_notification_repository_sql.py` — JSONB y UPDATE/DELETE masivos de la bandeja —
-`test_record_summaries_sql.py` — listado de expedientes (resúmenes, filtros y paginación) — `test_patient_search_sql.py` — búsqueda sin acentos, dígitos del teléfono, últimas visitas) usan `TEST_DATABASE_URL`
+`test_record_summaries_sql.py` — listado de expedientes (resúmenes, filtros y paginación) — `test_record_amend_sql.py` — la cadena de enmiendas (lock de fila, índice único, CHECK del motivo) — `test_patient_search_sql.py` — búsqueda sin acentos, dígitos del teléfono, últimas visitas) usan `TEST_DATABASE_URL`
 (o `DATABASE_URL` de la configuración),
 corren dentro de una transacción que siempre se revierte —no dejan rastro en la BD de desarrollo—
 y se **saltan automáticamente** si no hay PostgreSQL accesible.
@@ -319,6 +321,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 >
 > **Migración `c4d5e6f7a8b0`:** añade el índice `ix_records_tenant_encounter` sobre `medical_records(tenant_id, encounter_at)` para el listado de expedientes, y otorga `records.read_clinical` al rol médico de las clínicas que lo habían personalizado. Crear el índice bloquea escrituras en `medical_records` un instante. Su downgrade quita el permiso de las personalizaciones del médico y elimina el índice.
 
+> **Migración `e6f7a8b9c0d2`** (enmiendas de expedientes): añade `amendment_reason` (obligatorio en toda enmienda, por un CHECK), rellena las enmiendas existentes con el motivo provisional "Enmienda previa a la exigencia de motivo", reasigna el `author_id` de las enmiendas hechas por otro médico al autor original de la cadena (quien firmó cada versión queda en `signed_by_id` y en la auditoría), y crea el índice único `uq_medical_records_amends`. **Antes de desplegar, ejecuta las consultas de [Cadenas de enmiendas ramificadas](#cadenas-de-enmiendas-ramificadas)**: la migración se niega a correr mientras algún expediente tenga más de una enmienda, y lista solo sus ids. Su downgrade quita la columna, el CHECK y el índice, pero no restaura los autores reasignados. **Despliega backend y frontend juntos**: el frontend anterior no envía el motivo.
+>
 > **Migración `d5e6f7a8b9c1`** (autoría de la consulta): devuelve `consultations.edit` a los roles médicos personalizados y elimina las revocaciones de `edit` a médicos; en roles y usuarios de enfermería y recepción, `consultations.edit` pasa a `consultations.vitals` (si quedan a la vez concedido y revocado, gana la revocación; admin no se toca). **Antes de desplegar, respalda `role_permission_overrides` y la tabla `users` (columna `permission_adjustments`).** Su downgrade convierte `vitals` de nuevo en `edit`, pero no restaura las revocaciones de los médicos.
 
 > Para varios workers basta con `WEB_CONCURRENCY=N` (uvicorn la lee; el `docker-compose.yml` usa 2). Cada
@@ -351,3 +355,29 @@ ORDER BY r.consultation_id, r.signed_at;
 
 - **Sin filas**: no hay duplicados, y la migración se aplica al desplegar.
 - **Con filas**: resuelve a mano cada consulta antes de desplegar. Anula las recetas, órdenes de aplicación y procedimientos duplicados, y el expediente sobrante, conservando el que queda. Cada fila indica cuántas recetas tiene el expediente y cuántas órdenes de aplicación y procedimientos tiene la consulta. La migración no corre hasta que no queden duplicados.
+
+## Cadenas de enmiendas ramificadas
+
+Un expediente se enmienda como máximo una vez, así que sus versiones forman una línea. Antes de esta versión un expediente podía enmendarse más de una vez, y una enmienda podía estar firmada por un médico distinto al autor original. La migración `e6f7a8b9c0d2` hace cumplir la línea con un índice único sobre `amends_record_id`. Nunca vuelve a enlazar nada por sí misma: cuando un expediente tiene más de una enmienda, decidir a qué versión sigue la siguiente es una decisión clínica. Por eso la migración se niega a correr mientras existan esas ramas y solo lista sus ids.
+
+Ejecuta estas consultas sobre la base de datos de producción antes de desplegar:
+
+```sql
+-- 1. Ramas (si hay filas, la migración falla)
+SELECT tenant_id, amends_record_id, array_agg(id ORDER BY signed_at) ids, array_agg(signed_by_id ORDER BY signed_at) signers
+FROM medical_records WHERE amends_record_id IS NOT NULL GROUP BY 1,2 HAVING count(*) > 1;
+-- 2. Enmiendas hechas por otro médico (la migración las reasigna al autor original)
+WITH RECURSIVE chain AS (SELECT id, id root_id, author_id root_author FROM medical_records WHERE amends_record_id IS NULL
+  UNION ALL SELECT m.id, c.root_id, c.root_author FROM medical_records m JOIN chain c ON m.amends_record_id = c.id)
+SELECT r.tenant_id, r.id, chain.root_id, chain.root_author, r.author_id, r.signed_by_id, r.signed_at
+FROM medical_records r JOIN chain USING (id) WHERE r.amends_record_id IS NOT NULL AND r.author_id <> chain.root_author;
+-- 3. Constancias emitidas por quien no es el autor original (siguen válidas; decidir si se anulan)
+WITH RECURSIVE chain AS (SELECT id, author_id root_author FROM medical_records WHERE amends_record_id IS NULL
+  UNION ALL SELECT m.id, c.root_author FROM medical_records m JOIN chain c ON m.amends_record_id = c.id)
+SELECT c.tenant_id, c.id, c.code, c.doctor_id, chain.root_author, c.voided_at
+FROM medical_certificates c JOIN chain ON chain.id = c.record_id WHERE c.doctor_id <> chain.root_author;
+```
+
+- **Filas de la consulta 1**: la migración se niega a correr. Resuelve cada rama a mano, con revisión clínica: vuelve a apuntar cada enmienda posterior a la punta de la anterior, ordenadas por `signed_at`, con un `UPDATE` de `amends_record_id`. Hazlo en una transacción y revisa el resultado; luego vuelve a ejecutar la consulta hasta que no devuelva filas.
+- **Filas de la consulta 2**: no hay nada que hacer antes de desplegar. La migración reasigna su `author_id`, y quien firmó cada versión queda en `signed_by_id` y en la auditoría.
+- **Filas de la consulta 3**: esas constancias siguen válidas y la migración no las toca. Decide con la clínica si las anulas.

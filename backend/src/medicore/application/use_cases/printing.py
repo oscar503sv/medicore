@@ -88,6 +88,8 @@ class RecordPrint:
     record: MedicalRecord
     indications: str | None  # the note's plan, when the doctor wrote one
     amends_code: str | None  # the original record's code, for an amendment
+    version: int  # 1 is the original
+    original_signed_at: datetime | None  # only for an amendment
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,18 +218,18 @@ class PrintRecordDocument(_Printer):
             else Permission.RECORDS_READ_CLINICAL,
         )
         can_read_clinical = has_permission(actor, Permission.RECORDS_READ_CLINICAL)
-        record = self._uow.medical_records.get_by_id(record_id)
-        if record is None:
+        # Printing always resolves to the current version, so an old link never reprints
+        # a superseded text.
+        chain = self._uow.medical_records.versions(record_id)
+        if not chain:
             raise EntityNotFound("MedicalRecord", record_id)
+        record = chain[-1]
         if (document == "prescription" and not record.prescriptions) or (
             document == "exams" and not record.exams
         ):
             raise _nothing()
         patient = self._load_patient(record.patient_id)
-        amends_code = None
-        if record.amends_record_id is not None:
-            original = self._uow.medical_records.get_by_id(record.amends_record_id)
-            amends_code = original.code if original else None
+        amends_code = chain[-2].code if len(chain) > 1 else None
         context = self._context(
             location_id=self._location_of(record.appointment_id), patient=patient,
             doctor_id=record.signed_by_id, on=record.encounter_at.date(),
@@ -236,7 +238,8 @@ class PrintRecordDocument(_Printer):
         indications = record.note.text_for(NoteRole.PLAN) or None if can_read_clinical else None
         return RecordPrint(
             context=context, document=document, record=record, indications=indications,
-            amends_code=amends_code,
+            amends_code=amends_code, version=len(chain),
+            original_signed_at=chain[0].signed_at if len(chain) > 1 else None,
         )
 
 
@@ -249,9 +252,10 @@ class PrintCertificate(_Printer):
         if certificate.is_voided:
             raise ValidationError("a voided certificate is not printed",
                                   code="print.certificate_voided")
-        record = self._uow.medical_records.get_by_id(certificate.record_id)
-        if record is None:
+        chain = self._uow.medical_records.versions(certificate.record_id)
+        if not chain:
             raise EntityNotFound("MedicalRecord", certificate.record_id)
+        record = chain[0]
         patient = self._load_patient(certificate.patient_id)
         context = self._context(
             location_id=self._location_of(record.appointment_id), patient=patient,

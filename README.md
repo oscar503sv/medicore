@@ -93,7 +93,8 @@ A separate session (`platform`-scoped token, with its own `mc_console` cookie) t
 
 ### Critical business rules
 - Appointments only within the doctor's availability, with no overlaps, honoring the booking rules.
-- A signed `MedicalRecord` is **immutable**; corrections are **versioned amendments** (`status=amended` referencing the original).
+- A signed `MedicalRecord` is **immutable**; corrections are **versioned amendments** (`status=amended` referencing the original). Only the record's author amends it, and only its current version: a record is amended at most once, so the versions form a single line. The reason is required (10 to 1000 characters), and every version keeps who signed it and when (`signed_by_id`, `signed_at`), so the author never changes. Amendments notify no one, and the audit log keeps the changed sections and the reason's length, never its text, because administrators read it without clinical access.
+- **Amendments in the record drawer**: **Amend** appears only to the record's author and only on the current version; the modal asks for the reason, with a counter. The **version history** lists every version with its signer, date, reason and current mark. An older version shows a *Version replaced* banner that links to the current one and hides amend, print and certificates. The printed copy of the record has an **Amendment** section (version, original signature and reason); the prescription doesn't show the reason.
 - `SignConsultation` is **atomic**: record + prescriptions + appointment `completed` in a single transaction. The sign first locks the consultation row, so a second sign (double click, retry, another tab) answers 409 `consultation.already_signed` and editing a signed consultation answers 409 too; a partial unique index keeps a single original record per consultation.
 - Consultation diagnoses are limited to the catalog of the **ICD version configured per clinic** (ICD-10 / ICD-11), with autocomplete.
 - **Vaccination** following El Salvador's national scheme (MINSAL), for children, adolescents and adults: each patient's card computes every dose's status (given, due, overdue, upcoming…) from their age and records; records are never edited, a wrong one is voided with a reason. A worklist shows overdue and upcoming doses across the clinic.
@@ -185,7 +186,7 @@ Pending findings are tracked in [`docs/BACKLOG.md`](docs/BACKLOG.md).
 
 ## Notifications and dashboard
 
-- **In-app notifications**: appointments created, rescheduled, cancelled or marked as no-show (to the doctor), record amendments (to the original author), uploaded documents (to the treating doctor) and new users or role changes (to administrators) and support actions on a clinic's users (to active admins and the affected user; impersonation entry: admins only). A bell in the top bar with an unread counter (polled every 60 s), an unread-only filter and deep links to the item, plus a full **inbox page** (`/notifications`) filterable by status and category and grouped by day. Kept for 90 days.
+- **In-app notifications**: appointments created, rescheduled, cancelled or marked as no-show (to the doctor), uploaded documents (to the treating doctor) and new users or role changes (to administrators) and support actions on a clinic's users (to active admins and the affected user; impersonation entry: admins only). A bell in the top bar with an unread counter (polled every 60 s), an unread-only filter and deep links to the item, plus a full **inbox page** (`/notifications`) filterable by status and category and grouped by day. Kept for 90 days. Amendments no longer notify; the notifications they generated before stay visible.
 - **Dashboard with real data** (`GET /dashboard/summary`): today's appointments, pending ones, registered patients and schedule occupancy, each compared with the previous week, plus the next pending appointments from now on (`GET /appointments/upcoming`). Doctors see their own schedule; other roles see the whole clinic. Whoever can see metrics also gets a **month summary** there.
 
 ## Practice metrics
@@ -399,7 +400,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 
 ```bash
 # Backend
-.venv/bin/pytest                          # full suite (1537 tests)
+.venv/bin/pytest                          # full suite (1602 tests)
 .venv/bin/pytest tests/domain/            # domain tests only
 .venv/bin/ruff check src tests            # lint (--fix to autofix)
 
@@ -424,7 +425,7 @@ npm run build          # type-check (tsc -b) + production build → dist/
 | `appointments` | Appointments with a status FSM and their charge (fee in force when booked, amount charged and the reason for an adjustment) |
 | `doctor_fees` | Each doctor's fee per appointment type (USD) |
 | `consultations` | Consultation in progress (mutable draft) |
-| `medical_records` | Signed, immutable medical records (at most one original per consultation); indexed by `(tenant_id, encounter_at)` for the records list |
+| `medical_records` | Signed, immutable medical records (at most one original per consultation, at most one amendment per record); indexed by `(tenant_id, encounter_at)` for the records list |
 | `prescriptions` | Issued prescriptions |
 | `medical_documents` | Medical files (metadata) |
 | `insurers` | The clinic's insurers |
@@ -453,14 +454,14 @@ npm run build          # type-check (tsc -b) + production build → dist/
 Almost the entire suite is **database-independent** — it uses in-memory adapters that honor the same multi-tenant contract as the SQLAlchemy repos. Infrastructure tests run against **real PostgreSQL** inside a transaction that is always rolled back, and are skipped when no database is available.
 
 ```
-1537 passing tests
-   305  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1602 passing tests
+   319  — domain (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             immunization schedule, applications, procedures, allergy matching)
-   695  — application (auth, sessions, appointments, consultations, records, notifications,
+   721  — application (auth, sessions, appointments, consultations, records and amendments, notifications,
             dashboard, platform (support actions land in the clinic's audit and are notified), granular permissions, multi-tenant isolation)
-   360  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
+   378  — presentation (HTTP endpoints: auth guards, CSRF, booking, lifecycle, 403 per
             permission, error codes, validation, platform)
-    177  — infrastructure (SQLAlchemy repositories against PostgreSQL)
+    184  — infrastructure (SQLAlchemy repositories against PostgreSQL, including the amendment chain)
 ```
 
 Among other things, the tests verify:
@@ -540,7 +541,7 @@ Redeploys keep the data (volume `medicore-pgdata`) and apply new migrations on s
 
 > **Migration `d5e6f7a8b9c1`** (consultation authorship): gives `consultations.edit` back to the doctor roles that customized it and drops doctors' revocations of it; in nurse and receptionist roles and users, `consultations.edit` becomes `consultations.vitals` (if a grant and a revocation of the same permission would both remain, the revocation wins; admins are untouched). **Before deploying, back up `role_permission_overrides` and the `users` table (column `permission_adjustments`).** Its downgrade turns `vitals` back into `edit`, but it does not restore the doctors' revocations.
 
-> **Visible changes in this version** (tell the clinics' users): administrators and nurses no longer see the reason for the visit in Records or in the patient summary; in Records the Reason column becomes Doctor, and only the doctor can open a record; the medication line shows the prescribing doctor instead of the record code; administrators and nurses reprint prescriptions without general instructions; tabs opened with the previous version fail in Records until they are reloaded. Nurses only record vital signs in the consultation in progress, and administrators can no longer open it: only the doctor who started it continues to the note. API clients: `POST /consultations/start/{id}` no longer returns the note (a minimal reference instead).
+> **Visible changes in this version** (tell the clinics' users): administrators and nurses no longer see the reason for the visit in Records or in the patient summary; in Records the Reason column becomes Doctor, and only the doctor can open a record; the medication line shows the prescribing doctor instead of the record code; administrators and nurses reprint prescriptions without general instructions; tabs opened with the previous version fail in Records until they are reloaded. Nurses only record vital signs in the consultation in progress, and administrators can no longer open it: only the doctor who started it continues to the note. API clients: `POST /consultations/start/{id}` no longer returns the note (a minimal reference instead). Record amendments: only the record's author can amend it, from its current version and with a reason of 10 to 1000 characters (`POST /records/{id}/amend` takes `reason`, and rejects unknown fields); the records list and the patient summary show only current versions, so their totals can be lower than before; amendments no longer notify the author.
 
 For a public demo, add a nightly **Scheduled Task** in Coolify on the `backend` container running `python scripts/seed_demo.py --reset` (e.g. `0 9 * * *`, 03:00 in El Salvador): it undoes whatever visitors changed, keeps the data from piling up and moves the dates to the current day. The ICD catalog and the platform admins are not touched. Each run is recorded, and the *Monitoring* page flags the task when it fails or when more than 26 h pass without a successful reset.
 

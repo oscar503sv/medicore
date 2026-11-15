@@ -335,6 +335,7 @@ def to_medical_record(row: MedicalRecordModel) -> MedicalRecord:
         appointment_id=AppointmentId.parse(row.appointment_id) if row.appointment_id else None,
         consultation_id=ConsultationId.parse(row.consultation_id) if row.consultation_id else None,
         amends_record_id=RecordId.parse(row.amends_record_id) if row.amends_record_id else None,
+        amendment_reason=row.amendment_reason,
     )
 
 

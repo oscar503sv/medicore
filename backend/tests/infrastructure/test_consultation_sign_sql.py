@@ -272,6 +272,7 @@ def _record(clinic, consultation_id, amends=None) -> MedicalRecord:
         type=ClinicalRecordType.CONSULTATION, encounter_at=NOW, location_name="Sede",
         chief_complaint="x", note=soap_note(), vitals=Vitals(), signed_at=NOW,
         signed_by_id=clinic.doctor.id, consultation_id=consultation_id, amends_record_id=amends,
+        amendment_reason="Corrección del motivo" if amends else None,
     )
 
 

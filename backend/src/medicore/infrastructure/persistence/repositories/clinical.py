@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import String, and_, func, literal_column, or_
-from sqlalchemy.orm import Session
+from sqlalchemy import String, and_, exists, func, literal_column, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from medicore.domain.entities.consultation import Consultation
 from medicore.domain.entities.medical_document import MedicalDocument
@@ -115,10 +115,69 @@ class SqlMedicalRecordRepository:
         row = self._q().filter(MedicalRecordModel.id == record_id.value).first()
         return to_medical_record(row) if row else None
 
-    def list_by_patient(self, patient_id: PatientId) -> list[MedicalRecord]:
+    def get_for_update(self, record_id: RecordId) -> MedicalRecord | None:
+        # FOR NO KEY UPDATE: a second amendment waits here and then finds the first one's
+        # version; it does not block inserts that merely reference the record.
+        row = (
+            self._q()
+            .filter(MedicalRecordModel.id == record_id.value)
+            .with_for_update(key_share=True)
+            .populate_existing()
+            .first()
+        )
+        return to_medical_record(row) if row else None
+
+    def successor_id(self, record_id: RecordId) -> RecordId | None:
+        found = (
+            self._q()
+            .with_entities(MedicalRecordModel.id)
+            .filter(MedicalRecordModel.amends_record_id == record_id.value)
+            .first()
+        )
+        return RecordId(found[0]) if found else None
+
+    def versions(self, record_id: RecordId) -> list[MedicalRecord]:
+        m = MedicalRecordModel
+        # Up to the root, then down along the amendments; ``depth`` orders the chain.
+        up = (
+            select(m.id, m.amends_record_id)
+            .where(m.id == record_id.value, m.tenant_id == self._tid)
+            .cte("up", recursive=True)
+        )
+        parent = aliased(m)
+        up = up.union_all(
+            select(parent.id, parent.amends_record_id).where(
+                parent.id == up.c.amends_record_id, parent.tenant_id == self._tid
+            )
+        )
+        root = select(m.id).where(m.id.in_(select(up.c.id)), m.amends_record_id.is_(None))
+        down = (
+            select(m.id.label("id"), literal_column("0").label("depth"))
+            .where(m.id.in_(root), m.tenant_id == self._tid)
+            .cte("down", recursive=True)
+        )
+        child = aliased(m)
+        down = down.union_all(
+            select(child.id, down.c.depth + 1).where(
+                child.amends_record_id == down.c.id, child.tenant_id == self._tid
+            )
+        )
         rows = (
             self._q()
-            .filter(MedicalRecordModel.patient_id == patient_id.value)
+            .join(down, down.c.id == m.id)
+            .order_by(down.c.depth)
+            .all()
+        )
+        return [to_medical_record(r) for r in rows]
+
+    def list_by_patient(self, patient_id: PatientId) -> list[MedicalRecord]:
+        newer = aliased(MedicalRecordModel)
+        rows = (
+            self._q()
+            .filter(
+                MedicalRecordModel.patient_id == patient_id.value,
+                ~exists().where(newer.amends_record_id == MedicalRecordModel.id),
+            )
             .order_by(MedicalRecordModel.encounter_at.desc())
             .all()
         )
@@ -126,6 +185,7 @@ class SqlMedicalRecordRepository:
 
     def summaries(self, filter: RecordFilter, paging: Paging) -> Page[RecordSummary]:
         m = MedicalRecordModel
+        newer = aliased(m)
         q = (
             self._s.query(
                 m.id, m.code, m.patient_id, m.type, m.status, m.encounter_at, m.location_name,
@@ -140,6 +200,7 @@ class SqlMedicalRecordRepository:
                 UserModel, and_(UserModel.id == m.signed_by_id, UserModel.tenant_id == self._tid)
             )
             .filter(m.tenant_id == self._tid)
+            .filter(~exists().where(newer.amends_record_id == m.id))
         )
         if filter.patient_id:
             q = q.filter(m.patient_id == UUID(filter.patient_id))
@@ -223,6 +284,7 @@ class SqlMedicalRecordRepository:
         row.appointment_id = record.appointment_id.value if record.appointment_id else None
         row.consultation_id = record.consultation_id.value if record.consultation_id else None
         row.amends_record_id = record.amends_record_id.value if record.amends_record_id else None
+        row.amendment_reason = record.amendment_reason
 
 
 class SqlPrescriptionRepository:

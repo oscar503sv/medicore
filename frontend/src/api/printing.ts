@@ -35,6 +35,9 @@ interface RecordPrintBase {
   context: PrintContext
   indications: string | null
   amends_code: string | null
+  /** 1 is the original; the server always prints the current version. */
+  version: number
+  original_signed_at: string | null
 }
 
 /** What reprinting a prescription needs of its record (the server leaves out the rest). */
@@ -62,6 +65,7 @@ export interface FullPrintRecord {
   exams: ExamRequest[]
   vaccines: { name: string; lot: string; dose: string; site: string }[]
   status: string
+  amendment_reason: string | null
 }
 
 export type PrescriptionPrint = RecordPrintBase & {

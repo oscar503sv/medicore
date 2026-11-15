@@ -889,19 +889,47 @@ class InMemoryMedicalRecordRepository(_Scoped):
         r = self._store.medical_records.get(record_id.value)
         return r if r and r.tenant_id == self._tenant else None
 
+    def get_for_update(self, record_id: RecordId) -> MedicalRecord | None:
+        return self.get_by_id(record_id)
+
+    def _current(self) -> list[MedicalRecord]:
+        records = self._mine(self._store.medical_records.values())
+        amended = {r.amends_record_id for r in records if r.amends_record_id}
+        return [r for r in records if r.id not in amended]
+
+    def successor_id(self, record_id: RecordId) -> RecordId | None:
+        return next(
+            (
+                r.id
+                for r in self._mine(self._store.medical_records.values())
+                if r.amends_record_id == record_id
+            ),
+            None,
+        )
+
+    def versions(self, record_id: RecordId) -> list[MedicalRecord]:
+        record = self.get_by_id(record_id)
+        if record is None:
+            return []
+        while record.amends_record_id is not None:
+            parent = self.get_by_id(record.amends_record_id)
+            if parent is None:
+                break
+            record = parent
+        chain = [record]
+        while (next_id := self.successor_id(chain[-1].id)) is not None:
+            chain.append(self.get_by_id(next_id))
+        return chain
+
     def list_by_patient(self, patient_id: PatientId) -> list[MedicalRecord]:
-        result = [
-            r
-            for r in self._mine(self._store.medical_records.values())
-            if r.patient_id == patient_id
-        ]
+        result = [r for r in self._current() if r.patient_id == patient_id]
         result.sort(key=lambda r: r.encounter_at, reverse=True)
         return result
 
     def summaries(self, filter: RecordFilter, paging: Paging) -> Page[RecordSummary]:
         patients = {str(p.id): p for p in self._mine(self._store.patients.values())}
         signers = {str(u.id): u.name for u in self._store.users.values()}
-        records = self._mine(self._store.medical_records.values())
+        records = self._current()
         if filter.patient_id:
             records = [r for r in records if str(r.patient_id) == filter.patient_id]
         if filter.type:

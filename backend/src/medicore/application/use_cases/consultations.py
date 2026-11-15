@@ -13,7 +13,12 @@ from medicore.application.common.errors import (
     ValidationError,
 )
 from medicore.application.common.fees import ensure_can_price
-from medicore.application.common.permissions import Permission, ensure_permission, has_permission
+from medicore.application.common.permissions import (
+    Permission,
+    ensure_not_support,
+    ensure_permission,
+    has_permission,
+)
 from medicore.application.common.timezone import clinic_now
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
@@ -75,17 +80,9 @@ class ConsultationVitalsView:
     doctor_name: str | None
 
 
-def _ensure_not_support(actor: ActorContext) -> None:
-    # Support sessions act as an admin for operations, never on clinical content.
-    if actor.impersonated_by is not None:
-        raise PermissionDenied(
-            "support sessions don't reach clinical content", code="support.clinical_forbidden"
-        )
-
-
 def _ensure_author(actor: ActorContext, doctor_id: UserId, verb: str) -> None:
     """Clinical content belongs to the consultation's doctor; no grant reaches it."""
-    _ensure_not_support(actor)
+    ensure_not_support(actor)
     if actor.role != Role.DOCTOR or actor.user_id != doctor_id:
         raise PermissionDenied(
             f"only the consultation's doctor may {verb} it", code="consultation.not_own"
@@ -109,7 +106,7 @@ class StartConsultation:
 
     def execute(self, actor: ActorContext, appointment_id: AppointmentId) -> Consultation:
         ensure_permission(actor, Permission.CONSULTATIONS_START)
-        _ensure_not_support(actor)
+        ensure_not_support(actor)
         with self._uow:
             # Two starts queue here; the second finds the first's consultation instead of
             # inserting a duplicate.
@@ -238,7 +235,7 @@ def _vitals_view(
 def _ensure_vitals_access(actor: ActorContext) -> None:
     """Checked before loading anything, so a refused actor learns nothing about the
     consultation."""
-    _ensure_not_support(actor)
+    ensure_not_support(actor)
     if not has_permission(actor, Permission.CONSULTATIONS_VITALS):
         ensure_permission(actor, Permission.CONSULTATIONS_EDIT)
 

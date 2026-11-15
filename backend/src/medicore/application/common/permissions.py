@@ -325,6 +325,14 @@ def has_permission(actor: ActorContext, permission: Permission) -> bool:
     return permission in ROLE_PERMISSIONS[actor.role]
 
 
+def ensure_not_support(actor: ActorContext) -> None:
+    """Support sessions act as an admin for operations, never on clinical content."""
+    if actor.impersonated_by is not None:
+        raise PermissionDenied(
+            "support sessions don't reach clinical content", code="support.clinical_forbidden"
+        )
+
+
 def ensure_manages_roles(actor: ActorContext, *roles: Role) -> None:
     """Only an administrator acts on admin or doctor accounts, or hands out those roles.
     Someone else holding ``users.manage`` still manages the rest of the staff.

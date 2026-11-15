@@ -143,7 +143,8 @@ def test_amend_rewrites_sections_of_the_signed_template():
     record = SignConsultation(uow, SequentialCodeGenerator(), FixedClock()).execute(
         seed.doctor_actor, SignConsultationCommand(consultation_id=consultation.id))
     amended = AmendMedicalRecord(uow, FixedClock()).execute(
-        seed.doctor_actor, record.id, note={"plan": "plan corregido"})
+        seed.doctor_actor, record.id, reason="Plan corregido tras la llamada de seguimiento",
+        note={"plan": "plan corregido"})
     assert amended.note.texts()["plan"] == "plan corregido"
     assert amended.note.texts()["subjective"] == "subjetivo"
     assert record.note.texts()["plan"] == "plan"  # the original is untouched

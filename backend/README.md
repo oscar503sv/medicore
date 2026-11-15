@@ -50,7 +50,7 @@ UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/a
 - **Multi-tenancy**: every business entity carries a `tenant_id`; tenant filtering is the
   repositories' responsibility, not the caller's.
 - **Clinical immutability**: a signed `MedicalRecord` is never modified; a correction creates an
-  **amendment** (a new record with `status=amended` that references the original).
+  **amendment** (a new record with `status=amended` that references the original). Only the record's author amends it, only its current version, and always with a reason; the versions form a single chain (`amends_record_id` is unique) and each version keeps its signer (`signed_by_id`, `signed_at`).
 
 ## Features
 
@@ -137,10 +137,11 @@ UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/a
   same appointment twice returns the same consultation.
 - **Consultation access** (`application/use_cases/consultations.py`): the note, diagnoses and drafts belong to the owning doctor (`consultations.edit` is `DOCTOR_ONLY`). Another doctor gets 403 `consultation.not_own`, other roles 403 `permission.missing` and support impersonation 403 `support.clinical_forbidden`; admins can start a consultation but not read or change it. Nurses write vitals with `consultations.vitals` (delegable, nurses by default): `GET /consultations/by-appointment/{appointment_id}/vitals` answers 404 `consultation.not_started` when the appointment has no consultation yet, and `PUT /consultations/{id}/vitals` takes partial updates (a field sent as `null` is cleared; a signed consultation answers 409 `consultation.already_signed`). `POST /consultations/start/{appointment_id}` answers a minimal reference (`id`, `appointment_id`, `patient_id`, `doctor_id`, `status`, `started_at`) without the note, and `PATCH /autosave` merges vitals field by field.
 - **Medical records reading** (`application/use_cases/records.py`, `records` router): the clinical content of a record (note, diagnoses, prescriptions, vaccines, exams, full copy, certificates and the clinical history) needs `records.read_clinical`, a doctor-only permission that can't be delegated (`DOCTOR_ONLY`); anyone else gets 403 `permission.missing`. `GET /records` is paginated (`{items, total, offset, limit}`, 25 by default, 100 at most) and filters on the server: `patient_id`, `type`, `date_from`/`date_to` (clinic days) and `q` (record code, patient name or code); a reversed range answers 400 `records.invalid_range`. It returns metadata only (no reason for the visit, note or vitals) and is backed by the index `ix_records_tenant_encounter`. New endpoints: `GET /patients/{id}/records` (clinical history, doctors only) and `GET /patients/{id}/vitals` (`records.view`); `GET /patients/{id}` adds `latest_vitals` and `recent_records` (up to 6, metadata only). Audit: `record.listed` (each page; never the search text), `record.viewed`, `record.history_viewed`, `patient.vitals_listed`, `prescription.listed` and `document.listed`. In printing, `GET /print/records/{id}` includes `document`; for non-doctors the prescription comes without the general instructions, and the full copy, the exam order and certificates (listing and printing) need `records.read_clinical`.
+- **Record amendments** (`application/use_cases/records.py`, `records` router): `POST /records/{id}/amend` takes `{reason, chief_complaint?, note?}` and rejects unknown fields (422). Only the record's author amends it (403 `record.not_own`; support sessions get 403 `support.clinical_forbidden`), and only the current version (409 `record.superseded`, with `params.current_id`). An amendment with no changes answers 422 `record.amend_empty`; a reason outside 10 to 1000 characters answers 422 `record.amend_reason_invalid` (`params.min`, `params.max`). The reason is stored on the version (`amendment_reason`) and shown in the history and in the printed copy, but it stays out of the audit log, which records the changed sections (`changed`) and the reason's length (`reason_chars`), because administrators read it without clinical access. The check and the insert run under a row lock, and a partial unique index `uq_medical_records_amends` on `amends_record_id` backs it. Currency is derived (a version is current when nothing amends it), so signed records are never updated. `GET /records/{id}/versions` lists the chain (requires `records.read_clinical`, audited as `record.versions_viewed`). `RecordResponse` adds `amendment_reason`, `is_current` and `superseded_by_id`, and `GET /records/{id}` of an older version is still allowed. Lists (`GET /records`, `GET /patients/{id}/records`, vitals, and `recent_records` / `records_count` in `GET /patients/{id}`) show only current versions. `GET /print/records/{id}` resolves to the current version and adds `version` and `original_signed_at`. A certificate issued on a replaced record uses the current version, listing certificates by record walks the whole chain, and a printed certificate ends the consultation at the original signature time.
 - **In-app notifications** (`application/common/notifications.py`): use cases emit them inside
   their own transaction — they are saved together with the action or not at all — and never
   to the author themselves. Events: appointment created/rescheduled/cancelled/no-show (to the
-  appointment's doctor), record amended (to the original author), document uploaded (to the
+  appointment's doctor), document uploaded (to the
   patient's assigned doctor or, if none, the doctor of their last completed appointment) and
   user created/role changed (to active admins), and support actions on a clinic's users (to active admins and the affected user; the impersonation entry, to admins only). Only `type` + `data` are stored (ids and
   labels, never clinical content or file names) and the client writes the text in its own
@@ -254,10 +255,11 @@ Every error response has the same shape:
   answers 409 `consultation.already_signed`. `consultation.incomplete` stays a 422.
 - Reading clinical content without `records.read_clinical` answers 403 `permission.missing`; a records list with `date_from` after `date_to` answers 400 `records.invalid_range`.
 - Consultation access answers 403 `consultation.not_own` (another doctor's consultation), `permission.missing` (other roles) or `support.clinical_forbidden` (support impersonation); vitals of an appointment with no consultation answer 404 `consultation.not_started`.
+- Record amendments answer 403 `record.not_own` (not the author) or `support.clinical_forbidden`, 409 `record.superseded` (`params.current_id`), 422 `record.amend_reason_invalid` (`params.min`, `params.max`) and 422 `record.amend_empty`.
 
 ## Tests and linting
 
-A suite of **1537 tests** (305 domain · 695 application · 360 presentation · 177 infrastructure),
+A suite of **1602 tests** (319 domain · 721 application · 378 presentation · 184 infrastructure),
 almost entirely database-independent thanks to in-memory adapters that honor the same
 multi-tenant contract as the SQLAlchemy repos.
 
@@ -266,7 +268,7 @@ The integration tests against real PostgreSQL (`tests/infrastructure/test_audit_
 `test_login_throttle_sql.py` — atomic UPSERT of the login lockout —
 `test_consultation_sign_sql.py` — concurrent signs and edits of one consultation — and
 `test_notification_repository_sql.py` — JSONB and bulk UPDATE/DELETE of the inbox —
-`test_record_summaries_sql.py` — the records list (summaries, filters and paging) — `test_patient_search_sql.py` — accent-insensitive search, phone digits, last visits) use
+`test_record_summaries_sql.py` — the records list (summaries, filters and paging) — `test_record_amend_sql.py` — the amendment chain (row lock, unique index, reason CHECK) — `test_patient_search_sql.py` — accent-insensitive search, phone digits, last visits) use
 `TEST_DATABASE_URL` (or the configured `DATABASE_URL`), run inside a transaction that is always
 rolled back — they leave no trace in the development database — and are **skipped
 automatically** when PostgreSQL isn't reachable.
@@ -319,6 +321,8 @@ Production checklist (via environment variables, see the **Configuration** table
 >
 > **Migration `c4d5e6f7a8b0`:** adds the index `ix_records_tenant_encounter` on `medical_records(tenant_id, encounter_at)` for the records list, and grants `records.read_clinical` to the doctor role of clinics that had customized it. Creating the index blocks writes to `medical_records` for an instant. Its downgrade removes the permission from the doctor's customizations and drops the index.
 
+> **Migration `e6f7a8b9c0d2`** (record amendments): adds `amendment_reason` (required on every amendment, enforced by a CHECK), fills the existing amendments with the placeholder reason "Enmienda previa a la exigencia de motivo", reassigns `author_id` of amendments made by another doctor to the original author of the chain (who signed each version stays in `signed_by_id` and in the audit log), and creates the unique index `uq_medical_records_amends`. **Before deploying, run the queries in [Branched amendment chains](#branched-amendment-chains)**: the migration refuses to run while any record has more than one amendment, and lists only their ids. Its downgrade drops the column, the CHECK and the index, but does not restore the reassigned authors. **Deploy the backend and the frontend together**: the previous frontend doesn't send the reason.
+>
 > **Migration `d5e6f7a8b9c1`** (consultation authorship): gives `consultations.edit` back to the doctor roles that customized it and drops doctors' revocations of it; in nurse and receptionist roles and users, `consultations.edit` becomes `consultations.vitals` (if a grant and a revocation of the same permission would both remain, the revocation wins; admins are untouched). **Before deploying, back up `role_permission_overrides` and the `users` table (column `permission_adjustments`).** Its downgrade turns `vitals` back into `edit`, but it does not restore the doctors' revocations.
 
 > For multiple workers just set `WEB_CONCURRENCY=N` (uvicorn reads it; `docker-compose.yml` uses 2). Each
@@ -350,3 +354,29 @@ ORDER BY r.consultation_id, r.signed_at;
 
 - **No rows**: there are no duplicates, and the migration applies on deploy.
 - **Rows**: resolve each consultation by hand before deploying. Void the duplicate prescriptions, application orders and procedures, and the surplus record, keeping the one that stands. Each row shows how many prescriptions the record has, and how many application orders and procedures the consultation has. The migration does not run until no duplicates remain.
+
+## Branched amendment chains
+
+A record can be amended at most once, so its versions form a line. Before this version a record could be amended more than once, and an amendment could be signed by a different doctor than the original author. Migration `e6f7a8b9c0d2` enforces the line with a unique index on `amends_record_id`. It never re-links anything by itself: where a record has more than one amendment, the choice of which version the next one follows is a clinical decision. The migration therefore refuses to run while such branches exist and lists only their ids.
+
+Run these queries against the production database before deploying:
+
+```sql
+-- 1. Branches (if there are rows, the migration fails)
+SELECT tenant_id, amends_record_id, array_agg(id ORDER BY signed_at) ids, array_agg(signed_by_id ORDER BY signed_at) signers
+FROM medical_records WHERE amends_record_id IS NOT NULL GROUP BY 1,2 HAVING count(*) > 1;
+-- 2. Amendments made by another doctor (the migration reassigns them to the original author)
+WITH RECURSIVE chain AS (SELECT id, id root_id, author_id root_author FROM medical_records WHERE amends_record_id IS NULL
+  UNION ALL SELECT m.id, c.root_id, c.root_author FROM medical_records m JOIN chain c ON m.amends_record_id = c.id)
+SELECT r.tenant_id, r.id, chain.root_id, chain.root_author, r.author_id, r.signed_by_id, r.signed_at
+FROM medical_records r JOIN chain USING (id) WHERE r.amends_record_id IS NOT NULL AND r.author_id <> chain.root_author;
+-- 3. Certificates issued by someone other than the original author (they stay valid; decide whether to void them)
+WITH RECURSIVE chain AS (SELECT id, author_id root_author FROM medical_records WHERE amends_record_id IS NULL
+  UNION ALL SELECT m.id, c.root_author FROM medical_records m JOIN chain c ON m.amends_record_id = c.id)
+SELECT c.tenant_id, c.id, c.code, c.doctor_id, chain.root_author, c.voided_at
+FROM medical_certificates c JOIN chain ON chain.id = c.record_id WHERE c.doctor_id <> chain.root_author;
+```
+
+- **Rows from query 1**: the migration will refuse to run. Resolve each branch by hand, with clinical review: re-point each later amendment at the tip of the previous one, ordered by `signed_at`, with an `UPDATE` of `amends_record_id`. Do it in a transaction and check the result, then run the query again until it returns no rows.
+- **Rows from query 2**: nothing to do before deploying. The migration reassigns their `author_id`, and the signer of each version stays in `signed_by_id` and in the audit log.
+- **Rows from query 3**: those certificates remain valid and the migration does not touch them. Decide with the clinic whether to void them.

@@ -49,9 +49,11 @@ class IssueMedicalCertificate:
 
     def execute(self, actor: ActorContext, cmd: IssueCertificateCommand) -> MedicalCertificate:
         ensure_permission(actor, Permission.RECORDS_SIGN)
-        record = self._uow.medical_records.get_by_id(cmd.record_id)
-        if record is None:
+        # The paper is issued for the current version, whichever one the caller named.
+        chain = self._uow.medical_records.versions(cmd.record_id)
+        if not chain:
             raise EntityNotFound("MedicalRecord", cmd.record_id)
+        record = chain[-1]
         if record.author_id != actor.user_id:
             raise PermissionDenied(
                 "only the doctor who signed the visit issues its certificates",
@@ -101,7 +103,13 @@ class ListMedicalCertificates:
         # A certificate can carry the diagnosis, so it is clinical content.
         ensure_permission(actor, Permission.RECORDS_READ_CLINICAL)
         if record_id is not None:
-            return self._uow.certificates.list_by_record(record_id)
+            # Certificates stay on the version they were issued for: list the whole chain.
+            issued = [
+                c
+                for version in self._uow.medical_records.versions(record_id)
+                for c in self._uow.certificates.list_by_record(version.id)
+            ]
+            return sorted(issued, key=lambda c: c.issued_at, reverse=True)
         if patient_id is not None:
             return self._uow.certificates.list_by_patient(patient_id)
         return []

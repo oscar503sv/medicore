@@ -42,6 +42,7 @@ from medicore.domain.shared.errors import (
     PermissionDenied,
     QuotaExceeded,
     RecordAlreadySigned,
+    RecordSuperseded,
     SlotUnavailable,
 )
 from medicore.presentation.dependencies import get_clock, get_runtime, get_uow_factory
@@ -190,6 +191,11 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RecordAlreadySigned)
     async def handle_signed(request: Request, exc: RecordAlreadySigned):
+        return _json(409, exc)
+
+    @app.exception_handler(RecordSuperseded)
+    async def handle_superseded(request: Request, exc: RecordSuperseded):
+        # Someone amended the record first (another tab): a conflict with its current state.
         return _json(409, exc)
 
     @app.exception_handler(InvalidValueObject)

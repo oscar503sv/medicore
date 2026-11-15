@@ -15,6 +15,7 @@ from medicore.application.use_cases.records import (
     ListPatientDocuments,
     ListPatientHistory,
     ListPatientVitals,
+    ListRecordVersions,
     RecordQuery,
     UploadDocument,
     UploadDocumentCommand,
@@ -28,6 +29,7 @@ from medicore.presentation.schemas.records import (
     DocumentResponse,
     RecordListResponse,
     RecordResponse,
+    RecordVersionResponse,
     UploadDocumentRequest,
     VitalsReadingResponse,
 )
@@ -35,6 +37,7 @@ from medicore.presentation.serializers import (
     ser_document,
     ser_record,
     ser_record_summary,
+    ser_record_version,
     ser_vitals_reading,
 )
 
@@ -71,7 +74,8 @@ def list_records(
 
 @router.get("/records/{record_id}", response_model=RecordResponse)
 def get_record(record_id: str, actor: Actor, uow: UoW, clock: Clock):
-    record = GetMedicalRecord(uow, clock).execute(actor, RecordId.parse(record_id))
+    view = GetMedicalRecord(uow, clock).execute(actor, RecordId.parse(record_id))
+    record = view.record
     # Record who signed it (the doctor) for the document footer.
     signer = uow.users.get_by_id(record.signed_by_id)
     patient = uow.patients.get_by_id(record.patient_id)
@@ -79,7 +83,15 @@ def get_record(record_id: str, actor: Actor, uow: UoW, clock: Clock):
         record,
         patient_name=patient.full_name if patient else None,
         signed_by_name=signer.name if signer else None,
+        superseded_by_id=view.superseded_by_id,
     )
+
+
+@router.get("/records/{record_id}/versions", response_model=list[RecordVersionResponse])
+def list_record_versions(record_id: str, actor: Actor, uow: UoW, clock: Clock):
+    with uow:
+        versions = ListRecordVersions(uow, clock).execute(actor, RecordId.parse(record_id))
+    return [ser_record_version(v) for v in versions]
 
 
 @router.get("/patients/{patient_id}/records", response_model=list[RecordResponse])
@@ -109,11 +121,9 @@ def list_patient_vitals(patient_id: str, actor: Actor, uow: UoW, clock: Clock):
 
 @router.post("/records/{record_id}/amend", response_model=RecordResponse)
 def amend_record(record_id: str, body: AmendRequest, actor: Actor, uow: UoW, clock: Clock):
-    changes: dict = {}
-    if body.chief_complaint is not None:
-        changes["chief_complaint"] = body.chief_complaint
     amendment = AmendMedicalRecord(uow, clock).execute(
-        actor, RecordId.parse(record_id), note=body.note, **changes
+        actor, RecordId.parse(record_id),
+        reason=body.reason, chief_complaint=body.chief_complaint, note=body.note,
     )
     return ser_record(amendment)
 

@@ -3,20 +3,19 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
-from medicore.application.common.notifications import (
-    DOCUMENT_UPLOADED,
-    RECORD_AMENDED,
-    notify,
-    treating_doctor,
+from medicore.application.common.notifications import DOCUMENT_UPLOADED, notify, treating_doctor
+from medicore.application.common.permissions import (
+    Permission,
+    ensure_not_support,
+    ensure_permission,
 )
-from medicore.application.common.permissions import Permission, ensure_permission
 from medicore.application.common.timezone import clinic_instant
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -24,10 +23,12 @@ from medicore.domain.entities.medical_document import MedicalDocument
 from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.enums import ClinicalRecordType, DocumentKind
 from medicore.domain.repositories._support import Page, Paging, RecordFilter, RecordSummary
+from medicore.domain.shared.errors import PermissionDenied, RecordSuperseded
 from medicore.domain.shared.identifiers import (
     DocumentId,
     PatientId,
     RecordId,
+    UserId,
 )
 from medicore.domain.value_objects.vitals import Vitals
 
@@ -61,6 +62,22 @@ class VitalsReading:
     record_code: str
     encounter_at: datetime
     vitals: Vitals
+
+
+@dataclass(frozen=True, slots=True)
+class RecordView:
+    """A record and, when it was amended, the version that replaced it."""
+
+    record: MedicalRecord
+    superseded_by_id: RecordId | None
+
+
+@dataclass(frozen=True, slots=True)
+class RecordVersion:
+    record: MedicalRecord
+    version: int  # 1 is the original
+    signer_name: str | None
+    is_current: bool
 
 
 def summarize(
@@ -151,11 +168,12 @@ class GetMedicalRecord:
         self._uow = uow
         self._clock = clock
 
-    def execute(self, actor: ActorContext, record_id: RecordId) -> MedicalRecord:
+    def execute(self, actor: ActorContext, record_id: RecordId) -> RecordView:
         ensure_permission(actor, Permission.RECORDS_READ_CLINICAL)
         record = self._uow.medical_records.get_by_id(record_id)
         if record is None:
             raise EntityNotFound("MedicalRecord", record_id)
+        superseded_by_id = self._uow.medical_records.successor_id(record_id)
         # Accessing patient clinical data is auditable (HIPAA/GDPR).
         patient = self._uow.patients.get_by_id(record.patient_id)
         with self._uow:
@@ -166,7 +184,41 @@ class GetMedicalRecord:
                 )
             )
             self._uow.commit()
-        return record
+        return RecordView(record, superseded_by_id)
+
+
+class ListRecordVersions:
+    """Every version of a record, oldest first, for whoever may read its content."""
+
+    def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
+        self._uow = uow
+        self._clock = clock
+
+    def execute(self, actor: ActorContext, record_id: RecordId) -> list[RecordVersion]:
+        ensure_permission(actor, Permission.RECORDS_READ_CLINICAL)
+        chain = self._uow.medical_records.versions(record_id)
+        if not chain:
+            raise EntityNotFound("MedicalRecord", record_id)
+        current = chain[-1]
+        names: dict[UserId, str | None] = {}
+        for r in chain:
+            if r.signed_by_id not in names:
+                signer = self._uow.users.get_by_id(r.signed_by_id)
+                names[r.signed_by_id] = signer.name if signer else None
+        patient = self._uow.patients.get_by_id(current.patient_id)
+        with self._uow:
+            self._uow.audit.append(
+                audit_entry(
+                    actor, self._clock.now(), "record.versions_viewed", "MedicalRecord",
+                    str(current.id), count=len(chain),
+                    subject=subject(current.code, patient.full_name if patient else None),
+                )
+            )
+            self._uow.commit()
+        return [
+            RecordVersion(r, number, names[r.signed_by_id], r is current)
+            for number, r in enumerate(chain, start=1)
+        ]
 
 
 class _PatientRecordsReader:
@@ -220,7 +272,9 @@ class ListPatientVitals(_PatientRecordsReader):
 
 
 class AmendMedicalRecord:
-    """Create a versioned amendment that references the original; never mutates it."""
+    """Create a versioned amendment that references the original; never mutates it.
+
+    Only the record's author amends it, only its current version, and always with a reason."""
 
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
@@ -231,40 +285,56 @@ class AmendMedicalRecord:
         actor: ActorContext,
         record_id: RecordId,
         *,
-        note: dict[str, str] | None = None,
-        **changes: object,
+        reason: str,
+        chief_complaint: str | None = None,
+        note: Mapping[str, str] | None = None,
     ) -> MedicalRecord:
         """``note`` rewrites sections of the note by key, in the template it was signed
         with."""
         ensure_permission(actor, Permission.RECORDS_AMEND)
-        original = self._uow.medical_records.get_by_id(record_id)
-        if original is None:
-            raise EntityNotFound("MedicalRecord", record_id)
-        if note:
-            changes["note"] = original.note.with_texts(note)
-        patient = self._uow.patients.get_by_id(original.patient_id)
-
+        ensure_not_support(actor)
         with self._uow:
+            # Locked: two amendments of the same version queue here and the second finds the
+            # first one's version instead of branching the chain.
+            original = self._uow.medical_records.get_for_update(record_id)
+            if original is None:
+                raise EntityNotFound("MedicalRecord", record_id)
+            if original.author_id != actor.user_id:
+                raise PermissionDenied(
+                    "only the record's author may amend it", code="record.not_own"
+                )
+            if self._uow.medical_records.successor_id(original.id) is not None:
+                current = self._uow.medical_records.versions(original.id)[-1]
+                raise RecordSuperseded(
+                    "the record has a newer version", current_id=str(current.id)
+                )
             amendment = original.amend(
+                by=actor.user_id,
                 new_id=RecordId.new(),
-                author_id=actor.user_id,
                 signed_at=self._clock.now(),
-                **changes,
+                reason=reason,
+                chief_complaint=chief_complaint,
+                note=original.note.with_texts(dict(note)) if note else None,
             )
+            patient = self._uow.patients.get_by_id(original.patient_id)
+            changed = ["chief_complaint"] if (
+                amendment.chief_complaint != original.chief_complaint
+            ) else []
+            changed += [
+                f"note.{a.key}"
+                for a, b in zip(original.note.sections, amendment.note.sections, strict=True)
+                if a.text.strip() != b.text.strip()
+            ]
             self._uow.medical_records.save(amendment)
+            # The reason's text stays in the record: the audit log is read by people who
+            # may not read clinical content.
             self._uow.audit.append(
                 audit_entry(
                     actor, self._clock.now(), "record.amended", "MedicalRecord",
-                    str(amendment.id), amends=str(original.id),
+                    str(amendment.id), amends=str(original.id), changed=changed,
+                    reason_chars=len(amendment.amendment_reason or ""),
                     subject=subject(amendment.code, patient.full_name if patient else None),
                 )
-            )
-            notify(
-                self._uow, actor, self._clock.now(), RECORD_AMENDED, [original.author_id],
-                record_id=str(amendment.id),
-                record_code=amendment.code,
-                patient_id=str(amendment.patient_id),
-                patient_name=patient.full_name if patient else None,
             )
             self._uow.commit()
         return amendment

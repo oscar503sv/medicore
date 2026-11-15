@@ -170,8 +170,28 @@ export function RecordCopyDoc({ doc }: { doc: FullRecordPrint }) {
       <p className="mt-1 text-[9pt] text-neutral-600">
         {r.code} · {r.location_name} · {t('pr.record.insurer')}:{' '}
         {r.insurer_name ?? t('pr.record.private')}
-        {doc.amends_code && <> · {t('pr.record.amends')}</>}
       </p>
+      {doc.version > 1 && (
+        <Section title={t('pr.record.amendment')}>
+          <p>
+            {f('pr.record.version', { n: doc.version })}
+            {doc.original_signed_at && (
+              <>
+                {' · '}
+                {f('pr.record.originally_signed', {
+                  v: fmtDateTz(doc.original_signed_at, 'd MMM yyyy HH:mm'),
+                  w: fmtDateTz(r.signed_at, 'd MMM yyyy HH:mm'),
+                })}
+              </>
+            )}
+          </p>
+          {r.amendment_reason && (
+            <p className="whitespace-pre-wrap">
+              {f('pr.record.amend_reason', { v: r.amendment_reason })}
+            </p>
+          )}
+        </Section>
+      )}
       <Section title={t('pr.record.reason')}>{r.chief_complaint}</Section>
       {vitals.length > 0 && (
         <Section title={t('consult.vitals')}>

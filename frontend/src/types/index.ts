@@ -705,6 +705,21 @@ export interface MedicalRecord {
   appointment_id: string | null
   consultation_id: string | null
   amends_record_id: string | null
+  amendment_reason: string | null
+  /** False once a newer version amends it; only the current version is amended or printed. */
+  is_current: boolean
+  superseded_by_id: string | null
+}
+
+export interface RecordVersion {
+  id: string
+  version: number
+  status: RecordStatus
+  signed_at: string
+  signed_by_id: string
+  signed_by_name: string | null
+  amendment_reason: string | null
+  is_current: boolean
 }
 
 /** What lists show of a record to anyone with records.view: never the clinical content. */

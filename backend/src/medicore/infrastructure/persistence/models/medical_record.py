@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,6 +25,18 @@ class MedicalRecordModel(Base):
             "consultation_id",
             unique=True,
             postgresql_where=text("consultation_id IS NOT NULL AND amends_record_id IS NULL"),
+        ),
+        # A record is amended at most once (the versions form a line); it also serves the
+        # "is there a newer version" lookups.
+        Index(
+            "uq_medical_records_amends",
+            "amends_record_id",
+            unique=True,
+            postgresql_where=text("amends_record_id IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "amends_record_id IS NULL OR amendment_reason IS NOT NULL",
+            name="ck_medical_records_amendment_reason",
         ),
     )
 
@@ -56,3 +68,4 @@ class MedicalRecordModel(Base):
     amends_record_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("medical_records.id"), nullable=True
     )
+    amendment_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)

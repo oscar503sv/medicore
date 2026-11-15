@@ -51,7 +51,10 @@ export const printingEs: Record<string, string> = {
   'pr.exams.other': 'Otros',
   'pr.exams.indication': 'Diagnóstico / indicación clínica',
 
-  'pr.record.amends': 'Versión enmendada (reemplaza la firmada anteriormente)',
+  'pr.record.amendment': 'Enmienda',
+  'pr.record.version': 'Versión {n}',
+  'pr.record.originally_signed': 'Firmada originalmente el {v}; enmendada el {w}',
+  'pr.record.amend_reason': 'Motivo de la enmienda: {v}',
   'pr.record.reason': 'Motivo de consulta',
   'pr.record.insurer': 'Aseguradora',
   'pr.record.private': 'Particular',
@@ -249,7 +252,10 @@ export const printingEn: Record<string, string> = {
   'pr.exams.other': 'Other',
   'pr.exams.indication': 'Diagnosis / clinical indication',
 
-  'pr.record.amends': 'Amended version (replaces the one signed earlier)',
+  'pr.record.amendment': 'Amendment',
+  'pr.record.version': 'Version {n}',
+  'pr.record.originally_signed': 'Originally signed on {v}; amended on {w}',
+  'pr.record.amend_reason': 'Reason for the amendment: {v}',
   'pr.record.reason': 'Reason for visit',
   'pr.record.insurer': 'Insurer',
   'pr.record.private': 'Self-pay',

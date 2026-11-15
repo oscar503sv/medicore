@@ -60,6 +60,12 @@ class RecordAlreadySigned(DomainError):
     code = "record_signed"
 
 
+class RecordSuperseded(DomainError):
+    """The record already has a newer version: only the current one is amended."""
+
+    code = "record.superseded"
+
+
 class ConsultationNotSignable(DomainError):
     """A consultation cannot be signed yet (e.g. minimum completeness not met)."""
 

@@ -14,7 +14,6 @@ from medicore.application.common.notifications import (
     APPOINTMENT_NO_SHOW,
     APPOINTMENT_RESCHEDULED,
     DOCUMENT_UPLOADED,
-    RECORD_AMENDED,
     USER_CREATED,
     USER_ROLE_CHANGED,
 )
@@ -31,7 +30,7 @@ from medicore.application.use_cases.notifications import (
     MarkAllNotificationsRead,
     MarkNotificationRead,
 )
-from medicore.application.use_cases.records import AmendMedicalRecord, UploadDocument
+from medicore.application.use_cases.records import UploadDocument
 from medicore.application.use_cases.users import (
     InviteUser,
     InviteUserCommand,
@@ -114,39 +113,6 @@ class TestAppointmentNotifications:
         uow = seed.factory.for_tenant(seed.tenant.id)
 
         ConfirmAppointment(uow, FixedClock()).execute(seed.receptionist_actor, appt.id)
-
-        assert _inbox(seed, seed.doctor) == []
-
-
-class TestRecordNotifications:
-    def test_amendment_by_someone_else_notifies_the_original_author(self):
-        seed = seed_clinic()
-        uow = seed.factory.for_tenant(seed.tenant.id)
-        original = _sign_a_record(seed, uow)
-        colleague = build_user(seed.tenant.id, Role.DOCTOR, name="Dr. Colega", email="c@x.test")
-        seed.factory.store.users[colleague.id.value] = colleague
-
-        amendment = AmendMedicalRecord(uow, FixedClock()).execute(
-            seed.actor(colleague), original.id, chief_complaint="Corregido"
-        )
-
-        [n] = _inbox(seed, seed.doctor)
-        assert n.type == RECORD_AMENDED
-        assert n.data["record_id"] == str(amendment.id)
-        assert n.data["record_code"] == amendment.code
-        assert n.data["patient_name"] == seed.patient.full_name
-        assert n.data["actor_name"] == "Dr. Colega"
-        # Clinical content never travels in a notification.
-        assert "Corregido" not in n.data.values()
-
-    def test_author_amending_their_own_record_is_not_notified(self):
-        seed = seed_clinic()
-        uow = seed.factory.for_tenant(seed.tenant.id)
-        original = _sign_a_record(seed, uow)
-
-        AmendMedicalRecord(uow, FixedClock()).execute(
-            seed.doctor_actor, original.id, chief_complaint="Corregido"
-        )
 
         assert _inbox(seed, seed.doctor) == []
 

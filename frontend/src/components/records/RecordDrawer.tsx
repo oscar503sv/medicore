@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FilePen, ShieldCheck } from 'lucide-react'
 import { recordsApi } from '@/api/records'
@@ -9,10 +9,13 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Drawer } from '@/components/ui/Drawer'
 import { Spinner } from '@/components/ui/Spinner'
+import { cn } from '@/lib/cn'
 import { fmtDateTimeTz } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { sectionTitle, templateName } from '@/lib/notes'
+import { useFill } from '@/lib/printing'
 import { useAuthStore } from '@/stores/auth'
+import type { RecordVersion } from '@/types'
 
 export function RecordDrawer({
   recordId,
@@ -24,12 +27,30 @@ export function RecordDrawer({
   const t = useT()
   const canAmend = useAuthStore((s) => s.can('records.amend'))
   const canReadClinical = useAuthStore((s) => s.can('records.read_clinical'))
+  const userId = useAuthStore((s) => s.session?.user_id)
   const [amendOpen, setAmendOpen] = useState(false)
+  // The version on screen: starts at the one that was opened and follows the version links.
+  const [viewId, setViewId] = useState(recordId)
+  useEffect(() => setViewId(recordId), [recordId])
   const { data: record, isLoading } = useQuery({
-    queryKey: ['record', recordId],
-    queryFn: () => recordsApi.get(recordId!),
-    enabled: !!recordId && canReadClinical,
+    queryKey: ['record', viewId],
+    queryFn: () => recordsApi.get(viewId!),
+    enabled: !!viewId && canReadClinical,
   })
+  const hasVersions = !!record && (record.status === 'amended' || !record.is_current)
+  const versions = useQuery({
+    queryKey: ['record', viewId, 'versions'],
+    queryFn: () => recordsApi.versions(viewId!),
+    enabled: hasVersions && canReadClinical,
+  })
+  // Only the author amends, and only the current version.
+  const canAmendThis =
+    canAmend &&
+    !!record &&
+    record.status !== 'draft' &&
+    record.is_current &&
+    userId === record.author_id
+  const currentId = versions.data?.find((v) => v.is_current)?.id ?? record?.superseded_by_id
 
   return (
     <Drawer open={!!recordId} onClose={onClose}>
@@ -55,7 +76,7 @@ export function RecordDrawer({
               </p>
             </div>
             <div className="flex items-center gap-3">
-              {canAmend && record.status !== 'draft' && (
+              {canAmendThis && (
                 <Button size="sm" variant="outline" onClick={() => setAmendOpen(true)}>
                   <FilePen className="h-3.5 w-3.5" />
                   {t('record.amend')}
@@ -67,9 +88,25 @@ export function RecordDrawer({
             </div>
           </div>
 
-          <div className="mt-4">
-            <RecordPrintActions record={record} />
-          </div>
+          {!record.is_current && (
+            <div
+              role="status"
+              className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warn px-3 py-2 text-sm text-tx"
+            >
+              <span>{t('record.superseded_banner')}</span>
+              {currentId && (
+                <Button size="sm" variant="outline" onClick={() => setViewId(currentId)}>
+                  {t('record.view_current')}
+                </Button>
+              )}
+            </div>
+          )}
+
+          {record.is_current && (
+            <div className="mt-4">
+              <RecordPrintActions record={record} />
+            </div>
+          )}
 
           {/* Vitals */}
           {Object.values(record.vitals).some((v) => v !== null) && (
@@ -151,7 +188,34 @@ export function RecordDrawer({
             </section>
           )}
 
-          <RecordCertificates recordId={record.id} />
+          {record.is_current && <RecordCertificates recordId={record.id} />}
+
+          {hasVersions && (
+            <section className="mt-6" aria-labelledby="record-versions-title">
+              <h3 id="record-versions-title" className="eyebrow mb-2">
+                {t('record.versions')}
+              </h3>
+              {versions.isError ? (
+                <p role="alert" className="text-sm text-danger">
+                  {t('record.versions_error')}
+                </p>
+              ) : versions.isLoading ? (
+                <Spinner />
+              ) : (
+                <ol className="space-y-1.5">
+                  {versions.data?.map((v) => (
+                    <li key={v.id}>
+                      <VersionRow
+                        version={v}
+                        isShown={v.id === record.id}
+                        onOpen={() => setViewId(v.id)}
+                      />
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          )}
 
           {/* Signer */}
           <div className="mt-8 flex items-center gap-2 border-t border-line pt-5 text-[13px] text-tx-3">
@@ -168,8 +232,51 @@ export function RecordDrawer({
       <AmendRecordModal
         record={amendOpen && record ? record : null}
         onClose={() => setAmendOpen(false)}
+        onAmended={(amendment) => setViewId(amendment.id)}
+        onOpenRecord={setViewId}
       />
     </Drawer>
+  )
+}
+
+function VersionRow({
+  version,
+  isShown,
+  onOpen,
+}: {
+  version: RecordVersion
+  isShown: boolean
+  onOpen: () => void
+}) {
+  const t = useT()
+  const f = useFill()
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-current={isShown ? 'true' : undefined}
+      className={cn(
+        'block w-full rounded-lg border px-3 py-2 text-left transition-colors',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent',
+        isShown ? 'border-accent bg-surface' : 'border-line hover:bg-surface',
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <span className="text-sm font-medium text-tx">
+          {f('record.version_n', { n: version.version })}
+        </span>
+        {version.is_current && <Badge tone="ok">{t('record.current')}</Badge>}
+      </span>
+      <span className="mt-0.5 block text-xs text-tx-3">
+        {version.signed_by_name ?? '—'} · {fmtDateTimeTz(version.signed_at)}
+      </span>
+      {version.amendment_reason && (
+        <span className="mt-1 block whitespace-pre-wrap text-sm text-tx">
+          <span className="text-tx-3">{t('record.reason_label')}: </span>
+          {version.amendment_reason}
+        </span>
+      )}
+    </button>
   )
 }
 

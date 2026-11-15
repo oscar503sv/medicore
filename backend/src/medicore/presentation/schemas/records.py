@@ -5,13 +5,18 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from medicore.domain.enums import DocumentKind
 
 
 class AmendRequest(BaseModel):
-    chief_complaint: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    # The reason's length is judged by the domain (min/max in the error); the cap here only
+    # bounds the payload.
+    reason: str = Field(max_length=4000)
+    chief_complaint: str | None = Field(None, min_length=1, max_length=500)
     note: dict[str, str] | None = None  # section key -> text
 
 
@@ -51,6 +56,20 @@ class RecordResponse(BaseModel):
     appointment_id: str | None
     consultation_id: str | None
     amends_record_id: str | None
+    amendment_reason: str | None = None
+    is_current: bool = True
+    superseded_by_id: str | None = None
+
+
+class RecordVersionResponse(BaseModel):
+    id: str
+    version: int
+    status: str
+    signed_at: datetime
+    signed_by_id: str
+    signed_by_name: str | None = None
+    amendment_reason: str | None = None
+    is_current: bool
 
 
 class DocumentResponse(BaseModel):

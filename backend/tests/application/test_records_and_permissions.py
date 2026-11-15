@@ -135,7 +135,7 @@ class TestRecordPermissions:
         uow = seed.factory.for_tenant(seed.tenant.id)
         record = _sign_a_record(seed, uow)
         get = GetMedicalRecord(uow, FixedClock())
-        assert get.execute(seed.doctor_actor, record.id).id == record.id
+        assert get.execute(seed.doctor_actor, record.id).record.id == record.id
         for actor in (
             seed.actor(seed.admin), seed.actor(seed.nurse), seed.receptionist_actor,
             replace(seed.actor(seed.admin), impersonated_by=seed.platform_admin.id),
@@ -224,7 +224,8 @@ class TestAmendment:
         original = _sign_a_record(seed, uow)
 
         amendment = AmendMedicalRecord(uow, FixedClock()).execute(
-            seed.doctor_actor, original.id, chief_complaint="Corregido"
+            seed.doctor_actor, original.id,
+            reason="Se corrige el motivo", chief_complaint="Corregido",
         )
 
         assert amendment.status == RecordStatus.AMENDED
@@ -242,7 +243,7 @@ class TestAmendment:
         original = _sign_a_record(seed, uow)
         with pytest.raises(PermissionDenied):
             AmendMedicalRecord(uow, FixedClock()).execute(
-                seed.actor(seed.nurse), original.id, chief_complaint="x"
+                seed.actor(seed.nurse), original.id, reason="Una razón válida", chief_complaint="x"
             )
 
 

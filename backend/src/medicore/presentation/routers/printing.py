@@ -94,6 +94,7 @@ def print_record(
     return {
         "context": _context(doc.context), "document": doc.document, "record": record,
         "indications": doc.indications, "amends_code": doc.amends_code,
+        "version": doc.version, "original_signed_at": doc.original_signed_at,
     }
 
 

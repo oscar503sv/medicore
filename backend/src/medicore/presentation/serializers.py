@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 from medicore.application.use_cases.auth import MyProfileDTO
 from medicore.application.use_cases.consultations import ConsultationVitalsView
-from medicore.application.use_cases.records import VitalsReading
+from medicore.application.use_cases.records import RecordVersion, VitalsReading
 from medicore.application.use_cases.sessions import SessionInfoDTO
 from medicore.application.use_cases.subscriptions import SubscriptionNotice, SubscriptionView
 from medicore.domain.entities.appointment import Appointment
@@ -24,6 +24,7 @@ from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.repositories._support import RecordSummary
 from medicore.domain.services.slot_resolver import Slot
+from medicore.domain.shared.identifiers import RecordId
 from medicore.domain.value_objects.fee import Charge
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
@@ -358,7 +359,11 @@ def ser_consultation_vitals(view: ConsultationVitalsView) -> dict:
 
 
 def ser_record(
-    r: MedicalRecord, *, patient_name: str | None = None, signed_by_name: str | None = None
+    r: MedicalRecord,
+    *,
+    patient_name: str | None = None,
+    signed_by_name: str | None = None,
+    superseded_by_id: RecordId | None = None,
 ) -> dict:
     return {
         "id": str(r.id),
@@ -386,6 +391,22 @@ def ser_record(
         "appointment_id": str(r.appointment_id) if r.appointment_id else None,
         "consultation_id": str(r.consultation_id) if r.consultation_id else None,
         "amends_record_id": str(r.amends_record_id) if r.amends_record_id else None,
+        "amendment_reason": r.amendment_reason,
+        "is_current": superseded_by_id is None,
+        "superseded_by_id": str(superseded_by_id) if superseded_by_id else None,
+    }
+
+
+def ser_record_version(v: RecordVersion) -> dict:
+    return {
+        "id": str(v.record.id),
+        "version": v.version,
+        "status": str(v.record.status),
+        "signed_at": v.record.signed_at,
+        "signed_by_id": str(v.record.signed_by_id),
+        "signed_by_name": v.signer_name,
+        "amendment_reason": v.record.amendment_reason,
+        "is_current": v.is_current,
     }
 
 

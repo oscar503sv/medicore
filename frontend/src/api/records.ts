@@ -1,5 +1,11 @@
 import { api } from './client'
-import type { MedicalDocument, MedicalRecord, RecordPage, VitalsReading } from '@/types'
+import type {
+  MedicalDocument,
+  MedicalRecord,
+  RecordPage,
+  RecordVersion,
+  VitalsReading,
+} from '@/types'
 
 export const recordsApi = {
   list: (params: {
@@ -21,8 +27,14 @@ export const recordsApi = {
 
   get: (id: string) => api.get<MedicalRecord>(`/records/${id}`).then((r) => r.data),
 
-  amend: (id: string, payload: { chief_complaint?: string; note?: Record<string, string> }) =>
-    api.post<MedicalRecord>(`/records/${id}/amend`, payload).then((r) => r.data),
+  /** Every version of the record, oldest first. */
+  versions: (id: string) =>
+    api.get<RecordVersion[]>(`/records/${id}/versions`).then((r) => r.data),
+
+  amend: (
+    id: string,
+    payload: { reason: string; chief_complaint?: string; note?: Record<string, string> },
+  ) => api.post<MedicalRecord>(`/records/${id}/amend`, payload).then((r) => r.data),
 
   listDocuments: (patientId: string) =>
     api.get<MedicalDocument[]>(`/patients/${patientId}/documents`).then((r) => r.data),

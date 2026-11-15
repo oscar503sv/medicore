@@ -93,7 +93,8 @@ Sesión separada (token de scope `platform`, con cookie propia `mc_console`) que
 
 ### Reglas de negocio críticas
 - Citas solo dentro de la disponibilidad del doctor, sin solapes, respetando las reglas de reserva.
-- `MedicalRecord` firmado es **inmutable**; las correcciones son **enmiendas versionadas** (`status=amended` que referencia al original).
+- `MedicalRecord` firmado es **inmutable**; las correcciones son **enmiendas versionadas** (`status=amended` que referencia al original). Solo el autor del expediente lo enmienda, y solo su versión vigente: un expediente se enmienda como máximo una vez, así que las versiones forman una sola línea. El motivo es obligatorio (de 10 a 1000 caracteres), y cada versión guarda quién la firmó y cuándo (`signed_by_id`, `signed_at`), de modo que el autor nunca cambia. Las enmiendas no notifican a nadie, y la auditoría guarda las secciones cambiadas y la longitud del motivo, nunca su texto, porque los administradores la leen sin acceso clínico.
+- **Enmiendas en el panel lateral del expediente**: **Enmendar** aparece solo al autor y solo en la versión vigente; el modal pide el motivo con un contador. El **historial de versiones** lista cada versión con quién la firmó, la fecha, el motivo y la marca de vigente. Una versión antigua muestra el aviso *Versión reemplazada* con un enlace a la vigente, y oculta enmendar, imprimir y las constancias. La copia impresa del expediente tiene una sección **Enmienda** (versión, firma original y motivo); la receta no muestra el motivo.
 - `SignConsultation` es **atómico**: record + recetas + cita `completed` en una sola transacción. La firma bloquea primero la fila de la consulta, así que una segunda firma (doble clic, reintento, otra pestaña) responde 409 `consultation.already_signed` y editar una consulta ya firmada también responde 409; un índice único parcial mantiene un solo expediente original por consulta.
 - Diagnósticos en consulta limitados al catálogo de la **versión CIE configurada por cada clínica** (CIE-10 / CIE-11), con autocompletado.
 - **Vacunación** según el esquema nacional de El Salvador (MINSAL), para niños, adolescentes y adultos: el carné de cada paciente calcula el estado de cada dosis (aplicada, toca, atrasada, próxima…) a partir de su edad y sus registros; los registros no se editan, uno erróneo se anula con motivo. Una lista de trabajo muestra las dosis atrasadas y próximas de toda la clínica.
@@ -185,7 +186,7 @@ Los hallazgos pendientes están en [`docs/BACKLOG.es.md`](docs/BACKLOG.es.md).
 
 ## Notificaciones y dashboard
 
-- **Notificaciones in-app**: citas creadas, reprogramadas, canceladas o marcadas como no-show (al doctor), enmiendas de historial (al autor original), documentos subidos (al médico tratante) y altas o cambios de rol de usuarios (a los administradores) y acciones de soporte sobre usuarios de la clínica (a los admins activos y al usuario afectado; la entrada de impersonación, solo a los admins). Campana en la barra superior con contador (sondeo cada 60 s), filtro de no leídas y enlaces directos al elemento, además de una **página de buzón** (`/notifications`) filtrable por estado y categoría y agrupada por día. Se conservan 90 días.
+- **Notificaciones in-app**: citas creadas, reprogramadas, canceladas o marcadas como no-show (al doctor), documentos subidos (al médico tratante) y altas o cambios de rol de usuarios (a los administradores) y acciones de soporte sobre usuarios de la clínica (a los admins activos y al usuario afectado; la entrada de impersonación, solo a los admins). Campana en la barra superior con contador (sondeo cada 60 s), filtro de no leídas y enlaces directos al elemento, además de una **página de buzón** (`/notifications`) filtrable por estado y categoría y agrupada por día. Se conservan 90 días. Las enmiendas ya no notifican; las notificaciones que generaron antes siguen visibles.
 - **Dashboard con datos reales** (`GET /dashboard/summary`): citas de hoy, pendientes, pacientes registrados y ocupación de la agenda, cada uno comparado con la semana anterior, y las próximas citas pendientes a partir de ahora (`GET /appointments/upcoming`). El doctor ve su propia agenda; los demás roles, la clínica completa. Quien puede ver métricas también recibe ahí un **resumen del mes**.
 
 ## Métricas de la práctica
@@ -399,7 +400,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 
 ```bash
 # Backend
-.venv/bin/pytest                          # suite completa (1537 tests)
+.venv/bin/pytest                          # suite completa (1602 tests)
 .venv/bin/pytest tests/domain/            # solo tests de dominio
 .venv/bin/ruff check src tests            # lint (--fix para corregir)
 
@@ -424,7 +425,7 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 | `appointments` | Citas con FSM de estado y su cobro (tarifa vigente al agendar, monto cobrado y motivo del ajuste) |
 | `doctor_fees` | Tarifa de cada médico por tipo de cita (USD) |
 | `consultations` | Consulta en curso (borrador mutable) |
-| `medical_records` | Historiales firmados e inmutables (como máximo un original por consulta); indexado por `(tenant_id, encounter_at)` para el listado de expedientes |
+| `medical_records` | Historiales firmados e inmutables (como máximo un original por consulta y una enmienda por expediente); indexado por `(tenant_id, encounter_at)` para el listado de expedientes |
 | `prescriptions` | Recetas emitidas |
 | `medical_documents` | Archivos médicos (metadata) |
 | `insurers` | Aseguradoras de la clínica |
@@ -453,14 +454,14 @@ Detalles de variables `VITE_*` y despliegue en [`frontend/README.es.md`](fronten
 Casi toda la suite es **independiente de la base de datos** — usa adaptadores en memoria que ejercen el mismo contrato multi-tenant que los repos SQLAlchemy. Los tests de infraestructura corren contra **PostgreSQL real** dentro de una transacción que siempre se revierte, y se saltan si no hay base de datos disponible.
 
 ```
-1537 tests en verde
-   305  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
+1602 tests en verde
+   319  — dominio (VOs, FSM, slot_resolver, Consultation.sign, MedicalRecord.amend,
             esquema de vacunación, aplicaciones, procedimientos, cruce de alergias)
-   695  — aplicación (auth, sesiones, citas, consultas, records, notificaciones, dashboard,
+   721  — aplicación (auth, sesiones, citas, consultas, records y enmiendas, notificaciones, dashboard,
             plataforma (las acciones de soporte quedan en la auditoría de la clínica y se notifican), permisos granulares, aislamiento multi-tenant)
-   360  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
+   378  — presentación (endpoints HTTP: auth guards, CSRF, booking, lifecycle, 403 por
             permiso, códigos de error, validación, plataforma)
-    177  — infraestructura (repositorios SQLAlchemy contra PostgreSQL)
+    184  — infraestructura (repositorios SQLAlchemy contra PostgreSQL, incluida la cadena de enmiendas)
 ```
 
 Los tests verifican, entre otras cosas:
@@ -540,7 +541,7 @@ Los redeploys conservan los datos (volumen `medicore-pgdata`) y aplican las migr
 
 > **Migración `d5e6f7a8b9c1`** (autoría de la consulta): devuelve `consultations.edit` a los roles médicos personalizados y elimina las revocaciones de `edit` a médicos; en roles y usuarios de enfermería y recepción, `consultations.edit` pasa a `consultations.vitals` (si quedan a la vez concedido y revocado, gana la revocación; admin no se toca). **Antes de desplegar, respalda `role_permission_overrides` y la tabla `users` (columna `permission_adjustments`).** Su downgrade convierte `vitals` de nuevo en `edit`, pero no restaura las revocaciones de los médicos.
 
-> **Cambios visibles para los usuarios en esta versión** (avísalos a las clínicas): admin y enfermería ya no ven el motivo de consulta en Expedientes ni en el resumen del paciente; en Expedientes la columna Motivo pasa a Médico y solo el médico puede abrir un expediente; la línea de medicación muestra al médico que la prescribió en vez del código del expediente; admin y enfermería reimprimen recetas sin indicaciones; las pestañas abiertas con la versión anterior fallan en Expedientes hasta recargarlas. Enfermería solo registra signos vitales en la consulta en curso, y admin ya no puede abrirla: solo el médico que la inició pasa a la nota. Para clientes de la API: `POST /consultations/start/{id}` ya no devuelve la nota (devuelve una referencia mínima).
+> **Cambios visibles para los usuarios en esta versión** (avísalos a las clínicas): admin y enfermería ya no ven el motivo de consulta en Expedientes ni en el resumen del paciente; en Expedientes la columna Motivo pasa a Médico y solo el médico puede abrir un expediente; la línea de medicación muestra al médico que la prescribió en vez del código del expediente; admin y enfermería reimprimen recetas sin indicaciones; las pestañas abiertas con la versión anterior fallan en Expedientes hasta recargarlas. Enfermería solo registra signos vitales en la consulta en curso, y admin ya no puede abrirla: solo el médico que la inició pasa a la nota. Para clientes de la API: `POST /consultations/start/{id}` ya no devuelve la nota (devuelve una referencia mínima). Enmiendas de expedientes: solo su autor puede enmendarlo, desde la versión vigente y con un motivo de 10 a 1000 caracteres (`POST /records/{id}/amend` recibe `reason` y rechaza campos desconocidos); los listados de expedientes y el resumen del paciente muestran solo versiones vigentes, así que sus totales pueden bajar respecto a antes; las enmiendas ya no notifican al autor.
 
 Para una demo pública, agrega en Coolify una **Scheduled Task** nocturna en el contenedor `backend` que ejecute `python scripts/seed_demo.py --reset` (p. ej. `0 9 * * *`, las 03:00 en El Salvador): deshace lo que hayan cambiado los visitantes, evita que se acumulen datos y mueve las fechas al día actual. No toca el catálogo CIE ni los superadmins de la plataforma. Cada ejecución queda registrada y la página *Monitoreo* marca la tarea si falla o si pasan más de 26 h sin un reset exitoso.
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
@@ -168,3 +169,145 @@ class TestPrintingPrescriptions:
             f"/api/v1/print/records/{record.id}?document=record", headers=nurse_headers
         )
         assert exams.status_code == 403
+
+
+REASON = "Se añade el resultado de laboratorio recibido"
+
+
+def _amend(client, record, headers, **body):
+    body = {"reason": REASON, "chief_complaint": "Fiebre alta", **body}
+    return client.post(f"{RECORDS}/{record.id}/amend", json=body, headers=headers)
+
+
+class TestAmending:
+    def test_the_author_amends_with_a_reason(self, seed, client, auth_headers, record):
+        resp = _amend(client, record, auth_headers)
+
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["amendment_reason"] == REASON
+        assert body["is_current"] is True
+        assert body["superseded_by_id"] is None
+        assert body["author_id"] == str(seed.doctor.id)
+        assert body["amends_record_id"] == str(record.id)
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"chief_complaint": "x"},
+            {"reason": REASON, "chief_complaint": "x", "unknown": 1},
+            {"reason": "x" * 4001, "chief_complaint": "x"},
+            {"reason": REASON, "chief_complaint": ""},
+        ],
+    )
+    def test_malformed_bodies_are_422(self, client, auth_headers, record, body):
+        resp = client.post(f"{RECORDS}/{record.id}/amend", json=body, headers=auth_headers)
+        assert resp.status_code == 422
+        assert resp.json()["code"] == "request_invalid"
+
+    def test_a_short_reason_is_422_with_its_bounds(self, client, auth_headers, record):
+        resp = _amend(client, record, auth_headers, reason="corto")
+        assert resp.status_code == 422
+        assert resp.json()["code"] == "record.amend_reason_invalid"
+        assert resp.json()["params"] == {"min": 10, "max": 1000}
+
+    def test_an_amendment_without_changes_is_422(self, client, auth_headers, record):
+        resp = _amend(client, record, auth_headers, chief_complaint="dolor secreto")
+        assert resp.status_code == 422
+        assert resp.json()["code"] == "record.amend_empty"
+
+    def test_another_doctor_gets_403(self, client, other_doctor_headers, record):
+        resp = _amend(client, record, other_doctor_headers)
+        assert resp.status_code == 403
+        assert resp.json()["code"] == "record.not_own"
+
+    def test_a_nurse_gets_403(self, client, nurse_headers, record):
+        assert _amend(client, record, nurse_headers).status_code == 403
+
+    def test_support_sessions_get_403(self, client, support_headers, record):
+        assert _amend(client, record, support_headers).status_code == 403
+
+    def test_a_replaced_record_is_a_409_naming_the_current_one(
+        self, client, auth_headers, record
+    ):
+        current = _amend(client, record, auth_headers).json()
+        resp = _amend(client, record, auth_headers, chief_complaint="Otra cosa")
+        assert resp.status_code == 409
+        assert resp.json()["code"] == "record.superseded"
+        assert resp.json()["params"] == {"current_id": current["id"]}
+
+    def test_the_old_version_reads_as_replaced(self, client, auth_headers, record):
+        current = _amend(client, record, auth_headers).json()
+        old = client.get(f"{RECORDS}/{record.id}", headers=auth_headers).json()
+        assert old["is_current"] is False
+        assert old["superseded_by_id"] == current["id"]
+        assert old["amendment_reason"] is None
+        new = client.get(f"{RECORDS}/{current['id']}", headers=auth_headers).json()
+        assert new["is_current"] is True
+
+
+class TestVersions:
+    def test_the_chain_with_its_reasons(self, seed, client, auth_headers, record):
+        current = _amend(client, record, auth_headers).json()
+        resp = client.get(f"{RECORDS}/{record.id}/versions", headers=auth_headers)
+
+        assert resp.status_code == 200
+        first, second = resp.json()
+        assert (first["id"], first["version"], first["is_current"]) == (str(record.id), 1, False)
+        assert (second["id"], second["version"], second["is_current"]) == (
+            current["id"], 2, True,
+        )
+        assert second["amendment_reason"] == REASON
+        assert second["signed_by_name"] == seed.doctor.name
+
+    def test_nursing_does_not_read_versions(self, client, nurse_headers, record):
+        resp = client.get(f"{RECORDS}/{record.id}/versions", headers=nurse_headers)
+        assert resp.status_code == 403
+
+    def test_an_unknown_record_is_404(self, client, auth_headers):
+        resp = client.get(f"{RECORDS}/{uuid.uuid4()}/versions", headers=auth_headers)
+        assert resp.status_code == 404
+
+
+class TestListsShowCurrentVersions:
+    def test_lists_and_history_skip_replaced_records(self, seed, client, auth_headers, record):
+        current = _amend(client, record, auth_headers).json()
+
+        listed = client.get(RECORDS, headers=auth_headers).json()
+        assert [i["id"] for i in listed["items"]] == [current["id"]]
+        assert listed["total"] == 1
+        history = client.get(f"/api/v1/patients/{seed.patient.id}/records", headers=auth_headers)
+        assert [r["id"] for r in history.json()] == [current["id"]]
+
+
+class TestPrintingAmendments:
+    def test_the_copy_carries_the_reason_and_the_prescription_does_not(
+        self, client, auth_headers, record
+    ):
+        _amend(client, record, auth_headers)
+        copy = client.get(
+            f"/api/v1/print/records/{record.id}?document=record", headers=auth_headers
+        ).json()
+        assert copy["version"] == 2
+        assert copy["original_signed_at"] is not None
+        assert copy["record"]["amendment_reason"] == REASON
+        assert copy["record"]["is_current"] is True
+
+    def test_the_prescription_leaves_the_reason_out(self, seed, client, auth_headers):
+        from datetime import date
+
+        from medicore.domain.entities.prescription import PrescriptionSnapshot
+
+        rx = store_record(seed, code="REC-RX", encounter_at=datetime(2026, 5, 20, 9))
+        seed.factory.store.medical_records[rx.id.value] = type(rx)(
+            **{
+                **{f: getattr(rx, f) for f in rx.__dataclass_fields__},
+                "prescriptions": (
+                    PrescriptionSnapshot("Paracetamol", "500 mg", "c/8 h", date(2026, 5, 20)),
+                ),
+            }
+        )
+        _amend(client, rx, auth_headers)
+        resp = client.get(f"/api/v1/print/records/{rx.id}", headers=auth_headers)
+        assert resp.status_code == 200
+        assert REASON not in resp.text
