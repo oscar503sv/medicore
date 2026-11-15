@@ -6,15 +6,23 @@ they are listed and moved through their lifecycle: active → completed | cancel
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
-from medicore.application.common.permissions import Permission, ensure_permission
+from medicore.application.common.permissions import (
+    Permission,
+    ensure_not_support,
+    ensure_permission,
+    has_permission,
+)
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.prescription import Prescription
+from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import PatientId, PrescriptionId, UserId
 
 
@@ -22,6 +30,7 @@ from medicore.domain.shared.identifiers import PatientId, PrescriptionId, UserId
 class PrescriptionView:
     prescription: Prescription
     prescriber_name: str | None  # None → the prescriber no longer exists in the tenant
+    cancel_reason: str | None  # the reason is clinical: only who may read clinical content sees it
 
 
 class ListPatientPrescriptions:
@@ -40,7 +49,13 @@ class ListPatientPrescriptions:
             if p.prescriber_id not in names:
                 prescriber = self._uow.users.get_by_id(p.prescriber_id)
                 names[p.prescriber_id] = prescriber.name if prescriber else None
-        views = [PrescriptionView(p, names[p.prescriber_id]) for p in prescriptions]
+        can_read_reason = has_permission(actor, Permission.RECORDS_READ_CLINICAL)
+        views = [
+            PrescriptionView(
+                p, names[p.prescriber_id], p.cancel_reason if can_read_reason else None
+            )
+            for p in prescriptions
+        ]
         patient = self._uow.patients.get_by_id(patient_id)
         with self._uow:
             self._uow.audit.append(
@@ -55,42 +70,57 @@ class ListPatientPrescriptions:
 
 
 class _PrescriptionTransition:
-    action: str  # audit action, e.g. "prescription.completed"
-
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
         self._clock = clock
 
-    def execute(self, actor: ActorContext, prescription_id: PrescriptionId) -> Prescription:
+    def _transition(
+        self,
+        actor: ActorContext,
+        prescription_id: PrescriptionId,
+        apply: Callable[[Prescription, datetime], None],
+        action: str,
+        **audit_details: object,
+    ) -> Prescription:
         ensure_permission(actor, Permission.PRESCRIPTIONS_MANAGE)
-        prescription = self._uow.prescriptions.get_by_id(prescription_id)
-        if prescription is None:
-            raise EntityNotFound("Prescription", prescription_id)
+        ensure_not_support(actor)
         with self._uow:
-            self._apply(prescription)
+            # Locked so a concurrent complete/cancel waits and then finds the prescription
+            # already closed (invalid_transition) instead of closing it twice.
+            prescription = self._uow.prescriptions.get_for_update(prescription_id)
+            if prescription is None:
+                raise EntityNotFound("Prescription", prescription_id)
+            if prescription.prescriber_id != actor.user_id:
+                raise PermissionDenied(
+                    "only the prescriber closes a prescription", code="prescription.not_own"
+                )
+            now = self._clock.now()
+            apply(prescription, now)
             self._uow.prescriptions.save(prescription)
             self._uow.audit.append(
                 audit_entry(
-                    actor, self._clock.now(), self.action, "Prescription",
-                    str(prescription.id), subject=subject(prescription.drug),
+                    actor, now, action, "Prescription", str(prescription.id),
+                    subject=subject(prescription.drug), **audit_details,
                 )
             )
             self._uow.commit()
         return prescription
 
-    def _apply(self, prescription: Prescription) -> None:
-        raise NotImplementedError
-
 
 class CompletePrescription(_PrescriptionTransition):
-    action = "prescription.completed"
-
-    def _apply(self, prescription: Prescription) -> None:
-        prescription.complete()
+    def execute(self, actor: ActorContext, prescription_id: PrescriptionId) -> Prescription:
+        return self._transition(
+            actor, prescription_id, lambda p, now: p.complete(actor.user_id, now),
+            "prescription.completed",
+        )
 
 
 class CancelPrescription(_PrescriptionTransition):
-    action = "prescription.cancelled"
-
-    def _apply(self, prescription: Prescription) -> None:
-        prescription.cancel()
+    def execute(
+        self, actor: ActorContext, prescription_id: PrescriptionId, *, reason: str
+    ) -> Prescription:
+        # The reason's text stays in the prescription; the audit trail only records its size.
+        return self._transition(
+            actor, prescription_id, lambda p, now: p.cancel(actor.user_id, reason, now),
+            "prescription.cancelled", reason_chars=len(reason.strip()),
+        )

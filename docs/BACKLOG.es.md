@@ -24,11 +24,17 @@ Canales externos y recordatorios quedan planificados como evolución futura (ver
 - El almacenamiento de documentos médicos guarda **solo metadata** (nombre, mime, tamaño,
   `storage_key`); no hay backend de archivos (S3/disco). La UI lo comunica explícitamente.
 - Seguimientos de enmiendas (OZK-94, OZK-98): `procedure.amended` y `certificate.voided` guardan el
-  texto del motivo en la auditoría, a diferencia de las enmiendas de expedientes (que guardan solo
-  su longitud); hay que alinearlas. `platform_reads.signed_records` y `signed_per_week` (consola de
+  texto del motivo en la auditoría, a diferencia de las enmiendas de expedientes y de las
+  cancelaciones de recetas (que guardan solo su longitud, `reason_chars`); hay que alinearlas. `platform_reads.signed_records` y `signed_per_week` (consola de
   plataforma) cuentan las enmiendas como expedientes firmados nuevos; deben excluirlas.
 - OZK-99 (trigger de inmutabilidad de `medical_records`) debe ir en una migración posterior a
-  `e6f7a8b9c0d2`.
+  `f7a8b9c0d1e3`.
+- Recetas activas que nadie puede cerrar: desde OZK-100 solo el médico que las emitió las completa o
+  cancela, y los administradores no tienen `prescriptions.manage`, así que una receta de un médico que
+  se fue de la clínica (o fue borrado) sigue activa (consulta 5 del [README del backend](../backend/README.es.md#recetas-cerradas-por-otra-persona)).
+  Decidir si el médico tratante o un administrador puede cerrarla, con motivo y entrada de auditoría.
+- Avisar al médico tratante cuando una receta la emitió otro médico (por ejemplo, si quien recetó sale
+  de la clínica). OZK-100 no notifica a nadie, porque solo actúa quien recetó.
 
 ## A futuro
 
@@ -163,5 +169,10 @@ Resueltos en nov 2026:
 - **Listado de expedientes paginado y auditado** (OZK-97): `GET /records` devuelve `{items, total, offset, limit}` con filtros en el servidor (paciente, tipo, fechas, búsqueda), solo metadatos fuera de la lectura clínica del médico, un índice sobre `(tenant_id, encounter_at)` y una entrada de auditoría por página (`record.listed`).
 - **El contenido de la consulta es del médico** (OZK-95): `consultations.edit` es exclusivo de médicos (no delegable) y protege la nota, los diagnósticos y los borradores, que solo lee o edita el médico dueño. La enfermería registra signos vitales con `consultations.vitals` (delegable); el admin puede iniciar una consulta pero no abrirla; la suplantación de soporte no puede tocar contenido clínico. Las lecturas y las ediciones se auditan solo con nombres (`consultation.viewed`, `consultation.note_updated`, `consultation.vitals_updated`, `consultation.template_changed`, `consultation.draft_changed`), y la migración `d5e6f7a8b9c1` mueve las concesiones existentes.
 - **Enmiendas de expedientes** (OZK-94, OZK-98): una sola línea de versiones por expediente. Solo se enmienda la versión vigente, como máximo una vez, por el autor del expediente (que nunca cambia), con un motivo de 10 a 1000 caracteres; serializado con un lock de fila y un índice único parcial. El motivo se guarda en la versión y se muestra en el historial y en la copia impresa, pero no en la auditoría; los listados y resúmenes muestran solo versiones vigentes; las enmiendas ya no notifican. La constancia impresa usa la hora de firma original como fin de la consulta. La migración `e6f7a8b9c0d2` hace cumplir la línea (ver [Cadenas de enmiendas ramificadas](../backend/README.es.md#cadenas-de-enmiendas-ramificadas)).
+- **Recetas cerradas por quien las emitió** (OZK-100): solo el médico que emitió una receta la completa
+  o la cancela (`prescriptions.manage` es exclusivo de médicos). Cancelar exige un motivo de 10 a 500
+  caracteres, que queda en la receta; la auditoría solo registra su longitud, y el motivo llega solo a
+  quien lee contenido clínico. La migración `f7a8b9c0d1e3` añade los campos de cierre y el CHECK, y
+  traslada el permiso (ver [Recetas cerradas por otra persona](../backend/README.es.md#recetas-cerradas-por-otra-persona)).
 
 No quedan hallazgos pendientes en esta lista.

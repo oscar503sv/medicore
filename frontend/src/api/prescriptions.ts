@@ -10,6 +10,6 @@ export const prescriptionsApi = {
   complete: (id: string) =>
     api.post<Prescription>(`/prescriptions/${id}/complete`).then((r) => r.data),
 
-  cancel: (id: string) =>
-    api.post<Prescription>(`/prescriptions/${id}/cancel`).then((r) => r.data),
+  cancel: (id: string, reason: string) =>
+    api.post<Prescription>(`/prescriptions/${id}/cancel`, { reason }).then((r) => r.data),
 }

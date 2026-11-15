@@ -13,7 +13,8 @@ Summary of the DOMAIN_MODEL rules the defaults encode:
                    records; NOT the note, NOT the clinical content, NOT book appointments,
                    NOT edit patients, NOT start/sign.
   * doctor       → all clinical work for their patients + their own availability, fees and
-                   metrics (with their income).
+                   metrics (with their income); only they complete or cancel the
+                   prescriptions they issued.
   * admin        → user & organization management; full access except sign/amend, the
                    clinical content of records (list/metadata only) and the consultation's
                    content (it may open a consultation, never read or edit it); the
@@ -245,12 +246,14 @@ def locked_permissions(modules: Iterable[AddonModule]) -> frozenset[Permission]:
 
 
 # Clinical content and acts only a doctor may reach, whatever a role or user customization
-# says: opening the record's content, writing the consultation, signing and amending.
+# says: opening the record's content, writing the consultation, signing and amending, and
+# completing or cancelling the prescriptions they issued.
 DOCTOR_ONLY = frozenset({
     Permission.RECORDS_SIGN,
     Permission.RECORDS_AMEND,
     Permission.RECORDS_READ_CLINICAL,
     Permission.CONSULTATIONS_EDIT,
+    Permission.PRESCRIPTIONS_MANAGE,
 })
 
 # Handing out permissions stays with administrators: delegating it would let anyone who

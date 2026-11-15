@@ -8,7 +8,7 @@ system. Each document follows the permissions of what it shows.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from typing import Literal
 
@@ -29,7 +29,7 @@ from medicore.domain.entities.medical_record import MedicalRecord
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.procedure import Procedure
 from medicore.domain.entities.tenant import Location, Tenant
-from medicore.domain.enums import NoteRole, PaperSize, Role
+from medicore.domain.enums import NoteRole, PaperSize, PrescriptionStatus, Role
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     CertificateId,
@@ -224,6 +224,8 @@ class PrintRecordDocument(_Printer):
         if not chain:
             raise EntityNotFound("MedicalRecord", record_id)
         record = chain[-1]
+        if document == "prescription":
+            record = self._without_cancelled(record, chain[0].id)
         if (document == "prescription" and not record.prescriptions) or (
             document == "exams" and not record.exams
         ):
@@ -241,6 +243,25 @@ class PrintRecordDocument(_Printer):
             amends_code=amends_code, version=len(chain),
             original_signed_at=chain[0].signed_at if len(chain) > 1 else None,
         )
+
+
+    def _without_cancelled(self, record: MedicalRecord, original_id: RecordId) -> MedicalRecord:
+        """A cancelled prescription stays in the signed record but is never handed out again.
+
+        Prescriptions point at the original record while amendments copy their snapshots, so
+        each cancelled one removes one matching snapshot."""
+        cancelled = [
+            p.snapshot()
+            for p in self._uow.prescriptions.list_by_patient(record.patient_id)
+            if p.record_id == original_id and p.status == PrescriptionStatus.CANCELLED
+        ]
+        kept = []
+        for snapshot in record.prescriptions:
+            if snapshot in cancelled:
+                cancelled.remove(snapshot)
+            else:
+                kept.append(snapshot)
+        return replace(record, prescriptions=tuple(kept))
 
 
 class PrintCertificate(_Printer):

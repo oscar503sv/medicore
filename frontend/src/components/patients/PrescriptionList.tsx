@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Printer, X } from 'lucide-react'
 import { errorMessage } from '@/api/client'
@@ -5,11 +6,13 @@ import { openPrint } from '@/api/printing'
 import { prescriptionsApi } from '@/api/prescriptions'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { CancelPrescriptionModal } from '@/components/patients/CancelPrescriptionModal'
 import { Card } from '@/components/ui/Card'
 import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
 import { clinicToday, fmtDate } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { useFill } from '@/lib/printing'
 import { useAuthStore } from '@/stores/auth'
 import type { Prescription } from '@/types'
 
@@ -28,7 +31,10 @@ const STATUS_TONE = {
 
 export function PrescriptionList({ patientId }: { patientId: string }) {
   const t = useT()
+  const f = useFill()
   const qc = useQueryClient()
+  const userId = useAuthStore((s) => s.session?.user_id)
+  const [cancelling, setCancelling] = useState<Prescription | null>(null)
   const canManage = useAuthStore((s) => s.can('prescriptions.manage'))
   const canPrint = useAuthStore((s) => s.can('records.view'))
 
@@ -37,16 +43,18 @@ export function PrescriptionList({ patientId }: { patientId: string }) {
     queryFn: () => prescriptionsApi.list(patientId),
   })
 
-  const transition = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: 'complete' | 'cancel' }) =>
-      action === 'complete' ? prescriptionsApi.complete(id) : prescriptionsApi.cancel(id),
-    onSuccess: (_, { action }) => {
+  const complete = useMutation({
+    mutationFn: (id: string) => prescriptionsApi.complete(id),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['prescriptions', patientId] })
       // The summary's active-prescriptions counter comes from the patient detail.
       qc.invalidateQueries({ queryKey: ['patient', patientId] })
-      toast(t(action === 'complete' ? 'rx.completed_ok' : 'rx.cancelled_ok'))
+      toast(t('rx.completed_ok'))
     },
-    onError: (err) => toast(errorMessage(err), 'danger'),
+    onError: (err) => {
+      toast(errorMessage(err), 'danger')
+      qc.invalidateQueries({ queryKey: ['prescriptions', patientId] })
+    },
   })
 
   if (isLoading) return <PageLoader />
@@ -54,61 +62,68 @@ export function PrescriptionList({ patientId }: { patientId: string }) {
     return <Card className="p-8 text-center text-sm text-tx-3">{t('rx.empty')}</Card>
 
   return (
-    <Card className="divide-y divide-line">
-      {items.map((rx) => {
-        const status = displayStatus(rx)
-        const actionable = canManage && rx.status === 'active'
-        return (
-          <div key={rx.id} className="flex items-center gap-4 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-tx">{rx.drug}</p>
-                <Badge tone={STATUS_TONE[status]}>{t(`rx.status_${status}`)}</Badge>
+    <>
+      <Card className="divide-y divide-line">
+        {items.map((rx) => {
+          const status = displayStatus(rx)
+          // Only the prescriber closes a prescription; the backend enforces it too.
+          const actionable = canManage && rx.status === 'active' && rx.prescriber_id === userId
+          return (
+            <div key={rx.id} className="flex items-center gap-4 px-4 py-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-tx">{rx.drug}</p>
+                  <Badge tone={STATUS_TONE[status]}>{t(`rx.status_${status}`)}</Badge>
+                </div>
+                <p className="mt-0.5 text-xs text-tx-3">
+                  {rx.dose} · {rx.schedule}
+                  {rx.prescriber_name ? ` · ${rx.prescriber_name}` : ''}
+                </p>
+                <p className="mt-0.5 text-xs text-tx-4">
+                  {fmtDate(rx.start_date)}
+                  {rx.end_date ? ` → ${fmtDate(rx.end_date)}` : ` · ${t('rx.indefinite')}`}
+                </p>
+                {rx.status === 'cancelled' && (
+                  <p className="mt-0.5 text-xs text-tx-3">
+                    {rx.closed_at && f('rx.cancelled_on', { date: fmtDate(rx.closed_at) })}
+                    {rx.cancel_reason &&
+                      `${rx.closed_at ? ' · ' : ''}${f('rx.cancel_reason_shown', { reason: rx.cancel_reason })}`}
+                  </p>
+                )}
               </div>
-              <p className="mt-0.5 text-xs text-tx-3">
-                {rx.dose} · {rx.schedule}
-                {rx.prescriber_name ? ` · ${rx.prescriber_name}` : ''}
-              </p>
-              <p className="mt-0.5 text-xs text-tx-4">
-                {fmtDate(rx.start_date)}
-                {rx.end_date ? ` → ${fmtDate(rx.end_date)}` : ` · ${t('rx.indefinite')}`}
-              </p>
+              {canPrint && rx.record_id && rx.status !== 'cancelled' && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  title={t('pr.btn.prescription')}
+                  onClick={() => openPrint(`prescription/${rx.record_id}`)}
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              {actionable && (
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={complete.isPending}
+                    title={t('rx.complete_hint')}
+                    onClick={() => complete.mutate(rx.id)}
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    {t('rx.complete')}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setCancelling(rx)}>
+                    <X className="h-3.5 w-3.5" />
+                    {t('rx.cancel')}
+                  </Button>
+                </div>
+              )}
             </div>
-            {canPrint && rx.record_id && (
-              <Button
-                size="sm"
-                variant="ghost"
-                title={t('pr.btn.prescription')}
-                onClick={() => openPrint(`prescription/${rx.record_id}`)}
-              >
-                <Printer className="h-3.5 w-3.5" />
-              </Button>
-            )}
-            {actionable && (
-              <div className="flex shrink-0 gap-1">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={transition.isPending}
-                  onClick={() => transition.mutate({ id: rx.id, action: 'complete' })}
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  {t('rx.complete')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={transition.isPending}
-                  onClick={() => transition.mutate({ id: rx.id, action: 'cancel' })}
-                >
-                  <X className="h-3.5 w-3.5" />
-                  {t('rx.cancel')}
-                </Button>
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </Card>
+          )
+        })}
+      </Card>
+      <CancelPrescriptionModal prescription={cancelling} onClose={() => setCancelling(null)} />
+    </>
   )
 }

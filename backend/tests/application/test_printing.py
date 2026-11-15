@@ -27,7 +27,7 @@ from medicore.application.use_cases.printing import (
 )
 from medicore.application.use_cases.users import UpdateUser
 from medicore.domain.entities.medical_record import MedicalRecord
-from medicore.domain.entities.prescription import PrescriptionSnapshot
+from medicore.domain.entities.prescription import Prescription, PrescriptionSnapshot
 from medicore.domain.enums import (
     CertificateKind,
     ClinicalRecordType,
@@ -37,7 +37,7 @@ from medicore.domain.enums import (
     Sex,
 )
 from medicore.domain.shared.errors import InvalidValueObject, PermissionDenied
-from medicore.domain.shared.identifiers import RecordId
+from medicore.domain.shared.identifiers import PrescriptionId, RecordId
 from medicore.domain.value_objects.exam_request import ExamRequest
 from medicore.domain.value_objects.icd_code import IcdCode
 from medicore.domain.value_objects.print_settings import PrintSettings
@@ -111,6 +111,76 @@ class TestRecordDocuments:
                 seed.doctor_actor, record.id, document)
         assert e.value.code == "print.nothing_to_print"
         assert "document.printed" not in _actions(seed)
+
+    def _prescribe(self, seed, record, drug, *, cancel=False):
+        uow = _uow(seed)
+        snapshot = next(s for s in record.prescriptions if s.drug == drug)
+        rx = Prescription(
+            id=PrescriptionId.new(), tenant_id=seed.tenant.id, patient_id=seed.patient.id,
+            prescriber_id=seed.doctor.id, drug=snapshot.drug, dose=snapshot.dose,
+            schedule=snapshot.schedule, start_date=snapshot.start_date,
+            duration_days=snapshot.duration_days, record_id=record.id,
+        )
+        if cancel:
+            rx.cancel(seed.doctor.id, "Allergic reaction reported", NOW)
+        uow.prescriptions.save(rx)
+
+    def _two_prescriptions(self, seed):
+        record = _record(seed)
+        record = replace(record, prescriptions=(
+            *record.prescriptions,
+            PrescriptionSnapshot("Ibuprofeno", "400 mg", "c/8 h", date(2026, 5, 20)),
+        ))
+        seed.factory.store.medical_records[record.id.value] = record
+        return record
+
+    def test_a_cancelled_prescription_is_left_out(self, seed):
+        record = self._two_prescriptions(seed)
+        self._prescribe(seed, record, "Paracetamol", cancel=True)
+        self._prescribe(seed, record, "Ibuprofeno")
+        doc = PrintRecordDocument(_uow(seed), FixedClock(NOW)).execute(
+            seed.doctor_actor, record.id, "prescription")
+        assert [p.drug for p in doc.record.prescriptions] == ["Ibuprofeno"]
+        stored = seed.factory.store.medical_records[record.id.value]
+        assert [p.drug for p in stored.prescriptions] == ["Paracetamol", "Ibuprofeno"]
+
+    def test_a_completed_prescription_is_still_printed(self, seed):
+        record = _record(seed)
+        self._prescribe(seed, record, "Paracetamol")
+        rx = _uow(seed).prescriptions.list_by_patient(seed.patient.id)[0]
+        rx.complete(seed.doctor.id, NOW)
+        doc = PrintRecordDocument(_uow(seed), FixedClock(NOW)).execute(
+            seed.doctor_actor, record.id, "prescription")
+        assert len(doc.record.prescriptions) == 1
+
+    def test_nothing_to_print_when_every_prescription_is_cancelled(self, seed):
+        record = _record(seed)
+        self._prescribe(seed, record, "Paracetamol", cancel=True)
+        with pytest.raises(ValidationError) as e:
+            PrintRecordDocument(_uow(seed), FixedClock(NOW)).execute(
+                seed.doctor_actor, record.id, "prescription")
+        assert e.value.code == "print.nothing_to_print"
+        assert "document.printed" not in _actions(seed)
+
+    def test_the_exam_order_ignores_cancelled_prescriptions(self, seed):
+        record = _record(seed, exams=[ExamRequest("Hemograma", ExamKind.LAB)])
+        self._prescribe(seed, record, "Paracetamol", cancel=True)
+        doc = PrintRecordDocument(_uow(seed), FixedClock(NOW)).execute(
+            seed.doctor_actor, record.id, "exams")
+        assert len(doc.record.exams) == 1
+
+    def test_an_amended_version_leaves_out_the_cancelled_one_too(self, seed):
+        original = self._two_prescriptions(seed)
+        self._prescribe(seed, original, "Paracetamol", cancel=True)
+        self._prescribe(seed, original, "Ibuprofeno")
+        amended = original.amend(
+            by=seed.doctor.id, new_id=RecordId.new(), signed_at=datetime(2026, 5, 21, 9),
+            reason="Typo in the chief complaint", chief_complaint="Fiebre alta")
+        seed.factory.store.medical_records[amended.id.value] = amended
+        doc = PrintRecordDocument(_uow(seed), FixedClock(NOW)).execute(
+            seed.doctor_actor, original.id, "prescription")
+        assert doc.version == 2
+        assert [p.drug for p in doc.record.prescriptions] == ["Ibuprofeno"]
 
     def test_exam_order(self, seed):
         record = _record(seed, exams=[ExamRequest("Ultrasonografía pélvica", ExamKind.IMAGING)])

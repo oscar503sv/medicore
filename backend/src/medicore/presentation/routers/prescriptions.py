@@ -13,6 +13,7 @@ from medicore.application.use_cases.prescriptions import (
 from medicore.domain.shared.identifiers import PatientId, PrescriptionId
 from medicore.presentation.dependencies import Actor, Clock, UoW
 from medicore.presentation.schemas.prescriptions import (
+    CancelPrescriptionRequest,
     PrescriptionListResponse,
     PrescriptionResponse,
 )
@@ -26,7 +27,10 @@ def list_prescriptions(actor: Actor, uow: UoW, clock: Clock, patient_id: str = Q
     with uow:
         views = ListPatientPrescriptions(uow, clock).execute(actor, PatientId.parse(patient_id))
     return PrescriptionListResponse(
-        items=[ser_prescription(v.prescription, v.prescriber_name) for v in views]
+        items=[
+            ser_prescription(v.prescription, v.prescriber_name, cancel_reason=v.cancel_reason)
+            for v in views
+        ]
     )
 
 
@@ -39,8 +43,10 @@ def complete_prescription(prescription_id: str, actor: Actor, uow: UoW, clock: C
 
 
 @router.post("/{prescription_id}/cancel", response_model=PrescriptionResponse)
-def cancel_prescription(prescription_id: str, actor: Actor, uow: UoW, clock: Clock):
+def cancel_prescription(
+    prescription_id: str, body: CancelPrescriptionRequest, actor: Actor, uow: UoW, clock: Clock
+):
     prescription = CancelPrescription(uow, clock).execute(
-        actor, PrescriptionId.parse(prescription_id)
+        actor, PrescriptionId.parse(prescription_id), reason=body.reason
     )
-    return ser_prescription(prescription)
+    return ser_prescription(prescription, cancel_reason=prescription.cancel_reason)

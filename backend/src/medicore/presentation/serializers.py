@@ -214,7 +214,9 @@ def ser_patient(
     }
 
 
-def ser_prescription(p: Prescription, prescriber_name: str | None = None) -> dict:
+def ser_prescription(
+    p: Prescription, prescriber_name: str | None = None, *, cancel_reason: str | None = None
+) -> dict:
     return {
         "id": str(p.id),
         "patient_id": str(p.patient_id),
@@ -229,6 +231,9 @@ def ser_prescription(p: Prescription, prescriber_name: str | None = None) -> dic
         "status": str(p.status),
         "record_id": str(p.record_id) if p.record_id else None,
         "created_at": p.created_at,
+        "closed_at": p.closed_at,
+        "closed_by_id": str(p.closed_by_id) if p.closed_by_id else None,
+        "cancel_reason": cancel_reason,
     }
 
 

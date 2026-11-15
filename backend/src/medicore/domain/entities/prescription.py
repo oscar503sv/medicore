@@ -6,7 +6,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from medicore.domain.enums import PrescriptionStatus
-from medicore.domain.shared.errors import InvalidStateTransition
+from medicore.domain.shared.errors import (
+    InvalidStateTransition,
+    InvalidValueObject,
+    PermissionDenied,
+)
 from medicore.domain.shared.identifiers import (
     PatientId,
     PrescriptionId,
@@ -14,6 +18,9 @@ from medicore.domain.shared.identifiers import (
     TenantId,
     UserId,
 )
+
+CANCEL_REASON_MIN = 10
+CANCEL_REASON_MAX = 500
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,12 +67,41 @@ class Prescription:
     status: PrescriptionStatus = PrescriptionStatus.ACTIVE
     record_id: RecordId | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    closed_at: datetime | None = None
+    closed_by_id: UserId | None = None
+    cancel_reason: str | None = None
 
-    def complete(self) -> None:
+    def complete(self, by: UserId, now: datetime) -> None:
+        """Natural end of the treatment. Only the prescriber closes a prescription."""
+        self._ensure_prescriber(by)
         self._transition_to(PrescriptionStatus.COMPLETED)
+        self._close(by, now)
 
-    def cancel(self) -> None:
-        self._transition_to(PrescriptionStatus.CANCELLED)
+    def cancel(self, by: UserId, reason: str, now: datetime) -> None:
+        """Stop the treatment early; the prescriber must say why (kept on the prescription)."""
+        self._ensure_prescriber(by)
+        self._ensure_active(PrescriptionStatus.CANCELLED)
+        reason = reason.strip()
+        if not CANCEL_REASON_MIN <= len(reason) <= CANCEL_REASON_MAX:
+            raise InvalidValueObject(
+                "cancel reason out of range",
+                code="prescription.cancel_reason_invalid",
+                min=CANCEL_REASON_MIN,
+                max=CANCEL_REASON_MAX,
+            )
+        self.status = PrescriptionStatus.CANCELLED
+        self.cancel_reason = reason
+        self._close(by, now)
+
+    def _ensure_prescriber(self, by: UserId) -> None:
+        if by != self.prescriber_id:
+            raise PermissionDenied(
+                "only the prescriber closes a prescription", code="prescription.not_own"
+            )
+
+    def _close(self, by: UserId, now: datetime) -> None:
+        self.closed_at = now
+        self.closed_by_id = by
 
     def is_expired_on(self, ref: date) -> bool:
         """Active past its end date — shown as expired, but still ACTIVE until a doctor acts."""
@@ -75,9 +111,12 @@ class Prescription:
             and self.end_date < ref
         )
 
-    def _transition_to(self, target: PrescriptionStatus) -> None:
+    def _ensure_active(self, target: PrescriptionStatus) -> None:
         if self.status != PrescriptionStatus.ACTIVE:
             raise InvalidStateTransition("Prescription", self.status, target)
+
+    def _transition_to(self, target: PrescriptionStatus) -> None:
+        self._ensure_active(target)
         self.status = target
 
     def snapshot(self) -> PrescriptionSnapshot:

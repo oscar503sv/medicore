@@ -985,6 +985,9 @@ class InMemoryPrescriptionRepository(_Scoped):
         p = self._store.prescriptions.get(prescription_id.value)
         return p if p and p.tenant_id == self._tenant else None
 
+    def get_for_update(self, prescription_id: PrescriptionId) -> Prescription | None:
+        return self.get_by_id(prescription_id)
+
     def list_by_patient(
         self, patient_id: PatientId, active_only: bool = False
     ) -> list[Prescription]:

@@ -74,6 +74,13 @@ class TestRule:
             Role.NURSE, stored, frozenset(AddonModule), adj
         )
 
+    def test_prescriptions_manage_is_never_granted_to_others(self):
+        adj = PermissionAdjustments(granted=frozenset({"prescriptions.manage"}))
+        stored = ["records.view", "prescriptions.manage"]
+        assert Permission.PRESCRIPTIONS_MANAGE not in granted(
+            Role.NURSE, stored, frozenset(AddonModule), adj
+        )
+
     def test_vitals_can_be_granted_to_a_receptionist(self):
         adj = PermissionAdjustments(granted=frozenset({"consultations.vitals"}))
         assert Permission.CONSULTATIONS_VITALS in granted(
@@ -215,6 +222,16 @@ class TestUpdate:
             _update(seed, seed.nurse, ["records.sign"])
         assert exc.value.code == "roles.doctor_only"
         doctor_set = [p for p in _role_set(seed, seed.doctor) if p != "records.sign"]
+        with pytest.raises(ValidationError) as exc:
+            _update(seed, seed.doctor, doctor_set)
+        assert exc.value.code == "roles.doctor_must_keep"
+
+    def test_prescriptions_manage_is_doctor_only(self):
+        seed = seed_clinic()
+        with pytest.raises(ValidationError) as exc:
+            _update(seed, seed.nurse, ["records.view", "prescriptions.manage"])
+        assert exc.value.code == "roles.doctor_only"
+        doctor_set = [p for p in _role_set(seed, seed.doctor) if p != "prescriptions.manage"]
         with pytest.raises(ValidationError) as exc:
             _update(seed, seed.doctor, doctor_set)
         assert exc.value.code == "roles.doctor_must_keep"

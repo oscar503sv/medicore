@@ -354,6 +354,9 @@ def to_prescription(row: PrescriptionModel) -> Prescription:
         status=PrescriptionStatus(row.status),
         record_id=RecordId.parse(row.record_id) if row.record_id else None,
         created_at=row.created_at,
+        closed_at=row.closed_at,
+        closed_by_id=UserId.parse(row.closed_by_id) if row.closed_by_id else None,
+        cancel_reason=row.cancel_reason,
     )
 
 

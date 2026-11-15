@@ -34,6 +34,16 @@ def test_update_and_reset_role(client, admin_headers):
     assert entry["customized"] is False
 
 
+def test_prescriptions_manage_cannot_go_to_the_nurse(client, admin_headers):
+    resp = client.put(
+        "/api/v1/permissions/roles/nurse",
+        json={"permissions": ["patients.view", "prescriptions.manage"]},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 400
+    assert resp.json()["code"] == "roles.doctor_only"
+
+
 def test_update_admin_role_rejected(client, admin_headers):
     resp = client.put(
         "/api/v1/permissions/roles/admin", json={"permissions": []}, headers=admin_headers

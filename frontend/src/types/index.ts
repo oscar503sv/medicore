@@ -482,6 +482,10 @@ export interface Prescription {
   status: PrescriptionStatus
   record_id: string | null
   created_at: string
+  closed_at: string | null
+  closed_by_id: string | null
+  /** Only readers of clinical content get the text; others see null. */
+  cancel_reason: string | null
 }
 
 export interface PaginatedResponse<T> {

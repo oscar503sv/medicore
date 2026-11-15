@@ -1684,7 +1684,7 @@ def finish(c: Clinic) -> None:
         for patient in c.patients:
             for rx in uow.prescriptions.list_by_patient(patient.id):
                 if rx.status == PrescriptionStatus.ACTIVE and rx.is_expired_on(c.today):
-                    rx.complete()
+                    rx.complete(by=rx.prescriber_id, now=c.clock.at(c.now).now())
                     uow.prescriptions.save(rx)
                     expired += 1
         uow.commit()

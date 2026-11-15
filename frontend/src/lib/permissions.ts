@@ -26,6 +26,7 @@ export const DOCTOR_ONLY: Permission[] = [
   'records.amend',
   'records.read_clinical',
   'consultations.edit',
+  'prescriptions.manage',
 ]
 
 // Mirrored from the backend: handing out permissions stays with administrators.

@@ -23,11 +23,19 @@ External channels and reminders are planned as a future evolution (see [Future](
 - Medical document storage keeps **metadata only** (name, mime type, size, `storage_key`);
   there is no file backend (S3/disk). The UI says so explicitly.
 - Amendment follow-ups (OZK-94, OZK-98): `procedure.amended` and `certificate.voided` store the
-  reason text in the audit log, unlike record amendments (which keep only its length); align them.
+  reason text in the audit log, unlike record amendments and prescription cancellations (which keep
+  only its length, `reason_chars`); align them.
   `platform_reads.signed_records` and `signed_per_week` (platform console) count amendments as new
   signed records; they should exclude them.
 - OZK-99 (immutability trigger on `medical_records`) must go in a migration after
-  `e6f7a8b9c0d2`.
+  `f7a8b9c0d1e3`.
+- Active prescriptions that nobody can close: since OZK-100 only the prescriber completes or cancels
+  a prescription, and administrators don't hold `prescriptions.manage`, so a prescription of a doctor
+  who left the clinic (or was deleted) stays active (query 5 in the
+  [backend README](../backend/README.md#prescriptions-closed-by-someone-else)). Decide whether the
+  treating doctor or an administrator may close it, with a reason and an audit entry.
+- Notify the treating doctor when a prescription was issued by another doctor (for example, when the
+  prescriber leaves the clinic). OZK-100 notifies no one, since only the prescriber acts.
 
 ## Future
 
@@ -166,5 +174,10 @@ Resolved in November 2026:
   summaries show only current versions; amendments no longer notify. The printed certificate uses the
   original signature time as the end of the consultation. Migration `e6f7a8b9c0d2` enforces the line
   (see [Branched amendment chains](../backend/README.md#branched-amendment-chains)).
+- **Prescriptions closed by their prescriber** (OZK-100): only the doctor who issued a prescription
+  completes or cancels it (`prescriptions.manage` is doctor-only). Cancelling needs a reason of 10 to
+  500 characters, kept on the prescription and only its length in the audit log; the reason reaches
+  clinical readers only. Migration `f7a8b9c0d1e3` adds the closing fields and the CHECK, and moves the
+  permission (see [Prescriptions closed by someone else](../backend/README.md#prescriptions-closed-by-someone-else)).
 
 No pending findings remain in this list.

@@ -54,7 +54,16 @@ export function MedicationTimeline({ patientId }: { patientId: string }) {
             <div className="mt-2 space-y-1.5">
               {group.map((rx) => (
                 <div key={rx.id} className="rounded-lg border border-line bg-surface px-3 py-2">
-                  <p className="text-sm font-medium text-tx">{rx.drug}</p>
+                  <div className="flex items-center gap-2">
+                    <p
+                      className={`text-sm font-medium text-tx ${rx.status === 'cancelled' ? 'line-through' : ''}`}
+                    >
+                      {rx.drug}
+                    </p>
+                    {rx.status === 'cancelled' && (
+                      <span className="text-xs text-tx-3">{t('rx.status_cancelled')}</span>
+                    )}
+                  </div>
                   <p className="text-xs text-tx-3">
                     {rx.dose} · {rx.schedule}
                     {rx.duration_days ? ` · ${rx.duration_days} ${t('patient.meds_days')}` : ''}

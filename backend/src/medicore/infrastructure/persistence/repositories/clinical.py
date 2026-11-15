@@ -299,6 +299,18 @@ class SqlPrescriptionRepository:
         row = self._q().filter(PrescriptionModel.id == prescription_id.value).first()
         return to_prescription(row) if row else None
 
+    def get_for_update(self, prescription_id: PrescriptionId) -> Prescription | None:
+        # FOR NO KEY UPDATE: a concurrent complete/cancel waits here and then reads the closed
+        # prescription (populate_existing refreshes the identity map).
+        row = (
+            self._q()
+            .filter(PrescriptionModel.id == prescription_id.value)
+            .with_for_update(key_share=True)
+            .populate_existing()
+            .first()
+        )
+        return to_prescription(row) if row else None
+
     def list_by_patient(
         self, patient_id: PatientId, active_only: bool = False
     ) -> list[Prescription]:
@@ -328,6 +340,9 @@ class SqlPrescriptionRepository:
         row.status = str(prescription.status)
         row.record_id = prescription.record_id.value if prescription.record_id else None
         row.created_at = prescription.created_at
+        row.closed_at = prescription.closed_at
+        row.closed_by_id = prescription.closed_by_id.value if prescription.closed_by_id else None
+        row.cancel_reason = prescription.cancel_reason
 
 
 class SqlMedicalDocumentRepository:
