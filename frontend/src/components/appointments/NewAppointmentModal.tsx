@@ -18,6 +18,12 @@ import { Button } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
+import {
+  APPOINTMENT_TYPES,
+  isAppointmentType,
+  typeHintKey,
+  typeLabelKey,
+} from '@/lib/appointmentTypes'
 import { cn } from '@/lib/cn'
 import { fmtFee } from '@/lib/fees'
 import { clinicToday, fmtDate, fmtTime } from '@/lib/format'
@@ -26,13 +32,6 @@ import { useAuthStore } from '@/stores/auth'
 import type { AppointmentType, Patient, Slot } from '@/types'
 
 const STEPS = ['appt.step_patient', 'appt.step_details', 'appt.step_slot']
-
-const TYPE_LABELS: Record<string, string> = {
-  consult: 'Consulta',
-  follow_up: 'Seguimiento',
-  check_up: 'Control',
-  procedure: 'Procedimiento',
-}
 
 export function NewAppointmentModal({
   open,
@@ -48,7 +47,7 @@ export function NewAppointmentModal({
   /** Booking from a patient's row: skip the patient step (and suggest their doctor). */
   initialPatient?: Patient | null
   /** Prefilled type and reason, e.g. a procedure's suggested follow-up. */
-  initialType?: string
+  initialType?: AppointmentType
   initialReason?: string
 }) {
   const t = useT()
@@ -57,7 +56,7 @@ export function NewAppointmentModal({
   const [step, setStep] = useState(0)
   const [patient, setPatient] = useState<Patient | null>(null)
   const [doctorId, setDoctorId] = useState('')
-  const [type, setType] = useState('consult')
+  const [type, setType] = useState<AppointmentType>('consult')
   // Procedure appointments belong to the optional procedures module.
   const canProcedures = useAuthStore((s) => s.can('procedures.view'))
   const [reason, setReason] = useState('')
@@ -244,14 +243,21 @@ export function NewAppointmentModal({
               ))}
             </Select>
             <div className="grid grid-cols-2 gap-4">
-              <Select label={t('appt.type')} value={type} onChange={(e) => setType(e.target.value)}>
-                {Object.entries(TYPE_LABELS)
-                  .filter(([value]) => value !== 'procedure' || canProcedures)
-                  .map(([value, label]) => (
+              <Select
+                label={t('appt.type')}
+                value={type}
+                hint={t(typeHintKey(type))}
+                onChange={(e) => {
+                  if (isAppointmentType(e.target.value)) setType(e.target.value)
+                }}
+              >
+                {APPOINTMENT_TYPES.filter((value) => value !== 'procedure' || canProcedures).map(
+                  (value) => (
                     <option key={value} value={value}>
-                      {label}
+                      {t(typeLabelKey(value))}
                     </option>
-                  ))}
+                  ),
+                )}
               </Select>
               {/* Duration is the doctor's rule — shown for context, never chosen here. */}
               <div>
@@ -407,7 +413,7 @@ export function NewAppointmentModal({
                 <span className="flex items-center gap-2 text-tx-3">
                   <CalendarDays className="h-3.5 w-3.5" /> {t('appt.type')}
                 </span>
-                <span className="text-right text-tx">{TYPE_LABELS[type] ?? type}</span>
+                <span className="text-right text-tx">{t(typeLabelKey(type))}</span>
                 <span className="flex items-center gap-2 text-tx-3">
                   <BadgeDollarSign className="h-3.5 w-3.5" /> {t('fee.col_fee')}
                 </span>

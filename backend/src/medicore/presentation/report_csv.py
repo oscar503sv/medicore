@@ -56,8 +56,9 @@ HEADERS: dict[str, dict[str, str]] = {
 
 ENUMS: dict[str, dict[str, dict[str, str]]] = {
     "es": {
-        "appointment_type": {"consult": "Consulta", "follow_up": "Seguimiento",
-                             "check_up": "Chequeo", "procedure": "Procedimiento",
+        # Same names as the frontend ``apptype.*``.
+        "appointment_type": {"consult": "Consulta", "follow_up": "Seguimiento (control)",
+                             "check_up": "Chequeo preventivo", "procedure": "Procedimiento",
                              "emergency": "Urgencia"},
         "appointment_status": {"scheduled": "Agendada", "confirmed": "Confirmada",
                                "in_progress": "En curso", "completed": "Completada",
@@ -71,7 +72,7 @@ ENUMS: dict[str, dict[str, dict[str, str]]] = {
     },
     "en": {
         "appointment_type": {"consult": "Consultation", "follow_up": "Follow-up",
-                             "check_up": "Check-up", "procedure": "Procedure",
+                             "check_up": "Preventive check-up", "procedure": "Procedure",
                              "emergency": "Emergency"},
         "appointment_status": {"scheduled": "Scheduled", "confirmed": "Confirmed",
                                "in_progress": "In progress", "completed": "Completed",

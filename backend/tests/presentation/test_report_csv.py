@@ -8,13 +8,17 @@ from decimal import Decimal
 import pytest
 
 from medicore.application.use_cases.reports import ReportColumn
+from medicore.domain.enums import AppointmentType
 from medicore.domain.services.immunization import VACCINES
-from medicore.presentation.report_csv import VACCINE_NAMES, cell
+from medicore.presentation.report_csv import ENUMS, VACCINE_NAMES, cell
 
 
 @pytest.mark.parametrize(("column", "value", "lang", "expected"), [
     (ReportColumn("status", "enum:appointment_status"), "no_show", "es", "No asistió"),
     (ReportColumn("type", "enum:appointment_type"), "follow_up", "en", "Follow-up"),
+    (ReportColumn("type", "enum:appointment_type"), "check_up", "es", "Chequeo preventivo"),
+    (ReportColumn("type", "enum:appointment_type"), "follow_up", "es", "Seguimiento (control)"),
+    (ReportColumn("type", "enum:appointment_type"), "check_up", "en", "Preventive check-up"),
     (ReportColumn("age", "age"), 8, "es", "8 meses"),
     (ReportColumn("age", "age"), 410, "en", "34 years"),
     (ReportColumn("included", "bool"), True, "es", "Sí"),
@@ -37,3 +41,9 @@ def test_cells(column, value, lang, expected):
 def test_every_vaccine_has_a_name_in_both_languages():
     for lang in ("es", "en"):
         assert set(VACCINES) <= set(VACCINE_NAMES[lang])
+
+
+def test_every_appointment_type_has_a_name_in_both_languages():
+    expected = {t.value for t in AppointmentType}
+    for lang in ("es", "en"):
+        assert set(ENUMS[lang]["appointment_type"]) == expected

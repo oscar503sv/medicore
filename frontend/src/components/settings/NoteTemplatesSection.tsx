@@ -8,13 +8,14 @@ import { Checkbox } from '@/components/ui/Checkbox'
 import { Select } from '@/components/ui/Select'
 import { PageLoader } from '@/components/ui/Spinner'
 import { toast } from '@/components/ui/Toast'
+import { APPOINTMENT_TYPES } from '@/lib/appointmentTypes'
 import { useT } from '@/lib/i18n'
 import { CustomNoteTemplates } from '@/components/settings/CustomNoteTemplates'
 import { templateName } from '@/lib/notes'
 import { useAuthStore } from '@/stores/auth'
 import type { NoteCatalog, NoteSettings } from '@/types'
 
-const RULES = ['first_visit', 'consult', 'follow_up', 'check_up', 'procedure', 'emergency']
+const RULES = ['first_visit', ...APPOINTMENT_TYPES]
 
 /**
  * Clinical note formats: the doctor's preferred one and, for whoever configures the clinic

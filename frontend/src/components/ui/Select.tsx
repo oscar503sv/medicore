@@ -41,6 +41,9 @@ export interface SelectProps {
   disabled?: boolean
   id?: string
   'aria-label'?: string
+  'aria-describedby'?: string
+  /** Help text under the control, announced with it. */
+  hint?: ReactNode
   /** `bare`: no border/background, for inline use (e.g. a time inside a row). */
   variant?: 'default' | 'bare'
 }
@@ -49,7 +52,18 @@ const MAX_HEIGHT = 280
 
 export const Select = forwardRef<HTMLButtonElement, SelectProps>(
   (
-    { label, value, onChange, children, className, disabled, id, variant = 'default', ...aria },
+    {
+      label,
+      value,
+      onChange,
+      children,
+      className,
+      disabled,
+      id,
+      hint,
+      variant = 'default',
+      ...aria
+    },
     ref,
   ) => {
     const options = collectOptions(children)
@@ -61,6 +75,8 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
     const buttonId = id ?? `${autoId}-button`
     const listId = `${autoId}-list`
     const labelId = `${autoId}-label`
+    const hintId = `${autoId}-hint`
+    const describedBy = [hint ? hintId : null, aria['aria-describedby']].filter(Boolean).join(' ')
 
     const [open, setOpen] = useState(false)
     const [active, setActive] = useState(-1)
@@ -201,6 +217,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
           aria-activedescendant={open && active >= 0 ? `${listId}-${active}` : undefined}
           aria-labelledby={label ? `${labelId} ${buttonId}` : undefined}
           aria-label={aria['aria-label']}
+          aria-describedby={describedBy || undefined}
           onClick={() => (open ? hide() : show())}
           onKeyDown={onKeyDown}
           className={cn(
@@ -219,6 +236,11 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
             className={cn('h-4 w-4 shrink-0 text-tx-3 transition-transform', open && 'rotate-180')}
           />
         </button>
+        {hint && (
+          <p id={hintId} className="mt-1 text-xs text-tx-3">
+            {hint}
+          </p>
+        )}
 
         {open &&
           createPortal(

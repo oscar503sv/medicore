@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil } from 'lucide-react'
 import { errorMessage } from '@/api/client'
-import { type DoctorFees, feesApi, PRICED_TYPES } from '@/api/fees'
+import { type DoctorFees, feesApi } from '@/api/fees'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
+import { PRICED_TYPES, typeHintKey, typeLabelKey } from '@/lib/appointmentTypes'
 import { cn } from '@/lib/cn'
 import { FEE_PATTERN, fmtFee } from '@/lib/fees'
 import { useT } from '@/lib/i18n'
@@ -73,8 +74,8 @@ export function FeesPage() {
               <tr>
                 <Th>{t('fee.col_doctor')}</Th>
                 {PRICED_TYPES.map((k) => (
-                  <Th key={k} className="text-right">
-                    {t(`apptype.${k}`)}
+                  <Th key={k} className="text-right" title={t(typeHintKey(k))}>
+                    {t(typeLabelKey(k))}
                   </Th>
                 ))}
                 <Th />
@@ -95,7 +96,8 @@ export function FeesPage() {
                       <Td key={k} className="text-right">
                         {isEditing ? (
                           <input
-                            aria-label={t(`apptype.${k}`)}
+                            aria-label={t(typeLabelKey(k))}
+                            aria-describedby={`fee-type-${k}`}
                             inputMode="decimal"
                             placeholder="—"
                             value={draft[k] ?? ''}
@@ -152,6 +154,14 @@ export function FeesPage() {
         )}
         <div className="space-y-1 border-t border-line px-5 py-3 text-xs text-tx-3">
           {editing && <p>{t('fee.blank_hint')}</p>}
+          <dl className="space-y-0.5 pb-1">
+            {PRICED_TYPES.map((k) => (
+              <div key={k} className="sm:flex sm:gap-1.5">
+                <dt className="font-medium text-tx-2">{t(typeLabelKey(k))}:</dt>
+                <dd id={`fee-type-${k}`}>{t(typeHintKey(k))}</dd>
+              </div>
+            ))}
+          </dl>
           <p>
             {t('fee.procedures_note')}{' '}
             {canProcedures && (

@@ -9,9 +9,18 @@ export function Table({ children }: { children: ReactNode }) {
   )
 }
 
-export function Th({ children, className }: { children?: ReactNode; className?: string }) {
+export function Th({
+  children,
+  className,
+  title,
+}: {
+  children?: ReactNode
+  className?: string
+  title?: string
+}) {
   return (
     <th
+      title={title}
       className={cn(
         'border-b border-line px-4 py-3 text-left text-[11px] font-medium uppercase tracking-wider text-tx-3',
         className,

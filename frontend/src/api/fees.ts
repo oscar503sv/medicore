@@ -10,9 +10,6 @@ export interface DoctorFees {
   editable: boolean
 }
 
-/** Appointment types priced per doctor (procedures come from the procedure catalog). */
-export const PRICED_TYPES: AppointmentType[] = ['consult', 'follow_up', 'check_up', 'emergency']
-
 export const feesApi = {
   list: () => api.get<DoctorFees[]>('/fees').then((r) => r.data),
 
