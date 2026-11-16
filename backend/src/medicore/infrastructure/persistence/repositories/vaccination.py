@@ -12,6 +12,7 @@ from medicore.domain.enums import (
     VaccinationOutcome,
     VaccinationSource,
     VaccineRoute,
+    VaccineSupply,
 )
 from medicore.domain.shared.identifiers import (
     AppointmentId,
@@ -20,6 +21,7 @@ from medicore.domain.shared.identifiers import (
     UserId,
     VaccinationRecordId,
 )
+from medicore.infrastructure.persistence.mappers.fee import amount_of, money_from
 from medicore.infrastructure.persistence.models.vaccination_record import VaccinationRecordModel
 
 
@@ -39,6 +41,8 @@ def to_vaccination_record(row: VaccinationRecordModel) -> VaccinationRecord:
     record.route = VaccineRoute(row.route) if row.route else None
     record.site = InjectionSite(row.site) if row.site else None
     record.notes = row.notes
+    record.supply = VaccineSupply(row.supply) if row.supply else None
+    record.listed_fee = money_from(row.listed_fee)
     record.created_at = row.created_at
     record.voided_at = row.voided_at
     record.voided_by_id = UserId.parse(row.voided_by_id) if row.voided_by_id else None
@@ -58,6 +62,16 @@ class SqlVaccinationRecordRepository:
 
     def get_by_id(self, record_id: VaccinationRecordId) -> VaccinationRecord | None:
         row = self._q().filter(VaccinationRecordModel.id == record_id.value).first()
+        return to_vaccination_record(row) if row else None
+
+    def get_for_update(self, record_id: VaccinationRecordId) -> VaccinationRecord | None:
+        row = (
+            self._q()
+            .filter(VaccinationRecordModel.id == record_id.value)
+            .with_for_update()
+            .populate_existing()  # the dose may have been read before the lock
+            .first()
+        )
         return to_vaccination_record(row) if row else None
 
     def list_by_patient(self, patient_id: PatientId) -> list[VaccinationRecord]:
@@ -124,6 +138,8 @@ class SqlVaccinationRecordRepository:
         row.route = str(record.route) if record.route else None
         row.site = str(record.site) if record.site else None
         row.notes = record.notes
+        row.supply = str(record.supply) if record.supply else None
+        row.listed_fee = amount_of(record.listed_fee)
         row.recorded_by_id = record.recorded_by_id.value
         row.appointment_id = record.appointment_id.value if record.appointment_id else None
         row.created_at = record.created_at

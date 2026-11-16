@@ -17,7 +17,7 @@ def test_record_card_and_void_round_trip(seed, client, auth_headers):
     resp = client.post(
         f"/api/v1/vaccinations/patients/{pid}",
         json={"vaccine_code": "TD", "dose_key": "TD-1", "occurred_on": "2026-05-30",
-              "lot": "TD-118", "site": "left_arm"},
+              "lot": "TD-118", "site": "left_arm", "supply": "clinic"},
         headers=auth_headers,
     )
     assert resp.status_code == 201, resp.text

@@ -35,6 +35,7 @@ HEADERS: dict[str, dict[str, str]] = {
         "ordered_by": "Indicado por", "performed_by": "Realizado por",
         "included": "Incluido en la consulta", "performed": "Realizados", "drug": "Medicamento",
         "route": "Vía", "dose_number": "N.º de dosis", "doses": "Dosis aplicadas",
+        "vaccinations": "Vacunaciones", "supply": "Procedencia",
     },
     "en": {
         "date": "Date", "time": "Time", "code": "Code", "patient_code": "Patient no.",
@@ -51,6 +52,7 @@ HEADERS: dict[str, dict[str, str]] = {
         "ordered_by": "Ordered by", "performed_by": "Performed by",
         "included": "Included in the visit", "performed": "Performed", "drug": "Drug",
         "route": "Route", "dose_number": "Dose no.", "doses": "Doses applied",
+        "vaccinations": "Vaccinations", "supply": "Supply",
     },
 }
 
@@ -64,7 +66,9 @@ ENUMS: dict[str, dict[str, dict[str, str]]] = {
                                "in_progress": "En curso", "completed": "Completada",
                                "cancelled": "Cancelada", "no_show": "No asistió"},
         "income_source": {"visit": "Consulta", "procedure": "Procedimiento",
-                          "procedure_included": "Procedimiento incluido en la consulta"},
+                          "procedure_included": "Procedimiento incluido en la consulta",
+                          "vaccination": "Vacunación"},
+        "vaccine_supply": {"clinic": "Privada (clínica)", "minsal": "MINSAL"},
         "sex": {"male": "Masculino", "female": "Femenino", "other": "Otro"},
         "application_route": {"im": "Intramuscular", "iv": "Intravenosa",
                               "sc": "Subcutánea", "id": "Intradérmica",
@@ -78,7 +82,9 @@ ENUMS: dict[str, dict[str, dict[str, str]]] = {
                                "in_progress": "In progress", "completed": "Completed",
                                "cancelled": "Cancelled", "no_show": "No show"},
         "income_source": {"visit": "Visit", "procedure": "Procedure",
-                          "procedure_included": "Procedure included in the visit"},
+                          "procedure_included": "Procedure included in the visit",
+                          "vaccination": "Vaccination"},
+        "vaccine_supply": {"clinic": "Private (clinic)", "minsal": "MINSAL"},
         "sex": {"male": "Male", "female": "Female", "other": "Other"},
         "application_route": {"im": "Intramuscular", "iv": "Intravenous",
                               "sc": "Subcutaneous", "id": "Intradermal",

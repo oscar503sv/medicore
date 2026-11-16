@@ -10,9 +10,11 @@ import {
   type VaccinationOutcome,
   type VaccinationSource,
   type VaccineRoute,
+  type VaccineSupply,
 } from '@/api/vaccinations'
 import { Button } from '@/components/ui/Button'
 import { AdministrationFields, VaccineDoseSelects } from './DoseFields'
+import { SupplyField } from './SupplyField'
 import { Input, Textarea } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Segmented } from '@/components/ui/Segmented'
@@ -58,6 +60,7 @@ export function RecordVaccinationModal({
   const [route, setRoute] = useState<VaccineRoute | ''>('')
   const [site, setSite] = useState<InjectionSite | ''>('')
   const [notes, setNotes] = useState('')
+  const [supply, setSupply] = useState<VaccineSupply | ''>('')
 
   // Doses of the chosen vaccine that apply to this patient and can still be recorded.
   const doses = useMemo(
@@ -82,6 +85,7 @@ export function RecordVaccinationModal({
     setRoute('')
     setSite('')
     setNotes('')
+    setSupply('')
     // Reset only when the modal opens: a background refetch of the card must not wipe
     // what the user is typing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,6 +114,7 @@ export function RecordVaccinationModal({
         lot: outcome === 'administered' ? lot.trim() || null : null,
         route: hereGiven ? route || null : null,
         site: hereGiven ? site || null : null,
+        supply: hereGiven ? supply || null : null,
         notes: notes.trim() || null,
       }),
     onSuccess: () => {
@@ -211,6 +216,10 @@ export function RecordVaccinationModal({
           />
         )}
 
+        {hereGiven && (
+          <SupplyField value={supply} price={null} onChange={setSupply} />
+        )}
+
         {outcome === 'administered' && source === 'external' && (
           <Input
             label={t('vax.lot_optional')}
@@ -233,7 +242,7 @@ export function RecordVaccinationModal({
           <Button type="button" variant="outline" onClick={onClose}>
             {t('app.cancel')}
           </Button>
-          <Button type="submit" variant="accent" loading={save.isPending} disabled={!vaccine}>
+          <Button type="submit" variant="accent" loading={save.isPending} disabled={!vaccine || (hereGiven && !supply)}>
             {t('vax.record')}
           </Button>
         </div>

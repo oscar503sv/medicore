@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta
 from medicore.application.common.appointment_access import ensure_own_appointment
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
+from medicore.application.common.entitlements import ensure_module
 from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.notifications import (
     APPOINTMENT_CANCELLED,
@@ -85,19 +86,6 @@ _TYPE_MODULES = {
 def _required_module(kind: AppointmentType, agenda: ServiceAgenda | None) -> AddonModule | None:
     """The module a clinic needs to book this: the agenda's own, or the type's."""
     return agenda.module if agenda is not None else _TYPE_MODULES.get(kind)
-
-
-def _ensure_module(
-    uow: UnitOfWork, actor: ActorContext, module: AddonModule | None, code: str
-) -> Tenant:
-    tenant = uow.tenants.get_by_id(actor.tenant_id)
-    if tenant is None:
-        raise EntityNotFound("Tenant", actor.tenant_id)
-    if module is not None and not tenant.subscription.has_module(module):
-        raise PermissionDenied(
-            "the module is not contracted", code=code, module=str(module)
-        )
-    return tenant
 
 
 def _ensure_doctor_attendable(
@@ -355,7 +343,7 @@ class CreateAppointment:
         assignee = Assignee(cmd.doctor_id, cmd.agenda_id)
         _ensure_doctor_attendable(self._uow, actor, cmd.doctor_id, "appointment.invalid_doctor")
         agenda = _bookable_agenda(self._uow, assignee, cmd.type)
-        tenant = _ensure_module(
+        tenant = ensure_module(
             self._uow, actor, _required_module(cmd.type, agenda), "appointment.module_required"
         )
         _ensure_patient(self._uow, cmd.patient_id, "appointment.patient_inactive")
@@ -450,7 +438,7 @@ class RegisterWalkIn:
         assignee = Assignee(cmd.doctor_id, cmd.agenda_id)
         _ensure_doctor_attendable(self._uow, actor, cmd.doctor_id, "walk_in.invalid_doctor")
         agenda = _bookable_agenda(self._uow, assignee, cmd.type)
-        tenant = _ensure_module(
+        tenant = ensure_module(
             self._uow, actor, _required_module(cmd.type, agenda), "walk_in.module_required"
         )
         location_id = cmd.location_id or tenant.primary_location.id

@@ -15,6 +15,8 @@ export type DoseStatus =
   | 'indicated'
 export type VaccinationOutcome = 'administered' | 'refused' | 'contraindicated'
 export type VaccinationSource = 'clinic' | 'external'
+/** Who supplied a dose given at the clinic: its own stock or the health ministry (free). */
+export type VaccineSupply = 'clinic' | 'minsal'
 export type VaccineRoute = 'im' | 'sc' | 'id' | 'oral'
 export type InjectionSite = 'left_arm' | 'right_arm' | 'left_thigh' | 'right_thigh' | 'mouth'
 
@@ -63,6 +65,10 @@ export interface VaccinationRecord {
   route: VaccineRoute | null
   site: InjectionSite | null
   notes: string | null
+  /** Null for doses given elsewhere and for those recorded before the field existed. */
+  supply: VaccineSupply | null
+  /** The price copied when the dose was given in an appointment ($0.00 for MINSAL). */
+  listed_fee: string | null
   recorded_by_id: string
   recorded_by_name: string | null
   /** The appointment this dose was recorded from, when it came from a visit. */
@@ -89,6 +95,8 @@ export interface RecordVaccinationPayload {
   route?: VaccineRoute | null
   site?: InjectionSite | null
   notes?: string | null
+  /** Required when the dose is given at the clinic. */
+  supply?: VaccineSupply | null
 }
 
 export interface WorklistPatient {
@@ -124,6 +132,7 @@ export interface VisitDosePayload {
   route?: VaccineRoute | null
   site?: InjectionSite | null
   notes?: string | null
+  supply: VaccineSupply
 }
 
 export interface VaccinationVisitPayload {
@@ -141,6 +150,10 @@ export type VaccinationAppointment = Pick<
 export interface VaccinationVisitResult {
   appointment: VaccinationAppointment
   records: VaccinationRecord[]
+  /** What the visit is charged, from its private doses. */
+  listed_fee: string | null
+  fee: string | null
+  fee_note: string | null
 }
 
 export interface VaccinationWorklist {

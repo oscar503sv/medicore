@@ -31,7 +31,13 @@ from medicore.application.use_cases.vaccinations import (
 )
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.service_agenda import ServiceAgenda
-from medicore.domain.enums import AppointmentStatus, AppointmentType, Role, ServiceAgendaKind
+from medicore.domain.enums import (
+    AppointmentStatus,
+    AppointmentType,
+    Role,
+    ServiceAgendaKind,
+    VaccineSupply,
+)
 from medicore.domain.shared.errors import SlotUnavailable
 from medicore.domain.shared.identifiers import AppointmentId, ServiceAgendaId
 from medicore.domain.value_objects.assignee import Assignee
@@ -97,7 +103,7 @@ def _visit(clinic: Clinic, appointment: Appointment) -> None:
             _staff(clinic, Role.NURSE),
             RecordVaccinationVisitCommand(
                 appointment_id=appointment.id, patient_id=clinic.patient.id,
-                doses=(VisitDose("TD", lot="TD-1"),),
+                doses=(VisitDose("TD", lot="TD-1", supply=VaccineSupply.MINSAL),),
             ),
         )
 
@@ -406,7 +412,7 @@ class TestVisitDuplicates:
         with Clinic(engine) as clinic:
             agenda = _agenda(clinic)
             appointment = _vaccination_appointment(clinic, agenda)
-            dose = VisitDose("HEXA", lot="L-1", dose_key="HEXA-1")
+            dose = VisitDose("HEXA", lot="L-1", dose_key="HEXA-1", supply=VaccineSupply.MINSAL)
 
             with (
                 Session(bind=engine, expire_on_commit=False) as session,
@@ -441,7 +447,7 @@ class TestVisitDuplicates:
                     _staff(clinic, Role.NURSE),
                     RecordVaccinationVisitCommand(
                         appointment_id=appointment.id, patient_id=clinic.patient.id,
-                        doses=(VisitDose("TD", lot="L-1"),),
+                        doses=(VisitDose("TD", lot="L-1", supply=VaccineSupply.MINSAL),),
                     ),
                 )
 

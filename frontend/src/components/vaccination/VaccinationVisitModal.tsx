@@ -4,6 +4,7 @@ import { Modal } from '@/components/ui/Modal'
 import { PageLoader } from '@/components/ui/Spinner'
 import { useT } from '@/lib/i18n'
 import { VisitDoseRow } from './VisitDoseRow'
+import { VisitTotal } from './VisitTotal'
 import { useVaccinationVisit, type VisitTarget } from './useVaccinationVisit'
 
 export type { VisitTarget }
@@ -55,6 +56,7 @@ export function VaccinationVisitModal({
                 row={row}
                 catalog={catalog}
                 states={v.states}
+                prices={v.prices}
                 canRemove={v.rows.length > 1}
                 onChange={(patch) => v.update(row.uid, patch)}
                 onVaccine={(code) => v.pickVaccine(row.uid, code)}
@@ -71,6 +73,7 @@ export function VaccinationVisitModal({
               <Plus className="h-4 w-4" />
               {t('vax.visit_add_dose')}
             </Button>
+            <VisitTotal cents={v.total.cents} minsal={v.total.minsal} />
           </>
         )}
 

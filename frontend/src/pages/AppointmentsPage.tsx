@@ -382,7 +382,7 @@ export function AppointmentsPage() {
                         ]
                       : []),
                     ...(a.status !== 'cancelled' &&
-                    a.type !== 'vaccination' &&
+                    (a.type !== 'vaccination' || a.listed_fee !== null) &&
                     canManageAppt(a) &&
                     canPrice(a.doctor_id)
                       ? [
@@ -577,6 +577,7 @@ export function AppointmentsPage() {
         listed={feeTarget?.listed_fee ?? null}
         charged={feeTarget?.fee ?? null}
         note={feeTarget?.fee_note ?? null}
+        max={feeTarget?.type === 'vaccination' ? feeTarget.listed_fee : null}
         loading={adjustFee.isPending}
         onClose={() => setFeeTarget(null)}
         onSave={(amount, note) => adjustFee.mutate({ id: feeTarget!.id, amount, note })}

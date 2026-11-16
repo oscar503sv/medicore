@@ -42,6 +42,11 @@ class AppointmentModel(Base):
         CheckConstraint(
             "num_nonnulls(doctor_id, agenda_id) = 1", name="ck_appointments_one_assignee"
         ),
+        # A vaccination visit is charged at most what its private doses add up to.
+        CheckConstraint(
+            "type <> 'vaccination' OR listed_fee IS NULL OR fee <= listed_fee",
+            name="ck_appointments_vaccination_fee_cap",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

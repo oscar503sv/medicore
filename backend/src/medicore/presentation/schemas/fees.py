@@ -6,6 +6,7 @@ strings; the domain checks the range and the cents.
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -35,3 +36,19 @@ class ProcedureChargeRequest(BaseModel):
     included: bool = False  # included in the consultation fee
     amount: FeeAmount | None = None  # required unless included
     note: str | None = Field(None, max_length=200)
+
+
+class VaccinePriceItemResponse(BaseModel):
+    vaccine_code: str
+    in_schedule: bool
+    price: str | None  # "25.00"; None when the clinic has not priced it
+    updated_at: datetime | None
+
+
+class VaccinePricesResponse(BaseModel):
+    editable: bool
+    items: list[VaccinePriceItemResponse]
+
+
+class VaccinePriceRequest(BaseModel):
+    price: FeeAmount | None = None  # None removes the price

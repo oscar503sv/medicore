@@ -14,6 +14,7 @@ from medicore.domain.enums import (
     VaccinationOutcome,
     VaccinationSource,
     VaccineRoute,
+    VaccineSupply,
 )
 from medicore.domain.shared.errors import DomainError, InvalidValueObject
 from medicore.domain.shared.identifiers import (
@@ -23,6 +24,8 @@ from medicore.domain.shared.identifiers import (
     UserId,
     VaccinationRecordId,
 )
+from medicore.domain.value_objects.fee import check_fee
+from medicore.domain.value_objects.money import Money
 
 
 class VaccinationAlreadyVoided(DomainError):
@@ -46,6 +49,10 @@ class VaccinationRecord:
     route: VaccineRoute | None = None
     site: InjectionSite | None = None
     notes: str | None = None
+    # Who supplied a dose given here (None for anything else and for doses recorded before the
+    # field existed), and the price copied when it was given in an appointment.
+    supply: VaccineSupply | None = None
+    listed_fee: Money | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     voided_at: datetime | None = None
     voided_by_id: UserId | None = None
@@ -63,6 +70,35 @@ class VaccinationRecord:
             raise InvalidValueObject(
                 "a dose administered at the clinic requires its lot number",
                 code="vaccination.lot_required",
+            )
+        self._check_supply()
+
+    def _check_supply(self) -> None:
+        given_here = (
+            self.outcome == VaccinationOutcome.ADMINISTERED
+            and self.source == VaccinationSource.CLINIC
+        )
+        if given_here and self.supply is None:
+            raise InvalidValueObject(
+                "a dose administered at the clinic says who supplied it",
+                code="vaccination.supply_required",
+            )
+        if not given_here and self.supply is not None:
+            raise InvalidValueObject(
+                "only a dose administered at the clinic has a supplier",
+                code="vaccination.supply_not_applicable",
+            )
+        if self.listed_fee is None:
+            return
+        check_fee(self.listed_fee)
+        if self.supply is None or self.appointment_id is None:
+            raise InvalidValueObject(
+                "a dose is priced only when given in an appointment",
+                code="vaccination.fee_needs_visit",
+            )
+        if self.supply == VaccineSupply.MINSAL and self.listed_fee.amount != 0:
+            raise InvalidValueObject(
+                "MINSAL vaccines are free of charge", code="vaccination.minsal_free"
             )
 
     @property

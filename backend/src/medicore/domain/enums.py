@@ -156,6 +156,14 @@ class VaccinationSource(StrEnum):
     EXTERNAL = "external"
 
 
+class VaccineSupply(StrEnum):
+    """Who supplied a dose given at the clinic: the clinic itself (private, priced) or the
+    health ministry (MINSAL, always free of charge)."""
+
+    CLINIC = "clinic"
+    MINSAL = "minsal"
+
+
 class VaccineRoute(StrEnum):
     INTRAMUSCULAR = "im"
     SUBCUTANEOUS = "sc"

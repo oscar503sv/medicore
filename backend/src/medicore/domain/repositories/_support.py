@@ -296,6 +296,7 @@ class VaccinationReportRow:
     dose_key: str | None
     lot: str | None
     recorded_by_id: str
+    supply: str | None = None  # who supplied the dose: clinic | minsal (None: not recorded)
 
 
 @dataclass(frozen=True, slots=True)

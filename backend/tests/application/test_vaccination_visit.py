@@ -28,6 +28,7 @@ from medicore.domain.enums import (
     Role,
     ServiceAgendaKind,
     VaccinationOutcome,
+    VaccineSupply,
 )
 from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import ConsultationId
@@ -84,6 +85,7 @@ def _visit(seed, appointment, *doses, actor=None, patient=None):
 
 
 def _dose(vaccine="TD", lot="L-1", **kw):
+    kw.setdefault("supply", VaccineSupply.MINSAL)  # free: no price list needed
     return VisitDose(vaccine_code=vaccine, lot=lot, **kw)
 
 

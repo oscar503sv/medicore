@@ -28,6 +28,7 @@ import {
   vaccineName,
 } from '@/lib/vaccination'
 import { useAuthStore } from '@/stores/auth'
+import { SupplyBadge } from './SupplyBadge'
 import { RecordVaccinationModal, type RecordPreset } from './RecordVaccinationModal'
 import { VoidVaccinationModal } from './VoidVaccinationModal'
 
@@ -302,6 +303,7 @@ function HistoryRow({
             {vaccineName(t, r.vaccine_code)}
           </p>
           {!voided && <Badge tone={tone}>{t(`vax.outcome.${r.outcome}`)}</Badge>}
+          {!voided && <SupplyBadge record={r} />}
           {r.source === 'external' && <Badge tone="neutral">{t('vax.external_short')}</Badge>}
         </div>
         <p className={cn('mt-0.5 text-xs text-tx-3', voided && 'line-through')}>

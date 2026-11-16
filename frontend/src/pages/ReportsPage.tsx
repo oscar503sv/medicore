@@ -63,6 +63,7 @@ const ENUM_PREFIX: Record<string, string> = {
   sex: 'sex',
   application_route: 'apl.route',
   income_source: 'rep.source',
+  vaccine_supply: 'vax.supply_short',
 }
 
 const iso = (d: Date) => format(d, 'yyyy-MM-dd')

@@ -4,8 +4,19 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, ForeignKeyConstraint, Index, String, text
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Numeric,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,6 +37,27 @@ class VaccinationRecordModel(Base):
             ["tenant_id", "appointment_id"], ["appointments.tenant_id", "appointments.id"],
             name="fk_vaccination_records_tenant_appointment",
         ),
+        # Who supplied a dose given here; MINSAL doses are free by law (Decreto 1013).
+        CheckConstraint(
+            "supply IS NULL OR supply IN ('clinic', 'minsal')",
+            name="ck_vaccination_records_supply_value",
+        ),
+        CheckConstraint(
+            "supply IS NULL OR (source = 'clinic' AND outcome = 'administered')",
+            name="ck_vaccination_records_supply_scope",
+        ),
+        CheckConstraint(
+            "listed_fee IS NULL OR (listed_fee >= 0 AND listed_fee <= 10000)",
+            name="ck_vaccination_records_fee_range",
+        ),
+        CheckConstraint(
+            "listed_fee IS NULL OR (supply IS NOT NULL AND appointment_id IS NOT NULL)",
+            name="ck_vaccination_records_fee_needs_visit",
+        ),
+        CheckConstraint(
+            "supply IS DISTINCT FROM 'minsal' OR listed_fee IS NULL OR listed_fee = 0",
+            name="ck_vaccination_records_minsal_free",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -45,6 +77,10 @@ class VaccinationRecordModel(Base):
     route: Mapped[str | None] = mapped_column(String(10), nullable=True)
     site: Mapped[str | None] = mapped_column(String(20), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # "clinic" or "minsal"; NULL for anything not given here and for doses that predate it.
+    supply: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # The vaccine's price when the dose was given in an appointment (copied, never updated).
+    listed_fee: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     recorded_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")

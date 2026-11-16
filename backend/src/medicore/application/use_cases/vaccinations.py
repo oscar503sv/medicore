@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -10,6 +11,7 @@ from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
 from medicore.application.common.permissions import Permission, ensure_permission, has_permission
 from medicore.application.common.timezone import clinic_now
+from medicore.application.common.vaccination_fees import price_vaccination_visit
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.appointment import Appointment
@@ -24,6 +26,7 @@ from medicore.domain.enums import (
     VaccinationOutcome,
     VaccinationSource,
     VaccineRoute,
+    VaccineSupply,
 )
 from medicore.domain.repositories._support import Paging, PatientFilter
 from medicore.domain.services.immunization import (
@@ -33,7 +36,9 @@ from medicore.domain.services.immunization import (
     DoseState,
     dose_states,
 )
+from medicore.domain.services.vaccine_fees import dose_fee, doses_total
 from medicore.domain.shared.identifiers import AppointmentId, PatientId, VaccinationRecordId
+from medicore.domain.value_objects.money import Money
 
 MAX_VISIT_DOSES = 20
 OPEN_APPOINTMENT_STATUSES = frozenset({
@@ -101,6 +106,7 @@ class RecordVaccinationCommand:
     route: VaccineRoute | None = None
     site: InjectionSite | None = None
     notes: str | None = None
+    supply: VaccineSupply | None = None  # required when the dose is given at the clinic
 
 
 def _build_record(
@@ -110,9 +116,11 @@ def _build_record(
     patient: Patient,
     cmd: RecordVaccinationCommand,
     appointment_id: AppointmentId | None = None,
+    prices: Mapping[str, Money] | None = None,
 ) -> VaccinationRecord:
     """Validate one dose against the patient and the vaccine schedule and build its record.
-    Shared by the single-dose entry and the doses given in an appointment."""
+    Shared by the single-dose entry and the doses given in an appointment, which are the
+    only ones priced (from ``prices``, the clinic's list)."""
     if patient.status != PatientStatus.ACTIVE:
         raise ValidationError("patient is inactive", code="vaccination.patient_inactive")
     vaccine = VACCINES.get(cmd.vaccine_code)
@@ -146,6 +154,13 @@ def _build_record(
         cmd.source == VaccinationSource.CLINIC
         and cmd.outcome == VaccinationOutcome.ADMINISTERED
     )
+    supply = cmd.supply if here_given else None
+    # Without a supplier the record itself refuses the dose, before any price is looked up.
+    listed_fee = (
+        dose_fee(vaccine.code, supply, (prices or {}).get(vaccine.code))
+        if supply is not None and appointment_id is not None and prices is not None
+        else None
+    )
     return VaccinationRecord(
         id=VaccinationRecordId.new(),
         tenant_id=actor.tenant_id,
@@ -162,6 +177,8 @@ def _build_record(
         route=(cmd.route or vaccine.route) if here_given else None,
         site=cmd.site if here_given else None,
         notes=cmd.notes,
+        supply=supply,
+        listed_fee=listed_fee,
         created_at=clock.now(),
     )
 
@@ -176,6 +193,8 @@ def _audit_recorded(
             str(record.id), subject=subject(patient.code, patient.full_name),
             vaccine=record.vaccine_code, dose=record.dose_key, status=str(record.outcome),
             appointment_id=str(record.appointment_id) if record.appointment_id else None,
+            supply=str(record.supply) if record.supply else None,
+            fee=f"{record.listed_fee.amount:.2f}" if record.listed_fee else None,
         )
     )
 
@@ -212,6 +231,7 @@ class VisitDose:
     route: VaccineRoute | None = None
     site: InjectionSite | None = None
     notes: str | None = None
+    supply: VaccineSupply | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,7 +291,9 @@ class RecordVaccinationVisit:
             if appointment.scheduled_start.date() != today:
                 raise ValidationError("the appointment is not scheduled for today",
                                       code="vaccination.appointment_not_today")
-            records = []
+            # Read once, before the doses: a later price change never reaches this visit.
+            prices = self._uow.vaccine_prices.as_map()
+            records: list[VaccinationRecord] = []
             one_off_given: set[str] = set()
             for dose in cmd.doses:
                 self._refuse_repeated_one_off(dose, one_off_given)
@@ -281,14 +303,15 @@ class RecordVaccinationVisit:
                         patient_id=patient.id, vaccine_code=dose.vaccine_code,
                         outcome=dose.outcome, occurred_on=today,
                         source=VaccinationSource.CLINIC, dose_key=dose.dose_key, lot=dose.lot,
-                        route=dose.route, site=dose.site, notes=dose.notes,
+                        route=dose.route, site=dose.site, notes=dose.notes, supply=dose.supply,
                     ),
-                    appointment_id=appointment.id,
+                    appointment_id=appointment.id, prices=prices,
                 )
                 self._uow.vaccinations.save(record)
                 _audit_recorded(self._uow, actor, self._clock, patient, record)
                 records.append(record)
 
+            self._price(actor, appointment, patient)
             self._close(actor, appointment, patient)
             self._uow.commit()
         return VaccinationVisit(appointment, records)
@@ -307,6 +330,19 @@ class RecordVaccinationVisit:
             raise ValidationError("dose already recorded",
                                   code="vaccination.dose_already_recorded")
         given.add(scheduled.key)
+
+    def _price(
+        self, actor: ActorContext, appointment: Appointment, patient: Patient
+    ) -> None:
+        price_vaccination_visit(self._uow, appointment)
+        listed = appointment.charge.listed
+        self._uow.audit.append(audit_entry(
+            actor, self._clock.now(), "appointment.fee_repriced", "Appointment",
+            str(appointment.id), subject=subject(appointment.code, patient.full_name),
+            reason="visit", listed=f"{listed.amount:.2f}" if listed else None,
+            charged=f"{appointment.charge.charged.amount:.2f}" if appointment.charge.charged
+            else None,
+        ))
 
     def _close(self, actor: ActorContext, appointment: Appointment, patient: Patient) -> None:
         if appointment.status in (AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED):
@@ -338,6 +374,15 @@ class VoidVaccination:
             record = self._uow.vaccinations.get_by_id(record_id)
             if record is None:
                 raise EntityNotFound("VaccinationRecord", record_id)
+            # The appointment first, then the dose (the order every writer of a visit uses).
+            # Its id never changes, so reading it before the lock is safe.
+            appointment = (
+                self._uow.appointments.get_for_update(record.appointment_id)
+                if record.appointment_id else None
+            )
+            record = self._uow.vaccinations.get_for_update(record_id)
+            if record is None:
+                raise EntityNotFound("VaccinationRecord", record_id)
             record.void(actor.user_id, reason, self._clock.now())
             self._uow.vaccinations.save(record)
             patient = self._uow.patients.get_by_id(record.patient_id)
@@ -349,8 +394,32 @@ class VoidVaccination:
                     vaccine=record.vaccine_code, reason=record.void_reason,
                 )
             )
+            if appointment is not None:
+                self._reprice(actor, appointment, patient)
             self._uow.commit()
         return record
+
+    def _reprice(
+        self, actor: ActorContext, appointment: Appointment, patient: Patient | None
+    ) -> None:
+        """A visit priced from its doses follows them when one is voided. A legacy visit
+        (never priced) and a total that does not change are left alone."""
+        old = appointment.charge.listed
+        if appointment.type != AppointmentType.VACCINATION or old is None:
+            return
+        total = doses_total(self._uow.vaccinations.list_by_appointment(appointment.id))
+        if total == old:
+            return
+        price_vaccination_visit(self._uow, appointment)
+        self._uow.appointments.save(appointment)
+        self._uow.audit.append(audit_entry(
+            actor, self._clock.now(), "appointment.fee_repriced", "Appointment",
+            str(appointment.id),
+            subject=subject(appointment.code, patient.full_name if patient else None),
+            reason="void", old_listed=f"{old.amount:.2f}", listed=f"{total.amount:.2f}",
+            charged=f"{appointment.charge.charged.amount:.2f}" if appointment.charge.charged
+            else None,
+        ))
 
 
 @dataclass(frozen=True, slots=True)

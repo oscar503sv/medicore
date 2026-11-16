@@ -13,6 +13,7 @@ export function AdjustFeeModal({
   listed,
   charged,
   note,
+  max,
   loading,
   onClose,
   onSave,
@@ -22,6 +23,8 @@ export function AdjustFeeModal({
   listed: string | null
   charged: string | null
   note: string | null
+  /** A ceiling the charge cannot go above (a vaccination visit: its private doses). */
+  max?: string | null
   loading: boolean
   onClose: () => void
   onSave: (amount: string, note: string | null) => void
@@ -39,7 +42,8 @@ export function AdjustFeeModal({
 
   const valid = FEE_PATTERN.test(amount.trim())
   const differs = listed !== null && valid && Number(amount) !== Number(listed)
-  const canSave = valid && (!differs || reason.trim().length > 0)
+  const aboveMax = max != null && valid && Number(amount) > Number(max)
+  const canSave = valid && !aboveMax && (!differs || reason.trim().length > 0)
 
   return (
     <Modal open={open} onClose={onClose} title={t('fee.adjust_title')}>
@@ -63,6 +67,7 @@ export function AdjustFeeModal({
           onChange={(e) => setAmount(e.target.value)}
           className="w-40 font-mono"
           autoFocus
+          error={aboveMax ? t('fee.max_vaccination').replace('{max}', fmtFee(max)!) : undefined}
         />
         <div>
           <Input

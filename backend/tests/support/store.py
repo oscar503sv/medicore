@@ -35,6 +35,7 @@ from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.entities.vaccination_record import VaccinationRecord
+from medicore.domain.entities.vaccine_price import VaccinePrice
 from medicore.domain.repositories._support import RequestStatsRow
 from medicore.domain.services.plan_catalog import default_addon_pricing, default_plans
 
@@ -68,6 +69,8 @@ class InMemoryStore:
     audit: dict[UUID, AuditLog] = field(default_factory=dict)
     role_permission_overrides: dict[UUID, RolePermissionOverride] = field(default_factory=dict)
     vaccinations: dict[UUID, VaccinationRecord] = field(default_factory=dict)
+    # Keyed by (tenant id, vaccine code).
+    vaccine_prices: dict[tuple[UUID, str], VaccinePrice] = field(default_factory=dict)
     application_orders: dict[UUID, ApplicationOrder] = field(default_factory=dict)
     application_records: dict[UUID, ApplicationRecord] = field(default_factory=dict)
     procedure_types: dict[UUID, ProcedureType] = field(default_factory=dict)

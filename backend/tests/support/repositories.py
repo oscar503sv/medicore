@@ -37,6 +37,7 @@ from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.service_agenda import ServiceAgenda
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
+from medicore.domain.entities.vaccine_price import VaccinePrice
 from medicore.domain.enums import (
     ApplicationOutcome,
     AppointmentStatus,
@@ -708,6 +709,9 @@ class InMemoryVaccinationRecordRepository(_Scoped):
         r = self._store.vaccinations.get(record_id.value)
         return r if r and r.tenant_id == self._tenant else None
 
+    def get_for_update(self, record_id):
+        return self.get_by_id(record_id)
+
     def list_by_patient(self, patient_id) -> list:
         result = [r for r in self._mine(self._store.vaccinations.values())
                   if r.patient_id == patient_id]
@@ -738,6 +742,27 @@ class InMemoryVaccinationRecordRepository(_Scoped):
 
     def save(self, record) -> None:
         self._store.vaccinations[record.id.value] = record
+
+
+class InMemoryVaccinePriceRepository(_Scoped):
+    def list(self) -> list[VaccinePrice]:
+        return sorted(
+            (p for (tenant, _), p in self._store.vaccine_prices.items()
+             if tenant == self._tenant.value),
+            key=lambda p: p.vaccine_code,
+        )
+
+    def get_for_update(self, vaccine_code: str):
+        return self._store.vaccine_prices.get((self._tenant.value, vaccine_code))
+
+    def as_map(self) -> dict:
+        return {p.vaccine_code: p.price for p in self.list()}
+
+    def save(self, price: VaccinePrice) -> None:
+        self._store.vaccine_prices[(self._tenant.value, price.vaccine_code)] = price
+
+    def delete(self, vaccine_code: str) -> None:
+        self._store.vaccine_prices.pop((self._tenant.value, vaccine_code), None)
 
 
 class InMemoryApplicationRepository(_Scoped):
@@ -1585,6 +1610,7 @@ class InMemoryReportReadModel(_Scoped):
                 patient_sex=str(p.sex), date_of_birth=p.date_of_birth,
                 vaccine_code=v.vaccine_code, dose_key=v.dose_key, lot=v.lot,
                 recorded_by_id=str(v.recorded_by_id),
+                supply=str(v.supply) if v.supply else None,
             ))
         return rows
 

@@ -3,6 +3,7 @@ import type { DoseState, VaccinationCatalog } from '@/api/vaccinations'
 import { useT } from '@/lib/i18n'
 import { openDoses } from '@/lib/vaccination'
 import { AdministrationFields, VaccineDoseSelects } from './DoseFields'
+import { SupplyField } from './SupplyField'
 import type { DoseRow } from './useVaccinationVisit'
 
 /** One dose of a visit: always given here, so the lot is required. */
@@ -11,6 +12,7 @@ export function VisitDoseRow({
   row,
   catalog,
   states,
+  prices,
   canRemove,
   onChange,
   onVaccine,
@@ -20,6 +22,7 @@ export function VisitDoseRow({
   row: DoseRow
   catalog: VaccinationCatalog
   states: DoseState[]
+  prices: Map<string, string>
   canRemove: boolean
   onChange: (patch: Partial<DoseRow>) => void
   onVaccine: (code: string) => void
@@ -57,6 +60,11 @@ export function VisitDoseRow({
         onLot={(lot) => onChange({ lot })}
         onRoute={(route) => onChange({ route })}
         onSite={(site) => onChange({ site })}
+      />
+      <SupplyField
+        value={row.supply}
+        price={prices.get(row.vaccine) ?? null}
+        onChange={(supply) => onChange({ supply })}
       />
     </fieldset>
   )

@@ -20,6 +20,7 @@ from medicore.domain.enums import (
     VaccinationOutcome,
     VaccinationSource,
     VaccineRoute,
+    VaccineSupply,
 )
 from medicore.domain.shared.identifiers import VaccinationRecordId
 from medicore.infrastructure.config import get_settings
@@ -76,6 +77,8 @@ def test_records_round_trip_and_queries(session):
             vaccine_code=code, dose_key="TD-1" if code == "TD" else None, outcome=outcome,
             occurred_on=on, source=source, recorded_by_id=nurse.id,
             lot=lot if outcome == VaccinationOutcome.ADMINISTERED else None,
+            supply=(VaccineSupply.CLINIC if outcome == VaccinationOutcome.ADMINISTERED
+                    and source == VaccinationSource.CLINIC else None),
             route=VaccineRoute.INTRAMUSCULAR, site=InjectionSite.LEFT_ARM,
             notes="  sin reacción ", created_at=NOW,
         )

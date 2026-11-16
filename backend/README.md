@@ -97,7 +97,18 @@ UnitOfWork), **20 use-case groups** and **26 routers / 183 endpoints** under `/a
   copied from the patient's card are recorded as external. Records are never edited: a wrong
   one is voided with a reason and stays in the history. `vaccinations` router: catalog,
   patient card, record, void and a clinic-wide worklist (due/overdue, upcoming within a
-  horizon, given today). Permissions `vaccinations.view` / `vaccinations.record`.
+  horizon, given today). Permissions `vaccinations.view` / `vaccinations.record`. **Supply and
+  price**: every dose given at the clinic says who supplied it (`supply`: private `clinic` or
+  `minsal`). MINSAL doses are free by law, also in a private clinic (Vaccination Law, Decree
+  1013, arts. 5, 12, 13 and 26): `dose_fee` always gives them $0 and a CHECK backs it. Private
+  doses are charged at the clinic's price per vaccine (`vaccine_prices`, `GET`/`PUT
+  /fees/vaccines`, only with `fees.manage_all` and the vaccination module); a private dose of
+  an unpriced vaccine is refused (422 `vaccination.price_missing`), and the admin may set $0.
+  A dose keeps a fixed copy of the price (`listed_fee`) when recorded in an appointment, and a
+  vaccination appointment is charged the sum of its standing private doses: the adjustment can
+  only lower it (a CHECK guarantees it) and voiding a dose recalculates it. Loose doses (from
+  the card) carry a supplier but no price and are not income. Doses from before the migration
+  keep `supply` NULL ("not recorded"). A vaccination appointment is only ever charged what its private doses add up to: closing it by signing the consultation recomputes it from its doses (none: $0), and one closed without priced doses (a no-show, or one that predates prices) takes no adjustment (`fee.vaccination_unpriced`).
 - **In-clinic applications** (`domain/entities/application.py`): an `ApplicationOrder` says
   what to apply (drug, dose, route, number of doses and interval, observation minutes —
   30 by default). Internal orders are drafted in the consultation and issued atomically when
@@ -336,7 +347,9 @@ Plain reads take no lock. Cancelling an appointment doesn't look at its consulta
 | `CreatePatient`, certificates | their counter |
 | `CreateAppointment` | assignee's bookings → appointment counter |
 | `RescheduleAppointment` | appointment → assignee's bookings |
-| `RecordVaccinationVisit` | appointment (the doses and the completion follow; nothing else is locked) |
+| `RecordVaccinationVisit` | appointment (reads prices and earlier doses unlocked; then the doses, the charge and the completion) |
+| `VoidVaccination` | appointment (if the dose has one) → dose (recalculates the charge) |
+| `SetVaccinePrice` | none (a single atomic upsert) |
 | `RegisterWalkIn` | assignee's bookings → appointment counter (serializes the clinic's creations); then reads the assignee's appointments, without locking, to detect a duplicate. It doesn't check the slot, on purpose |
 
 ## Deployment
@@ -397,6 +410,8 @@ Production checklist (via environment variables, see the **Configuration** table
 > **Migration `b0c1d2e3f4a6`** (walk-in appointments, OZK-111): adds `appointments.is_walk_in` (boolean `NOT NULL`, default `false`, kept for the previous code) and grants `appointments.walk_in` to the doctor and receptionist roles of clinics that had customized them (administrators never hold it: `NOT_FOR_ADMIN`). It needs no manual steps and blocks writes only for an instant. Its downgrade removes the permission from those customizations and drops the column.
 
 > **Migration `d2e3f4a5b6c8`** (service agendas, OZK-112): creates `service_agendas` (unique name per clinic, case-insensitive) and adds `appointments.agenda_id` and `doctor_availability.agenda_id` (nullable FKs), makes `doctor_id` nullable on both with a `CHECK num_nonnulls(doctor_id, agenda_id) = 1`, plus a unique schedule per agenda and `vaccination_records.appointment_id`. The new references are composite `(tenant_id, …)` foreign keys, so a row can never point at another clinic's agenda or appointment; for that it adds `UNIQUE (tenant_id, id)` to `service_agendas`, `locations` and `appointments` (the one on `appointments` is reusable by OZK-116). It is backward compatible (the previous code always inserts a doctor, which satisfies the CHECK) and needs no manual steps. Its downgrade refuses to run, with a clear message, while any agenda, vaccination appointment or dose linked to an appointment exists: it never deletes data.
+
+> **Migration `e3f4a5b6c7d9`** (vaccine prices, OZK-112): creates `vaccine_prices` (price per clinic and vaccine, `CHECK` from 0 to 10,000, no row = no price) and adds `vaccination_records.supply` and `listed_fee`, with CHECKs requiring that only a dose given at the clinic has a supplier, that a price exists only with a supplier and an appointment, and that MINSAL doses cost $0; also `ck_appointments_vaccination_fee_cap` (a vaccination appointment is never charged above the sum of its doses). No backfill: earlier doses keep `supply` NULL. Backward compatible (the previous code inserts NULL, which satisfies the CHECKs; its vaccination appointments stay uncharged) and no manual steps, but deploy backend and frontend together: the previous frontend does not send `supply`. **After deploying, an administrator must load the prices in Fees**: without them private doses cannot be recorded. Its downgrade refuses to run while prices or doses with a supplier exist: it never deletes data.
 >
 > Endpoints added: `GET|POST /service-agendas`, `PATCH /service-agendas/{id}`, `POST /service-agendas/{id}/active`; the schedule of an agenda at `/availability/agendas/{id}` (`weekly`, `exceptions`, `rules`) and `GET /availability/preview?agenda_id=`; `agenda_id` (instead of `doctor_id`) on `POST /appointments`, `POST /appointments/walk-in`, `GET /appointments`, `/appointments/schedule` and `/appointments/slots`; `POST /vaccinations/visits`.
 

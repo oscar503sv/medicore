@@ -226,7 +226,43 @@ class Appointment:
         if self.status == AppointmentStatus.CANCELLED:
             raise DomainError("a cancelled appointment has no fee",
                               code="fee.appointment_cancelled")
+        if self.type == AppointmentType.VACCINATION:
+            self._check_vaccination_fee(charged)
         self.charge = self.charge.adjust(charged, note)
+        self._touch()
+
+    def _check_vaccination_fee(self, charged: Money) -> None:
+        """A vaccination visit costs what its private doses add up to: it can be discounted,
+        never raised. Before any dose is recorded there is nothing to discount. A legacy
+        visit closed without priced doses (a no-show, or one that predates the prices) has
+        no fee at all."""
+        listed = self.charge.listed
+        if listed is None:
+            if self.is_active:
+                raise DomainError(
+                    "the vaccination fee is set when the doses are recorded",
+                    code="fee.vaccination_pending",
+                )
+            raise DomainError(
+                "a vaccination appointment without priced doses has no fee",
+                code="fee.vaccination_unpriced",
+            )
+        if charged.amount > listed.amount:
+            raise DomainError(
+                "a vaccination visit cannot be charged above its doses",
+                code="fee.vaccination_above_list", max=f"{listed.amount:.2f}",
+            )
+
+    def price_from_doses(self, listed: Money) -> None:
+        """Price a vaccination visit from the sum of its private doses. A charge nobody
+        touched follows the total; a discount stays, capped at the new total."""
+        current = self.charge
+        if current.listed is None or not current.adjusted:
+            self.charge = Charge.at_list_price(listed)
+        else:
+            charged = min(current.charged or listed, listed, key=lambda m: m.amount)
+            note = current.note if charged != listed else None
+            self.charge = Charge(listed=listed, charged=charged, note=note)
         self._touch()
 
     def can_transition_to(self, target: AppointmentStatus) -> bool:

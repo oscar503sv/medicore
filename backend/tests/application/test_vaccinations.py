@@ -20,6 +20,7 @@ from medicore.domain.enums import (
     VaccinationOutcome,
     VaccinationSource,
     VaccineRoute,
+    VaccineSupply,
 )
 from medicore.domain.shared.errors import DomainError, PermissionDenied
 from tests.support.builders import build_patient, seed_clinic
@@ -40,13 +41,19 @@ def _infant(seed, birth=date(2026, 1, 15)):
 
 
 def _record(seed, actor, patient, **kw):
+    outcome = kw.pop("outcome", VaccinationOutcome.ADMINISTERED)
+    source = kw.pop("source", VaccinationSource.CLINIC)
+    given_here = (
+        outcome == VaccinationOutcome.ADMINISTERED and source == VaccinationSource.CLINIC
+    )
+    kw.setdefault("supply", VaccineSupply.CLINIC if given_here else None)
     cmd = RecordVaccinationCommand(
         patient_id=patient.id,
         vaccine_code=kw.pop("vaccine", "HEXA"),
         dose_key=kw.pop("dose", "HEXA-1"),
-        outcome=kw.pop("outcome", VaccinationOutcome.ADMINISTERED),
+        outcome=outcome,
         occurred_on=kw.pop("on", TODAY),
-        source=kw.pop("source", VaccinationSource.CLINIC),
+        source=source,
         lot=kw.pop("lot", "L-2231"),
         **kw,
     )

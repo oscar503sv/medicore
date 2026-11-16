@@ -7,10 +7,13 @@ import {
   type InjectionSite,
   type VaccinationCatalog,
   type VaccineRoute,
+  type VaccineSupply,
 } from '@/api/vaccinations'
 import { toast } from '@/components/ui/Toast'
 import { useT } from '@/lib/i18n'
 import { openDoses } from '@/lib/vaccination'
+import { visitTotal } from '@/lib/vaccineFees'
+import { useVaccinePrices } from './useVaccinePrices'
 
 export interface VisitTarget {
   appointmentId: string
@@ -25,7 +28,13 @@ export interface DoseRow {
   lot: string
   route: VaccineRoute | ''
   site: InjectionSite | ''
+  supply: VaccineSupply | ''
 }
+
+/** A vaccine outside the national scheme is only ever private; in the scheme either can
+ * apply, so the nurse chooses. */
+const defaultSupply = (catalog: VaccinationCatalog, vaccine: string): VaccineSupply | '' =>
+  catalog.vaccines.find((v) => v.code === vaccine)?.in_schedule === false ? 'clinic' : ''
 
 /** A row starts on the most pressing dose (overdue, then due, then due soon). */
 function firstRow(uid: number, catalog: VaccinationCatalog, states: DoseState[]): DoseRow {
@@ -33,13 +42,15 @@ function firstRow(uid: number, catalog: VaccinationCatalog, states: DoseState[])
     .map((st) => states.find((s) => s.status === st))
     .find(Boolean)
   const dose = pressing && catalog.doses.find((d) => d.key === pressing.key)
+  const vaccine = dose?.vaccine ?? catalog.vaccines[0]?.code ?? ''
   return {
     uid,
-    vaccine: dose?.vaccine ?? catalog.vaccines[0]?.code ?? '',
+    vaccine,
     doseKey: dose?.key ?? '',
     lot: '',
     route: '',
     site: '',
+    supply: defaultSupply(catalog, vaccine),
   }
 }
 
@@ -64,6 +75,7 @@ export function useVaccinationVisit(target: VisitTarget | null, onDone: () => vo
     enabled: open,
   })
   const catalog = catalogQuery.data
+  const { prices, isLoading: pricesLoading, isFailed: pricesFailed } = useVaccinePrices(open)
   const states = useMemo(() => cardQuery.data?.states ?? [], [cardQuery.data])
 
   // Start with one row each time the visit opens; a later refetch of the card must not wipe
@@ -84,6 +96,7 @@ export function useVaccinationVisit(target: VisitTarget | null, onDone: () => vo
       vaccine,
       doseKey: catalog ? (openDoses(catalog, states, vaccine)[0]?.key ?? '') : '',
       route: '',
+      supply: catalog ? defaultSupply(catalog, vaccine) : '',
     })
 
   const addRow = () => {
@@ -91,7 +104,14 @@ export function useVaccinationVisit(target: VisitTarget | null, onDone: () => vo
   }
   const removeRow = (uid: number) => setRows((prev) => prev.filter((r) => r.uid !== uid))
 
-  const isValid = rows.length > 0 && rows.every((r) => r.vaccine && r.lot.trim())
+  // A private dose needs the clinic's price: the server refuses it otherwise.
+  const isValid =
+    rows.length > 0 &&
+    rows.every(
+      (r) =>
+        r.vaccine && r.lot.trim() && r.supply && (r.supply === 'minsal' || prices.has(r.vaccine)),
+    )
+  const total = visitTotal(rows, prices)
 
   const save = useMutation({
     mutationFn: () =>
@@ -105,14 +125,19 @@ export function useVaccinationVisit(target: VisitTarget | null, onDone: () => vo
           lot: r.lot.trim(),
           route: r.route || catalog?.vaccines.find((v) => v.code === r.vaccine)?.route || null,
           site: r.site || null,
+          supply: r.supply as VaccineSupply,
         })),
       }),
-    onSuccess: () => {
+    onSuccess: (result) => {
       for (const key of ['appointments', 'schedule', 'dashboard', 'vaccination-worklist']) {
         qc.invalidateQueries({ queryKey: [key] })
       }
       qc.invalidateQueries({ queryKey: ['vaccination-card', target?.patientId] })
-      toast(t('vax.visit_ok'))
+      toast(
+        result.fee === null
+          ? t('vax.visit_ok')
+          : t('vax.visit_ok_fee').replace('{total}', `$${Number(result.fee).toFixed(2)}`),
+      )
       onDone()
     },
     onError: (err) => {
@@ -129,8 +154,10 @@ export function useVaccinationVisit(target: VisitTarget | null, onDone: () => vo
     states,
     rows,
     error,
-    isLoading: catalogQuery.isLoading || cardQuery.isLoading,
-    isFailed: catalogQuery.isError || cardQuery.isError,
+    prices,
+    total,
+    isLoading: catalogQuery.isLoading || cardQuery.isLoading || pricesLoading,
+    isFailed: catalogQuery.isError || cardQuery.isError || pricesFailed,
     isValid,
     isSaving: save.isPending,
     update,

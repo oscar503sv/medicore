@@ -104,7 +104,7 @@ class SqlReportReadModel:
         v, p = VaccinationRecordModel, PatientModel
         q = (
             self._s.query(
-                v.occurred_on, v.vaccine_code, v.dose_key, v.lot, v.recorded_by_id,
+                v.occurred_on, v.vaccine_code, v.dose_key, v.lot, v.recorded_by_id, v.supply,
                 p.code.label("patient_code"), p.first_name, p.last_name, p.sex,
                 p.date_of_birth,
             )
@@ -122,6 +122,7 @@ class SqlReportReadModel:
                 patient_name=_name(r.first_name, r.last_name), patient_sex=r.sex,
                 date_of_birth=r.date_of_birth, vaccine_code=r.vaccine_code,
                 dose_key=r.dose_key, lot=r.lot, recorded_by_id=str(r.recorded_by_id),
+                supply=r.supply,
             )
             for r in q.all()
         ]

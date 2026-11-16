@@ -39,7 +39,13 @@ from medicore.application.common.permissions import (
 from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
-from medicore.domain.enums import AddonModule, AnalyticsTier, AppointmentStatus, Role
+from medicore.domain.enums import (
+    AddonModule,
+    AnalyticsTier,
+    AppointmentStatus,
+    AppointmentType,
+    Role,
+)
 from medicore.domain.repositories._support import AppointmentReportRow, Paging, UserFilter
 from medicore.domain.services.analytics_access import analytics_tier
 from medicore.domain.services.immunization import SCHEDULE_BY_KEY, VACCINES
@@ -320,15 +326,20 @@ def _income(ctx: _Context, start: date, end: date) -> tuple[ReportTable, ReportT
               if r.status == AppointmentStatus.COMPLETED]
     procedures = ctx.uow.reports.procedure_rows(ctx.instant(lo), ctx.instant(hi), ctx.user)
     entries: list[tuple[datetime, tuple[Any, ...]]] = []
-    per_doctor: dict[str, list] = defaultdict(lambda: [0, 0, Decimal("0")])
+    # Per who attended: [visits, procedures, vaccinations, income]. A service agenda has no
+    # doctor, so the key is whichever of the two attended.
+    per_attendant: dict[str, list] = defaultdict(lambda: [0, 0, 0, Decimal("0")])
     for v in visits:
+        vaccination = v.type == AppointmentType.VACCINATION
         entries.append((v.scheduled_start, (
-            v.scheduled_start.date(), "visit", v.code, v.patient_code, v.patient_name,
-            ctx.name(v.doctor_id), ctx.insurers.get(v.insurer_id) if v.insurer_id else None,
+            v.scheduled_start.date(), "vaccination" if vaccination else "visit", v.code,
+            v.patient_code, v.patient_name, ctx.attendant(v),
+            ctx.insurers.get(v.insurer_id) if v.insurer_id else None,
             v.listed, v.charged, v.fee_note,
         )))
-        per_doctor[v.doctor_id][0] += 1
-        per_doctor[v.doctor_id][2] += v.charged or Decimal("0")
+        totals = per_attendant[v.doctor_id or v.agenda_id or ""]
+        totals[2 if vaccination else 0] += 1
+        totals[3] += v.charged or Decimal("0")
     for p in procedures:
         when = ctx.local(p.performed_at)
         charged = Decimal("0.00") if p.included else p.charged
@@ -337,8 +348,8 @@ def _income(ctx: _Context, start: date, end: date) -> tuple[ReportTable, ReportT
             p.patient_code, p.patient_name, ctx.name(p.ordered_by_id), None, p.listed,
             charged, None,
         )))
-        per_doctor[p.ordered_by_id][1] += 1
-        per_doctor[p.ordered_by_id][2] += charged or Decimal("0")
+        per_attendant[p.ordered_by_id][1] += 1
+        per_attendant[p.ordered_by_id][3] += charged or Decimal("0")
     entries.sort(key=lambda e: e[0])
     detail = ReportTable(
         _cols("date:date", "source:enum:income_source", "concept", "patient_code", "patient",
@@ -346,11 +357,12 @@ def _income(ctx: _Context, start: date, end: date) -> tuple[ReportTable, ReportT
         [row for _, row in entries],
     )
     summary = ReportTable(
-        _cols("doctor", "visits:count", "procedures:count", "income:money"),
+        _cols("doctor", "visits:count", "procedures:count", "vaccinations:count",
+              "income:money"),
         sorted(
-            ((ctx.name(d) or "—", n_v, n_p, total) for d, (n_v, n_p, total)
-             in per_doctor.items()),
-            key=lambda r: (-r[3], r[0]),
+            ((ctx.name(k) or ctx.agendas.get(k) or "—", *counts)
+             for k, counts in per_attendant.items()),
+            key=lambda r: (-r[4], r[0]),
         ),
     )
     return summary, detail
@@ -423,11 +435,12 @@ def _vaccinations(ctx: _Context, start: date, end: date) -> tuple[ReportTable, R
     rows = ctx.uow.reports.vaccination_rows(start, end, ctx.user)
     detail = ReportTable(
         _cols("date:date", "patient_code", "patient", "sex:enum:sex", "age:age",
-              "vaccine:vaccine", "dose:dose", "lot", "recorded_by"),
+              "vaccine:vaccine", "dose:dose", "supply:enum:vaccine_supply", "lot",
+              "recorded_by"),
         [
             (r.occurred_on, r.patient_code, r.patient_name, r.patient_sex,
              _months(r.date_of_birth, r.occurred_on), r.vaccine_code, dose_label(r.dose_key),
-             r.lot, ctx.name(r.recorded_by_id))
+             r.supply, r.lot, ctx.name(r.recorded_by_id))
             for r in rows
         ],
     )

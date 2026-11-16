@@ -34,6 +34,7 @@ from medicore.domain.enums import (
     Role,
     VaccinationOutcome,
     VaccinationSource,
+    VaccineSupply,
 )
 from medicore.domain.services.plan_catalog import CLINICA, INDEPENDIENTE
 from medicore.domain.shared.errors import PermissionDenied
@@ -91,6 +92,7 @@ def _dose(seed, on, *, vaccine="Td", dose_key=None, source=VaccinationSource.CLI
         vaccine_code=vaccine, dose_key=dose_key, outcome=VaccinationOutcome.ADMINISTERED,
         occurred_on=on, source=source, recorded_by_id=seed.doctor.id,
         lot="L-1" if source == VaccinationSource.CLINIC else None,
+        supply=VaccineSupply.CLINIC if source == VaccinationSource.CLINIC else None,
         voided_at=NOW if voided else None,
     )
     seed.factory.store.vaccinations[v.id.value] = v
@@ -199,7 +201,7 @@ class TestIncomeInsurersNoShows:
         r = _report(clinic, clinic.doctor_actor, "income")
         assert _col(r.detail, "source") == ["visit", "procedure", "procedure_included"]
         assert _col(r.detail, "charged") == [Decimal("30"), Decimal("40"), Decimal("0.00")]
-        assert r.summary.rows == [("Dra. Elena Ruiz", 1, 2, Decimal("70"))]
+        assert r.summary.rows == [("Dra. Elena Ruiz", 1, 2, 0, Decimal("70"))]
 
     def test_insurers_summary_lists_out_of_pocket_last(self, clinic):
         admin = _with(clinic.actor(clinic.admin), Permission.ANALYTICS_MONEY)

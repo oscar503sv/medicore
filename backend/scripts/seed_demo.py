@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import os
 import random
+import zlib
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
@@ -114,6 +115,7 @@ from medicore.application.use_cases.vaccinations import (
     RecordVaccinationCommand,
     VoidVaccination,
 )
+from medicore.application.use_cases.vaccine_prices import SetVaccinePrice
 from medicore.domain.entities.application import ApplicationDraft, ApplicationOrder
 from medicore.domain.entities.availability import (
     AvailabilityException,
@@ -150,6 +152,7 @@ from medicore.domain.enums import (
     VaccinationOutcome,
     VaccinationSource,
     VaccineRoute,
+    VaccineSupply,
 )
 from medicore.domain.services.allergies import allergy_conflicts
 from medicore.domain.services.immunization import (
@@ -835,6 +838,13 @@ def seed_patients(c: Clinic) -> None:
           f"{mix.new_this_week} registrados esta semana)")
 
 
+VACCINE_PRICES = {
+    "BCG": "15", "HEXA": "65", "ROTA": "40", "PCV13": "70", "SPR": "30", "DPT": "25",
+    "VPH": "85", "TD": "12", "TDPA": "35", "INFLU": "18", "INFLU_PED": "18",
+    "HEPB_ADULT": "28", "VARICELA": "45", "HEPA": "32", "MENINGO": "60",
+}
+
+
 # ── vaccination ───────────────────────────────────────────────────────────────────────────
 def _months(birth: date, on: date) -> int:
     return (on.year - birth.year) * 12 + on.month - birth.month - (on.day < birth.day)
@@ -850,6 +860,11 @@ def seed_vaccinations(c: Clinic) -> None:
     couple of doses given this morning and one entry voided and re-recorded.
     """
     nurse = actor(c, c.nursing)
+    # The clinic prices the vaccines it gives from its own stock; the scheme's are the
+    # ministry's (free) for most doses, and the clinic's for the rest.
+    priced_at = datetime.combine(c.today - timedelta(weeks=PAST_WEEKS, days=5), time(8, 30))
+    for code, price in VACCINE_PRICES.items():
+        SetVaccinePrice(c.uow(), c.at(priced_at)).execute(actor(c, c.admin), code, fee(price))
     lots = {code: f"{code[:3]}{RNG.randint(100, 999)}{RNG.choice('ABCDEFGH')}"
             for code in VACCINES}
     latest = c.now - timedelta(minutes=5)
@@ -877,6 +892,9 @@ def seed_vaccinations(c: Clinic) -> None:
             source=VaccinationSource.CLINIC if here else VaccinationSource.EXTERNAL,
             lot=(lot or lots[dose.vaccine]) if given_here else None,
             site=site if given_here else None, notes=notes,
+            supply=(VaccineSupply.CLINIC
+                    if zlib.crc32(f"{patient.code}{dose.key}".encode()) % 10 < 3
+                    else VaccineSupply.MINSAL) if given_here else None,
         )
         c.count("vacunas registradas")
         return RecordVaccination(c.uow(), c.at(at)).execute(nurse, cmd)

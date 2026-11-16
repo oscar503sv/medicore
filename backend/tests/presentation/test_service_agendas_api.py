@@ -227,8 +227,9 @@ class TestVisit:
     def _visit(self, seed, appointment_id, **overrides):
         body = {
             "appointment_id": appointment_id, "patient_id": str(seed.patient.id),
-            "doses": [{"vaccine_code": "TD", "lot": "TD-1"},
-                      {"vaccine_code": "INFLU", "lot": "IN-9", "site": "left_arm"}],
+            "doses": [{"vaccine_code": "TD", "lot": "TD-1", "supply": "minsal"},
+                      {"vaccine_code": "INFLU", "lot": "IN-9", "site": "left_arm",
+                       "supply": "minsal"}],
         }
         return body | overrides
 

@@ -37,6 +37,7 @@ from medicore.presentation.schemas.vaccinations import (
     VaccinationWorklistResponse,
     VoidVaccinationRequest,
 )
+from medicore.presentation.serializers import ser_charge, ser_money
 
 router = APIRouter(prefix="/vaccinations", tags=["vaccinations"])
 
@@ -67,6 +68,8 @@ def _ser_records(uow, records: list[VaccinationRecord]) -> list[dict]:
             "route": str(r.route) if r.route else None,
             "site": str(r.site) if r.site else None,
             "notes": r.notes,
+            "supply": str(r.supply) if r.supply else None,
+            "listed_fee": ser_money(r.listed_fee),
             "recorded_by_id": str(r.recorded_by_id),
             "recorded_by_name": names.get(r.recorded_by_id),
             "created_at": r.created_at,
@@ -189,6 +192,7 @@ def record_vaccination(
         route=body.route,
         site=body.site,
         notes=body.notes,
+        supply=body.supply,
     )
     record = RecordVaccination(uow, clock).execute(actor, cmd)
     with uow:
@@ -203,7 +207,7 @@ def record_visit(body: RecordVaccinationVisitRequest, actor: Actor, uow: UoW, cl
         doses=tuple(
             VisitDose(
                 vaccine_code=d.vaccine_code, outcome=d.outcome, dose_key=d.dose_key,
-                lot=d.lot, route=d.route, site=d.site, notes=d.notes,
+                lot=d.lot, route=d.route, site=d.site, notes=d.notes, supply=d.supply,
             )
             for d in body.doses
         ),
@@ -213,6 +217,7 @@ def record_visit(body: RecordVaccinationVisitRequest, actor: Actor, uow: UoW, cl
         return {
             "appointment": _ser_worklist_appointment(visit.appointment),
             "records": _ser_records(uow, visit.records),
+            **ser_charge(visit.appointment.charge),
         }
 
 

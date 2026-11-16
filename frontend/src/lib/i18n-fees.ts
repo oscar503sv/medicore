@@ -1,6 +1,19 @@
 // Fees vocabulary (ES/EN), spread into the main dictionaries in i18n.ts.
 
 export const feeEs: Record<string, string> = {
+  'vprice.title': 'Precios de vacunas',
+  'vprice.subtitle': 'Lo que cobra la clínica por cada vacuna privada. Cada dosis guarda el precio vigente cuando se aplica.',
+  'vprice.col_vaccine': 'Vacuna',
+  'vprice.col_price': 'Precio',
+  'vprice.none': 'Sin precio',
+  'vprice.input': 'Precio de {vaccine}',
+  'vprice.edit': 'Editar el precio de {vaccine}',
+  'vprice.saved': 'Precio guardado',
+  'vprice.removed': 'Precio quitado',
+  'vprice.load_error': 'No se pudieron cargar los precios de las vacunas.',
+  'vprice.free_hint': 'Un precio de $0 significa que la clínica no cobra esa vacuna. Sin precio, no se pueden registrar dosis privadas de ella.',
+  'vprice.minsal_note': 'Las vacunas del MINSAL son gratuitas también en clínicas privadas (Ley de Vacunas, arts. 12, 13 y 26): no tienen precio.',
+  'fee.max_vaccination': 'No puede superar {max}, el total de las dosis privadas.',
   'nav.fees': 'Tarifas',
   'fee.title': 'Tarifas',
   'fee.subtitle':
@@ -40,6 +53,19 @@ export const feeEs: Record<string, string> = {
 }
 
 export const feeEn: Record<string, string> = {
+  'vprice.title': 'Vaccine prices',
+  'vprice.subtitle': 'What the clinic charges for each private vaccine. Each dose keeps the price in force when it is given.',
+  'vprice.col_vaccine': 'Vaccine',
+  'vprice.col_price': 'Price',
+  'vprice.none': 'No price',
+  'vprice.input': 'Price of {vaccine}',
+  'vprice.edit': 'Edit the price of {vaccine}',
+  'vprice.saved': 'Price saved',
+  'vprice.removed': 'Price removed',
+  'vprice.load_error': 'The vaccine prices could not be loaded.',
+  'vprice.free_hint': 'A price of $0 means the clinic does not charge for that vaccine. Without a price, private doses of it cannot be recorded.',
+  'vprice.minsal_note': "Ministry (MINSAL) vaccines are free in private clinics too (Vaccination Law, arts. 12, 13 and 26): they have no price.",
+  'fee.max_vaccination': 'It cannot exceed {max}, the total of the private doses.',
   'nav.fees': 'Fees',
   'fee.title': 'Fees',
   'fee.subtitle':

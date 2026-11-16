@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { VaccinePriceCard } from '@/components/fees/VaccinePriceCard'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
@@ -27,6 +28,7 @@ export function FeesPage() {
   const qc = useQueryClient()
   const userId = useAuthStore((s) => s.session?.user_id)
   const canProcedures = useAuthStore((s) => s.can('procedures.catalog'))
+  const canVaccines = useAuthStore((s) => s.can('vaccinations.view'))
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft>({})
 
@@ -172,6 +174,7 @@ export function FeesPage() {
           </p>
         </div>
       </Card>
+      {canVaccines && <VaccinePriceCard />}
     </div>
   )
 }

@@ -408,9 +408,12 @@ class TestWhatAnAgendaAppointmentIsNot:
             AdjustAppointmentFee(_uow(seed), FixedClock()).execute(
                 seed.doctor_actor, appt.id, fee("0"), None
             )
-        AdjustAppointmentFee(_uow(seed), FixedClock()).execute(
-            seed.actor(seed.admin), appt.id, fee("0"), None
-        )
+        # The admin may price it; there is just nothing to discount before any dose.
+        with pytest.raises(DomainError) as error:
+            AdjustAppointmentFee(_uow(seed), FixedClock()).execute(
+                seed.actor(seed.admin), appt.id, fee("0"), None
+            )
+        assert error.value.code == "fee.vaccination_pending"
 
     def test_clinic_metrics_count_it_without_a_doctor_row(self, clinic):
         seed, agenda = clinic

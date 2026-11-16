@@ -17,7 +17,7 @@ export const agendaEs: Dict = {
   'apptype.vaccination_hint':
     'Las vacunas se cobran según las dosis aplicadas; se registran desde la cita.',
   'fee.booking_vaccination':
-    'Las vacunas se cobran según las dosis aplicadas. Esta cita no lleva tarifa.',
+    'Se cobran las vacunas privadas aplicadas; las del MINSAL son gratuitas.',
   'fee.by_vaccination': 'Según las dosis',
   'audit.action.service_agenda.created': 'Agenda de servicio creada',
   'audit.action.service_agenda.updated': 'Agenda de servicio actualizada',
@@ -77,7 +77,7 @@ export const agendaEn: Dict = {
   'apptype.vaccination': 'Vaccination',
   'apptype.vaccination_hint':
     'Vaccines are charged per dose given; they are recorded from the appointment.',
-  'fee.booking_vaccination': 'Vaccines are charged per dose given. This appointment has no fee.',
+  'fee.booking_vaccination': 'Private vaccines given are charged; MINSAL ones are free.',
   'fee.by_vaccination': 'Per dose',
   'audit.action.service_agenda.created': 'Service agenda created',
   'audit.action.service_agenda.updated': 'Service agenda updated',

@@ -46,6 +46,7 @@ from medicore.infrastructure.persistence.models.subscription import (
 from medicore.infrastructure.persistence.models.tenant import LocationModel, TenantModel
 from medicore.infrastructure.persistence.models.user import DoctorProfileModel, UserModel
 from medicore.infrastructure.persistence.models.vaccination_record import VaccinationRecordModel
+from medicore.infrastructure.persistence.models.vaccine_price import VaccinePriceModel
 
 __all__ = [
     "AddonPricingModel",
@@ -86,4 +87,5 @@ __all__ = [
     "TenantModel",
     "UserModel",
     "VaccinationRecordModel",
+    "VaccinePriceModel",
 ]

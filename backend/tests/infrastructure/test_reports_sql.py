@@ -22,6 +22,7 @@ from medicore.domain.enums import (
     Role,
     VaccinationOutcome,
     VaccinationSource,
+    VaccineSupply,
 )
 from medicore.domain.shared.identifiers import (
     ApplicationOrderId,
@@ -82,6 +83,7 @@ def test_rows(session):  # noqa: F811
             id=VaccinationRecordId.new(), tenant_id=tenant.id, patient_id=ana.id,
             vaccine_code="Td", dose_key=None, outcome=VaccinationOutcome.ADMINISTERED,
             occurred_on=date(2026, 5, 10), source=source, recorded_by_id=doctor.id, lot=lot,
+            supply=VaccineSupply.CLINIC if lot else None,
             created_at=NOW,
         ))
     order = ApplicationOrder(

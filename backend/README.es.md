@@ -98,7 +98,18 @@ En cifras: **22 entidades** y **10 value objects** de dominio, **20 repositorios
   externas. Los registros no se editan: uno erróneo se anula con motivo y queda en el
   historial. Router `vaccinations`: catálogo, carné del paciente, registrar, anular y una lista
   de trabajo de la clínica (tocan/atrasadas, próximas en un horizonte, aplicadas hoy).
-  Permisos `vaccinations.view` / `vaccinations.record`.
+  Permisos `vaccinations.view` / `vaccinations.record`. **Procedencia y precio**: cada dosis
+  aplicada en la clínica dice quién la suministró (`supply`: `clinic` privada o `minsal`). Las
+  del MINSAL son gratuitas por ley, también en una clínica privada (Ley de Vacunas, Decreto
+  1013, arts. 5, 12, 13 y 26): `dose_fee` les da siempre $0 y un CHECK lo respalda. Las
+  privadas se cobran al precio por vacuna de la clínica (`vaccine_prices`, `GET`/`PUT
+  /fees/vaccines`, solo con `fees.manage_all` y el módulo de vacunación); una dosis privada
+  de una vacuna sin precio se rechaza (422 `vaccination.price_missing`), y el administrador
+  puede fijar $0. La dosis guarda una copia fija del precio (`listed_fee`) al registrarse en
+  una cita, y el cobro de la cita de vacunación es la suma de sus dosis privadas vigentes: el
+  ajuste solo puede bajarlo (un CHECK lo garantiza) y anular una dosis lo recalcula. Las
+  dosis sueltas (desde la cartilla) llevan procedencia pero no precio ni entran en ingresos.
+  Las dosis anteriores a la migración quedan con `supply` NULL ("no consta"). Una cita de vacunación solo cobra lo que suman sus dosis privadas, siempre: al cerrarla firmando la consulta se recalcula desde sus dosis (sin dosis, $0), y una cerrada sin dosis con precio (inasistencia, o anterior a los precios) no admite ajuste (`fee.vaccination_unpriced`).
 - **Aplicaciones en la clínica** (`domain/entities/application.py`): una `ApplicationOrder`
   dice qué aplicar (medicamento, dosis, vía, número de dosis e intervalo, minutos de
   observación — 30 por defecto). Las internas se indican en la consulta y se emiten de forma
@@ -336,7 +347,9 @@ Las lecturas simples no bloquean. Cancelar una cita no mira su consulta: una con
 | `CreatePatient`, certificados | su contador |
 | `CreateAppointment` | reservas de quien atiende → contador de citas |
 | `RescheduleAppointment` | cita → reservas de quien atiende |
-| `RecordVaccinationVisit` | cita (luego las dosis y el cierre; no se bloquea nada más) |
+| `RecordVaccinationVisit` | cita (lee precios y dosis previas sin bloquear; luego las dosis, el cobro y el cierre) |
+| `VoidVaccination` | cita (si la dosis la tiene) → dosis (recalcula el cobro) |
+| `SetVaccinePrice` | ninguno (un solo upsert atómico) |
 | `RegisterWalkIn` | reservas de quien atiende → contador de citas (serializa las altas de la clínica); después lee, sin bloquear, las citas del médico para detectar un duplicado. No comprueba el hueco, a propósito |
 
 ## Despliegue
@@ -397,6 +410,8 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 > **Migración `b0c1d2e3f4a6`** (atender sin cita, OZK-111): añade `appointments.is_walk_in` (booleano `NOT NULL`, por defecto `false`, que se conserva para el código anterior) y otorga `appointments.walk_in` a los roles médico y recepción de las clínicas que los habían personalizado (el administrador nunca lo tiene: `NOT_FOR_ADMIN`). No requiere pasos manuales ni bloquea escrituras más que un instante. Su downgrade quita el permiso de esas personalizaciones y elimina la columna.
 
 > **Migración `d2e3f4a5b6c8`** (agendas de servicio, OZK-112): crea `service_agendas` (nombre único por clínica, sin distinguir mayúsculas) y añade `appointments.agenda_id` y `doctor_availability.agenda_id` (FK anulables), hace anulable `doctor_id` en ambas con un `CHECK num_nonnulls(doctor_id, agenda_id) = 1`, un horario único por agenda y `vaccination_records.appointment_id`. Las referencias nuevas son claves foráneas compuestas `(tenant_id, …)`, de modo que una fila nunca apunta a la agenda o cita de otra clínica; para eso añade `UNIQUE (tenant_id, id)` a `service_agendas`, `locations` y `appointments` (el de `appointments` lo puede reutilizar OZK-116). Es compatible hacia atrás (el código anterior siempre inserta un médico, lo que cumple el CHECK) y no requiere pasos manuales. Su downgrade se niega a correr, con un mensaje claro, mientras exista alguna agenda, cita de vacunación o dosis enlazada a una cita: nunca borra datos.
+
+> **Migración `e3f4a5b6c7d9`** (precios de vacunas, OZK-112): crea `vaccine_prices` (precio por clínica y vacuna, `CHECK` de 0 a 10,000, sin fila = sin precio) y añade `vaccination_records.supply` y `listed_fee`, con CHECKs que exigen que solo una dosis aplicada en la clínica tenga procedencia, que el precio exista solo con procedencia y cita, y que las del MINSAL cuesten $0; también `ck_appointments_vaccination_fee_cap` (una cita de vacunación no se cobra por encima de la suma de sus dosis). Sin backfill: las dosis previas quedan con `supply` NULL. Compatible hacia atrás (el código anterior inserta NULL, que cumple los CHECK; sus citas de vacunación quedan sin cobro) y sin pasos manuales, pero despliega backend y frontend juntos: el frontend anterior no envía `supply`. **Tras desplegar, un administrador debe cargar los precios en Tarifas**: sin ellos no se registran dosis privadas. Su downgrade se niega a correr mientras existan precios o dosis con procedencia: nunca borra datos.
 >
 > Endpoints nuevos: `GET|POST /service-agendas`, `PATCH /service-agendas/{id}`, `POST /service-agendas/{id}/active`; el horario de una agenda en `/availability/agendas/{id}` (`weekly`, `exceptions`, `rules`) y `GET /availability/preview?agenda_id=`; `agenda_id` (en lugar de `doctor_id`) en `POST /appointments`, `POST /appointments/walk-in`, `GET /appointments`, `/appointments/schedule` y `/appointments/slots`; `POST /vaccinations/visits`.
 

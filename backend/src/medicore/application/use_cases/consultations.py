@@ -21,6 +21,7 @@ from medicore.application.common.permissions import (
     has_permission,
 )
 from medicore.application.common.timezone import clinic_now
+from medicore.application.common.vaccination_fees import price_vaccination_visit
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.code_generator import CodeGenerator
 from medicore.application.ports.unit_of_work import UnitOfWork
@@ -751,6 +752,7 @@ class SignConsultation:
                 ),
             )
             appointment.complete()
+            price_vaccination_visit(self._uow, appointment)
             self._uow.consultations.save(consultation)
             self._uow.medical_records.save(result.record)
             for prescription in result.prescriptions:

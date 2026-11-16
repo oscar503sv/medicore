@@ -2,6 +2,9 @@
 // spread into the main dictionaries in i18n.ts.
 
 export const reportsEs: Record<string, string> = {
+  'rep.source.vaccination': 'Vacunación',
+  'rep.col.vaccinations': 'Vacunaciones',
+  'rep.col.supply': 'Procedencia',
   'nav.reports': 'Reportes',
   'permgroup.reports': 'Reportes',
   'permission.reports_export': 'Exportar reportes a CSV',
@@ -97,6 +100,9 @@ export const reportsEs: Record<string, string> = {
 }
 
 export const reportsEn: Record<string, string> = {
+  'rep.source.vaccination': 'Vaccination',
+  'rep.col.vaccinations': 'Vaccinations',
+  'rep.col.supply': 'Supply',
   'nav.reports': 'Reports',
   'permgroup.reports': 'Reports',
   'permission.reports_export': 'Export reports to CSV',

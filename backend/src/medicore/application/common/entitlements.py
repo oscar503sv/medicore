@@ -7,12 +7,14 @@ from __future__ import annotations
 
 from datetime import date
 
+from medicore.application.common.context import ActorContext
+from medicore.application.common.errors import EntityNotFound
 from medicore.application.common.permissions import Permission, granted
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import User
-from medicore.domain.enums import PlanFeature, SubscriptionStatus
-from medicore.domain.shared.errors import SubscriptionReadOnly
+from medicore.domain.enums import AddonModule, PlanFeature, SubscriptionStatus
+from medicore.domain.shared.errors import PermissionDenied, SubscriptionReadOnly
 
 
 def has_feature(uow: UnitOfWork, tenant: Tenant, feature: PlanFeature) -> bool:
@@ -47,3 +49,15 @@ def ensure_writable(tenant: Tenant, today: date) -> None:
             "the subscription expired: the clinic is read-only until it renews",
             period_end=sub.period_end.isoformat() if sub.period_end else None,
         )
+
+
+def ensure_module(
+    uow: UnitOfWork, actor: ActorContext, module: AddonModule | None, code: str
+) -> Tenant:
+    """The actor's clinic (returned) must have contracted ``module``; None asks for none."""
+    tenant = uow.tenants.get_by_id(actor.tenant_id)
+    if tenant is None:
+        raise EntityNotFound("Tenant", actor.tenant_id)
+    if module is not None and not tenant.subscription.has_module(module):
+        raise PermissionDenied("the module is not contracted", code=code, module=str(module))
+    return tenant

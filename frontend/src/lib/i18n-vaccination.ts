@@ -7,6 +7,20 @@
 type Dict = Record<string, string>
 
 export const vaxEs: Dict = {
+  'vax.supply': 'Procedencia de la dosis',
+  'vax.supply.clinic': 'Privada (clínica)',
+  'vax.supply.clinic_price': 'Privada (clínica) · {price}',
+  'vax.supply.minsal_free': 'MINSAL · gratuita',
+  'vax.supply.badge_clinic': 'Privada · {price}',
+  'vax.supply_short.clinic': 'Privada (clínica)',
+  'vax.supply_short.minsal': 'MINSAL',
+  'vax.supply.no_price': 'La clínica no ha fijado el precio de esta vacuna. Un administrador debe cargarlo en Tarifas (puede ser $0), o elige MINSAL si es gratuita.',
+  'vax.supply.set_price': 'Fijar el precio en Tarifas',
+  'vax.prices_missing': 'Aún no hay precios de vacunas. Sin ellos no se pueden registrar dosis privadas.',
+  'vax.total': 'Total a cobrar: {total}',
+  'vax.total_minsal': '{n} dosis MINSAL gratuitas',
+  'vax.total_minsal_one': '1 dosis MINSAL gratuita',
+  'vax.visit_ok_fee': 'Vacunas registradas y cita completada. Total: {total}',
   // vaccines (by code) and what they protect against
   'vax.name.BCG': 'BCG',
   'vax.diseases.BCG': 'Tuberculosis (formas graves)',
@@ -163,6 +177,20 @@ export const vaxEs: Dict = {
 }
 
 export const vaxEn: Dict = {
+  'vax.supply': 'Who supplied the dose',
+  'vax.supply.clinic': 'Private (clinic)',
+  'vax.supply.clinic_price': 'Private (clinic) · {price}',
+  'vax.supply.minsal_free': 'MINSAL · free',
+  'vax.supply.badge_clinic': 'Private · {price}',
+  'vax.supply_short.clinic': 'Private (clinic)',
+  'vax.supply_short.minsal': 'MINSAL',
+  'vax.supply.no_price': 'The clinic has not set a price for this vaccine. An administrator must add it in Fees (it can be $0), or pick MINSAL if it is free.',
+  'vax.supply.set_price': 'Set the price in Fees',
+  'vax.prices_missing': 'There are no vaccine prices yet. Without them private doses cannot be recorded.',
+  'vax.total': 'Total to charge: {total}',
+  'vax.total_minsal': '{n} free MINSAL doses',
+  'vax.total_minsal_one': '1 free MINSAL dose',
+  'vax.visit_ok_fee': 'Vaccines recorded and appointment completed. Total: {total}',
   'vax.name.BCG': 'BCG',
   'vax.diseases.BCG': 'Tuberculosis (severe forms)',
   'vax.name.HEPB_PED': 'Paediatric hepatitis B',

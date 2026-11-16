@@ -45,6 +45,7 @@ from medicore.domain.repositories import (
     TenantRepository,
     UserRepository,
     VaccinationRecordRepository,
+    VaccinePriceRepository,
 )
 from medicore.domain.repositories._support import (
     ActiveImpersonation,
@@ -91,6 +92,7 @@ class UnitOfWork(Protocol):
     audit: AuditLogRepository
     role_permissions: RolePermissionOverrideRepository
     vaccinations: VaccinationRecordRepository
+    vaccine_prices: VaccinePriceRepository
     applications: ApplicationRepository
     procedures: ProcedureRepository
     subscription_payments: SubscriptionPaymentRepository

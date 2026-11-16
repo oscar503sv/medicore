@@ -12,6 +12,7 @@ from medicore.domain.enums import (
     VaccinationOutcome,
     VaccinationSource,
     VaccineRoute,
+    VaccineSupply,
 )
 
 
@@ -60,6 +61,8 @@ class VaccinationRecordResponse(BaseModel):
     route: str | None
     site: str | None
     notes: str | None
+    supply: str | None = None  # clinic | minsal; None when not given here or not recorded
+    listed_fee: str | None = None  # the vaccine's price when given in an appointment
     recorded_by_id: str
     recorded_by_name: str | None
     created_at: datetime
@@ -84,6 +87,7 @@ class RecordVaccinationRequest(BaseModel):
     route: VaccineRoute | None = None
     site: InjectionSite | None = None
     notes: str | None = Field(None, max_length=500)
+    supply: VaccineSupply | None = None  # required when it is given at the clinic
 
 
 class WorklistAppointment(BaseModel):
@@ -108,6 +112,7 @@ class VisitDoseRequest(BaseModel):
     route: VaccineRoute | None = None
     site: InjectionSite | None = None
     notes: str | None = Field(None, max_length=500)
+    supply: VaccineSupply | None = None  # required when the dose is administered
 
 
 class RecordVaccinationVisitRequest(BaseModel):
@@ -119,6 +124,10 @@ class RecordVaccinationVisitRequest(BaseModel):
 class VaccinationVisitResponse(BaseModel):
     appointment: WorklistAppointment  # completed, unless a consultation is still open
     records: list[VaccinationRecordResponse]
+    # What the visit is charged, from the private doses ("45.00"; MINSAL doses are free).
+    listed_fee: str | None = None
+    fee: str | None = None
+    fee_note: str | None = None
 
 
 class VoidVaccinationRequest(BaseModel):

@@ -28,6 +28,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
+import { MissingPricesBanner } from '@/components/vaccination/MissingPricesBanner'
 import { TodayAppointments } from '@/components/vaccination/TodayAppointments'
 import {
   VaccinationVisitModal,
@@ -143,6 +144,7 @@ export function VaccinationPage() {
   return (
     <div className="space-y-5 p-8">
       <PageHeader eyebrow={t('vax.scheme')} title={t('vax.page_title')} />
+      <MissingPricesBanner />
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard

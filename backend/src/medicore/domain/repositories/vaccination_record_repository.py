@@ -12,6 +12,10 @@ from medicore.domain.shared.identifiers import AppointmentId, PatientId, Vaccina
 class VaccinationRecordRepository(Protocol):
     def get_by_id(self, record_id: VaccinationRecordId) -> VaccinationRecord | None: ...
 
+    def get_for_update(self, record_id: VaccinationRecordId) -> VaccinationRecord | None:
+        """Like ``get_by_id`` but locking the row, so two voids of one dose queue up."""
+        ...
+
     def list_by_patient(self, patient_id: PatientId) -> list[VaccinationRecord]:
         """Every record of the patient, voided ones included, newest first."""
         ...
