@@ -319,7 +319,8 @@ Quienes escriben documentos clínicos o citas bloquean sus filas dentro de la tr
 
 1. **Documento clínico (N1)**: una consulta o un procedimiento. Una transacción nunca bloquea los dos.
 2. **Cita (N2)**.
-3. **Contador (N3)**: código de expediente, código de cita, etc. Siempre al final, así que no se bloquea nada mientras se tiene un contador.
+3. **Reservas del médico (N3)**: bloqueo consultivo por clínica y médico (`lock_doctor_bookings`), que se libera al terminar la transacción.
+4. **Contador (N4)**: código de expediente, código de cita, etc. Siempre al final, así que no se bloquea nada mientras se tiene un contador.
 
 Las lecturas simples no bloquean. Cancelar una cita no mira su consulta: una consulta solo existe para citas en curso o completadas, y esas no se cancelan.
 
@@ -332,8 +333,10 @@ Las lecturas simples no bloquean. Cancelar una cita no mira su consulta: una con
 | `SaveProcedureProgress`, `RecordProcedureConsent`, `CancelProcedure`, `AmendProcedure`, `SetProcedureFee` | procedimiento |
 | `CreateProcedure` con cita | cita |
 | `ConfirmAppointment`, `CancelAppointment`, `MarkNoShow`, `RescheduleAppointment`, `AdjustAppointmentFee` | cita |
-| `CreateAppointment`, `CreatePatient`, certificados | su contador |
-| `RegisterWalkIn` | contador de citas (primero, para serializar las altas de la clínica); después lee, sin bloquear, las citas del médico para detectar un duplicado |
+| `CreatePatient`, certificados | su contador |
+| `CreateAppointment` | reservas del médico → contador de citas |
+| `RescheduleAppointment` | cita → reservas del médico |
+| `RegisterWalkIn` | reservas del médico → contador de citas (serializa las altas de la clínica); después lee, sin bloquear, las citas del médico para detectar un duplicado. No comprueba el hueco, a propósito |
 
 ## Despliegue
 

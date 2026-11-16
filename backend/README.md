@@ -319,7 +319,8 @@ Writers of clinical documents and appointments lock their rows inside the transa
 
 1. **Clinical document (N1)**: a consultation or a procedure. A transaction never locks both.
 2. **Appointment (N2)**.
-3. **Counter (N3)**: record code, appointment code and the rest. Always last, so nothing is locked while holding one.
+3. **Doctor's bookings (N3)**: an advisory lock per clinic and doctor (`lock_doctor_bookings`), released when the transaction ends.
+4. **Counter (N4)**: record code, appointment code and the rest. Always last, so nothing is locked while holding one.
 
 Plain reads take no lock. Cancelling an appointment doesn't look at its consultation: a consultation exists only for appointments in progress or completed, and those can't be cancelled.
 
@@ -332,8 +333,10 @@ Plain reads take no lock. Cancelling an appointment doesn't look at its consulta
 | `SaveProcedureProgress`, `RecordProcedureConsent`, `CancelProcedure`, `AmendProcedure`, `SetProcedureFee` | procedure |
 | `CreateProcedure` with an appointment | appointment |
 | `ConfirmAppointment`, `CancelAppointment`, `MarkNoShow`, `RescheduleAppointment`, `AdjustAppointmentFee` | appointment |
-| `CreateAppointment`, `CreatePatient`, certificates | their counter |
-| `RegisterWalkIn` | appointment counter (first, to serialize the clinic's creations); then reads the doctor's appointments, without locking, to detect a duplicate |
+| `CreatePatient`, certificates | their counter |
+| `CreateAppointment` | doctor's bookings → appointment counter |
+| `RescheduleAppointment` | appointment → doctor's bookings |
+| `RegisterWalkIn` | doctor's bookings → appointment counter (serializes the clinic's creations); then reads the doctor's appointments, without locking, to detect a duplicate. It doesn't check the slot, on purpose |
 
 ## Deployment
 

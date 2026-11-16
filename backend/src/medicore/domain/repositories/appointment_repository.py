@@ -57,10 +57,18 @@ class AppointmentRepository(Protocol):
         1. a clinical document: a consultation or a procedure (never both in one
            transaction);
         2. the appointment;
-        3. a counter (record code, appointment code, ...), always last.
+        3. the doctor's bookings (``lock_doctor_bookings``);
+        4. a counter (record code, appointment code, ...), always last.
         Never lock a consultation or a procedure while holding an appointment, and never
         lock anything while holding a counter. Plain reads do not lock.
         """
+        ...
+
+    def lock_doctor_bookings(self, doctor_id: UserId) -> None:
+        """Serialize, until the transaction ends, everything that books or moves an
+        appointment of this doctor, so the overlap check that follows sees what concurrent
+        bookings committed. Level 3 of the lock order: after the appointment being moved,
+        before any counter."""
         ...
 
     def save(self, appointment: Appointment) -> None: ...

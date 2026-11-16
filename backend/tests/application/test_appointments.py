@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -21,10 +22,11 @@ from medicore.application.use_cases.appointments import (
 from medicore.application.use_cases.availability import UpdateBookingRules
 from medicore.application.use_cases.consultations import StartConsultation
 from medicore.domain.entities.availability import BookingRules
-from medicore.domain.enums import AppointmentStatus, AppointmentType, Role
+from medicore.domain.enums import AddonModule, AppointmentStatus, AppointmentType, Role
 from medicore.domain.services.slot_resolver import SlotStatus
 from medicore.domain.shared.errors import InvalidStateTransition, PermissionDenied, SlotUnavailable
 from medicore.domain.shared.identifiers import UserId
+from medicore.domain.value_objects.subscription import Subscription
 from tests.support.builders import seed_clinic
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
@@ -135,7 +137,9 @@ def test_every_appointment_transition_locks_the_appointment_once():
     ):
         log.clear()
         use_case()
-        assert log == [("appointment", appt.id.value)]
+        assert [entry for entry in log if entry[0] == "appointment"] == [
+            ("appointment", appt.id.value)
+        ]
 
     other = create.execute(actor, booking_cmd(seed, start=datetime(2026, 6, 1, 11, 0)))
     log.clear()
@@ -275,3 +279,64 @@ class TestDoctorDrivenDuration:
             RescheduleAppointment(uow, FixedClock()).execute(
                 seed.receptionist_actor, appt.id, datetime(2026, 6, 1, 14, 0)
             )
+
+
+def test_create_locks_the_doctor_bookings_before_the_counter():
+    seed = seed_clinic()
+    uow = seed.factory.for_tenant(seed.tenant.id)
+    store = seed.factory.store
+
+    class _CountingCodes(SequentialCodeGenerator):
+        def next_appointment_code(self) -> str:
+            store.lock_log.append(("counter", None))
+            return super().next_appointment_code()
+
+    CreateAppointment(uow, _CountingCodes(), FixedClock()).execute(
+        seed.receptionist_actor, booking_cmd(seed)
+    )
+
+    assert store.lock_log == [("doctor_bookings", seed.doctor.id.value), ("counter", None)]
+
+
+def test_reschedule_locks_the_doctor_bookings_after_the_appointment():
+    seed = seed_clinic()
+    create, uow = make_create(seed)
+    appt = create.execute(seed.receptionist_actor, booking_cmd(seed))
+    seed.factory.store.lock_log.clear()
+
+    RescheduleAppointment(uow, FixedClock()).execute(
+        seed.receptionist_actor, appt.id, datetime(2026, 6, 1, 10, 0)
+    )
+
+    assert seed.factory.store.lock_log == [
+        ("appointment", appt.id.value),
+        ("doctor_bookings", seed.doctor.id.value),
+    ]
+
+
+def _procedure_cmd(seed):
+    return replace(booking_cmd(seed), type=AppointmentType.PROCEDURE)
+
+
+def test_booking_a_procedure_needs_the_module():
+    seed = seed_clinic()
+    seed.tenant.subscription = Subscription(plan_code="clinica", modules=frozenset())
+    create, uow = make_create(seed)
+
+    with pytest.raises(PermissionDenied) as exc:
+        create.execute(seed.receptionist_actor, _procedure_cmd(seed))
+
+    assert exc.value.code == "appointment.module_required"
+    assert uow.appointments.list_by_day(MONDAY_9AM.date()) == []
+
+
+def test_booking_a_procedure_with_the_module_is_allowed():
+    seed = seed_clinic()
+    seed.tenant.subscription = Subscription(
+        plan_code="clinica", modules=frozenset({AddonModule.PROCEDURES})
+    )
+    create, _ = make_create(seed)
+
+    appt = create.execute(seed.receptionist_actor, _procedure_cmd(seed))
+
+    assert appt.type == AppointmentType.PROCEDURE

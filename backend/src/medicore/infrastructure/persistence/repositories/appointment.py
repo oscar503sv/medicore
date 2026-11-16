@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import Date as SqlDate
-from sqlalchemy import and_, cast, func, or_
+from sqlalchemy import and_, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from medicore.domain.entities.appointment import Appointment
@@ -54,6 +55,14 @@ class SqlAppointmentRepository:
             .first()
         )
         return to_appointment(row) if row else None
+
+    def lock_doctor_bookings(self, doctor_id: UserId) -> None:
+        # An advisory lock, not a row lock: the thing to serialize is the absence of a
+        # conflicting row, which no existing row represents, and it adds no table or column.
+        # The hash only has to be stable; a collision merely serializes two doctors.
+        digest = hashlib.sha256(f"doctor_bookings:{self._tid}:{doctor_id.value}".encode()).digest()
+        key = int.from_bytes(digest[:8], "big", signed=True)
+        self._s.execute(select(func.pg_advisory_xact_lock(key)))
 
     def list_by_day(self, on: date, doctor_id: UserId | None = None) -> list[Appointment]:
         q = (

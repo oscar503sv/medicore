@@ -224,49 +224,64 @@ class CreateAppointment:
     def execute(self, actor: ActorContext, cmd: CreateAppointmentCommand) -> Appointment:
         ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
 
-        availability = self._uow.availability.get_by_doctor(cmd.doctor_id)
-        if availability is None:
-            raise SlotUnavailable(
-                "doctor has no availability configured", code="slot.no_availability"
-            )
+        if cmd.type == AppointmentType.PROCEDURE:
+            tenant = self._uow.tenants.get_by_id(actor.tenant_id)
+            if tenant is None:
+                raise EntityNotFound("Tenant", actor.tenant_id)
+            if not tenant.subscription.has_module(AddonModule.PROCEDURES):
+                raise PermissionDenied(
+                    "the procedures module is not contracted",
+                    code="appointment.module_required", module=str(AddonModule.PROCEDURES),
+                )
 
-        # Appointment duration is the doctor's rule, never a caller choice.
-        duration = availability.rules.slot_minutes
-        end = cmd.scheduled_start + timedelta(minutes=duration)
-        busy = _busy_intervals(
-            self._uow.appointments.find_overlapping(cmd.doctor_id, cmd.scheduled_start, end)
-        )
-        if not is_available(
-            availability,
-            cmd.scheduled_start,
-            busy=busy,
-            now=clinic_now(self._uow, actor.tenant_id, self._clock),
-        ):
-            raise SlotUnavailable(
-                f"{cmd.scheduled_start.isoformat()} is not bookable for doctor {cmd.doctor_id}",
-                code="slot.not_bookable",
-            )
-
-        appointment = Appointment(
-            id=AppointmentId.new(),
-            tenant_id=actor.tenant_id,
-            code=self._codes.next_appointment_code(),
-            patient_id=cmd.patient_id,
-            doctor_id=cmd.doctor_id,
-            location_id=cmd.location_id,
-            type=cmd.type,
-            scheduled_start=cmd.scheduled_start,
-            duration_minutes=duration,
-            reason=cmd.reason,
-            created_by_id=actor.user_id,
-            room=cmd.room,
-            insurance_id=cmd.insurance_id,
-            # The doctor's price for this type right now; later price changes don't touch it.
-            charge=Charge.at_list_price(list_price(self._uow, cmd.doctor_id, cmd.type)),
-            created_at=self._clock.now(),
-            updated_at=self._clock.now(),
-        )
         with self._uow:
+            # Held until the commit: two bookings of the same slot queue here, and the second
+            # one sees the first in the overlap check. Always before the code counter.
+            self._uow.appointments.lock_doctor_bookings(cmd.doctor_id)
+
+            availability = self._uow.availability.get_by_doctor(cmd.doctor_id)
+            if availability is None:
+                raise SlotUnavailable(
+                    "doctor has no availability configured", code="slot.no_availability"
+                )
+
+            # Appointment duration is the doctor's rule, never a caller choice.
+            duration = availability.rules.slot_minutes
+            end = cmd.scheduled_start + timedelta(minutes=duration)
+            busy = _busy_intervals(
+                self._uow.appointments.find_overlapping(cmd.doctor_id, cmd.scheduled_start, end)
+            )
+            if not is_available(
+                availability,
+                cmd.scheduled_start,
+                busy=busy,
+                now=clinic_now(self._uow, actor.tenant_id, self._clock),
+            ):
+                raise SlotUnavailable(
+                    f"{cmd.scheduled_start.isoformat()} is not bookable for doctor "
+                    f"{cmd.doctor_id}",
+                    code="slot.not_bookable",
+                )
+
+            appointment = Appointment(
+                id=AppointmentId.new(),
+                tenant_id=actor.tenant_id,
+                code=self._codes.next_appointment_code(),
+                patient_id=cmd.patient_id,
+                doctor_id=cmd.doctor_id,
+                location_id=cmd.location_id,
+                type=cmd.type,
+                scheduled_start=cmd.scheduled_start,
+                duration_minutes=duration,
+                reason=cmd.reason,
+                created_by_id=actor.user_id,
+                room=cmd.room,
+                insurance_id=cmd.insurance_id,
+                # The doctor's price for this type right now; later price changes don't touch it.
+                charge=Charge.at_list_price(list_price(self._uow, cmd.doctor_id, cmd.type)),
+                created_at=self._clock.now(),
+                updated_at=self._clock.now(),
+            )
             self._uow.appointments.save(appointment)
             self._uow.audit.append(
                 audit_entry(
@@ -330,8 +345,10 @@ class RegisterWalkIn:
         now = clinic_now(self._uow, actor.tenant_id, self._clock).replace(second=0, microsecond=0)
 
         with self._uow:
-            # The counter is locked first: it serializes this tenant's creations, so two
+            # The doctor's bookings first, so a walk-in and a booking of the same doctor see
+            # each other; then the counter, which serializes this tenant's creations so two
             # simultaneous registrations of the same patient see each other below.
+            self._uow.appointments.lock_doctor_bookings(cmd.doctor_id)
             code = self._codes.next_appointment_code()
             end = now + timedelta(minutes=duration)
             same_patient = [
@@ -389,6 +406,9 @@ class RescheduleAppointment:
         ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
         with self._uow:
             appointment = self._require(appointment_id)
+            # After the appointment, before the overlap check: serializes against bookings
+            # and other moves of this doctor. The doctor never changes on a reschedule.
+            self._uow.appointments.lock_doctor_bookings(appointment.doctor_id)
 
             availability = self._uow.availability.get_by_doctor(appointment.doctor_id)
             if availability is None:

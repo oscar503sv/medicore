@@ -601,6 +601,9 @@ class InMemoryAppointmentRepository(_Scoped):
         self._store.lock_log.append(("appointment", appointment_id.value))
         return self.get_by_id(appointment_id)
 
+    def lock_doctor_bookings(self, doctor_id: UserId) -> None:
+        self._store.lock_log.append(("doctor_bookings", doctor_id.value))
+
     def list_by_day(self, on: date, doctor_id: UserId | None = None) -> list[Appointment]:
         result = [
             a

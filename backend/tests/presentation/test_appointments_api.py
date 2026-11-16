@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from medicore.domain.value_objects.subscription import Subscription
+
 MONDAY = "2026-06-01"  # Monday within Mon-Fri 09:00-13:00 availability
 
 
@@ -48,6 +50,14 @@ def test_create_appointment(seed, client, auth_headers):
     assert data["code"].startswith("A-")
     # Duration comes from the doctor's rules, not from the request.
     assert data["duration_minutes"] == 30
+
+
+def test_booking_a_procedure_without_the_module_is_forbidden(seed, client, auth_headers):
+    seed.tenant.subscription = Subscription(plan_code="clinica", modules=frozenset())
+    payload = {**_booking_payload(seed), "type": "procedure"}
+    resp = client.post("/api/v1/appointments", json=payload, headers=auth_headers)
+    assert resp.status_code == 403
+    assert resp.json()["code"] == "appointment.module_required"
 
 
 def test_create_ignores_client_duration(seed, client, auth_headers):
