@@ -676,8 +676,13 @@ export interface ConsultationRef {
   started_at: string
 }
 
-/** The non-clinical view of a consultation, for whoever records vitals. */
-export interface ConsultationVitals extends ConsultationRef {
+/** The non-clinical view of an appointment's vitals, for whoever records them: the waiting
+ * room's ("triage") until the consultation starts, then the consultation's. */
+export interface AppointmentVitals {
+  appointment_id: string
+  consultation_id: string | null
+  phase: 'triage' | 'consultation'
+  consultation_status: ConsultationStatus | null
   doctor_name: string | null
   vitals: Vitals
   last_saved_at: string | null

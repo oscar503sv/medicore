@@ -21,6 +21,10 @@ from medicore.application.use_cases.appointments import (
     RescheduleAppointment,
     WalkInCommand,
 )
+from medicore.application.use_cases.consultations import (
+    GetAppointmentVitals,
+    UpdateAppointmentVitals,
+)
 from medicore.application.use_cases.fees import AdjustAppointmentFee
 from medicore.domain.shared.identifiers import (
     AppointmentId,
@@ -40,8 +44,18 @@ from medicore.presentation.schemas.appointments import (
     WalkInRequest,
     WeeklyScheduleResponse,
 )
+from medicore.presentation.schemas.consultations import (
+    AppointmentVitalsResponse,
+    VitalsUpdateRequest,
+    vital_changes,
+)
 from medicore.presentation.schemas.fees import ChargeRequest
-from medicore.presentation.serializers import ser_appointment, ser_slot, ser_user
+from medicore.presentation.serializers import (
+    ser_appointment,
+    ser_appointment_vitals,
+    ser_slot,
+    ser_user,
+)
 
 router = APIRouter(prefix="/appointments", tags=["appointments"])
 
@@ -206,3 +220,19 @@ def adjust_fee(appointment_id: str, body: ChargeRequest, actor: Actor, uow: UoW,
     return ser_appointment(AdjustAppointmentFee(uow, clock).execute(
         actor, AppointmentId.parse(appointment_id), fee(body.amount), body.note,
     ))
+
+
+@router.get("/{appointment_id}/vitals", response_model=AppointmentVitalsResponse)
+def get_appointment_vitals(appointment_id: str, actor: Actor, uow: UoW, clock: Clock):
+    view = GetAppointmentVitals(uow, clock).execute(actor, AppointmentId.parse(appointment_id))
+    return ser_appointment_vitals(view)
+
+
+@router.put("/{appointment_id}/vitals", response_model=AppointmentVitalsResponse)
+def update_appointment_vitals(
+    appointment_id: str, body: VitalsUpdateRequest, actor: Actor, uow: UoW, clock: Clock
+):
+    view = UpdateAppointmentVitals(uow, clock).execute(
+        actor, AppointmentId.parse(appointment_id), vital_changes(body)
+    )
+    return ser_appointment_vitals(view)

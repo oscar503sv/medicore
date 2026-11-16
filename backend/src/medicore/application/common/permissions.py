@@ -8,10 +8,10 @@ and the presentation layer puts the result on ``ActorContext.permissions``, so e
 
 Summary of the DOMAIN_MODEL rules the defaults encode:
   * receptionist → manage appointments + register/edit patients; NOT clinical records.
-  * nurse        → view patients/agenda, record vitals in open consultations, view the
-                   records list (metadata), prescriptions, vitals and documents, upload
-                   records; NOT the note, NOT the clinical content, NOT book appointments,
-                   NOT edit patients, NOT start/sign.
+  * nurse        → view patients/agenda, record vitals on confirmed appointments and in open
+                   consultations, view the records list (metadata), prescriptions, vitals and
+                   documents, upload records; NOT the note, NOT the clinical content, NOT
+                   book appointments, NOT edit patients, NOT start/sign.
   * doctor       → all clinical work for their patients + their own availability, fees and
                    metrics (with their income); only they complete or cancel the
                    prescriptions they issued.

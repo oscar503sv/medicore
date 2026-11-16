@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.enums import AppointmentStatus
 from medicore.domain.shared.identifiers import AppointmentId, PatientId, TenantId, UserId
+from medicore.infrastructure.persistence.mappers._json import vitals_to_dict
 from medicore.infrastructure.persistence.mappers.entities import to_appointment
 from medicore.infrastructure.persistence.mappers.fee import charge_columns
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
@@ -200,5 +201,7 @@ class SqlAppointmentRepository:
         row.created_by_id = appointment.created_by_id.value
         row.listed_fee, row.fee, row.fee_note = charge_columns(appointment.charge)
         row.is_walk_in = appointment.is_walk_in
+        row.pre_vitals = vitals_to_dict(appointment.pre_vitals)
+        row.pre_vitals_saved_at = appointment.pre_vitals_saved_at
         row.created_at = appointment.created_at
         row.updated_at = appointment.updated_at

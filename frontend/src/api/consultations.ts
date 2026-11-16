@@ -3,7 +3,6 @@ import type {
   ApplicationDraft,
   Consultation,
   ConsultationRef,
-  ConsultationVitals,
   ExamKind,
   MedicalRecord,
   Vitals,
@@ -17,16 +16,6 @@ export const consultationsApi = {
     api
       .post<ConsultationRef>(`/consultations/start/${appointmentId}`)
       .then((r) => r.data),
-
-  /** Nursing's entry point: found from the appointment, which does not carry the id. */
-  vitalsByAppointment: (appointmentId: string) =>
-    api
-      .get<ConsultationVitals>(`/consultations/by-appointment/${appointmentId}/vitals`)
-      .then((r) => r.data),
-
-  /** Only the fields present change; null clears one. */
-  updateVitals: (id: string, changes: Partial<Vitals>) =>
-    api.put<ConsultationVitals>(`/consultations/${id}/vitals`, changes).then((r) => r.data),
 
   /** `note` maps section keys to their text. */
   autosave: (id: string, patch: { vitals?: Partial<Vitals>; note?: Record<string, string> }) =>

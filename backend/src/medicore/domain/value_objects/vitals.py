@@ -58,6 +58,10 @@ class Vitals:
     def is_empty(self) -> bool:
         return all(getattr(self, f) is None for f in VITAL_FIELDS)
 
+    def filled_fields(self) -> tuple[str, ...]:
+        """Names of the readings taken (never their values)."""
+        return tuple(n for n in VITAL_FIELDS if getattr(self, n) is not None)
+
     def with_changes(self, changes: Mapping[str, object]) -> Vitals:
         """A copy with only the given fields replaced (None clears one), revalidated."""
         unknown = sorted(set(changes) - set(VITAL_FIELDS))

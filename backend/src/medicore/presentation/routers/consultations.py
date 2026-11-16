@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 from fastapi import APIRouter
 
 from medicore.application.use_cases.consultations import (
@@ -46,8 +44,8 @@ from medicore.presentation.schemas.consultations import (
     PrescriptionDraftRequest,
     ProcedureDraftRequest,
     SignRequest,
-    VitalsSchema,
     VitalsUpdateRequest,
+    vital_changes,
 )
 from medicore.presentation.serializers import (
     ser_consultation,
@@ -58,27 +56,14 @@ from medicore.presentation.serializers import (
 
 router = APIRouter(prefix="/consultations", tags=["consultations"])
 
-_DECIMAL_VITALS = ("temperature", "weight", "height")
-
-
-def _vital_changes(v: VitalsSchema) -> dict[str, object]:
-    """Only the fields the client sent: an absent field keeps what is stored, an explicit
-    null (or empty string) clears it."""
-    changes: dict[str, object] = {}
-    for name in v.model_fields_set:
-        value = getattr(v, name)
-        if name in _DECIMAL_VITALS:
-            value = Decimal(value) if value else None
-        changes[name] = value
-    return changes
-
-
 @router.post("/start/{appointment_id}", response_model=ConsultationRefResponse, status_code=201)
 def start_consultation(appointment_id: str, actor: Actor, uow: UoW, clock: Clock):
     c = StartConsultation(uow, clock).execute(actor, AppointmentId.parse(appointment_id))
     return ser_consultation_ref(c)
 
 
+# Legacy pair, kept while older clients are still open: the appointment-based endpoints in
+# the appointments router also serve the vitals before the consultation starts.
 @router.get(
     "/by-appointment/{appointment_id}/vitals", response_model=ConsultationVitalsResponse
 )
@@ -92,7 +77,7 @@ def update_consultation_vitals(
     consultation_id: str, body: VitalsUpdateRequest, actor: Actor, uow: UoW, clock: Clock
 ):
     view = UpdateConsultationVitals(uow, clock).execute(
-        actor, ConsultationId.parse(consultation_id), _vital_changes(body)
+        actor, ConsultationId.parse(consultation_id), vital_changes(body)
     )
     return ser_consultation_vitals(view)
 
@@ -108,7 +93,7 @@ def autosave(consultation_id: str, body: AutosaveRequest, actor: Actor, uow: UoW
     c = AutosaveConsultation(uow, clock).execute(
         actor, ConsultationId.parse(consultation_id),
         ConsultationPatch(
-            vitals=_vital_changes(body.vitals) if body.vitals else None, note=body.note
+            vitals=vital_changes(body.vitals) if body.vitals else None, note=body.note
         ),
     )
     return ser_consultation(c, uow)

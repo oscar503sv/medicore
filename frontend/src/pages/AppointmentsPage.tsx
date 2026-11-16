@@ -503,7 +503,7 @@ export function AppointmentsPage() {
                               {t('appt.continue')}
                             </Button>
                           )}
-                          {canVitals && a.status === 'in_progress' && (
+                          {canVitals && (a.status === 'confirmed' || a.status === 'in_progress') && (
                             <Button size="sm" variant="outline" onClick={() => setVitalsTarget(a)}>
                               <HeartPulse className="h-3.5 w-3.5" />
                               {t('appt.vitals')}

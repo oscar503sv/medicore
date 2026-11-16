@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -17,6 +18,7 @@ from medicore.domain.shared.identifiers import (
 )
 from medicore.domain.value_objects.fee import Charge
 from medicore.domain.value_objects.money import Money
+from medicore.domain.value_objects.vitals import Vitals
 
 # Allowed transitions of the appointment lifecycle.
 #   scheduled → confirmed → in_progress → completed
@@ -72,6 +74,10 @@ class Appointment:
     charge: Charge = field(default_factory=Charge)
     # Registered on the spot, without a booked slot (emergencies, patients who just arrived).
     is_walk_in: bool = False
+    # Vitals nursing took while the patient waited, before the consultation exists. They move
+    # into the consultation when it starts; they never leave the appointment any other way.
+    pre_vitals: Vitals = field(default_factory=Vitals)
+    pre_vitals_saved_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -138,6 +144,7 @@ class Appointment:
 
     def cancel(self) -> None:
         self._transition_to(AppointmentStatus.CANCELLED)
+        self._discard_pre_vitals()
 
     def mark_no_show(self) -> None:
         if self.is_walk_in:
@@ -146,6 +153,7 @@ class Appointment:
                 "a walk-in cannot be a no-show", code="appointment.walk_in_no_show"
             )
         self._transition_to(AppointmentStatus.NO_SHOW)
+        self._discard_pre_vitals()
 
     def reschedule(self, new_start: datetime, new_duration: int | None = None) -> None:
         """Move the appointment. Only valid before it starts.
@@ -161,7 +169,38 @@ class Appointment:
         self.scheduled_start = new_start
         if new_duration is not None:
             self.duration_minutes = new_duration
+        # Readings belong to the visit the patient waited for, not to the new day.
+        self._discard_pre_vitals()
         self._touch()
+
+    def record_pre_vitals(
+        self, changes: Mapping[str, object], when: datetime | None = None
+    ) -> tuple[str, ...]:
+        """Merge only the given vital fields taken before the consultation starts. Returns the
+        fields that changed. Only a confirmed appointment takes them: once it is in progress
+        the consultation holds the vitals."""
+        if self.status != AppointmentStatus.CONFIRMED:
+            raise DomainError(
+                "vitals can only be taken before the consultation, on a confirmed appointment",
+                code="appointment.vitals_closed",
+            )
+        merged = self.pre_vitals.with_changes(changes)
+        changed = self.pre_vitals.changed_fields(merged)
+        if changed:
+            self.pre_vitals = merged
+            self.pre_vitals_saved_at = when or datetime.now(UTC)
+            self._touch()
+        return changed
+
+    def take_pre_vitals(self) -> tuple[Vitals, datetime | None]:
+        """Hand the waiting-room vitals over (to the consultation) and clear them here."""
+        taken = (self.pre_vitals, self.pre_vitals_saved_at)
+        self._discard_pre_vitals()
+        return taken
+
+    def _discard_pre_vitals(self) -> None:
+        self.pre_vitals = Vitals()
+        self.pre_vitals_saved_at = None
 
     def adjust_fee(self, charged: Money, note: str | None) -> None:
         """Charge a different amount (a discount, a courtesy, or a price set after booking).

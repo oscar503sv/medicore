@@ -278,6 +278,8 @@ def to_appointment(row: AppointmentModel) -> Appointment:
         created_by_id=UserId.parse(row.created_by_id),
         charge=charge_from(row.listed_fee, row.fee, row.fee_note),
         is_walk_in=row.is_walk_in,
+        pre_vitals=dict_to_vitals(row.pre_vitals or {}),
+        pre_vitals_saved_at=row.pre_vitals_saved_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

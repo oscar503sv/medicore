@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -23,6 +24,21 @@ class VitalsSchema(BaseModel):
 
 class VitalsUpdateRequest(VitalsSchema):
     """Only the fields sent change; null clears one."""
+
+
+_DECIMAL_VITALS = ("temperature", "weight", "height")
+
+
+def vital_changes(v: VitalsSchema) -> dict[str, object]:
+    """Only the fields the client sent: an absent field keeps what is stored, an explicit
+    null (or empty string) clears it."""
+    changes: dict[str, object] = {}
+    for name in v.model_fields_set:
+        value = getattr(v, name)
+        if name in _DECIMAL_VITALS:
+            value = Decimal(value) if value else None
+        changes[name] = value
+    return changes
 
 
 class AutosaveRequest(BaseModel):
@@ -117,6 +133,21 @@ class ConsultationVitalsResponse(BaseModel):
     doctor_name: str | None
     status: str
     started_at: datetime
+    vitals: dict[str, Any]
+    last_saved_at: datetime | None
+    patient: dict[str, Any] | None = None
+    appointment: dict[str, Any] | None = None
+
+
+class AppointmentVitalsResponse(BaseModel):
+    """Vitals of an appointment: the waiting-room readings (``triage``) until the
+    consultation starts, then the consultation's (``consultation``)."""
+
+    appointment_id: str
+    consultation_id: str | None
+    phase: str
+    consultation_status: str | None
+    doctor_name: str | None
     vitals: dict[str, Any]
     last_saved_at: datetime | None
     patient: dict[str, Any] | None = None

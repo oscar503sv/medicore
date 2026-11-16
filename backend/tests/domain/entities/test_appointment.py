@@ -8,7 +8,7 @@ import pytest
 
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.enums import AppointmentStatus, AppointmentType
-from medicore.domain.shared.errors import DomainError, InvalidStateTransition
+from medicore.domain.shared.errors import DomainError, InvalidStateTransition, InvalidValueObject
 from medicore.domain.shared.identifiers import (
     AppointmentId,
     LocationId,
@@ -141,3 +141,70 @@ class TestWalkIn:
 
         assert cancelled.status == AppointmentStatus.CANCELLED
         assert attended.status == AppointmentStatus.IN_PROGRESS
+
+
+class TestPreVitals:
+    NOW = datetime(2026, 6, 1, 8, 50)
+
+    def test_merges_only_the_given_fields_and_reports_what_changed(self):
+        appt = make_appointment(AppointmentStatus.CONFIRMED)
+        assert appt.record_pre_vitals({"heart_rate": 72, "spo2": 98}, self.NOW) == (
+            "heart_rate", "spo2",
+        )
+        assert appt.record_pre_vitals({"heart_rate": 72, "glucose": 90}, self.NOW) == ("glucose",)
+        assert appt.pre_vitals.spo2 == 98
+        assert appt.pre_vitals_saved_at == self.NOW
+
+    def test_a_null_clears_one_reading(self):
+        appt = make_appointment(AppointmentStatus.CONFIRMED)
+        appt.record_pre_vitals({"heart_rate": 72}, self.NOW)
+        assert appt.record_pre_vitals({"heart_rate": None}, self.NOW) == ("heart_rate",)
+        assert appt.pre_vitals.is_empty()
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            AppointmentStatus.SCHEDULED,
+            AppointmentStatus.IN_PROGRESS,
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.CANCELLED,
+            AppointmentStatus.NO_SHOW,
+        ],
+    )
+    def test_only_a_confirmed_appointment_takes_them(self, status):
+        appt = make_appointment(status)
+        with pytest.raises(DomainError) as exc:
+            appt.record_pre_vitals({"heart_rate": 72}, self.NOW)
+        assert exc.value.code == "appointment.vitals_closed"
+        assert appt.pre_vitals.is_empty()
+
+    def test_invalid_readings_are_refused(self):
+        appt = make_appointment(AppointmentStatus.CONFIRMED)
+        with pytest.raises(InvalidValueObject):
+            appt.record_pre_vitals({"spo2": 140}, self.NOW)
+        with pytest.raises(InvalidValueObject):
+            appt.record_pre_vitals({"pulse": 70}, self.NOW)
+        assert appt.pre_vitals.is_empty()
+
+    @pytest.mark.parametrize(
+        "leave",
+        [
+            lambda a: a.cancel(),
+            lambda a: a.mark_no_show(),
+            lambda a: a.reschedule(datetime(2026, 6, 2, 9, 0)),
+        ],
+        ids=["cancel", "no_show", "reschedule"],
+    )
+    def test_leaving_the_visit_discards_them(self, leave):
+        appt = make_appointment(AppointmentStatus.CONFIRMED)
+        appt.record_pre_vitals({"heart_rate": 72}, self.NOW)
+        leave(appt)
+        assert appt.pre_vitals.is_empty()
+        assert appt.pre_vitals_saved_at is None
+
+    def test_taking_them_hands_them_over_and_clears_them(self):
+        appt = make_appointment(AppointmentStatus.CONFIRMED)
+        appt.record_pre_vitals({"heart_rate": 72}, self.NOW)
+        vitals, saved_at = appt.take_pre_vitals()
+        assert vitals.heart_rate == 72 and saved_at == self.NOW
+        assert appt.pre_vitals.is_empty() and appt.pre_vitals_saved_at is None

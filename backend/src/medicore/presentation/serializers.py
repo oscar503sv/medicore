@@ -5,7 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from medicore.application.use_cases.auth import MyProfileDTO
-from medicore.application.use_cases.consultations import ConsultationVitalsView
+from medicore.application.use_cases.consultations import (
+    AppointmentVitalsView,
+    ConsultationVitalsView,
+)
 from medicore.application.use_cases.records import RecordVersion, VitalsReading
 from medicore.application.use_cases.sessions import SessionInfoDTO
 from medicore.application.use_cases.subscriptions import SubscriptionNotice, SubscriptionView
@@ -360,6 +363,22 @@ def ser_consultation_vitals(view: ConsultationVitalsView) -> dict:
         "doctor_name": view.doctor_name,
         "vitals": vitals_to_dict(c.vitals),
         "last_saved_at": c.last_saved_at,
+        "patient": ser_patient(view.patient) if view.patient else None,
+        "appointment": ser_appointment(view.appointment) if view.appointment else None,
+    }
+
+
+def ser_appointment_vitals(view: AppointmentVitalsView) -> dict:
+    """Vitals of an appointment as nursing sees them; no note or drafts."""
+    c = view.consultation
+    return {
+        "appointment_id": str(view.appointment_id),
+        "consultation_id": str(c.id) if c else None,
+        "phase": view.phase,
+        "consultation_status": str(c.status) if c else None,
+        "doctor_name": view.doctor_name,
+        "vitals": vitals_to_dict(view.vitals),
+        "last_saved_at": view.last_saved_at,
         "patient": ser_patient(view.patient) if view.patient else None,
         "appointment": ser_appointment(view.appointment) if view.appointment else None,
     }

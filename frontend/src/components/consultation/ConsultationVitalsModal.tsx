@@ -1,6 +1,6 @@
 import { useId, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { consultationsApi } from '@/api/consultations'
+import { appointmentsApi } from '@/api/appointments'
 import { errorMessage } from '@/api/client'
 import { unitLabel } from '@/components/patients/vitalsData'
 import { Badge } from '@/components/ui/Badge'
@@ -14,8 +14,8 @@ import type { Appointment, Vitals } from '@/types'
 import { sanitizeVital, VITAL_FIELDS, vitalPayload } from './vitalFields'
 
 /**
- * Nursing's way into an open consultation: the patient header and the vitals, nothing of
- * the note. Only the fields that were edited are sent, so it never overwrites what the
+ * Nursing's way into a confirmed or open appointment: the patient header and the vitals,
+ * nothing of the note. Before the consultation starts they are kept for the doctor. Only the fields that were edited are sent, so it never overwrites what the
  * doctor typed in the meantime.
  */
 export function ConsultationVitalsModal({
@@ -50,12 +50,12 @@ function VitalsForm({ appointment, onClose }: { appointment: Appointment; onClos
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['consultation-vitals', appointment.id],
-    queryFn: () => consultationsApi.vitalsByAppointment(appointment.id),
+    queryFn: () => appointmentsApi.vitals(appointment.id),
     retry: false,
   })
 
   const save = useMutation({
-    mutationFn: (changes: Partial<Vitals>) => consultationsApi.updateVitals(data!.id, changes),
+    mutationFn: (changes: Partial<Vitals>) => appointmentsApi.updateVitals(appointment.id, changes),
     onSuccess: (view) => {
       qc.setQueryData(['consultation-vitals', appointment.id], view)
       qc.invalidateQueries({ queryKey: ['appointments'] })
@@ -150,6 +150,12 @@ function VitalsForm({ appointment, onClose }: { appointment: Appointment; onClos
           </>
         )}
       </p>
+
+      {data.phase === 'triage' && (
+        <p className="rounded-lg bg-surface-2/60 p-2 text-xs text-tx-3">
+          {t('consult.vitals_pre_hint')}
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {VITAL_FIELDS.map((f) => {

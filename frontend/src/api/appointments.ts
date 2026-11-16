@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { Appointment, Location, Slot, User } from '@/types'
+import type { Appointment, AppointmentVitals, Location, Slot, User, Vitals } from '@/types'
 
 export interface BookingDoctor extends User {
   /** Appointment duration imposed by the doctor's booking rules (null → not configured). */
@@ -65,6 +65,14 @@ export const appointmentsApi = {
   /** A patient seen right now: starts at the clinic's current minute, no slot involved. */
   walkIn: (payload: WalkInPayload) =>
     api.post<Appointment>('/appointments/walk-in', payload).then((r) => r.data),
+
+  /** Nursing's entry point: the waiting-room vitals, or the consultation's once it started. */
+  vitals: (id: string) =>
+    api.get<AppointmentVitals>(`/appointments/${id}/vitals`).then((r) => r.data),
+
+  /** Only the fields present change; null clears one. */
+  updateVitals: (id: string, changes: Partial<Vitals>) =>
+    api.put<AppointmentVitals>(`/appointments/${id}/vitals`, changes).then((r) => r.data),
 
   adjustFee: (id: string, amount: string, note: string | null) =>
     api.put<Appointment>(`/appointments/${id}/fee`, { amount, note }).then((r) => r.data),
