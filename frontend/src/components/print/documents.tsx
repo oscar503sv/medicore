@@ -539,7 +539,9 @@ export function AppointmentSlipDoc({ doc, paper }: { doc: AppointmentPrint; pape
     ],
     [
       t('pr.appt.with'),
-      `${doctor?.name ?? ''}${doctor?.specialty ? ` · ${doctor.specialty}` : ''}`,
+      doctor
+        ? `${doctor.name}${doctor.specialty ? ` · ${doctor.specialty}` : ''}`
+        : (a.agenda_name ?? ''),
     ],
     [
       t('pr.appt.type'),

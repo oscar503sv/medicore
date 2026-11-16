@@ -3,8 +3,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Printer } from 'lucide-react'
 import { addDays, format, parseISO, startOfWeek } from 'date-fns'
-import { appointmentsApi, type BookingDoctor } from '@/api/appointments'
+import { appointmentsApi, type BookingAgenda, type BookingDoctor } from '@/api/appointments'
 import { openPrint } from '@/api/printing'
+import { AssigneeFilter } from '@/components/appointments/AssigneeFilter'
 import { WalkInBadge } from '@/components/appointments/WalkInBadge'
 import { WalkInButton } from '@/components/appointments/WalkInButton'
 import { PageHeader } from '@/components/PageHeader'
@@ -12,9 +13,9 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Checkbox } from '@/components/ui/Checkbox'
-import { Select } from '@/components/ui/Input'
 import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
+import { assigneeKey, assigneeName, decodeAssignee, encodeAssignee } from '@/lib/assignee'
 import { cn } from '@/lib/cn'
 import { clinicNowTime, clinicToday, fmtDate } from '@/lib/format'
 import { useT } from '@/lib/i18n'
@@ -69,15 +70,15 @@ export function SchedulePage() {
   const go = (next: { view?: View; date?: string }) =>
     setParams({ view: next.view ?? view, date: next.date ?? date }, { replace: true })
 
-  const [doctorId, setDoctorId] = useState('')
+  const [assignee, setAssignee] = useState('')
   const [showInactive, setShowInactive] = useState(false)
   const weekStart = startOfWeek(parseISO(date), { weekStartsOn: 1 })
   const weekStartStr = format(weekStart, 'yyyy-MM-dd')
 
   // The day view reads the same weekly payload (shared cache when switching views).
   const { data: schedule, isLoading } = useQuery({
-    queryKey: ['schedule', weekStartStr, doctorId],
-    queryFn: () => appointmentsApi.weeklySchedule(weekStartStr, doctorId || undefined),
+    queryKey: ['schedule', weekStartStr, assignee],
+    queryFn: () => appointmentsApi.weeklySchedule(weekStartStr, decodeAssignee(assignee)),
   })
 
   // Doctors only ever see their own agenda; the filter is for the front desk / admins.
@@ -87,6 +88,8 @@ export function SchedulePage() {
     enabled: canManage && !isDoctor,
   })
   const doctors = options?.doctors ?? []
+  const agendas = options?.agendas ?? []
+  const pickedDoctorId = decodeAssignee(assignee).doctor_id
 
   const days = Array.from({ length: 7 }, (_, i) => format(addDays(weekStart, i), 'yyyy-MM-dd'))
   const byDay = useMemo(() => {
@@ -96,6 +99,11 @@ export function SchedulePage() {
     }
     return out
   }, [schedule, showInactive])
+
+  const picked = decodeAssignee(assignee)
+  const nameOfPicked = picked.doctor_id
+    ? doctors.find((d) => d.id === picked.doctor_id)?.name
+    : agendas.find((a) => a.id === picked.agenda_id)?.name
 
   const columns: Column[] =
     view === 'week'
@@ -113,12 +121,13 @@ export function SchedulePage() {
           // A single agenda: the doctor's own, or the one picked in the filter.
           isDoctor
             ? (sessionName ?? null)
-            : doctorId
-              ? (doctors.find((d) => d.id === doctorId)?.name ?? null)
+            : assignee
+              ? (nameOfPicked ?? null)
               : undefined,
           doctors,
-          setDoctorId,
-          t('sched.only_doctor'),
+          agendas,
+          setAssignee,
+          t,
         )
 
   // The visible range grows to fit early/late appointments (e.g. an 18:30 slot ends at 19:00).
@@ -158,27 +167,21 @@ export function SchedulePage() {
                 { value: 'week', label: t('sched.view_week') },
               ]}
             />
-            {doctors.length > 0 && (
-              <Select
-                value={doctorId}
-                onChange={(e) => setDoctorId(e.target.value)}
+            {doctors.length + agendas.length > 0 && (
+              <AssigneeFilter
+                value={assignee}
+                onChange={setAssignee}
+                doctors={doctors}
+                agendas={agendas}
                 className="h-9 w-56"
-                aria-label={t('sched.doctor')}
-              >
-                <option value="">{t('sched.all_doctors')}</option>
-                {doctors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </Select>
+              />
             )}
-            {view === 'day' && (isDoctor || doctorId) && (
+            {view === 'day' && (isDoctor || pickedDoctorId) && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  openPrint(`agenda/${date}${doctorId && !isDoctor ? `?doctor=${doctorId}` : ''}`)
+                  openPrint(`agenda/${date}${pickedDoctorId && !isDoctor ? `?doctor=${pickedDoctorId}` : ''}`)
                 }
               >
                 <Printer className="h-4 w-4" />
@@ -321,7 +324,7 @@ export function SchedulePage() {
                           a={it.appts[0]}
                           box={box}
                           detailed={view === 'day'}
-                          showDoctor={view === 'week' && !isDoctor && !doctorId}
+                          showDoctor={view === 'week' && !isDoctor && !assignee}
                           onOpen={open}
                         />
                       ) : (
@@ -417,11 +420,12 @@ function dayColumns(
   /** undefined → one column per doctor; otherwise a single agenda (name, if known). */
   single: string | null | undefined,
   doctors: BookingDoctor[],
-  pickDoctor: (id: string) => void,
-  onlyDoctorTitle: string,
+  agendas: BookingAgenda[],
+  pick: (assignee: string) => void,
+  t: (key: string) => string,
 ): Column[] {
   if (single !== undefined) {
-    const name = single ?? appts[0]?.doctor_name
+    const name = single ?? (appts[0] ? assigneeName(appts[0], t) : null)
     return [
       {
         key: 'single',
@@ -435,10 +439,25 @@ function dayColumns(
       },
     ]
   }
-  const known = new Map(doctors.map((d) => [d.id, { name: d.name, specialty: d.specialty }]))
+  // key → what the column is; agendas appear even when empty, like free doctors do.
+  const known = new Map<string, { name: string; specialty: string | null; value: string }>([
+    ...doctors.map((d) => [
+      d.id,
+      { name: d.name, specialty: d.specialty, value: encodeAssignee({ doctor_id: d.id }) },
+    ] as const),
+    ...agendas.map((a) => [
+      a.id,
+      { name: a.name, specialty: null, value: encodeAssignee({ agenda_id: a.id }) },
+    ] as const),
+  ])
   for (const a of appts) {
-    if (!known.has(a.doctor_id))
-      known.set(a.doctor_id, { name: a.doctor_name ?? '—', specialty: null })
+    const key = assigneeKey(a)
+    if (!known.has(key))
+      known.set(key, {
+        name: assigneeName(a, t),
+        specialty: null,
+        value: encodeAssignee({ doctor_id: a.doctor_id ?? undefined, agenda_id: a.agenda_id ?? undefined }),
+      })
   }
   if (known.size === 0)
     return [
@@ -449,16 +468,17 @@ function dayColumns(
         header: <DayHeader day={date} today="" count={0} />,
       },
     ]
+  const canPick = doctors.length + agendas.length > 0
   return [...known.entries()]
     .sort(([, x], [, y]) => x.name.localeCompare(y.name))
-    .map(([id, d]) => {
-      const own = appts.filter((a) => a.doctor_id === id)
+    .map(([key, d]) => {
+      const own = appts.filter((a) => assigneeKey(a) === key)
       return {
-        key: id,
+        key,
         date,
         appts: own,
-        onHeaderClick: doctors.length > 0 ? () => pickDoctor(id) : undefined,
-        headerTitle: doctors.length > 0 ? onlyDoctorTitle : undefined,
+        onHeaderClick: canPick ? () => pick(d.value) : undefined,
+        headerTitle: canPick ? t('sched.only_doctor') : undefined,
         header: <DoctorHeader name={d.name} specialty={d.specialty} count={own.length} />,
       }
     })
@@ -496,9 +516,9 @@ function AppointmentCard({
     a.is_walk_in ? t('appt.walk_in_badge') : null,
     a.patient_name,
     a.reason,
-    a.doctor_name,
+    assigneeName(a, t),
   ]
-    .filter(Boolean)
+    .filter((line) => line && line !== '—')
     .join('\n')
 
   return (
@@ -548,8 +568,10 @@ function AppointmentCard({
             · {a.reason}
             {detailed && <span className="text-tx-3"> · {t(`apptype.${a.type}`)}</span>}
           </p>
-          {showDoctor && box.height >= 62 && a.doctor_name && (
-            <p className="mt-0.5 truncate text-[11px] leading-tight text-tx-3">{a.doctor_name}</p>
+          {showDoctor && box.height >= 62 && (a.doctor_name ?? a.agenda_name) && (
+            <p className="mt-0.5 truncate text-[11px] leading-tight text-tx-3">
+              {assigneeName(a, t)}
+            </p>
           )}
         </>
       )}
@@ -566,7 +588,7 @@ function GroupCard({ appts, box, onOpen }: { appts: Appointment[]; box: Box; onO
     .map(
       (a) =>
         `${format(parseISO(a.scheduled_start), 'HH:mm')} · ${a.patient_name ?? a.reason}` +
-        (a.doctor_name ? ` — ${a.doctor_name}` : ''),
+        (a.doctor_name ?? a.agenda_name ? ` — ${assigneeName(a, t)}` : ''),
     )
     .join('\n')
   return (

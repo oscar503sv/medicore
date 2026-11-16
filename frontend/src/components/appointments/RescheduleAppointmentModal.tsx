@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { appointmentsApi } from '@/api/appointments'
 import { errorMessage } from '@/api/client'
+import { SlotGrid } from '@/components/appointments/SlotGrid'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
-import { cn } from '@/lib/cn'
+import { assigneeOf, encodeAssignee } from '@/lib/assignee'
 import { clinicToday, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import type { Appointment, Slot } from '@/types'
@@ -33,16 +34,14 @@ export function RescheduleAppointmentModal({
   }, [appointment])
 
   const open = !!appointment
-  const doctorId = appointment?.doctor_id ?? ''
+  const assignee = appointment ? assigneeOf(appointment) : {}
+  const hasAssignee = !!appointment && !!(appointment.doctor_id ?? appointment.agenda_id)
 
   const { data: slots, isFetching: slotsLoading } = useQuery({
-    queryKey: ['slots', doctorId, day],
-    queryFn: () => appointmentsApi.slots(doctorId, day),
-    enabled: open && !!doctorId,
+    queryKey: ['slots', encodeAssignee(assignee), day],
+    queryFn: () => appointmentsApi.slots(assignee, day),
+    enabled: open && hasAssignee,
   })
-
-  const doctorOffThatDay =
-    !!slots && slots.length > 0 && slots.every((s) => s.status === 'out_of_hours')
 
   // The new duration is decided by the backend from the doctor's current rules.
   const reschedule = useMutation({
@@ -85,43 +84,13 @@ export function RescheduleAppointmentModal({
           className="w-44 font-mono"
         />
 
-        {slotsLoading ? (
-          <p className="py-10 text-center text-sm text-tx-3">…</p>
-        ) : doctorOffThatDay ? (
-          <p className="py-10 text-center text-sm text-tx-3">{t('appt.doctor_off_day')}</p>
-        ) : slots && slots.length > 0 ? (
-          <div className="grid max-h-[240px] grid-cols-4 gap-2 overflow-y-auto pr-1">
-            {slots.map((slot) => {
-              const isFree = slot.status === 'free'
-              const isSelected = selectedSlot?.start === slot.start
-              return (
-                <button
-                  key={slot.start}
-                  type="button"
-                  disabled={!isFree}
-                  onClick={() => setSelectedSlot(slot)}
-                  className={cn(
-                    'rounded-lg border py-2 font-mono text-[13px] transition-colors',
-                    isFree && isSelected && 'border-accent bg-accent text-white shadow-sm',
-                    isFree &&
-                      !isSelected &&
-                      'border-accent bg-[var(--accent-10)] text-tx hover:bg-accent hover:text-white',
-                    slot.status === 'taken' && 'border-line-soft text-tx-4 line-through',
-                    (slot.status === 'out_of_hours' || slot.status === 'blocked_rules') &&
-                      'cursor-not-allowed border-line-soft bg-surface-2 text-tx-4',
-                  )}
-                  title={t(
-                    slot.status === 'blocked_rules' ? 'appt.slot_blocked' : `appt.slot_${slot.status}`,
-                  )}
-                >
-                  {fmtTime(slot.start)}
-                </button>
-              )
-            })}
-          </div>
-        ) : (
-          <p className="py-10 text-center text-sm text-tx-3">{t('appt.no_slots')}</p>
-        )}
+        <SlotGrid
+          slots={slots}
+          isLoading={slotsLoading}
+          selected={selectedSlot}
+          onSelect={setSelectedSlot}
+          offDayMessage={t(appointment?.agenda_id ? 'appt.agenda_off_day' : 'appt.doctor_off_day')}
+        />
       </div>
 
       <div className="flex justify-between border-t border-line px-5 py-4">

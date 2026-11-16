@@ -14,6 +14,7 @@ from medicore.domain.enums import (
     VaccineRoute,
 )
 from medicore.domain.shared.identifiers import (
+    AppointmentId,
     PatientId,
     TenantId,
     UserId,
@@ -33,6 +34,7 @@ def to_vaccination_record(row: VaccinationRecordModel) -> VaccinationRecord:
     record.occurred_on = row.occurred_on
     record.source = VaccinationSource(row.source)
     record.recorded_by_id = UserId.parse(row.recorded_by_id)
+    record.appointment_id = AppointmentId.parse(row.appointment_id) if row.appointment_id else None
     record.lot = row.lot
     record.route = VaccineRoute(row.route) if row.route else None
     record.site = InjectionSite(row.site) if row.site else None
@@ -66,6 +68,15 @@ class SqlVaccinationRecordRepository:
                 VaccinationRecordModel.occurred_on.desc(),
                 VaccinationRecordModel.created_at.desc(),
             )
+            .all()
+        )
+        return [to_vaccination_record(r) for r in rows]
+
+    def list_by_appointment(self, appointment_id: AppointmentId) -> list[VaccinationRecord]:
+        rows = (
+            self._q()
+            .filter(VaccinationRecordModel.appointment_id == appointment_id.value)
+            .order_by(VaccinationRecordModel.created_at)
             .all()
         )
         return [to_vaccination_record(r) for r in rows]
@@ -114,6 +125,7 @@ class SqlVaccinationRecordRepository:
         row.site = str(record.site) if record.site else None
         row.notes = record.notes
         row.recorded_by_id = record.recorded_by_id.value
+        row.appointment_id = record.appointment_id.value if record.appointment_id else None
         row.created_at = record.created_at
         row.voided_at = record.voided_at
         row.voided_by_id = record.voided_by_id.value if record.voided_by_id else None

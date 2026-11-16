@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Index, String, text
+from sqlalchemy import Date, DateTime, ForeignKey, ForeignKeyConstraint, Index, String, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +19,13 @@ class VaccinationRecordModel(Base):
         Index("ix_vaccination_records_patient", "tenant_id", "patient_id"),
         # "Given today" on the worklist.
         Index("ix_vaccination_records_day", "tenant_id", "occurred_on"),
+        # The doses given in one appointment.
+        Index("ix_vaccination_records_appointment", "tenant_id", "appointment_id"),
+        # The appointment must belong to the record's clinic.
+        ForeignKeyConstraint(
+            ["tenant_id", "appointment_id"], ["appointments.tenant_id", "appointments.id"],
+            name="fk_vaccination_records_tenant_appointment",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -28,6 +35,7 @@ class VaccinationRecordModel(Base):
     patient_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False
     )
+    appointment_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     vaccine_code: Mapped[str] = mapped_column(String(40), nullable=False)
     dose_key: Mapped[str | None] = mapped_column(String(40), nullable=True)
     outcome: Mapped[str] = mapped_column(String(20), nullable=False)

@@ -15,15 +15,19 @@ import { feesApi } from '@/api/fees'
 import { insurersApi } from '@/api/insurers'
 import { Button } from '@/components/ui/Button'
 import { AppointmentTypeSelect } from '@/components/appointments/AppointmentTypeSelect'
+import { AssigneeSelect } from '@/components/appointments/AssigneeSelect'
 import { PatientPicker } from '@/components/appointments/PatientPicker'
+import { SlotGrid } from '@/components/appointments/SlotGrid'
 import { Input, Select } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import { typeLabelKey } from '@/lib/appointmentTypes'
+import { decodeAssignee, encodeAssignee } from '@/lib/assignee'
 import { cn } from '@/lib/cn'
 import { fmtFee } from '@/lib/fees'
 import { clinicToday, fmtDate, fmtTime } from '@/lib/format'
 import { useT } from '@/lib/i18n'
+import { useAuthStore } from '@/stores/auth'
 import type { AppointmentType, Patient, Slot } from '@/types'
 
 const STEPS = ['appt.step_patient', 'appt.step_details', 'appt.step_slot']
@@ -47,10 +51,11 @@ export function NewAppointmentModal({
 }) {
   const t = useT()
   const qc = useQueryClient()
+  const me = useAuthStore((s) => s.session)
   const today = clinicToday()
   const [step, setStep] = useState(0)
   const [patient, setPatient] = useState<Patient | null>(null)
-  const [doctorId, setDoctorId] = useState('')
+  const [assignee, setAssignee] = useState('')
   const [type, setType] = useState<AppointmentType>('consult')
   const [reason, setReason] = useState('')
   const [withInsurance, setWithInsurance] = useState(false)
@@ -66,12 +71,21 @@ export function NewAppointmentModal({
   useEffect(() => {
     if (!open || !initialPatient) return
     setPatient(initialPatient)
-    setDoctorId(initialPatient.primary_doctor_id ?? '')
+    // A doctor books for themselves; reception suggests the patient's own doctor.
+    const suggested = me?.role === 'doctor' ? me.user_id : initialPatient.primary_doctor_id
+    setAssignee(encodeAssignee({ doctor_id: suggested ?? undefined }))
     if (initialType) setType(initialType)
     if (initialReason) setReason(initialReason)
     setSelectedSlot(null)
     setStep(1)
-  }, [open, initialPatient, initialType, initialReason])
+  }, [open, initialPatient, initialType, initialReason, me])
+
+  // Without a suggested patient, a doctor's own agenda is the default choice.
+  useEffect(() => {
+    if (open && !assignee && me?.role === 'doctor') {
+      setAssignee(encodeAssignee({ doctor_id: me.user_id }))
+    }
+  }, [open, assignee, me])
 
   const { data: options } = useQuery({
     queryKey: ['booking-options'],
@@ -89,34 +103,44 @@ export function NewAppointmentModal({
     enabled: open && withInsurance,
   })
   const { data: slots, isFetching: slotsLoading } = useQuery({
-    queryKey: ['slots', doctorId, day],
-    queryFn: () => appointmentsApi.slots(doctorId, day),
-    enabled: open && step === 2 && !!doctorId,
+    queryKey: ['slots', assignee, day],
+    queryFn: () => appointmentsApi.slots(decodeAssignee(assignee), day),
+    enabled: open && step === 2 && !!assignee,
   })
 
-  // The doctor isn't available at all that day (off exception or non-working weekday):
-  // every candidate in the fixed grid came back out_of_hours.
-  const doctorOffThatDay =
-    !!slots && slots.length > 0 && slots.every((s) => s.status === 'out_of_hours')
+  const { doctor_id: doctorId, agenda_id: agendaId } = decodeAssignee(assignee)
   const selectedDoctor = options?.doctors.find((d) => d.id === doctorId)
+  const selectedAgenda = options?.agendas.find((a) => a.id === agendaId)
   // What the patient will be told it costs (the backend copies the same price on booking).
   const doctorFee = fees?.find((f) => f.doctor_id === doctorId)?.prices[type as AppointmentType]
   const feeLine =
     type === 'procedure'
       ? t('fee.booking_procedure')
-      : doctorFee
-        ? t('fee.booking').replace('{price}', fmtFee(doctorFee)!)
-        : t('fee.booking_none')
-  const doctorName = selectedDoctor?.name
-  // Appointment duration is the doctor's rule — shown, never chosen.
-  const slotMinutes = selectedDoctor?.slot_minutes ?? null
+      : type === 'vaccination'
+        ? t('fee.booking_vaccination')
+        : doctorFee
+          ? t('fee.booking').replace('{price}', fmtFee(doctorFee)!)
+          : t('fee.booking_none')
+  const assigneeName = selectedDoctor?.name ?? selectedAgenda?.name
+  // Appointment duration is the assignee's rule — shown, never chosen.
+  const slotMinutes = selectedDoctor?.slot_minutes ?? selectedAgenda?.slot_minutes ?? null
+  const isByCatalog = type === 'procedure' || type === 'vaccination'
+
+  // An agenda only takes vaccinations: another type can't keep it.
+  const changeType = (next: AppointmentType) => {
+    setType(next)
+    if (next !== 'vaccination' && agendaId) {
+      setAssignee('')
+      setSelectedSlot(null)
+    }
+  }
 
   const create = useMutation({
     mutationFn: () =>
       appointmentsApi.create({
         patient_id: patient!.id,
-        doctor_id: doctorId,
-        location_id: options!.locations[0].id,
+        ...decodeAssignee(assignee),
+        location_id: selectedAgenda?.location_id ?? options!.locations[0].id,
         type,
         scheduled_start: selectedSlot!.start,
         reason,
@@ -135,7 +159,7 @@ export function NewAppointmentModal({
   function reset() {
     setStep(0)
     setPatient(null)
-    setDoctorId('')
+    setAssignee('')
     setType('consult')
     setReason('')
     setWithInsurance(false)
@@ -146,7 +170,7 @@ export function NewAppointmentModal({
 
   const canNext =
     (step === 0 && patient) ||
-    (step === 1 && doctorId && reason && (!withInsurance || insuranceId))
+    (step === 1 && assignee && reason && (!withInsurance || insuranceId))
 
   return (
     <Modal open={open} onClose={onClose} title={t('appt.new')} width="max-w-2xl">
@@ -181,23 +205,18 @@ export function NewAppointmentModal({
         {/* Step 2: details */}
         {step === 1 && (
           <div className="space-y-4">
-            <Select
-              label={t('appt.col_doctor')}
-              value={doctorId}
-              onChange={(e) => {
-                setDoctorId(e.target.value)
-                setSelectedSlot(null) // another doctor → previous pick is stale
+            <AssigneeSelect
+              value={assignee}
+              onChange={(v) => {
+                setAssignee(v)
+                setSelectedSlot(null) // another assignee → previous pick is stale
               }}
-            >
-              <option value="">—</option>
-              {options?.doctors.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} {d.specialty ? `· ${d.specialty}` : ''}
-                </option>
-              ))}
-            </Select>
+              doctors={options?.doctors ?? []}
+              agendas={options?.agendas ?? []}
+              withAgendas={type === 'vaccination'}
+            />
             <div className="grid grid-cols-2 gap-4">
-              <AppointmentTypeSelect value={type} onChange={setType} />
+              <AppointmentTypeSelect value={type} onChange={changeType} />
               {/* Duration is the doctor's rule — shown for context, never chosen here. */}
               <div>
                 <span className="mb-1.5 block text-[13px] font-medium text-tx-2">
@@ -207,14 +226,14 @@ export function NewAppointmentModal({
                   <Clock className="h-3.5 w-3.5 text-tx-3" />
                   {slotMinutes !== null ? `${slotMinutes} min` : '—'}
                 </div>
-                <p className="mt-1 text-[11px] text-tx-4">{t('appt.duration_by_doctor')}</p>
+                <p className="mt-1 text-[11px] text-tx-4">{t(agendaId ? 'appt.duration_by_agenda' : 'appt.duration_by_doctor')}</p>
               </div>
             </div>
-            {doctorId && (
+            {assignee && (
               <p
                 className={cn(
                   'flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-[13px]',
-                  doctorFee && type !== 'procedure' ? 'text-tx' : 'text-tx-3',
+                  doctorFee && !isByCatalog ? 'text-tx' : 'text-tx-3',
                 )}
               >
                 <BadgeDollarSign className="h-3.5 w-3.5 text-tx-3" />
@@ -285,53 +304,15 @@ export function NewAppointmentModal({
               </div>
             </div>
 
-            {/* Slots */}
-            {slotsLoading ? (
-              <p className="py-10 text-center text-sm text-tx-3">…</p>
-            ) : doctorOffThatDay ? (
-              <p className="py-10 text-center text-sm text-tx-3">
-                {doctorName ? `${doctorName}: ` : ''}
-                {t('appt.doctor_off_day')}
-              </p>
-            ) : slots && slots.length > 0 ? (
-              <div className="grid max-h-[240px] grid-cols-4 gap-2 overflow-y-auto pr-1">
-                {slots.map((slot) => {
-                  const isFree = slot.status === 'free'
-                  const isSelected = selectedSlot?.start === slot.start
-                  const titleKey =
-                    slot.status === 'out_of_hours'
-                      ? 'appt.slot_out'
-                      : slot.status === 'blocked_rules'
-                        ? 'appt.slot_blocked'
-                        : `appt.slot_${slot.status}`
-                  return (
-                    <button
-                      key={slot.start}
-                      type="button"
-                      disabled={!isFree}
-                      onClick={() => setSelectedSlot(slot)}
-                      className={cn(
-                        'rounded-lg border py-2 text-[13px] font-mono transition-colors',
-                        isFree &&
-                          isSelected &&
-                          'border-accent bg-accent text-white shadow-sm',
-                        isFree &&
-                          !isSelected &&
-                          'border-accent bg-[var(--accent-10)] text-tx hover:bg-accent hover:text-white',
-                        slot.status === 'taken' && 'border-line-soft text-tx-4 line-through',
-                        (slot.status === 'out_of_hours' || slot.status === 'blocked_rules') &&
-                          'cursor-not-allowed border-line-soft bg-surface-2 text-tx-4',
-                      )}
-                      title={t(titleKey)}
-                    >
-                      {fmtTime(slot.start)}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : (
-              <p className="py-10 text-center text-sm text-tx-3">{t('appt.no_slots')}</p>
-            )}
+            <SlotGrid
+              slots={slots}
+              isLoading={slotsLoading}
+              selected={selectedSlot}
+              onSelect={setSelectedSlot}
+              offDayMessage={`${assigneeName ? `${assigneeName}: ` : ''}${t(
+                agendaId ? 'appt.agenda_off_day' : 'appt.doctor_off_day',
+              )}`}
+            />
 
             {/* Summary */}
             <div className="rounded-lg border border-line bg-surface-2/40 p-3">
@@ -346,9 +327,9 @@ export function NewAppointmentModal({
                   {patient ? `${patient.first_name} ${patient.last_name}` : '—'}
                 </span>
                 <span className="flex items-center gap-2 text-tx-3">
-                  <Stethoscope className="h-3.5 w-3.5" /> {t('appt.col_doctor')}
+                  <Stethoscope className="h-3.5 w-3.5" /> {t('appt.attends')}
                 </span>
-                <span className="text-right text-tx">{doctorName ?? '—'}</span>
+                <span className="text-right text-tx">{assigneeName ?? '—'}</span>
                 <span className="flex items-center gap-2 text-tx-3">
                   <CalendarDays className="h-3.5 w-3.5" /> {t('appt.type')}
                 </span>
@@ -359,7 +340,9 @@ export function NewAppointmentModal({
                 <span className="text-right text-tx">
                   {type === 'procedure'
                     ? t('fee.by_procedure')
-                    : (fmtFee(doctorFee) ?? t('fee.none'))}
+                    : type === 'vaccination'
+                      ? t('fee.by_vaccination')
+                      : (fmtFee(doctorFee) ?? t('fee.none'))}
                 </span>
                 <span className="flex items-center gap-2 text-tx-3">
                   <ShieldCheck className="h-3.5 w-3.5" /> {t('appt.insurer')}

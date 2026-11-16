@@ -40,7 +40,7 @@ from medicore.application.common.timezone import tenant_today
 from medicore.application.ports.clock import Clock
 from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.domain.enums import AddonModule, AnalyticsTier, AppointmentStatus, Role
-from medicore.domain.repositories._support import Paging, UserFilter
+from medicore.domain.repositories._support import AppointmentReportRow, Paging, UserFilter
 from medicore.domain.services.analytics_access import analytics_tier
 from medicore.domain.services.immunization import SCHEDULE_BY_KEY, VACCINES
 from medicore.domain.shared.errors import PermissionDenied
@@ -168,9 +168,16 @@ class _Context:
             for u in uow.users.list(UserFilter(), Paging(limit=1000)).items
         }
         self.insurers = {str(i.id): i.name for i in uow.insurers.list()}
+        self.agendas = {str(a.id): a.name for a in uow.service_agendas.list()}
 
     def name(self, user_id: str | None) -> str | None:
         return self.users.get(user_id) if user_id else None
+
+    def attendant(self, row: AppointmentReportRow) -> str | None:
+        """Who attended an appointment: the doctor, or the service agenda in their place."""
+        return self.name(row.doctor_id) or (
+            self.agendas.get(row.agenda_id) if row.agenda_id else None
+        )
 
     def instant(self, wall: datetime) -> datetime:
         """Clinic wall-clock as an instant; a naive clock (tests) keeps it naive."""
@@ -291,7 +298,7 @@ def _appointments(ctx: _Context, start: date, end: date) -> tuple[ReportTable, R
               *money_cols),
         [
             (r.scheduled_start.date(), r.scheduled_start.time(), r.code, r.patient_code,
-             r.patient_name, ctx.name(r.doctor_id), r.type, r.status,
+             r.patient_name, ctx.attendant(r), r.type, r.status,
              ctx.insurers.get(r.insurer_id) if r.insurer_id else None,
              *((r.listed, r.charged, r.fee_note) if ctx.money else ()))
             for r in rows
@@ -360,7 +367,7 @@ def _insurers(ctx: _Context, start: date, end: date) -> tuple[ReportTable, Repor
               "type:enum:appointment_type", *money_col),
         [
             (r.scheduled_start.date(), ctx.insurers.get(r.insurer_id, "—"), r.code,
-             r.patient_code, r.patient_name, ctx.name(r.doctor_id), r.type,
+             r.patient_code, r.patient_name, ctx.attendant(r), r.type,
              *((r.charged,) if ctx.money else ()))
             for r in sorted(insured, key=lambda r: (ctx.insurers.get(r.insurer_id, ""),
                                                     r.scheduled_start))
@@ -392,13 +399,13 @@ def _no_shows(ctx: _Context, start: date, end: date) -> tuple[ReportTable, Repor
               "patient_code", "patient", "phone", "doctor", "type:enum:appointment_type"),
         [
             (r.scheduled_start.date(), r.scheduled_start.time(), r.status, r.code,
-             r.patient_code, r.patient_name, r.patient_phone, ctx.name(r.doctor_id), r.type)
+             r.patient_code, r.patient_name, r.patient_phone, ctx.attendant(r), r.type)
             for r in missed
         ],
     )
     per_doctor: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0])
     for r in rows:
-        counts = per_doctor[r.doctor_id]
+        counts = per_doctor[r.doctor_id or r.agenda_id or ""]
         counts[0] += 1
         if r.status == AppointmentStatus.NO_SHOW:
             counts[1] += 1
@@ -406,7 +413,7 @@ def _no_shows(ctx: _Context, start: date, end: date) -> tuple[ReportTable, Repor
             counts[2] += 1
     summary = ReportTable(
         _cols("doctor", "booked:count", "no_shows:count", "cancelled:count"),
-        sorted(((ctx.name(d) or "—", *c) for d, c in per_doctor.items()),
+        sorted(((ctx.name(d) or ctx.agendas.get(d) or "—", *c) for d, c in per_doctor.items()),
                key=lambda r: (-(r[2] + r[3]), r[0])),
     )
     return summary, detail

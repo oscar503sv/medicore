@@ -1,4 +1,6 @@
 import { api } from './client'
+import type { AssigneeRef } from '@/lib/assignee'
+import type { ServiceAgendaKind } from './serviceAgendas'
 import type { Appointment, AppointmentVitals, Location, Slot, User, Vitals } from '@/types'
 
 export interface BookingDoctor extends User {
@@ -6,15 +8,24 @@ export interface BookingDoctor extends User {
   slot_minutes: number | null
 }
 
+/** An active service agenda that can take appointments (only with its module contracted). */
+export interface BookingAgenda {
+  id: string
+  name: string
+  kind: ServiceAgendaKind
+  location_id: string | null
+  slot_minutes: number | null
+}
+
 export interface BookingOptions {
   doctors: BookingDoctor[]
+  agendas: BookingAgenda[]
   locations: Location[]
 }
 
 // Duration is never sent — the backend derives it from the doctor's booking rules.
-export interface CreateAppointmentPayload {
+export interface CreateAppointmentPayload extends AssigneeRef {
   patient_id: string
-  doctor_id: string
   location_id: string
   type: string
   scheduled_start: string
@@ -23,9 +34,8 @@ export interface CreateAppointmentPayload {
   insurance_id?: string | null
 }
 
-export interface WalkInPayload {
+export interface WalkInPayload extends AssigneeRef {
   patient_id: string
-  doctor_id: string
   type: string
   reason: string
   location_id?: string | null
@@ -40,24 +50,19 @@ export const appointmentsApi = {
   upcoming: (limit = 6) =>
     api.get<Appointment[]>('/appointments/upcoming', { params: { limit } }).then((r) => r.data),
 
-  listForDay: (on: string, doctorId?: string) =>
-    api
-      .get<Appointment[]>('/appointments', { params: { on, doctor_id: doctorId } })
-      .then((r) => r.data),
+  listForDay: (on: string, assignee: AssigneeRef = {}) =>
+    api.get<Appointment[]>('/appointments', { params: { on, ...assignee } }).then((r) => r.data),
 
-  weeklySchedule: (weekStart: string, doctorId?: string) =>
+  weeklySchedule: (weekStart: string, assignee: AssigneeRef = {}) =>
     api
       .get<{ schedule: Record<string, Appointment[]> }>('/appointments/schedule', {
-        params: { week_start: weekStart, doctor_id: doctorId },
+        params: { week_start: weekStart, ...assignee },
       })
       .then((r) => r.data.schedule),
 
-  slots: (doctorId: string, on: string) =>
-    api
-      .get<Slot[]>('/appointments/slots', {
-        params: { doctor_id: doctorId, on },
-      })
-      .then((r) => r.data),
+  /** Exactly one of doctor_id / agenda_id. */
+  slots: (assignee: AssigneeRef, on: string) =>
+    api.get<Slot[]>('/appointments/slots', { params: { ...assignee, on } }).then((r) => r.data),
 
   create: (payload: CreateAppointmentPayload) =>
     api.post<Appointment>('/appointments', payload).then((r) => r.data),

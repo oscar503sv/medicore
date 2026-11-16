@@ -116,7 +116,7 @@ class AppointmentVitalsView:
         )
 
 
-def _ensure_author(actor: ActorContext, doctor_id: UserId, verb: str) -> None:
+def _ensure_author(actor: ActorContext, doctor_id: UserId | None, verb: str) -> None:
     """Clinical content belongs to the consultation's doctor; no grant reaches it."""
     ensure_not_support(actor)
     if actor.role != Role.DOCTOR or actor.user_id != doctor_id:
@@ -125,7 +125,7 @@ def _ensure_author(actor: ActorContext, doctor_id: UserId, verb: str) -> None:
         )
 
 
-def _may_start(actor: ActorContext, doctor_id: UserId) -> bool:
+def _may_start(actor: ActorContext, doctor_id: UserId | None) -> bool:
     return actor.role != Role.DOCTOR or actor.user_id == doctor_id
 
 
@@ -149,7 +149,13 @@ class StartConsultation:
             appointment = self._uow.appointments.get_for_update(appointment_id)
             if appointment is None:
                 raise EntityNotFound("Appointment", appointment_id)
-            if not _may_start(actor, appointment.doctor_id):
+            doctor_id = appointment.doctor_id
+            if doctor_id is None:
+                # A service agenda's visit (a vaccination) has no doctor and no note.
+                raise DomainError(
+                    "an agenda appointment has no consultation", code="consultation.not_for_agenda"
+                )
+            if not _may_start(actor, doctor_id):
                 raise PermissionDenied(
                     "doctors may only start their own consultations", code="consultation.not_own"
                 )
@@ -167,7 +173,7 @@ class StartConsultation:
                 tenant_id=actor.tenant_id,
                 appointment_id=appointment_id,
                 patient_id=appointment.patient_id,
-                doctor_id=appointment.doctor_id,
+                doctor_id=doctor_id,
                 started_at=self._clock.now(),
                 vitals=pre_vitals,
                 last_saved_at=None if pre_vitals.is_empty() else pre_saved_at,
@@ -192,7 +198,9 @@ class StartConsultation:
                       patient: Patient | None) -> ClinicalNote:
         """A blank note in the template the clinic's rules (or the doctor) pick."""
         tenant = self._uow.tenants.get_by_id(actor.tenant_id)
-        doctor = self._uow.users.get_by_id(appointment.doctor_id)
+        doctor = (
+            self._uow.users.get_by_id(appointment.doctor_id) if appointment.doctor_id else None
+        )
         templates = available_templates(self._uow)
         key = resolve_template(
             tenant.note_settings if tenant else NoteSettings(),
@@ -296,7 +304,7 @@ def _ensure_pre_vitals_author(actor: ActorContext, appointment: Appointment) -> 
 
 
 def _ensure_confirmed(appointment: Appointment) -> None:
-    if appointment.status != AppointmentStatus.CONFIRMED:
+    if not appointment.takes_pre_vitals:
         raise DomainError(
             "the appointment no longer takes vitals", code="appointment.vitals_closed"
         )
@@ -305,7 +313,7 @@ def _ensure_confirmed(appointment: Appointment) -> None:
 def _pre_vitals_view(
     uow: UnitOfWork, appointment: Appointment, patient: Patient | None
 ) -> AppointmentVitalsView:
-    doctor = uow.users.get_by_id(appointment.doctor_id)
+    doctor = uow.users.get_by_id(appointment.doctor_id) if appointment.doctor_id else None
     return AppointmentVitalsView.of_appointment(
         appointment, patient, doctor.name if doctor else None
     )

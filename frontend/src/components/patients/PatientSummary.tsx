@@ -22,7 +22,9 @@ export function PatientSummary({ detail }: { detail: PatientDetail }) {
   const qc = useQueryClient()
   const canClinical = useAuthStore((s) => s.can('records.view'))
   const canReadClinical = useAuthStore((s) => s.can('records.read_clinical'))
-  const canManage = useAuthStore((s) => s.can('appointments.manage'))
+  const canManageAppts = useAuthStore((s) => s.can('appointments.manage'))
+  const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
+  const myId = useAuthStore((s) => s.session?.user_id)
 
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [cancelOpen, setCancelOpen] = useState(false)
@@ -31,6 +33,8 @@ export function PatientSummary({ detail }: { detail: PatientDetail }) {
   const p = detail.patient
   const c = p.contact
   const appt = detail.next_appointment
+  // A doctor manages only their own appointments, never a service agenda's.
+  const canManage = canManageAppts && (!isDoctor || appt?.doctor_id === myId)
 
   const refreshPatient = () => qc.invalidateQueries({ queryKey: ['patient', p.id] })
 
@@ -85,7 +89,7 @@ export function PatientSummary({ detail }: { detail: PatientDetail }) {
               <p className="text-sm text-tx">{appt.reason}</p>
               <p className="flex items-center gap-1.5 text-[13px] text-tx-3">
                 <Stethoscope className="h-3.5 w-3.5" />
-                {[appt.doctor_name, appt.room].filter(Boolean).join(' · ') || '—'}
+                {[appt.doctor_name ?? appt.agenda_name, appt.room].filter(Boolean).join(' · ') || '—'}
               </p>
               <Badge tone={appt.status === 'confirmed' ? 'ok' : 'info'}>
                 {t(`status.${appt.status}`)}

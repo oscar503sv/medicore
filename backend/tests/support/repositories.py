@@ -34,6 +34,7 @@ from medicore.domain.entities.plan import AddonPricing, Plan
 from medicore.domain.entities.platform_admin import PlatformAdmin
 from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
+from medicore.domain.entities.service_agenda import ServiceAgenda
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.enums import (
@@ -81,11 +82,13 @@ from medicore.domain.shared.identifiers import (
     PlatformAdminId,
     PrescriptionId,
     RecordId,
+    ServiceAgendaId,
     SessionId,
     TenantId,
     UserId,
 )
 from medicore.domain.shared.text import fold
+from medicore.domain.value_objects.assignee import Assignee
 from medicore.domain.value_objects.email import normalize_email
 from medicore.domain.value_objects.slug import Slug
 from tests.support.store import InMemoryStore
@@ -601,15 +604,22 @@ class InMemoryAppointmentRepository(_Scoped):
         self._store.lock_log.append(("appointment", appointment_id.value))
         return self.get_by_id(appointment_id)
 
-    def lock_doctor_bookings(self, doctor_id: UserId) -> None:
-        self._store.lock_log.append(("doctor_bookings", doctor_id.value))
+    def lock_bookings(self, assignee: Assignee) -> None:
+        kind = "doctor_bookings" if assignee.is_doctor else "agenda_bookings"
+        self._store.lock_log.append((kind, assignee.owner.value))
 
-    def list_by_day(self, on: date, doctor_id: UserId | None = None) -> list[Appointment]:
+    def list_by_day(
+        self,
+        on: date,
+        doctor_id: UserId | None = None,
+        agenda_id: ServiceAgendaId | None = None,
+    ) -> list[Appointment]:
         result = [
             a
             for a in self._mine(self._store.appointments.values())
             if a.scheduled_start.date() == on
             and (doctor_id is None or a.doctor_id == doctor_id)
+            and (agenda_id is None or a.agenda_id == agenda_id)
         ]
         result.sort(key=lambda a: a.scheduled_start)
         return result
@@ -678,12 +688,12 @@ class InMemoryAppointmentRepository(_Scoped):
         return result[:limit]
 
     def find_overlapping(
-        self, doctor_id: UserId, start: datetime, end: datetime
+        self, assignee: Assignee, start: datetime, end: datetime
     ) -> list[Appointment]:
         return [
             a
             for a in self._mine(self._store.appointments.values())
-            if a.doctor_id == doctor_id
+            if a.assignee == assignee
             and a.status in _ACTIVE_APPOINTMENTS
             and a.scheduled_start < end
             and start < a.scheduled_end
@@ -703,6 +713,13 @@ class InMemoryVaccinationRecordRepository(_Scoped):
                   if r.patient_id == patient_id]
         result.sort(key=lambda r: (r.occurred_on, r.created_at), reverse=True)
         return result
+
+    def list_by_appointment(self, appointment_id) -> list:
+        return sorted(
+            (r for r in self._mine(self._store.vaccinations.values())
+             if r.appointment_id == appointment_id),
+            key=lambda r: r.created_at,
+        )
 
     def list_active_by_patients(self, patient_ids) -> list:
         wanted = set(patient_ids)
@@ -1051,16 +1068,68 @@ class InMemoryDoctorAvailabilityRepository(_Scoped):
             None,
         )
 
+    def get_by_agenda(self, agenda_id: ServiceAgendaId) -> DoctorAvailability | None:
+        return next(
+            (
+                a
+                for a in self._mine(self._store.availability.values())
+                if a.agenda_id == agenda_id
+            ),
+            None,
+        )
+
+    def get_by_assignee(self, assignee: Assignee) -> DoctorAvailability | None:
+        return next(
+            (
+                a
+                for a in self._mine(self._store.availability.values())
+                if a.assignee == assignee
+            ),
+            None,
+        )
+
+    def list_for_agendas(
+        self, agenda_ids: list[ServiceAgendaId]
+    ) -> dict[ServiceAgendaId, DoctorAvailability]:
+        wanted = set(agenda_ids)
+        return {
+            a.agenda_id: a
+            for a in self._mine(self._store.availability.values())
+            if a.agenda_id is not None and a.agenda_id in wanted
+        }
+
     def list_for_doctors(self, doctor_ids: list[UserId]) -> dict[UserId, DoctorAvailability]:
         wanted = set(doctor_ids)
         return {
             a.doctor_id: a
             for a in self._mine(self._store.availability.values())
-            if a.doctor_id in wanted
+            if a.doctor_id is not None and a.doctor_id in wanted
         }
 
     def save(self, availability: DoctorAvailability) -> None:
         self._store.availability[availability.id.value] = availability
+
+
+class InMemoryServiceAgendaRepository(_Scoped):
+    def get_by_id(self, agenda_id: ServiceAgendaId) -> ServiceAgenda | None:
+        agenda = self._store.service_agendas.get(agenda_id.value)
+        return agenda if agenda and agenda.tenant_id == self._tenant else None
+
+    def list(self, active_only: bool = False) -> list[ServiceAgenda]:
+        return sorted(
+            (a for a in self._mine(self._store.service_agendas.values())
+             if a.active or not active_only),
+            key=lambda a: a.name,
+        )
+
+    def name_exists(self, name: str, exclude: ServiceAgendaId | None = None) -> bool:
+        return any(
+            a.name.casefold() == name.casefold() and a.id != exclude
+            for a in self._mine(self._store.service_agendas.values())
+        )
+
+    def save(self, agenda: ServiceAgenda) -> None:
+        self._store.service_agendas[agenda.id.value] = agenda
 
 
 class InMemoryFeeScheduleRepository(_Scoped):
@@ -1383,7 +1452,8 @@ class InMemoryAnalyticsReadModel(_Scoped):
     ) -> list[AppointmentFact]:
         return [
             AppointmentFact(
-                doctor_id=str(a.doctor_id), patient_id=str(a.patient_id), type=str(a.type),
+                doctor_id=str(a.doctor_id) if a.doctor_id else None,
+                patient_id=str(a.patient_id), type=str(a.type),
                 status=str(a.status), scheduled_start=a.scheduled_start,
                 created_at=a.created_at,
                 insurer_id=str(a.insurance_id) if a.insurance_id else None,
@@ -1464,7 +1534,9 @@ class InMemoryReportReadModel(_Scoped):
             rows.append(AppointmentReportRow(
                 code=a.code, scheduled_start=a.scheduled_start, patient_code=p.code,
                 patient_name=p.full_name, patient_phone=p.contact.phone,
-                doctor_id=str(a.doctor_id), type=str(a.type), status=str(a.status),
+                doctor_id=str(a.doctor_id) if a.doctor_id else None,
+                agenda_id=str(a.agenda_id) if a.agenda_id else None,
+                type=str(a.type), status=str(a.status),
                 insurer_id=str(a.insurance_id) if a.insurance_id else None,
                 listed=a.charge.listed.amount if a.charge.listed else None,
                 charged=a.charge.charged.amount if a.charge.charged else None,

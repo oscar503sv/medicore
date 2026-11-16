@@ -1,4 +1,5 @@
 import { api } from './client'
+import type { Appointment } from '@/types'
 
 export type VaccineStage = 'childhood' | 'adolescence' | 'adulthood' | 'indicated'
 export type DoseKind = 'dose' | 'booster' | 'single' | 'yearly' | 'periodic'
@@ -64,6 +65,8 @@ export interface VaccinationRecord {
   notes: string | null
   recorded_by_id: string
   recorded_by_name: string | null
+  /** The appointment this dose was recorded from, when it came from a visit. */
+  appointment_id: string | null
   created_at: string
   voided_at: string | null
   voided_by_name: string | null
@@ -106,11 +109,47 @@ export interface WorklistDose {
   due_on: string | null
 }
 
+/** A vaccination appointment of today still open, as the worklist shows it. */
+export interface WorklistAppointment {
+  appointment: VaccinationAppointment
+  patient: WorklistPatient
+  attendant_name: string | null
+}
+
+export interface VisitDosePayload {
+  vaccine_code: string
+  dose_key?: string | null
+  outcome: 'administered'
+  lot: string
+  route?: VaccineRoute | null
+  site?: InjectionSite | null
+  notes?: string | null
+}
+
+export interface VaccinationVisitPayload {
+  appointment_id: string
+  patient_id: string
+  doses: VisitDosePayload[]
+}
+
+/** What a vaccination view needs of an appointment: no reason, fee or insurer. */
+export type VaccinationAppointment = Pick<
+  Appointment,
+  'id' | 'code' | 'scheduled_start' | 'duration_minutes' | 'status' | 'type' | 'is_walk_in'
+>
+
+export interface VaccinationVisitResult {
+  appointment: VaccinationAppointment
+  records: VaccinationRecord[]
+}
+
 export interface VaccinationWorklist {
   today: string
   pending: WorklistDose[]
   upcoming: WorklistDose[]
   given_today: { patient: WorklistPatient; record: VaccinationRecord }[]
+  /** Empty without appointments.view. */
+  appointments_today: WorklistAppointment[]
 }
 
 export const vaccinationsApi = {
@@ -122,6 +161,10 @@ export const vaccinationsApi = {
 
   record: (patientId: string, payload: RecordVaccinationPayload) =>
     api.post<VaccinationRecord>(`/vaccinations/patients/${patientId}`, payload).then((r) => r.data),
+
+  /** Records every dose of a visit and closes the appointment, atomically. */
+  recordVisit: (payload: VaccinationVisitPayload) =>
+    api.post<VaccinationVisitResult>('/vaccinations/visits', payload).then((r) => r.data),
 
   void: (recordId: string, reason: string) =>
     api.post<VaccinationRecord>(`/vaccinations/${recordId}/void`, { reason }).then((r) => r.data),

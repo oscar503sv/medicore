@@ -319,7 +319,7 @@ Writers of clinical documents and appointments lock their rows inside the transa
 
 1. **Clinical document (N1)**: a consultation or a procedure. A transaction never locks both.
 2. **Appointment (N2)**.
-3. **Doctor's bookings (N3)**: an advisory lock per clinic and doctor (`lock_doctor_bookings`), released when the transaction ends.
+3. **Assignee's bookings (N3)**: an advisory lock per clinic and doctor or service agenda (`lock_bookings`; the doctor's lock key is the one OZK-119 shipped, so old and new containers collide during a deploy, and agendas hash apart), released when the transaction ends.
 4. **Counter (N4)**: record code, appointment code and the rest. Always last, so nothing is locked while holding one.
 
 Plain reads take no lock. Cancelling an appointment doesn't look at its consultation: a consultation exists only for appointments in progress or completed, and those can't be cancelled.
@@ -334,9 +334,10 @@ Plain reads take no lock. Cancelling an appointment doesn't look at its consulta
 | `CreateProcedure` with an appointment | appointment |
 | `ConfirmAppointment`, `CancelAppointment`, `MarkNoShow`, `RescheduleAppointment`, `AdjustAppointmentFee` | appointment |
 | `CreatePatient`, certificates | their counter |
-| `CreateAppointment` | doctor's bookings → appointment counter |
-| `RescheduleAppointment` | appointment → doctor's bookings |
-| `RegisterWalkIn` | doctor's bookings → appointment counter (serializes the clinic's creations); then reads the doctor's appointments, without locking, to detect a duplicate. It doesn't check the slot, on purpose |
+| `CreateAppointment` | assignee's bookings → appointment counter |
+| `RescheduleAppointment` | appointment → assignee's bookings |
+| `RecordVaccinationVisit` | appointment (the doses and the completion follow; nothing else is locked) |
+| `RegisterWalkIn` | assignee's bookings → appointment counter (serializes the clinic's creations); then reads the assignee's appointments, without locking, to detect a duplicate. It doesn't check the slot, on purpose |
 
 ## Deployment
 
@@ -394,6 +395,10 @@ Production checklist (via environment variables, see the **Configuration** table
 > **Migration `a9b0c1d2e3f5`** (signed records protection, OZK-99): seals every version (`seal`, `seal_version` 1), so the seal certifies the content as it stood on the migration date, not when it was signed. It makes `medical_records` append-only (triggers that reject `UPDATE`, `DELETE` and `TRUNCATE`), lets prescriptions only be closed, changes the foreign keys of `medical_records`, `prescriptions` and `medical_documents` to RESTRICT and creates the indexes that back them. It unlinks (`record_id = NULL`) the prescriptions and documents whose record doesn't exist. It refuses to run, listing only ids, while any other dangling reference exists. **Before deploying, run the queries in [Signed records protection and dangling references before OZK-99](#signed-records-protection-and-dangling-references-before-ozk-99)**, and deploy the backend and the frontend together. Going back needs `alembic downgrade f8a9b0c1d2e4` as well as the previous code: the code alone leaves the triggers and the seal columns in the database.
 
 > **Migration `b0c1d2e3f4a6`** (walk-in appointments, OZK-111): adds `appointments.is_walk_in` (boolean `NOT NULL`, default `false`, kept for the previous code) and grants `appointments.walk_in` to the doctor and receptionist roles of clinics that had customized them (administrators never hold it: `NOT_FOR_ADMIN`). It needs no manual steps and blocks writes only for an instant. Its downgrade removes the permission from those customizations and drops the column.
+
+> **Migration `d2e3f4a5b6c8`** (service agendas, OZK-112): creates `service_agendas` (unique name per clinic, case-insensitive) and adds `appointments.agenda_id` and `doctor_availability.agenda_id` (nullable FKs), makes `doctor_id` nullable on both with a `CHECK num_nonnulls(doctor_id, agenda_id) = 1`, plus a unique schedule per agenda and `vaccination_records.appointment_id`. The new references are composite `(tenant_id, …)` foreign keys, so a row can never point at another clinic's agenda or appointment; for that it adds `UNIQUE (tenant_id, id)` to `service_agendas`, `locations` and `appointments` (the one on `appointments` is reusable by OZK-116). It is backward compatible (the previous code always inserts a doctor, which satisfies the CHECK) and needs no manual steps. Its downgrade refuses to run, with a clear message, while any agenda, vaccination appointment or dose linked to an appointment exists: it never deletes data.
+>
+> Endpoints added: `GET|POST /service-agendas`, `PATCH /service-agendas/{id}`, `POST /service-agendas/{id}/active`; the schedule of an agenda at `/availability/agendas/{id}` (`weekly`, `exceptions`, `rules`) and `GET /availability/preview?agenda_id=`; `agenda_id` (instead of `doctor_id`) on `POST /appointments`, `POST /appointments/walk-in`, `GET /appointments`, `/appointments/schedule` and `/appointments/slots`; `POST /vaccinations/visits`.
 
 > **Before deploying this version** (OZK-106, no migration): a signed procedure answers 409 `procedure.already_signed` instead of 422, so deploy the backend and the frontend together. Run the queries in [Inconsistent appointments and procedures before OZK-106](#inconsistent-appointments-and-procedures-before-ozk-106) first: they only report, and nothing is changed automatically.
 

@@ -17,6 +17,7 @@ import { statusTone } from '@/components/ui/badgeTone'
 import { Card, CardHeader } from '@/components/ui/Card'
 import { PageLoader } from '@/components/ui/Spinner'
 import { clinicToday, fmtDate, fmtNow, fmtTime } from '@/lib/format'
+import { assigneeName } from '@/lib/assignee'
 import { useT } from '@/lib/i18n'
 import { greetingName } from '@/lib/user'
 import { useAuthStore } from '@/stores/auth'
@@ -132,7 +133,9 @@ export function DashboardPage() {
                   <p className="truncate text-sm font-medium text-tx">{a.patient_name ?? a.code}</p>
                   <p className="truncate text-xs text-tx-3">
                     {a.reason}
-                    {session?.role !== 'doctor' && a.doctor_name ? ` · ${a.doctor_name}` : ''}
+                    {session?.role !== 'doctor' && (a.doctor_name ?? a.agenda_name)
+                      ? ` · ${assigneeName(a, t)}`
+                      : ''}
                   </p>
                 </div>
                 {a.is_walk_in && <WalkInBadge />}

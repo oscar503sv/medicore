@@ -54,4 +54,4 @@ def test_validation_errors_carry_codes(seed, client, auth_headers):
 def test_worklist(client, auth_headers):
     resp = client.get("/api/v1/vaccinations/worklist?horizon_days=30", headers=auth_headers)
     assert resp.status_code == 200
-    assert set(resp.json()) == {"today", "pending", "upcoming", "given_today"}
+    assert set(resp.json()) == {"today", "pending", "upcoming", "given_today", "appointments_today"}

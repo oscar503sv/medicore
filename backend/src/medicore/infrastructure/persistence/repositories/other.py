@@ -12,9 +12,11 @@ from medicore.domain.entities.notification import Notification
 from medicore.domain.repositories._support import AuditFilter, Page, Paging
 from medicore.domain.shared.identifiers import (
     NotificationId,
+    ServiceAgendaId,
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.assignee import Assignee
 from medicore.infrastructure.persistence.mappers.availability import (
     from_doctor_availability,
     to_doctor_availability,
@@ -34,12 +36,23 @@ class SqlDoctorAvailabilityRepository:
         self._tid = tenant_id.value
 
     def get_by_doctor(self, doctor_id: UserId) -> DoctorAvailability | None:
+        return self._one(DoctorAvailabilityModel.doctor_id == doctor_id.value)
+
+    def get_by_agenda(self, agenda_id: ServiceAgendaId) -> DoctorAvailability | None:
+        return self._one(DoctorAvailabilityModel.agenda_id == agenda_id.value)
+
+    def get_by_assignee(self, assignee: Assignee) -> DoctorAvailability | None:
+        column = (
+            DoctorAvailabilityModel.doctor_id
+            if assignee.is_doctor
+            else DoctorAvailabilityModel.agenda_id
+        )
+        return self._one(column == assignee.owner.value)
+
+    def _one(self, condition) -> DoctorAvailability | None:
         row = (
             self._s.query(DoctorAvailabilityModel)
-            .filter(
-                DoctorAvailabilityModel.tenant_id == self._tid,
-                DoctorAvailabilityModel.doctor_id == doctor_id.value,
-            )
+            .filter(DoctorAvailabilityModel.tenant_id == self._tid, condition)
             .first()
         )
         if row is None:
@@ -54,16 +67,30 @@ class SqlDoctorAvailabilityRepository:
     def list_for_doctors(self, doctor_ids: list[UserId]) -> dict[UserId, DoctorAvailability]:
         if not doctor_ids:
             return {}
+        found = self._many(
+            DoctorAvailabilityModel.doctor_id.in_([d.value for d in doctor_ids])
+        )
+        return {a.doctor_id: a for a in found if a.doctor_id is not None}
+
+    def list_for_agendas(
+        self, agenda_ids: list[ServiceAgendaId]
+    ) -> dict[ServiceAgendaId, DoctorAvailability]:
+        if not agenda_ids:
+            return {}
+        found = self._many(
+            DoctorAvailabilityModel.agenda_id.in_([a.value for a in agenda_ids])
+        )
+        return {a.agenda_id: a for a in found if a.agenda_id is not None}
+
+    def _many(self, condition) -> list[DoctorAvailability]:
+        """Schedules matching the condition, with their exceptions, in two queries."""
         rows = (
             self._s.query(DoctorAvailabilityModel)
-            .filter(
-                DoctorAvailabilityModel.tenant_id == self._tid,
-                DoctorAvailabilityModel.doctor_id.in_([d.value for d in doctor_ids]),
-            )
+            .filter(DoctorAvailabilityModel.tenant_id == self._tid, condition)
             .all()
         )
         if not rows:
-            return {}
+            return []
         exceptions: dict = {r.id: [] for r in rows}
         for ex in (
             self._s.query(AvailabilityExceptionModel)
@@ -71,11 +98,7 @@ class SqlDoctorAvailabilityRepository:
             .all()
         ):
             exceptions[ex.availability_id].append(ex)
-        result = {}
-        for row in rows:
-            availability = to_doctor_availability(row, exceptions[row.id])
-            result[availability.doctor_id] = availability
-        return result
+        return [to_doctor_availability(row, exceptions[row.id]) for row in rows]
 
     def save(self, availability: DoctorAvailability) -> None:
         av_dict, ex_dicts = from_doctor_availability(availability)
@@ -85,6 +108,7 @@ class SqlDoctorAvailabilityRepository:
             self._s.add(row)
         row.tenant_id = av_dict["tenant_id"]
         row.doctor_id = av_dict["doctor_id"]
+        row.agenda_id = av_dict["agenda_id"]
         row.weekly = av_dict["weekly"]
         row.rules = av_dict["rules"]
 

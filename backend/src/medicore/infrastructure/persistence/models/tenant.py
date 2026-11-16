@@ -6,7 +6,17 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -66,6 +76,8 @@ class TenantModel(Base):
 
 class LocationModel(Base):
     __tablename__ = "locations"
+    # Lets other tables point at a location together with its clinic (composite FK).
+    __table_args__ = (UniqueConstraint("tenant_id", "id", name="uq_locations_tenant_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(

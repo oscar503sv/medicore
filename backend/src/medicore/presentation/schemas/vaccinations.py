@@ -6,6 +6,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from medicore.application.use_cases.vaccinations import MAX_VISIT_DOSES
 from medicore.domain.enums import (
     InjectionSite,
     VaccinationOutcome,
@@ -49,6 +50,7 @@ class DoseStateResponse(BaseModel):
 class VaccinationRecordResponse(BaseModel):
     id: str
     patient_id: str
+    appointment_id: str | None = None  # the vaccination appointment the dose was given in
     vaccine_code: str
     dose_key: str | None
     outcome: str
@@ -84,6 +86,41 @@ class RecordVaccinationRequest(BaseModel):
     notes: str | None = Field(None, max_length=500)
 
 
+class WorklistAppointment(BaseModel):
+    """What the vaccination room needs of an appointment: no reason, fee or insurer."""
+
+    id: str
+    code: str
+    scheduled_start: datetime
+    duration_minutes: int
+    status: str
+    type: str
+    is_walk_in: bool
+
+
+class VisitDoseRequest(BaseModel):
+    """A dose of a visit: it is given here, today, to the appointment's patient."""
+
+    vaccine_code: str = Field(min_length=1, max_length=40)
+    dose_key: str | None = Field(None, max_length=40)
+    outcome: VaccinationOutcome = VaccinationOutcome.ADMINISTERED
+    lot: str | None = Field(None, max_length=60)
+    route: VaccineRoute | None = None
+    site: InjectionSite | None = None
+    notes: str | None = Field(None, max_length=500)
+
+
+class RecordVaccinationVisitRequest(BaseModel):
+    appointment_id: str
+    patient_id: str
+    doses: list[VisitDoseRequest] = Field(min_length=1, max_length=MAX_VISIT_DOSES)
+
+
+class VaccinationVisitResponse(BaseModel):
+    appointment: WorklistAppointment  # completed, unless a consultation is still open
+    records: list[VaccinationRecordResponse]
+
+
 class VoidVaccinationRequest(BaseModel):
     reason: str = Field(min_length=1, max_length=300)
 
@@ -111,8 +148,15 @@ class WorklistGivenResponse(BaseModel):
     record: VaccinationRecordResponse
 
 
+class WorklistAppointmentResponse(BaseModel):
+    appointment: WorklistAppointment
+    patient: WorklistPatient
+    attendant_name: str | None  # the doctor, or the service agenda in their place
+
+
 class VaccinationWorklistResponse(BaseModel):
     today: date
     pending: list[WorklistDoseResponse]
     upcoming: list[WorklistDoseResponse]
     given_today: list[WorklistGivenResponse]
+    appointments_today: list[WorklistAppointmentResponse] = []

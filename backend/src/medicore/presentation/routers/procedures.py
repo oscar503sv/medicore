@@ -36,7 +36,6 @@ from medicore.domain.shared.identifiers import (
 )
 from medicore.domain.value_objects.fee import fee
 from medicore.presentation.dependencies import Actor, Clock, UoW
-from medicore.presentation.routers.applications import _Names
 from medicore.presentation.schemas.fees import ProcedureChargeRequest
 from medicore.presentation.schemas.procedures import (
     ActiveRequest,
@@ -51,7 +50,7 @@ from medicore.presentation.schemas.procedures import (
     ProgressRequest,
     ReasonRequest,
 )
-from medicore.presentation.serializers import ser_charge, ser_money
+from medicore.presentation.serializers import UserNames, ser_charge, ser_money
 
 router = APIRouter(prefix="/procedures", tags=["procedures"])
 
@@ -68,7 +67,7 @@ def _ser_type(t: ProcedureType) -> dict:
     }
 
 
-def _ser(p: Procedure, name: _Names) -> dict:
+def _ser(p: Procedure, name: UserNames) -> dict:
     return {
         "id": str(p.id),
         "patient_id": str(p.patient_id),
@@ -157,7 +156,7 @@ def set_type_active(type_id: str, body: ActiveRequest, actor: Actor, uow: UoW, c
 def worklist(actor: Actor, uow: UoW, clock: Clock):
     with uow:
         wl = GetProcedureWorklist(uow, clock).execute(actor)
-        name = _Names(uow)
+        name = UserNames(uow)
 
         def item(i) -> dict:
             return {"patient": _ser_patient(i.patient), "procedure": _ser(i.procedure, name)}
@@ -185,7 +184,7 @@ def worklist(actor: Actor, uow: UoW, clock: Clock):
 def patient_procedures(patient_id: str, actor: Actor, uow: UoW):
     with uow:
         items = GetPatientProcedures(uow).execute(actor, PatientId.parse(patient_id))
-        name = _Names(uow)
+        name = UserNames(uow)
         return [_ser(p, name) for p in items]
 
 
@@ -193,7 +192,7 @@ def _detail(uow, actor, procedure_id: ProcedureId) -> dict:
     with uow:
         view = GetProcedure(uow).execute(actor, procedure_id)
         return {
-            "procedure": _ser(view.procedure, _Names(uow)),
+            "procedure": _ser(view.procedure, UserNames(uow)),
             "patient": _ser_patient(view.patient),
             "technique_template": view.kind.technique_template if view.kind else None,
             "instructions_template": view.kind.instructions_template if view.kind else None,

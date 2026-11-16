@@ -109,7 +109,12 @@ def per_doctor(
 ) -> dict[str, Summary]:
     """``summarize`` for each doctor with any appointment or procedure in the window.
     A new patient is new to the clinic (``first_visits`` is clinic-wide)."""
-    doctors = {a.doctor_id for a in appointments if within(a.scheduled_start, start, end)}
+    # Appointments of a service agenda belong to no doctor.
+    doctors = {
+        a.doctor_id
+        for a in appointments
+        if a.doctor_id is not None and within(a.scheduled_start, start, end)
+    }
     doctors |= {p.doctor_id for p in procedures if within(p.performed_at, start, end)}
     return {
         d: summarize(

@@ -9,7 +9,13 @@ from medicore.domain.entities.availability import (
     WeeklyDay,
 )
 from medicore.domain.enums import AvailabilityExceptionKind
-from medicore.domain.shared.identifiers import AvailabilityId, ExceptionId, TenantId, UserId
+from medicore.domain.shared.identifiers import (
+    AvailabilityId,
+    ExceptionId,
+    ServiceAgendaId,
+    TenantId,
+    UserId,
+)
 from medicore.infrastructure.persistence.mappers._json import (
     dict_to_time_range,
     time_range_to_dict,
@@ -58,7 +64,8 @@ def to_doctor_availability(
     return DoctorAvailability(
         id=AvailabilityId.parse(row.id),
         tenant_id=TenantId.parse(row.tenant_id),
-        doctor_id=UserId.parse(row.doctor_id),
+        doctor_id=UserId.parse(row.doctor_id) if row.doctor_id else None,
+        agenda_id=ServiceAgendaId.parse(row.agenda_id) if row.agenda_id else None,
         weekly=_weekly_from_json(row.weekly or []),
         exceptions=[to_availability_exception(e) for e in exceptions],
         rules=_rules_from_json(row.rules or {}),
@@ -83,7 +90,8 @@ def from_doctor_availability(av: DoctorAvailability) -> tuple[dict, list[dict]]:
     av_dict = {
         "id": av.id.value,
         "tenant_id": av.tenant_id.value,
-        "doctor_id": av.doctor_id.value,
+        "doctor_id": av.doctor_id.value if av.doctor_id else None,
+        "agenda_id": av.agenda_id.value if av.agenda_id else None,
         "weekly": weekly,
         "rules": rules,
     }

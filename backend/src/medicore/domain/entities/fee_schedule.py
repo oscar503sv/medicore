@@ -1,7 +1,7 @@
 """FeeSchedule aggregate: what a doctor charges for each kind of appointment.
 
-One per doctor. Procedure appointments are not priced here: what a procedure costs depends
-on which one is done, so it comes from the clinic's procedure catalog. A type without a
+One per doctor. Procedure and vaccination appointments are not priced here: what they cost
+depends on which procedure or vaccine is given, so it comes from a catalog. A type without a
 price simply has none (the booking then shows "no fee set").
 """
 
@@ -16,8 +16,9 @@ from medicore.domain.shared.identifiers import FeeScheduleId, TenantId, UserId
 from medicore.domain.value_objects.fee import check_fee
 from medicore.domain.value_objects.money import Money
 
+CATALOG_PRICED_TYPES = frozenset({AppointmentType.PROCEDURE, AppointmentType.VACCINATION})
 PRICED_TYPES: tuple[AppointmentType, ...] = tuple(
-    t for t in AppointmentType if t != AppointmentType.PROCEDURE
+    t for t in AppointmentType if t not in CATALOG_PRICED_TYPES
 )
 
 
@@ -45,6 +46,6 @@ class FeeSchedule:
 def _check(prices: dict[AppointmentType, Money]) -> None:
     for kind, price in prices.items():
         if kind not in PRICED_TYPES:
-            raise InvalidValueObject("procedures are priced in the procedure catalog",
+            raise InvalidValueObject("procedures and vaccinations are priced from a catalog",
                                      code="fee.procedure_from_catalog")
         check_fee(price)

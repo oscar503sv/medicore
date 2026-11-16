@@ -30,6 +30,7 @@ from medicore.domain.entities.platform_audit_log import PlatformAuditLog
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.procedure import Procedure, ProcedureType
 from medicore.domain.entities.role_permission_override import RolePermissionOverride
+from medicore.domain.entities.service_agenda import ServiceAgenda
 from medicore.domain.entities.subscription_payment import SubscriptionPayment
 from medicore.domain.entities.tenant import Tenant
 from medicore.domain.entities.user import DoctorProfile, User
@@ -60,6 +61,7 @@ class InMemoryStore:
     prescriptions: dict[UUID, Prescription] = field(default_factory=dict)
     documents: dict[UUID, MedicalDocument] = field(default_factory=dict)
     availability: dict[UUID, DoctorAvailability] = field(default_factory=dict)
+    service_agendas: dict[UUID, ServiceAgenda] = field(default_factory=dict)
     fees: dict[UUID, FeeSchedule] = field(default_factory=dict)
     certificates: dict[UUID, MedicalCertificate] = field(default_factory=dict)
     notifications: dict[UUID, Notification] = field(default_factory=dict)
@@ -86,7 +88,8 @@ class InMemoryStore:
     consultation_locks: dict[UUID, int] = field(default_factory=dict)
     appointment_locks: dict[UUID, int] = field(default_factory=dict)
     procedure_locks: dict[UUID, int] = field(default_factory=dict)
-    # Order the document and appointment rows were locked in: (kind, id).
+    # Order the document and appointment rows were locked in: (kind, id). Booking locks are
+    # logged as ("doctor_bookings" | "agenda_bookings", id).
     lock_log: list[tuple[str, UUID]] = field(default_factory=list)
     # Global revocable sessions (tenant and platform scopes share the store).
     sessions: dict[UUID, AuthSession] = field(default_factory=dict)

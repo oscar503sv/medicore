@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.enums import AppointmentStatus
-from medicore.domain.shared.identifiers import AppointmentId, PatientId, TenantId, UserId
+from medicore.domain.shared.identifiers import (
+    AppointmentId,
+    PatientId,
+    ServiceAgendaId,
+    TenantId,
+    UserId,
+)
+from medicore.domain.value_objects.assignee import Assignee
 from medicore.infrastructure.persistence.mappers._json import vitals_to_dict
 from medicore.infrastructure.persistence.mappers.entities import to_appointment
 from medicore.infrastructure.persistence.mappers.fee import charge_columns
@@ -56,15 +63,26 @@ class SqlAppointmentRepository:
         )
         return to_appointment(row) if row else None
 
-    def lock_doctor_bookings(self, doctor_id: UserId) -> None:
+    def lock_bookings(self, assignee: Assignee) -> None:
         # An advisory lock, not a row lock: the thing to serialize is the absence of a
         # conflicting row, which no existing row represents, and it adds no table or column.
-        # The hash only has to be stable; a collision merely serializes two doctors.
-        digest = hashlib.sha256(f"doctor_bookings:{self._tid}:{doctor_id.value}".encode()).digest()
+        # The hash only has to be stable; a collision merely serializes two assignees. The
+        # doctor's string is the one OZK-119 shipped: rolling deploys mix old and new
+        # containers, which must take the same lock. Agendas get their own prefix.
+        if assignee.doctor_id is not None:
+            scope = f"doctor_bookings:{self._tid}:{assignee.doctor_id.value}"
+        else:
+            scope = f"agenda_bookings:{self._tid}:{assignee.owner.value}"
+        digest = hashlib.sha256(scope.encode()).digest()
         key = int.from_bytes(digest[:8], "big", signed=True)
         self._s.execute(select(func.pg_advisory_xact_lock(key)))
 
-    def list_by_day(self, on: date, doctor_id: UserId | None = None) -> list[Appointment]:
+    def list_by_day(
+        self,
+        on: date,
+        doctor_id: UserId | None = None,
+        agenda_id: ServiceAgendaId | None = None,
+    ) -> list[Appointment]:
         q = (
             self._q()
             .filter(cast(AppointmentModel.scheduled_start, SqlDate) == on)
@@ -72,6 +90,8 @@ class SqlAppointmentRepository:
         )
         if doctor_id:
             q = q.filter(AppointmentModel.doctor_id == doctor_id.value)
+        if agenda_id:
+            q = q.filter(AppointmentModel.agenda_id == agenda_id.value)
         return [to_appointment(r) for r in q.all()]
 
     def list_by_patient(self, patient_id: PatientId) -> list[Appointment]:
@@ -167,13 +187,15 @@ class SqlAppointmentRepository:
         return result
 
     def find_overlapping(
-        self, doctor_id: UserId, start: datetime, end: datetime
+        self, assignee: Assignee, start: datetime, end: datetime
     ) -> list[Appointment]:
+        column = AppointmentModel.doctor_id if assignee.is_doctor else AppointmentModel.agenda_id
+        owner = column == assignee.owner.value
         # Conservative 24-h window at DB level, then exact Python filter.
         rows = (
             self._q()
             .filter(
-                AppointmentModel.doctor_id == doctor_id.value,
+                owner,
                 AppointmentModel.status.in_(_ACTIVE),
                 AppointmentModel.scheduled_start >= start - timedelta(hours=24),
                 AppointmentModel.scheduled_start < end + timedelta(hours=24),
@@ -198,7 +220,8 @@ class SqlAppointmentRepository:
         row.tenant_id = appointment.tenant_id.value
         row.code = appointment.code
         row.patient_id = appointment.patient_id.value
-        row.doctor_id = appointment.doctor_id.value
+        row.doctor_id = appointment.doctor_id.value if appointment.doctor_id else None
+        row.agenda_id = appointment.agenda_id.value if appointment.agenda_id else None
         row.location_id = appointment.location_id.value
         row.type = str(appointment.type)
         row.status = str(appointment.status)

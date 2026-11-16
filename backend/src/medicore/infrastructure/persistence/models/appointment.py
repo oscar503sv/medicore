@@ -6,7 +6,19 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -18,6 +30,18 @@ class AppointmentModel(Base):
     __table_args__ = (
         Index("ix_appointments_tenant_day", "tenant_id", "scheduled_start"),
         Index("ix_appointments_doctor_day", "doctor_id", "scheduled_start"),
+        Index("ix_appointments_agenda_day", "agenda_id", "scheduled_start"),
+        # Lets other tables point at an appointment together with its clinic (composite FK).
+        UniqueConstraint("tenant_id", "id", name="uq_appointments_tenant_id"),
+        # The agenda must belong to the appointment's clinic.
+        ForeignKeyConstraint(
+            ["tenant_id", "agenda_id"], ["service_agendas.tenant_id", "service_agendas.id"],
+            name="fk_appointments_tenant_agenda",
+        ),
+        # Attended by a doctor or by a service agenda, never both and never neither.
+        CheckConstraint(
+            "num_nonnulls(doctor_id, agenda_id) = 1", name="ck_appointments_one_assignee"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -28,9 +52,10 @@ class AppointmentModel(Base):
     patient_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("patients.id"), nullable=False, index=True
     )
-    doctor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    doctor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
+    agenda_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     location_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("locations.id"), nullable=False
     )

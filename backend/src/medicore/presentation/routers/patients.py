@@ -118,13 +118,15 @@ def get_patient(patient_id: str, actor: Actor, uow: UoW, clock: Clock):
         next_appointment = None
         if detail.next_appointment is not None:
             appt = detail.next_appointment
-            doctor = uow.users.get_by_id(appt.doctor_id)
+            doctor = uow.users.get_by_id(appt.doctor_id) if appt.doctor_id else None
+            agenda = uow.service_agendas.get_by_id(appt.agenda_id) if appt.agenda_id else None
             insurer = uow.insurers.get_by_id(appt.insurance_id) if appt.insurance_id else None
             next_appointment = ser_appointment(
                 appt,
                 patient_name=detail.patient.full_name,
                 doctor_name=doctor.name if doctor else None,
                 insurer_name=insurer.name if insurer else None,
+                agenda_name=agenda.name if agenda else None,
             )
     return PatientDetailResponse(
         patient=ser_patient(detail.patient),

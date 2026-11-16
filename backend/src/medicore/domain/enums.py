@@ -50,6 +50,13 @@ class AppointmentType(StrEnum):
     CHECK_UP = "check_up"
     PROCEDURE = "procedure"
     EMERGENCY = "emergency"
+    VACCINATION = "vaccination"
+
+
+class ServiceAgendaKind(StrEnum):
+    """What a clinic service (an agenda not tied to a doctor) attends."""
+
+    VACCINATION = "vaccination"
 
 
 class AppointmentStatus(StrEnum):

@@ -136,7 +136,10 @@ def print_vaccination_card(patient_id: str, actor: Actor, uow: UoW, clock: Clock
 @router.get("/appointments/{appointment_id}", response_model=AppointmentPrintResponse)
 def print_appointment(appointment_id: str, actor: Actor, uow: UoW, clock: Clock):
     doc = PrintAppointmentSlip(uow, clock).execute(actor, AppointmentId.parse(appointment_id))
-    return {"context": _context(doc.context), "appointment": _appointment(doc.appointment)}
+    return {
+        "context": _context(doc.context),
+        "appointment": {**_appointment(doc.appointment), "agenda_name": doc.agenda_name},
+    }
 
 
 @router.get("/agenda", response_model=AgendaPrintResponse)

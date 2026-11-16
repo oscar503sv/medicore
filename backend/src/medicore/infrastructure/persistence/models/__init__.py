@@ -37,6 +37,7 @@ from medicore.infrastructure.persistence.models.request_stats import RequestStat
 from medicore.infrastructure.persistence.models.role_permission_override import (
     RolePermissionOverrideModel,
 )
+from medicore.infrastructure.persistence.models.service_agenda import ServiceAgendaModel
 from medicore.infrastructure.persistence.models.subscription import (
     AddonPricingModel,
     PlanModel,
@@ -66,6 +67,7 @@ __all__ = [
     "FeeScheduleModel",
     "InsurerModel",
     "NoteTemplateModel",
+    "ServiceAgendaModel",
     "LocationModel",
     "LoginAttemptModel",
     "MedicalCertificateModel",

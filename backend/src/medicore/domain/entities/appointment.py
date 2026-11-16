@@ -13,9 +13,11 @@ from medicore.domain.shared.identifiers import (
     InsurerId,
     LocationId,
     PatientId,
+    ServiceAgendaId,
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.assignee import Assignee
 from medicore.domain.value_objects.fee import Charge
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.vitals import Vitals
@@ -48,7 +50,8 @@ _TRANSITIONS: dict[AppointmentStatus, frozenset[AppointmentStatus]] = {
 
 @dataclass(slots=True)
 class Appointment:
-    """A scheduled encounter between a patient and a doctor at a location.
+    """A scheduled encounter between a patient and a doctor (or a service agenda, such as the
+    vaccination room) at a location.
 
     Slot validity (within doctor availability, no overlap, booking rules) is enforced when
     the appointment is created/rescheduled by the application layer via the slot resolver —
@@ -59,7 +62,7 @@ class Appointment:
     tenant_id: TenantId
     code: str  # human-readable, e.g. "A-2401"
     patient_id: PatientId
-    doctor_id: UserId
+    doctor_id: UserId | None  # None when a service agenda attends it
     location_id: LocationId
     type: AppointmentType
     scheduled_start: datetime
@@ -67,6 +70,7 @@ class Appointment:
     reason: str
     created_by_id: UserId
     status: AppointmentStatus = AppointmentStatus.SCHEDULED
+    agenda_id: ServiceAgendaId | None = None
     room: str | None = None
     # Set when the consultation is booked "with insurance"; None means private/out-of-pocket.
     insurance_id: InsurerId | None = None
@@ -81,6 +85,13 @@ class Appointment:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
+    def __post_init__(self) -> None:
+        Assignee(self.doctor_id, self.agenda_id)  # raises unless exactly one is set
+
+    @property
+    def assignee(self) -> Assignee:
+        return Assignee(self.doctor_id, self.agenda_id)
+
     @classmethod
     def walk_in(
         cls,
@@ -89,13 +100,14 @@ class Appointment:
         tenant_id: TenantId,
         code: str,
         patient_id: PatientId,
-        doctor_id: UserId,
+        doctor_id: UserId | None,
         location_id: LocationId,
         type: AppointmentType,
         reason: str,
         duration_minutes: int,
         created_by_id: UserId,
         now: datetime,
+        agenda_id: ServiceAgendaId | None = None,
         insurance_id: InsurerId | None = None,
         charge: Charge | None = None,
     ) -> Appointment:
@@ -106,6 +118,7 @@ class Appointment:
             code=code,
             patient_id=patient_id,
             doctor_id=doctor_id,
+            agenda_id=agenda_id,
             location_id=location_id,
             type=type,
             scheduled_start=now.replace(second=0, microsecond=0),
@@ -178,8 +191,9 @@ class Appointment:
     ) -> tuple[str, ...]:
         """Merge only the given vital fields taken before the consultation starts. Returns the
         fields that changed. Only a confirmed appointment takes them: once it is in progress
-        the consultation holds the vitals."""
-        if self.status != AppointmentStatus.CONFIRMED:
+        the consultation holds the vitals. A service agenda's appointment never has a
+        consultation, so it takes none."""
+        if not self.takes_pre_vitals:
             raise DomainError(
                 "vitals can only be taken before the consultation, on a confirmed appointment",
                 code="appointment.vitals_closed",
@@ -191,6 +205,10 @@ class Appointment:
             self.pre_vitals_saved_at = when or datetime.now(UTC)
             self._touch()
         return changed
+
+    @property
+    def takes_pre_vitals(self) -> bool:
+        return self.status == AppointmentStatus.CONFIRMED and self.agenda_id is None
 
     def take_pre_vitals(self) -> tuple[Vitals, datetime | None]:
         """Hand the waiting-room vitals over (to the consultation) and clear them here."""

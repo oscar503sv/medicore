@@ -10,7 +10,11 @@ export function FeeCell({ appointment: a }: { appointment: Appointment }) {
   if (a.fee === null) {
     return (
       <span className="text-xs text-tx-4">
-        {a.type === 'procedure' ? t('fee.by_procedure') : t('fee.none')}
+        {a.type === 'procedure'
+          ? t('fee.by_procedure')
+          : a.type === 'vaccination'
+            ? t('fee.by_vaccination')
+            : t('fee.none')}
       </span>
     )
   }

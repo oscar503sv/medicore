@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.application.use_cases.auth import MyProfileDTO
 from medicore.application.use_cases.consultations import (
     AppointmentVitalsView,
@@ -28,7 +29,7 @@ from medicore.domain.entities.user import User
 from medicore.domain.enums import SealStatus
 from medicore.domain.repositories._support import RecordSummary
 from medicore.domain.services.slot_resolver import Slot
-from medicore.domain.shared.identifiers import RecordId
+from medicore.domain.shared.identifiers import RecordId, UserId
 from medicore.domain.value_objects.fee import Charge
 from medicore.domain.value_objects.money import Money
 from medicore.domain.value_objects.plan_limits import LimitOverrides, PlanLimits
@@ -263,13 +264,16 @@ def ser_appointment(
     patient_name: str | None = None,
     doctor_name: str | None = None,
     insurer_name: str | None = None,
+    agenda_name: str | None = None,
 ) -> dict:
     return {
         "id": str(a.id),
         "tenant_id": str(a.tenant_id),
         "code": a.code,
         "patient_id": str(a.patient_id),
-        "doctor_id": str(a.doctor_id),
+        "doctor_id": str(a.doctor_id) if a.doctor_id else None,
+        "agenda_id": str(a.agenda_id) if a.agenda_id else None,
+        "agenda_name": agenda_name,
         "location_id": str(a.location_id),
         "type": str(a.type),
         "status": str(a.status),
@@ -499,7 +503,8 @@ def ser_document(d: MedicalDocument) -> dict:
 def ser_availability(av: DoctorAvailability) -> dict:
     return {
         "id": str(av.id),
-        "doctor_id": str(av.doctor_id),
+        "doctor_id": str(av.doctor_id) if av.doctor_id else None,
+        "agenda_id": str(av.agenda_id) if av.agenda_id else None,
         "weekly": [
             {
                 "day_of_week": d.day_of_week,
@@ -844,3 +849,50 @@ def ser_error_event(e) -> dict:
         "location": e.location,
         "commit": e.commit,
     }
+
+
+class UserNames:
+    """Resolves user ids to display names once per request."""
+
+    def __init__(self, uow) -> None:
+        self._uow = uow
+        self._cache: dict[UserId, str | None] = {}
+
+    def __call__(self, uid: UserId | None) -> str | None:
+        if uid is None:
+            return None
+        if uid not in self._cache:
+            user = self._uow.users.get_by_id(uid)
+            self._cache[uid] = user.name if user else None
+        return self._cache[uid]
+
+
+def ser_appointments(uow: UnitOfWork, appts: list[Appointment]) -> list[dict]:
+    """Serialize appointments, resolving patient/doctor/insurer names with per-id caching."""
+    patient_names: dict = {}
+    doctor_names: dict = {}
+    agenda_names: dict = {}
+    insurer_names: dict = {}
+    for a in appts:
+        if a.patient_id not in patient_names:
+            patient = uow.patients.get_by_id(a.patient_id)
+            patient_names[a.patient_id] = patient.full_name if patient else None
+        if a.doctor_id and a.doctor_id not in doctor_names:
+            doctor = uow.users.get_by_id(a.doctor_id)
+            doctor_names[a.doctor_id] = doctor.name if doctor else None
+        if a.agenda_id and a.agenda_id not in agenda_names:
+            agenda = uow.service_agendas.get_by_id(a.agenda_id)
+            agenda_names[a.agenda_id] = agenda.name if agenda else None
+        if a.insurance_id and a.insurance_id not in insurer_names:
+            insurer = uow.insurers.get_by_id(a.insurance_id)
+            insurer_names[a.insurance_id] = insurer.name if insurer else None
+    return [
+        ser_appointment(
+            a,
+            patient_name=patient_names[a.patient_id],
+            doctor_name=doctor_names.get(a.doctor_id) if a.doctor_id else None,
+            agenda_name=agenda_names.get(a.agenda_id) if a.agenda_id else None,
+            insurer_name=insurer_names.get(a.insurance_id) if a.insurance_id else None,
+        )
+        for a in appts
+    ]

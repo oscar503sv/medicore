@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from medicore.application.common.appointment_access import ensure_own_appointment
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound
@@ -123,6 +124,7 @@ class AdjustAppointmentFee:
             appointment = self._uow.appointments.get_for_update(appointment_id)
             if appointment is None:
                 raise EntityNotFound("Appointment", appointment_id)
+            ensure_own_appointment(actor, appointment)
             ensure_can_price(actor, appointment.doctor_id)
             appointment.adjust_fee(charged, note)
             self._uow.appointments.save(appointment)

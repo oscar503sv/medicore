@@ -140,7 +140,8 @@ interface AppointmentLine {
 
 export interface AppointmentPrint {
   context: PrintContext
-  appointment: AppointmentLine
+  /** agenda_name stands in for the doctor when a service agenda attends. */
+  appointment: AppointmentLine & { agenda_name: string | null }
 }
 
 export interface AgendaPrint {

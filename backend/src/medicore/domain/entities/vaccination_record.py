@@ -17,6 +17,7 @@ from medicore.domain.enums import (
 )
 from medicore.domain.shared.errors import DomainError, InvalidValueObject
 from medicore.domain.shared.identifiers import (
+    AppointmentId,
     PatientId,
     TenantId,
     UserId,
@@ -39,6 +40,8 @@ class VaccinationRecord:
     occurred_on: date
     source: VaccinationSource
     recorded_by_id: UserId
+    # The vaccination appointment the dose was given in; None for doses recorded on their own.
+    appointment_id: AppointmentId | None = None
     lot: str | None = None
     route: VaccineRoute | None = None
     site: InjectionSite | None = None

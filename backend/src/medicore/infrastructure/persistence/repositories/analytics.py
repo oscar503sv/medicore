@@ -39,7 +39,8 @@ class SqlAnalyticsReadModel:
             q = q.filter(a.doctor_id == doctor_id.value)
         return [
             AppointmentFact(
-                doctor_id=str(r.doctor_id), patient_id=str(r.patient_id), type=r.type,
+                doctor_id=str(r.doctor_id) if r.doctor_id else None,
+                patient_id=str(r.patient_id), type=r.type,
                 status=r.status, scheduled_start=r.scheduled_start, created_at=r.created_at,
                 insurer_id=str(r.insurance_id) if r.insurance_id else None, charged=r.fee,
             )

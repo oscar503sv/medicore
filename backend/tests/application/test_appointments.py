@@ -26,8 +26,9 @@ from medicore.domain.enums import AddonModule, AppointmentStatus, AppointmentTyp
 from medicore.domain.services.slot_resolver import SlotStatus
 from medicore.domain.shared.errors import InvalidStateTransition, PermissionDenied, SlotUnavailable
 from medicore.domain.shared.identifiers import UserId
+from medicore.domain.value_objects.assignee import Assignee
 from medicore.domain.value_objects.subscription import Subscription
-from tests.support.builders import seed_clinic
+from tests.support.builders import build_user, seed_clinic
 from tests.support.fakes import FixedClock, SequentialCodeGenerator
 
 MONDAY_9AM = datetime(2026, 6, 1, 9, 0)  # within Mon 09:00–13:00 availability
@@ -88,7 +89,7 @@ def test_available_slots_reflect_existing_appointment():
     create.execute(seed.receptionist_actor, booking_cmd(seed, start=MONDAY_9AM))
 
     slots = GetAvailableSlots(uow, FixedClock()).execute(
-        seed.receptionist_actor, seed.doctor.id, MONDAY_9AM.date()
+        seed.receptionist_actor, Assignee.doctor(seed.doctor.id), MONDAY_9AM.date()
     )
 
     nine = next(s for s in slots if s.start == MONDAY_9AM)
@@ -100,9 +101,11 @@ def test_available_slots_reflect_existing_appointment():
 def test_doctor_without_availability_cannot_be_booked():
     seed = seed_clinic()
     create, _ = make_create(seed)
+    newcomer = build_user(seed.tenant.id, Role.DOCTOR, email="nuevo@clinica-norte.test")
+    seed.factory.store.users[newcomer.id.value] = newcomer
     cmd = CreateAppointmentCommand(
         patient_id=seed.patient.id,
-        doctor_id=seed.nurse.id,  # nurse has no availability configured
+        doctor_id=newcomer.id,  # a doctor with no availability configured
         location_id=seed.tenant.primary_location.id,
         type=AppointmentType.CONSULT,
         scheduled_start=MONDAY_9AM,
@@ -247,7 +250,7 @@ class TestDoctorDrivenDuration:
             seed.doctor_actor, BookingRules(slot_minutes=60)
         )
         slots = GetAvailableSlots(uow, FixedClock()).execute(
-            seed.receptionist_actor, seed.doctor.id, MONDAY_9AM.date()
+            seed.receptionist_actor, Assignee.doctor(seed.doctor.id), MONDAY_9AM.date()
         )
         free = [s for s in slots if s.status == SlotStatus.FREE]
         assert len(free) == 4  # 09:00-13:00 block / 60 min

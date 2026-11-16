@@ -23,7 +23,6 @@ from medicore.domain.shared.identifiers import (
     ApplicationOrderId,
     ApplicationRecordId,
     PatientId,
-    UserId,
 )
 from medicore.presentation.dependencies import Actor, Clock, UoW
 from medicore.presentation.schemas.applications import (
@@ -35,27 +34,12 @@ from medicore.presentation.schemas.applications import (
     ReasonRequest,
     RecordApplicationRequest,
 )
+from medicore.presentation.serializers import UserNames
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
 
-class _Names:
-    """Resolves user ids to display names once per request."""
-
-    def __init__(self, uow) -> None:
-        self._uow = uow
-        self._cache: dict[UserId, str | None] = {}
-
-    def __call__(self, uid: UserId | None) -> str | None:
-        if uid is None:
-            return None
-        if uid not in self._cache:
-            user = self._uow.users.get_by_id(uid)
-            self._cache[uid] = user.name if user else None
-        return self._cache[uid]
-
-
-def _ser_record(r: ApplicationRecord, name: _Names) -> dict:
+def _ser_record(r: ApplicationRecord, name: UserNames) -> dict:
     return {
         "id": str(r.id),
         "order_id": str(r.order_id),
@@ -81,7 +65,7 @@ def _ser_record(r: ApplicationRecord, name: _Names) -> dict:
     }
 
 
-def _ser_order(o: ApplicationOrder, name: _Names, view: OrderView | None = None) -> dict:
+def _ser_order(o: ApplicationOrder, name: UserNames, view: OrderView | None = None) -> dict:
     return {
         "id": str(o.id),
         "patient_id": str(o.patient_id),
@@ -121,7 +105,7 @@ def _ser_patient(p: Patient) -> dict:
 def worklist(actor: Actor, uow: UoW, clock: Clock):
     with uow:
         wl = GetApplicationWorklist(uow, clock).execute(actor)
-        name = _Names(uow)
+        name = UserNames(uow)
 
         def rec_item(i) -> dict:
             return {"patient": _ser_patient(i.patient), "order": _ser_order(i.order, name),
@@ -146,7 +130,7 @@ def worklist(actor: Actor, uow: UoW, clock: Clock):
 def patient_orders(patient_id: str, actor: Actor, uow: UoW):
     with uow:
         views = GetPatientApplications(uow).execute(actor, PatientId.parse(patient_id))
-        name = _Names(uow)
+        name = UserNames(uow)
         return [_ser_order(v.order, name, v) for v in views]
 
 
@@ -161,7 +145,7 @@ def create_external_order(body: ExternalOrderRequest, actor: Actor, uow: UoW, cl
             observation_minutes=body.observation_minutes, instructions=body.instructions,
         ),
     )
-    return _ser_order(order, _Names(uow))
+    return _ser_order(order, UserNames(uow))
 
 
 @router.post("/orders/{order_id}/cancel", response_model=ApplicationOrderResponse)
@@ -169,7 +153,7 @@ def cancel_order(order_id: str, body: ReasonRequest, actor: Actor, uow: UoW, clo
     order = CancelApplicationOrder(uow, clock).execute(
         actor, ApplicationOrderId.parse(order_id), body.reason
     )
-    return _ser_order(order, _Names(uow))
+    return _ser_order(order, UserNames(uow))
 
 
 @router.post(
@@ -187,7 +171,7 @@ def record_dose(
             notes=body.notes,
         ),
     )
-    return _ser_record(record, _Names(uow))
+    return _ser_record(record, UserNames(uow))
 
 
 @router.post("/records/{record_id}/observation", response_model=ApplicationRecordResponse)
@@ -197,7 +181,7 @@ def close_observation(
     record = CloseObservation(uow, clock).execute(
         actor, ApplicationRecordId.parse(record_id), body.reaction, body.notes
     )
-    return _ser_record(record, _Names(uow))
+    return _ser_record(record, UserNames(uow))
 
 
 @router.post("/records/{record_id}/void", response_model=ApplicationRecordResponse)
@@ -205,4 +189,4 @@ def void_record(record_id: str, body: ReasonRequest, actor: Actor, uow: UoW, clo
     record = VoidApplication(uow, clock).execute(
         actor, ApplicationRecordId.parse(record_id), body.reason
     )
-    return _ser_record(record, _Names(uow))
+    return _ser_record(record, UserNames(uow))

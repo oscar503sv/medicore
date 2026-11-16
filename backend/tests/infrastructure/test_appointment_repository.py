@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from medicore.domain.shared.identifiers import TenantId, UserId
+from medicore.domain.value_objects.assignee import Assignee
 from medicore.infrastructure.persistence.models.appointment import AppointmentModel
 from medicore.infrastructure.persistence.repositories.appointment import (
     SqlAppointmentRepository,
@@ -72,7 +73,7 @@ def test_find_overlapping_compares_naive_store_against_aware_request():
     start = datetime(2026, 6, 1, 9, 15, tzinfo=UTC)
     end = datetime(2026, 6, 1, 9, 45, tzinfo=UTC)
 
-    overlapping = repo.find_overlapping(doctor, start, end)
+    overlapping = repo.find_overlapping(Assignee.doctor(doctor), start, end)
 
     assert len(overlapping) == 1
 
@@ -86,4 +87,4 @@ def test_find_overlapping_excludes_non_overlapping_aware_request():
     start = datetime(2026, 6, 1, 9, 30, tzinfo=UTC)
     end = datetime(2026, 6, 1, 10, 0, tzinfo=UTC)
 
-    assert repo.find_overlapping(doctor, start, end) == []
+    assert repo.find_overlapping(Assignee.doctor(doctor), start, end) == []

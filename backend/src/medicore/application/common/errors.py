@@ -60,3 +60,9 @@ class ValidationError(ApplicationError):
     """A command failed input validation before reaching the domain."""
 
     code = "validation_error"
+
+
+class ConflictError(ApplicationError):
+    """The request clashes with the current state of a resource (HTTP 409)."""
+
+    code = "conflict"

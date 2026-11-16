@@ -10,19 +10,30 @@ from medicore.application.use_cases.vaccinations import (
     GetVaccinationWorklist,
     RecordVaccination,
     RecordVaccinationCommand,
+    RecordVaccinationVisit,
+    RecordVaccinationVisitCommand,
+    VisitDose,
     VoidVaccination,
     WorklistItem,
 )
+from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.vaccination_record import VaccinationRecord
 from medicore.domain.services.immunization import SCHEDULE, SCHEDULE_NAME, VACCINES
-from medicore.domain.shared.identifiers import PatientId, UserId, VaccinationRecordId
+from medicore.domain.shared.identifiers import (
+    AppointmentId,
+    PatientId,
+    UserId,
+    VaccinationRecordId,
+)
 from medicore.presentation.dependencies import Actor, Clock, UoW
 from medicore.presentation.schemas.vaccinations import (
     RecordVaccinationRequest,
+    RecordVaccinationVisitRequest,
     VaccinationCardResponse,
     VaccinationCatalogResponse,
     VaccinationRecordResponse,
+    VaccinationVisitResponse,
     VaccinationWorklistResponse,
     VoidVaccinationRequest,
 )
@@ -46,6 +57,7 @@ def _ser_records(uow, records: list[VaccinationRecord]) -> list[dict]:
         {
             "id": str(r.id),
             "patient_id": str(r.patient_id),
+            "appointment_id": str(r.appointment_id) if r.appointment_id else None,
             "vaccine_code": r.vaccine_code,
             "dose_key": r.dose_key,
             "outcome": str(r.outcome),
@@ -75,6 +87,18 @@ def _ser_patient(p: Patient) -> dict:
         "date_of_birth": p.date_of_birth,
         "sex": str(p.sex),
         "phone": p.contact.phone,
+    }
+
+
+def _ser_worklist_appointment(a: Appointment) -> dict:
+    return {
+        "id": str(a.id),
+        "code": a.code,
+        "scheduled_start": a.scheduled_start,
+        "duration_minutes": a.duration_minutes,
+        "status": str(a.status),
+        "type": str(a.type),
+        "is_walk_in": a.is_walk_in,
     }
 
 
@@ -122,6 +146,14 @@ def worklist(actor: Actor, uow: UoW, clock: Clock, horizon_days: int = Query(30,
             {"patient": _ser_patient(p), "record": rec}
             for (p, _), rec in zip(wl.given_today, given, strict=True)
         ],
+        "appointments_today": [
+            {
+                "appointment": _ser_worklist_appointment(i.appointment),
+                "patient": _ser_patient(i.patient),
+                "attendant_name": i.attendant_name,
+            }
+            for i in wl.appointments_today
+        ],
     }
 
 
@@ -161,6 +193,27 @@ def record_vaccination(
     record = RecordVaccination(uow, clock).execute(actor, cmd)
     with uow:
         return _ser_records(uow, [record])[0]
+
+
+@router.post("/visits", response_model=VaccinationVisitResponse, status_code=201)
+def record_visit(body: RecordVaccinationVisitRequest, actor: Actor, uow: UoW, clock: Clock):
+    cmd = RecordVaccinationVisitCommand(
+        appointment_id=AppointmentId.parse(body.appointment_id),
+        patient_id=PatientId.parse(body.patient_id),
+        doses=tuple(
+            VisitDose(
+                vaccine_code=d.vaccine_code, outcome=d.outcome, dose_key=d.dose_key,
+                lot=d.lot, route=d.route, site=d.site, notes=d.notes,
+            )
+            for d in body.doses
+        ),
+    )
+    visit = RecordVaccinationVisit(uow, clock).execute(actor, cmd)
+    with uow:
+        return {
+            "appointment": _ser_worklist_appointment(visit.appointment),
+            "records": _ser_records(uow, visit.records),
+        }
 
 
 @router.post("/{record_id}/void", response_model=VaccinationRecordResponse)

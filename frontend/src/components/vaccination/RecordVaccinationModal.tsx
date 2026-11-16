@@ -12,16 +12,14 @@ import {
   type VaccineRoute,
 } from '@/api/vaccinations'
 import { Button } from '@/components/ui/Button'
-import { Input, Select, Textarea } from '@/components/ui/Input'
+import { AdministrationFields, VaccineDoseSelects } from './DoseFields'
+import { Input, Textarea } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Segmented } from '@/components/ui/Segmented'
 import { toast } from '@/components/ui/Toast'
 import { clinicToday } from '@/lib/format'
 import { useT } from '@/lib/i18n'
-import { ageLabel, doseLabel, vaccineDiseases, vaccineName } from '@/lib/vaccination'
-
-const ROUTES: VaccineRoute[] = ['im', 'sc', 'id', 'oral']
-const SITES: InjectionSite[] = ['left_arm', 'right_arm', 'left_thigh', 'right_thigh', 'mouth']
+import { openDoses } from '@/lib/vaccination'
 
 export interface RecordPreset {
   vaccine?: string
@@ -61,18 +59,10 @@ export function RecordVaccinationModal({
   const [site, setSite] = useState<InjectionSite | ''>('')
   const [notes, setNotes] = useState('')
 
-  const stateByKey = useMemo(() => new Map(states.map((s) => [s.key, s])), [states])
-  // Doses of the chosen vaccine that apply to this patient and can still be recorded
-  // (periodic doses repeat, so they are always offered).
+  // Doses of the chosen vaccine that apply to this patient and can still be recorded.
   const doses = useMemo(
-    () =>
-      catalog.doses.filter((d) => {
-        if (d.vaccine !== vaccine) return false
-        const st = stateByKey.get(d.key)
-        if (!st) return false // other sex
-        return d.repeat_months != null || st.status !== 'administered'
-      }),
-    [catalog.doses, vaccine, stateByKey],
+    () => openDoses(catalog, states, vaccine),
+    [catalog, states, vaccine],
   )
   const vaccineInfo = catalog.vaccines.find((v) => v.code === vaccine)
 
@@ -100,11 +90,7 @@ export function RecordVaccinationModal({
   // Changing vaccine resets the dose to its first open one, and the route to its default.
   const pickVaccine = (code: string) => {
     setVaccine(code)
-    const firstOpen = catalog.doses.find((d) => {
-      const st = stateByKey.get(d.key)
-      return d.vaccine === code && st && (d.repeat_months != null || st.status !== 'administered')
-    })
-    setDoseKey(firstOpen?.key ?? '')
+    setDoseKey(openDoses(catalog, states, code)[0]?.key ?? '')
     setRoute('')
   }
   useEffect(() => {
@@ -135,10 +121,6 @@ export function RecordVaccinationModal({
     onError: (err) => toast(errorMessage(err), 'danger'),
   })
 
-  const inScheme = catalog.vaccines.filter((v) => v.in_schedule)
-  const extra = catalog.vaccines.filter((v) => !v.in_schedule)
-  const diseases = vaccineDiseases(t, vaccine)
-
   return (
     <Modal open={open} onClose={onClose} title={t('vax.record_title')} width="max-w-xl">
       <form
@@ -148,39 +130,14 @@ export function RecordVaccinationModal({
           save.mutate()
         }}
       >
-        <div className="grid gap-4 sm:grid-cols-[1.4fr_1fr]">
-          <div>
-            <Select
-              label={t('vax.vaccine')}
-              value={vaccine}
-              onChange={(e) => pickVaccine(e.target.value)}
-            >
-              {inScheme.map((v) => (
-                <option key={v.code} value={v.code}>
-                  {vaccineName(t, v.code)}
-                </option>
-              ))}
-              {extra.map((v) => (
-                <option key={v.code} value={v.code}>
-                  {`${vaccineName(t, v.code)} · ${t('vax.out_of_scheme')}`}
-                </option>
-              ))}
-            </Select>
-            {diseases && <p className="mt-1 text-xs text-tx-3">{diseases}</p>}
-          </div>
-          <Select
-            label={t('vax.dose')}
-            value={doseKey}
-            onChange={(e) => setDoseKey(e.target.value)}
-          >
-            {doses.map((d) => (
-              <option key={d.key} value={d.key}>
-                {`${doseLabel(t, d)} · ${ageLabel(t, d.age_months)}`}
-              </option>
-            ))}
-            <option value="">{t('vax.dose_none')}</option>
-          </Select>
-        </div>
+        <VaccineDoseSelects
+          catalog={catalog}
+          vaccine={vaccine}
+          doseKey={doseKey}
+          doses={doses}
+          onVaccine={pickVaccine}
+          onDose={setDoseKey}
+        />
 
         <div>
           <span className="mb-1.5 block text-[13px] font-medium text-tx-2">{t('vax.outcome')}</span>
@@ -243,39 +200,15 @@ export function RecordVaccinationModal({
         )}
 
         {hereGiven && (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Input
-              label={t('vax.lot')}
-              value={lot}
-              placeholder={t('vax.lot_ph')}
-              onChange={(e) => setLot(e.target.value)}
-              className="font-mono"
-              required
-            />
-            <Select
-              label={t('vax.route')}
-              value={route || vaccineInfo?.route || ''}
-              onChange={(e) => setRoute(e.target.value as VaccineRoute)}
-            >
-              {ROUTES.map((r) => (
-                <option key={r} value={r}>
-                  {t(`vax.route.${r}`)}
-                </option>
-              ))}
-            </Select>
-            <Select
-              label={t('vax.site')}
-              value={site}
-              onChange={(e) => setSite(e.target.value as InjectionSite | '')}
-            >
-              <option value="">{t('vax.site_none')}</option>
-              {SITES.map((s) => (
-                <option key={s} value={s}>
-                  {t(`vax.site.${s}`)}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <AdministrationFields
+            lot={lot}
+            route={route}
+            site={site}
+            defaultRoute={vaccineInfo?.route}
+            onLot={setLot}
+            onRoute={setRoute}
+            onSite={setSite}
+          />
         )}
 
         {outcome === 'administered' && source === 'external' && (

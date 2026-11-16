@@ -48,6 +48,7 @@ from medicore.domain.repositories.procedure_repository import ProcedureRepositor
 from medicore.domain.repositories.role_permission_override_repository import (
     RolePermissionOverrideRepository,
 )
+from medicore.domain.repositories.service_agenda_repository import ServiceAgendaRepository
 from medicore.domain.repositories.tenant_repository import TenantRepository
 from medicore.domain.repositories.user_repository import (
     DoctorProfileRepository,
@@ -77,6 +78,7 @@ __all__ = [
     "FeeScheduleRepository",
     "InsurerRepository",
     "NoteTemplateRepository",
+    "ServiceAgendaRepository",
     "MedicalCertificateRepository",
     "MedicalDocumentRepository",
     "MedicalRecordRepository",

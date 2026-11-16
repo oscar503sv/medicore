@@ -59,7 +59,7 @@ ENUMS: dict[str, dict[str, dict[str, str]]] = {
         # Same names as the frontend ``apptype.*``.
         "appointment_type": {"consult": "Consulta", "follow_up": "Seguimiento (control)",
                              "check_up": "Chequeo preventivo", "procedure": "Procedimiento",
-                             "emergency": "Urgencia"},
+                             "emergency": "Urgencia", "vaccination": "Vacunación"},
         "appointment_status": {"scheduled": "Agendada", "confirmed": "Confirmada",
                                "in_progress": "En curso", "completed": "Completada",
                                "cancelled": "Cancelada", "no_show": "No asistió"},
@@ -73,7 +73,7 @@ ENUMS: dict[str, dict[str, dict[str, str]]] = {
     "en": {
         "appointment_type": {"consult": "Consultation", "follow_up": "Follow-up",
                              "check_up": "Preventive check-up", "procedure": "Procedure",
-                             "emergency": "Emergency"},
+                             "emergency": "Emergency", "vaccination": "Vaccination"},
         "appointment_status": {"scheduled": "Scheduled", "confirmed": "Confirmed",
                                "in_progress": "In progress", "completed": "Completed",
                                "cancelled": "Cancelled", "no_show": "No show"},

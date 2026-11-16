@@ -319,7 +319,7 @@ Quienes escriben documentos clínicos o citas bloquean sus filas dentro de la tr
 
 1. **Documento clínico (N1)**: una consulta o un procedimiento. Una transacción nunca bloquea los dos.
 2. **Cita (N2)**.
-3. **Reservas del médico (N3)**: bloqueo consultivo por clínica y médico (`lock_doctor_bookings`), que se libera al terminar la transacción.
+3. **Reservas de quien atiende (N3)**: bloqueo consultivo por clínica y médico o agenda de servicio (`lock_bookings`; la clave del médico es la que entregó OZK-119, así que los contenedores viejo y nuevo chocan durante un despliegue, y las agendas usan otra), que se libera al terminar la transacción.
 4. **Contador (N4)**: código de expediente, código de cita, etc. Siempre al final, así que no se bloquea nada mientras se tiene un contador.
 
 Las lecturas simples no bloquean. Cancelar una cita no mira su consulta: una consulta solo existe para citas en curso o completadas, y esas no se cancelan.
@@ -334,9 +334,10 @@ Las lecturas simples no bloquean. Cancelar una cita no mira su consulta: una con
 | `CreateProcedure` con cita | cita |
 | `ConfirmAppointment`, `CancelAppointment`, `MarkNoShow`, `RescheduleAppointment`, `AdjustAppointmentFee` | cita |
 | `CreatePatient`, certificados | su contador |
-| `CreateAppointment` | reservas del médico → contador de citas |
-| `RescheduleAppointment` | cita → reservas del médico |
-| `RegisterWalkIn` | reservas del médico → contador de citas (serializa las altas de la clínica); después lee, sin bloquear, las citas del médico para detectar un duplicado. No comprueba el hueco, a propósito |
+| `CreateAppointment` | reservas de quien atiende → contador de citas |
+| `RescheduleAppointment` | cita → reservas de quien atiende |
+| `RecordVaccinationVisit` | cita (luego las dosis y el cierre; no se bloquea nada más) |
+| `RegisterWalkIn` | reservas de quien atiende → contador de citas (serializa las altas de la clínica); después lee, sin bloquear, las citas del médico para detectar un duplicado. No comprueba el hueco, a propósito |
 
 ## Despliegue
 
@@ -394,6 +395,10 @@ Checklist de producción (vía variables de entorno, ver tabla de **Configuraci�
 > **Migración `a9b0c1d2e3f5`** (protección de expedientes firmados, OZK-99): sella cada versión (`seal`, `seal_version` 1), así que el sello certifica el contenido a la fecha de la migración, no a la de la firma. Convierte `medical_records` en solo inserción (triggers que rechazan `UPDATE`, `DELETE` y `TRUNCATE`), deja que las recetas solo se cierren, cambia a RESTRICT las claves foráneas de `medical_records`, `prescriptions` y `medical_documents`, y crea los índices que las respaldan. Desliga (`record_id = NULL`) las recetas y documentos cuyo expediente no existe. Se niega a ejecutarse, listando solo ids, mientras haya otra referencia huérfana. **Antes de desplegar, ejecuta las consultas de [Expedientes protegidos y referencias huérfanas antes de OZK-99](#expedientes-protegidos-y-referencias-huérfanas-antes-de-ozk-99)**, y despliega backend y frontend juntos. Volver atrás requiere `alembic downgrade f8a9b0c1d2e4` además del código anterior: el código por sí solo deja los triggers y las columnas del sello en la base de datos.
 
 > **Migración `b0c1d2e3f4a6`** (atender sin cita, OZK-111): añade `appointments.is_walk_in` (booleano `NOT NULL`, por defecto `false`, que se conserva para el código anterior) y otorga `appointments.walk_in` a los roles médico y recepción de las clínicas que los habían personalizado (el administrador nunca lo tiene: `NOT_FOR_ADMIN`). No requiere pasos manuales ni bloquea escrituras más que un instante. Su downgrade quita el permiso de esas personalizaciones y elimina la columna.
+
+> **Migración `d2e3f4a5b6c8`** (agendas de servicio, OZK-112): crea `service_agendas` (nombre único por clínica, sin distinguir mayúsculas) y añade `appointments.agenda_id` y `doctor_availability.agenda_id` (FK anulables), hace anulable `doctor_id` en ambas con un `CHECK num_nonnulls(doctor_id, agenda_id) = 1`, un horario único por agenda y `vaccination_records.appointment_id`. Las referencias nuevas son claves foráneas compuestas `(tenant_id, …)`, de modo que una fila nunca apunta a la agenda o cita de otra clínica; para eso añade `UNIQUE (tenant_id, id)` a `service_agendas`, `locations` y `appointments` (el de `appointments` lo puede reutilizar OZK-116). Es compatible hacia atrás (el código anterior siempre inserta un médico, lo que cumple el CHECK) y no requiere pasos manuales. Su downgrade se niega a correr, con un mensaje claro, mientras exista alguna agenda, cita de vacunación o dosis enlazada a una cita: nunca borra datos.
+>
+> Endpoints nuevos: `GET|POST /service-agendas`, `PATCH /service-agendas/{id}`, `POST /service-agendas/{id}/active`; el horario de una agenda en `/availability/agendas/{id}` (`weekly`, `exceptions`, `rules`) y `GET /availability/preview?agenda_id=`; `agenda_id` (en lugar de `doctor_id`) en `POST /appointments`, `POST /appointments/walk-in`, `GET /appointments`, `/appointments/schedule` y `/appointments/slots`; `POST /vaccinations/visits`.
 
 > **Antes de desplegar esta versión** (OZK-106, sin migración): un procedimiento firmado responde 409 `procedure.already_signed` en vez de 422, así que despliega el backend y el frontend juntos. Ejecuta antes las consultas de [Citas y procedimientos inconsistentes antes de OZK-106](#citas-y-procedimientos-inconsistentes-antes-de-ozk-106): solo informan, no cambian nada automáticamente.
 

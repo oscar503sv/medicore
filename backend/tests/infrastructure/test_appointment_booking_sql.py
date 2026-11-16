@@ -24,6 +24,7 @@ from medicore.application.use_cases.appointments import (
 from medicore.domain.enums import AppointmentType, Role
 from medicore.domain.shared.errors import SlotUnavailable
 from medicore.domain.shared.identifiers import AppointmentId
+from medicore.domain.value_objects.assignee import Assignee
 from tests.infrastructure.test_consultation_sign_sql import WAIT, Clinic, engine  # noqa: F401
 from tests.support.builders import build_user, build_weekday_availability
 from tests.support.fakes import FixedClock
@@ -116,7 +117,7 @@ def test_two_simultaneous_bookings_of_one_slot_create_one(engine):  # noqa: F811
         _with_availability(clinic, clinic.doctor)
         holder = Session(bind=engine)
         try:
-            clinic.uow(holder).appointments.lock_doctor_bookings(clinic.doctor.id)
+            clinic.uow(holder).appointments.lock_bookings(Assignee.doctor(clinic.doctor.id))
             futures = [pool.submit(_create, clinic) for _ in range(2)]
             _blocked(futures)
             holder.rollback()
@@ -133,7 +134,7 @@ def test_a_booking_and_a_reschedule_to_the_same_slot_leave_one(engine):  # noqa:
         moved = _scheduled_at_11(clinic)
         holder = Session(bind=engine)
         try:
-            clinic.uow(holder).appointments.lock_doctor_bookings(clinic.doctor.id)
+            clinic.uow(holder).appointments.lock_bookings(Assignee.doctor(clinic.doctor.id))
             futures = [pool.submit(_create, clinic), pool.submit(_reschedule, clinic, moved)]
             _blocked(futures)
             holder.rollback()
@@ -155,7 +156,7 @@ def test_bookings_of_different_doctors_do_not_wait_on_each_other(engine):  # noq
 
         holder = Session(bind=engine)
         try:
-            clinic.uow(holder).appointments.lock_doctor_bookings(clinic.doctor.id)
+            clinic.uow(holder).appointments.lock_bookings(Assignee.doctor(clinic.doctor.id))
             pool.submit(_create, clinic, other.id).result(timeout=5)
             holder.rollback()
         finally:

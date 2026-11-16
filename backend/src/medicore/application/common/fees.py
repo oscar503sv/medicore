@@ -14,12 +14,14 @@ from medicore.domain.shared.errors import PermissionDenied
 from medicore.domain.shared.identifiers import UserId
 
 
-def can_price(actor: ActorContext, doctor_id: UserId) -> bool:
+def can_price(actor: ActorContext, doctor_id: UserId | None) -> bool:
+    """``doctor_id`` None is a service agenda's appointment: nobody owns it, so only who
+    manages every doctor's fees may change its charge."""
     if has_permission(actor, Permission.FEES_MANAGE_ALL):
         return True
     return actor.user_id == doctor_id and has_permission(actor, Permission.FEES_MANAGE_OWN)
 
 
-def ensure_can_price(actor: ActorContext, doctor_id: UserId) -> None:
+def ensure_can_price(actor: ActorContext, doctor_id: UserId | None) -> None:
     if not can_price(actor, doctor_id):
         raise PermissionDenied("you may not set this doctor's fees", code="fee.not_allowed")

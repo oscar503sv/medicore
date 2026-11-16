@@ -23,6 +23,7 @@ from medicore.domain.shared.identifiers import (
     LocationId,
     PatientId,
     PlatformAdminId,
+    ServiceAgendaId,
     TenantId,
     UserId,
 )
@@ -105,12 +106,14 @@ def build_patient(tenant_id: TenantId, code: str = "P-00100", **overrides) -> Pa
 
 def build_weekday_availability(
     tenant_id: TenantId,
-    doctor_id: UserId,
+    doctor_id: UserId | None,
     *,
     slot_minutes: int = 30,
     min_advance_hours: int = 0,
+    agenda_id: ServiceAgendaId | None = None,
 ) -> DoctorAvailability:
-    """Mon–Fri 09:00–13:00 availability with permissive booking rules."""
+    """Mon–Fri 09:00–13:00 availability with permissive booking rules (a doctor's, or a
+    service agenda's when ``doctor_id`` is None)."""
     weekly = [WeeklyDay(day_of_week=d) for d in range(7)]
     for d in range(5):  # Monday..Friday
         weekly[d] = WeeklyDay(
@@ -120,6 +123,7 @@ def build_weekday_availability(
         id=AvailabilityId.new(),
         tenant_id=tenant_id,
         doctor_id=doctor_id,
+        agenda_id=agenda_id,
         weekly=weekly,
         rules=BookingRules(
             slot_minutes=slot_minutes,

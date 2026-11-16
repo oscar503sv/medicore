@@ -35,7 +35,8 @@ class BookingRulesRequest(BaseModel):
 
 class AvailabilityResponse(BaseModel):
     id: str
-    doctor_id: str
+    doctor_id: str | None = None  # None for a service agenda's schedule
+    agenda_id: str | None = None
     weekly: list[dict]
     exceptions: list[dict]
     rules: dict

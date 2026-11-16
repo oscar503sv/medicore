@@ -11,10 +11,12 @@ from medicore.presentation.schemas.organization import LocationResponse
 from medicore.presentation.schemas.users import UserResponse
 
 
-# Duration is never sent by the client — it always comes from the doctor's booking rules.
+# Duration is never sent by the client — it always comes from the booking rules of whoever
+# attends. Exactly one of doctor_id and agenda_id is sent (otherwise 422).
 class CreateAppointmentRequest(BaseModel):
     patient_id: str
-    doctor_id: str
+    doctor_id: str | None = None
+    agenda_id: str | None = None
     location_id: str
     type: AppointmentType
     scheduled_start: datetime
@@ -25,7 +27,8 @@ class CreateAppointmentRequest(BaseModel):
 
 class WalkInRequest(BaseModel):
     patient_id: str
-    doctor_id: str
+    doctor_id: str | None = None
+    agenda_id: str | None = None
     location_id: str | None = None
     type: AppointmentType = AppointmentType.EMERGENCY
     reason: str = Field(min_length=1, max_length=500)
@@ -41,7 +44,9 @@ class AppointmentResponse(BaseModel):
     tenant_id: str
     code: str
     patient_id: str
-    doctor_id: str
+    doctor_id: str | None = None  # None when a service agenda attends it
+    agenda_id: str | None = None
+    agenda_name: str | None = None
     location_id: str
     type: str
     status: str
@@ -78,6 +83,15 @@ class BookingDoctorResponse(UserResponse):
     slot_minutes: int | None = None  # appointment duration imposed by the doctor's rules
 
 
+class BookingAgendaResponse(BaseModel):
+    id: str
+    name: str
+    kind: str
+    location_id: str | None
+    slot_minutes: int | None = None  # appointment duration imposed by the agenda's rules
+
+
 class BookingOptionsResponse(BaseModel):
     doctors: list[BookingDoctorResponse]
     locations: list[LocationResponse]
+    agendas: list[BookingAgendaResponse] = []

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { MapPin, Pencil, Plus } from 'lucide-react'
 import { errorMessage } from '@/api/client'
 import { organizationApi } from '@/api/organization'
+import { ServiceAgendasSection } from '@/components/settings/ServiceAgendasSection'
 import { PlanCard } from '@/components/subscriptions/PlanCard'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +23,11 @@ export function OrganizationSection() {
   const qc = useQueryClient()
   const canManage = useAuthStore((s) => s.can('organization.manage'))
   const canManageLocations = useAuthStore((s) => s.can('locations.manage'))
+  // Permissions already exclude what the clinic has not contracted: the module's own ones
+  // stand in for "has the vaccination module".
+  const canManageAgendas = useAuthStore(
+    (s) => s.can('organization.manage') && s.can('vaccinations.view'),
+  )
 
   const { data: org, isLoading } = useQuery({
     queryKey: ['organization'],
@@ -139,6 +145,8 @@ export function OrganizationSection() {
           ))}
         </div>
       </Card>
+
+      {canManageAgendas && <ServiceAgendasSection locations={org.locations} />}
 
       <PrintSettingsCard org={org} canManage={canManage} onSaved={applyResult} />
 

@@ -126,7 +126,7 @@ def treating_doctor(uow: UnitOfWork, patient: Patient) -> UserId | None:
     completed = [
         a
         for a in uow.appointments.list_by_patient(patient.id)
-        if a.status == AppointmentStatus.COMPLETED
+        if a.status == AppointmentStatus.COMPLETED and a.doctor_id is not None
     ]
     if not completed:
         return None

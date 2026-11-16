@@ -232,7 +232,7 @@ class RequestStatsRow:
 class AppointmentFact:
     """The columns of an appointment the clinic's metrics need, and nothing clinical."""
 
-    doctor_id: str
+    doctor_id: str | None  # None: a service agenda attended it
     patient_id: str
     type: str
     status: str
@@ -262,13 +262,14 @@ class AppointmentReportRow:
     patient_code: str
     patient_name: str
     patient_phone: str | None
-    doctor_id: str
+    doctor_id: str | None  # None: a service agenda attended it
     type: str
     status: str
     insurer_id: str | None
     listed: Decimal | None
     charged: Decimal | None
     fee_note: str | None
+    agenda_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

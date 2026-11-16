@@ -10,9 +10,11 @@ from medicore.domain.shared.errors import DomainError, InvalidValueObject
 from medicore.domain.shared.identifiers import (
     AvailabilityId,
     ExceptionId,
+    ServiceAgendaId,
     TenantId,
     UserId,
 )
+from medicore.domain.value_objects.assignee import Assignee
 from medicore.domain.value_objects.time_range import TimeRange
 
 _SLOT_CHOICES = frozenset({15, 20, 30, 45, 60})
@@ -82,7 +84,8 @@ class BookingRules:
 
 @dataclass(slots=True)
 class DoctorAvailability:
-    """One per doctor per tenant. Owns the schedule, exceptions and rules.
+    """One per doctor, or per service agenda, per tenant. Owns the schedule, exceptions and
+    rules. The class keeps its name: for an agenda, ``doctor_id`` is None and ``agenda_id`` set.
 
     Slot resolution logic lives in ``domain.services.slot_resolver`` to keep this aggregate
     focused on holding state and its own invariants.
@@ -90,12 +93,18 @@ class DoctorAvailability:
 
     id: AvailabilityId
     tenant_id: TenantId
-    doctor_id: UserId
+    doctor_id: UserId | None
     weekly: list[WeeklyDay] = field(default_factory=list)
     exceptions: list[AvailabilityException] = field(default_factory=list)
     rules: BookingRules = field(default_factory=BookingRules)
+    agenda_id: ServiceAgendaId | None = None
+
+    @property
+    def assignee(self) -> Assignee:
+        return Assignee(self.doctor_id, self.agenda_id)
 
     def __post_init__(self) -> None:
+        Assignee(self.doctor_id, self.agenda_id)  # raises unless exactly one is set
         if not self.weekly:
             self.weekly = [WeeklyDay(day_of_week=d) for d in range(7)]
         seen = {d.day_of_week for d in self.weekly}

@@ -40,6 +40,7 @@ from tests.support.repositories import (
     InMemoryReportReadModel,
     InMemoryRequestStatsRepository,
     InMemoryRolePermissionOverrideRepository,
+    InMemoryServiceAgendaRepository,
     InMemorySubscriptionPaymentRepository,
     InMemoryTenantRepository,
     InMemoryUserRepository,
@@ -64,6 +65,7 @@ class InMemoryUnitOfWork:
         self.prescriptions = InMemoryPrescriptionRepository(store, tenant_id)
         self.documents = InMemoryMedicalDocumentRepository(store, tenant_id)
         self.availability = InMemoryDoctorAvailabilityRepository(store, tenant_id)
+        self.service_agendas = InMemoryServiceAgendaRepository(store, tenant_id)
         self.fees = InMemoryFeeScheduleRepository(store, tenant_id)
         self.certificates = InMemoryMedicalCertificateRepository(store, tenant_id)
         self.users = InMemoryUserRepository(store, tenant_id)

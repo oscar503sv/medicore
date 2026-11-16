@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
+from medicore.application.common.appointment_access import ensure_own_appointment
 from medicore.application.common.audit import audit_entry, subject
 from medicore.application.common.context import ActorContext
 from medicore.application.common.errors import EntityNotFound, ValidationError
@@ -25,7 +26,8 @@ from medicore.application.ports.unit_of_work import UnitOfWork
 from medicore.application.use_cases.fees import list_price
 from medicore.domain.entities.appointment import Appointment
 from medicore.domain.entities.availability import BookingRules
-from medicore.domain.entities.tenant import Location
+from medicore.domain.entities.service_agenda import ServiceAgenda
+from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import User
 from medicore.domain.enums import (
     AddonModule,
@@ -47,8 +49,10 @@ from medicore.domain.shared.identifiers import (
     InsurerId,
     LocationId,
     PatientId,
+    ServiceAgendaId,
     UserId,
 )
+from medicore.domain.value_objects.assignee import Assignee
 from medicore.domain.value_objects.fee import Charge
 
 _BLOCKING_STATUSES = {
@@ -72,16 +76,106 @@ def _appt_subject(uow: UnitOfWork, appointment: Appointment) -> str:
     return subject(appointment.code, patient.full_name if patient else None)
 
 
+_TYPE_MODULES = {
+    AppointmentType.PROCEDURE: AddonModule.PROCEDURES,
+    AppointmentType.VACCINATION: AddonModule.VACCINATION,
+}
+
+
+def _required_module(kind: AppointmentType, agenda: ServiceAgenda | None) -> AddonModule | None:
+    """The module a clinic needs to book this: the agenda's own, or the type's."""
+    return agenda.module if agenda is not None else _TYPE_MODULES.get(kind)
+
+
+def _ensure_module(
+    uow: UnitOfWork, actor: ActorContext, module: AddonModule | None, code: str
+) -> Tenant:
+    tenant = uow.tenants.get_by_id(actor.tenant_id)
+    if tenant is None:
+        raise EntityNotFound("Tenant", actor.tenant_id)
+    if module is not None and not tenant.subscription.has_module(module):
+        raise PermissionDenied(
+            "the module is not contracted", code=code, module=str(module)
+        )
+    return tenant
+
+
+def _ensure_doctor_attendable(
+    uow: UnitOfWork, actor: ActorContext, doctor_id: UserId | None, invalid_code: str
+) -> None:
+    """A doctor books only for themselves or a service agenda (never another doctor); and
+    whoever books must name an active doctor."""
+    if doctor_id is None:
+        return
+    if actor.role == Role.DOCTOR and doctor_id != actor.user_id:
+        raise PermissionDenied(
+            "doctors may only book appointments for themselves", code="appointment.not_own"
+        )
+    doctor = uow.users.get_by_id(doctor_id)
+    if doctor is None or doctor.role != Role.DOCTOR or not doctor.is_active:
+        raise ValidationError("the doctor must be an active doctor", code=invalid_code)
+
+
+def _ensure_patient(uow: UnitOfWork, patient_id: PatientId, inactive_code: str) -> None:
+    patient = uow.patients.get_by_id(patient_id)
+    if patient is None:
+        raise EntityNotFound("Patient", patient_id)
+    if patient.status != PatientStatus.ACTIVE:
+        raise ValidationError("the patient is not active", code=inactive_code)
+
+
+def _ensure_location_and_insurer(
+    uow: UnitOfWork,
+    tenant: Tenant,
+    location_id: LocationId,
+    insurance_id: InsurerId | None,
+    location_code: str,
+    insurer_code: str,
+) -> None:
+    """The ids a request carries must belong to the clinic, not to another one."""
+    if all(loc.id != location_id for loc in tenant.locations):
+        raise ValidationError("unknown location", code=location_code)
+    if insurance_id is not None and uow.insurers.get_by_id(insurance_id) is None:
+        raise ValidationError("unknown insurer", code=insurer_code)
+
+
+def _bookable_agenda(
+    uow: UnitOfWork, assignee: Assignee, kind: AppointmentType
+) -> ServiceAgenda | None:
+    """The agenda that would attend the appointment (None for a doctor's), checked to be
+    active and to take that type of appointment."""
+    if assignee.agenda_id is None:
+        return None
+    agenda = uow.service_agendas.get_by_id(assignee.agenda_id)
+    if agenda is None:
+        raise EntityNotFound("ServiceAgenda", assignee.agenda_id)
+    if not agenda.active:
+        raise ValidationError("the service agenda is archived", code="service_agenda.inactive")
+    agenda.ensure_accepts(kind)
+    return agenda
+
+
+def _charge_for(uow: UnitOfWork, assignee: Assignee, kind: AppointmentType) -> Charge:
+    """The doctor's price for this type right now (later price changes don't touch it). An
+    agenda has none: vaccines are priced from a catalog, not per appointment."""
+    if assignee.doctor_id is None:
+        return Charge()
+    return Charge.at_list_price(list_price(uow, assignee.doctor_id, kind))
+
+
 @dataclass(frozen=True, slots=True)
 class CreateAppointmentCommand:
+    """Exactly one of ``doctor_id`` and ``agenda_id`` says who attends."""
+
     patient_id: PatientId
-    doctor_id: UserId
+    doctor_id: UserId | None
     location_id: LocationId
     type: AppointmentType
     scheduled_start: datetime
     reason: str
     room: str | None = None
     insurance_id: InsurerId | None = None
+    agenda_id: ServiceAgendaId | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,11 +183,12 @@ class WalkInCommand:
     """A patient seen right now. No time: it always starts at the clinic's current minute."""
 
     patient_id: PatientId
-    doctor_id: UserId
+    doctor_id: UserId | None
     reason: str
     type: AppointmentType = AppointmentType.EMERGENCY
     location_id: LocationId | None = None  # the primary location when omitted
     insurance_id: InsurerId | None = None
+    agenda_id: ServiceAgendaId | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -105,16 +200,25 @@ class DoctorOption:
 
 
 @dataclass(frozen=True, slots=True)
+class AgendaOption:
+    """A bookable service agenda plus the appointment duration its rules impose."""
+
+    agenda: ServiceAgenda
+    slot_minutes: int | None  # None → the agenda has no availability configured yet
+
+
+@dataclass(frozen=True, slots=True)
 class BookingOptions:
     """Everything the create-appointment UI needs to populate its selectors."""
 
     doctors: list[DoctorOption]
     locations: list[Location]
+    agendas: list[AgendaOption]
 
 
 class GetBookingOptions:
-    """Doctors + locations available for booking. Accessible to appointment managers
-    (admin, doctor, receptionist) — unlike the admin-only user/organization endpoints."""
+    """Doctors, service agendas + locations available for booking. Accessible to appointment
+    managers (admin, doctor, receptionist) — unlike the admin-only user/organization endpoints."""
 
     def __init__(self, uow: UnitOfWork) -> None:
         self._uow = uow
@@ -138,7 +242,21 @@ class GetBookingOptions:
                     slot_minutes=availability.rules.slot_minutes if availability else None,
                 )
             )
-        return BookingOptions(doctors=options, locations=locations)
+        agendas = []
+        listed = [
+            a for a in self._uow.service_agendas.list(active_only=True)
+            if tenant is not None and tenant.subscription.has_module(a.module)
+        ]
+        schedules = self._uow.availability.list_for_agendas([a.id for a in listed])
+        for agenda in listed:
+            availability = schedules.get(agenda.id)
+            agendas.append(
+                AgendaOption(
+                    agenda=agenda,
+                    slot_minutes=availability.rules.slot_minutes if availability else None,
+                )
+            )
+        return BookingOptions(doctors=options, locations=locations, agendas=agendas)
 
 
 def _scope_doctor(actor: ActorContext, doctor_id: UserId | None) -> UserId | None:
@@ -153,10 +271,14 @@ class ListAppointmentsForDay:
         self._uow = uow
 
     def execute(
-        self, actor: ActorContext, on: date, doctor_id: UserId | None = None
+        self,
+        actor: ActorContext,
+        on: date,
+        doctor_id: UserId | None = None,
+        agenda_id: ServiceAgendaId | None = None,
     ) -> list[Appointment]:
         ensure_permission(actor, Permission.APPOINTMENTS_VIEW)
-        return self._uow.appointments.list_by_day(on, _scope_doctor(actor, doctor_id))
+        return self._uow.appointments.list_by_day(on, _scope_doctor(actor, doctor_id), agenda_id)
 
 
 class ListUpcomingAppointments:
@@ -179,31 +301,38 @@ class GetWeeklySchedule:
         self._uow = uow
 
     def execute(
-        self, actor: ActorContext, week_start: date, doctor_id: UserId | None = None
+        self,
+        actor: ActorContext,
+        week_start: date,
+        doctor_id: UserId | None = None,
+        agenda_id: ServiceAgendaId | None = None,
     ) -> dict[date, list[Appointment]]:
         ensure_permission(actor, Permission.APPOINTMENTS_VIEW)
         scoped = _scope_doctor(actor, doctor_id)
         return {
             (day := week_start + timedelta(days=offset)): self._uow.appointments.list_by_day(
-                day, scoped
+                day, scoped, agenda_id
             )
             for offset in range(7)
         }
 
 
 class GetAvailableSlots:
-    """Resolve a doctor's bookable slots for a date, subtracting existing appointments."""
+    """Resolve a doctor's or service agenda's bookable slots for a date, subtracting existing
+    appointments."""
 
     def __init__(self, uow: UnitOfWork, clock: Clock) -> None:
         self._uow = uow
         self._clock = clock
 
-    def execute(self, actor: ActorContext, doctor_id: UserId, on: date) -> list[Slot]:
+    def execute(self, actor: ActorContext, assignee: Assignee, on: date) -> list[Slot]:
         ensure_permission(actor, Permission.APPOINTMENTS_VIEW)
-        availability = self._uow.availability.get_by_doctor(doctor_id)
+        availability = self._uow.availability.get_by_assignee(assignee)
         if availability is None:
             return []
-        busy = _busy_intervals(self._uow.appointments.list_by_day(on, doctor_id))
+        busy = _busy_intervals(
+            self._uow.appointments.list_by_day(on, assignee.doctor_id, assignee.agenda_id)
+        )
         return resolve_available_slots(
             availability,
             on,
@@ -223,33 +352,34 @@ class CreateAppointment:
 
     def execute(self, actor: ActorContext, cmd: CreateAppointmentCommand) -> Appointment:
         ensure_permission(actor, Permission.APPOINTMENTS_MANAGE)
-
-        if cmd.type == AppointmentType.PROCEDURE:
-            tenant = self._uow.tenants.get_by_id(actor.tenant_id)
-            if tenant is None:
-                raise EntityNotFound("Tenant", actor.tenant_id)
-            if not tenant.subscription.has_module(AddonModule.PROCEDURES):
-                raise PermissionDenied(
-                    "the procedures module is not contracted",
-                    code="appointment.module_required", module=str(AddonModule.PROCEDURES),
-                )
+        assignee = Assignee(cmd.doctor_id, cmd.agenda_id)
+        _ensure_doctor_attendable(self._uow, actor, cmd.doctor_id, "appointment.invalid_doctor")
+        agenda = _bookable_agenda(self._uow, assignee, cmd.type)
+        tenant = _ensure_module(
+            self._uow, actor, _required_module(cmd.type, agenda), "appointment.module_required"
+        )
+        _ensure_patient(self._uow, cmd.patient_id, "appointment.patient_inactive")
+        _ensure_location_and_insurer(
+            self._uow, tenant, cmd.location_id, cmd.insurance_id,
+            "appointment.invalid_location", "appointment.invalid_insurer",
+        )
 
         with self._uow:
             # Held until the commit: two bookings of the same slot queue here, and the second
             # one sees the first in the overlap check. Always before the code counter.
-            self._uow.appointments.lock_doctor_bookings(cmd.doctor_id)
+            self._uow.appointments.lock_bookings(assignee)
 
-            availability = self._uow.availability.get_by_doctor(cmd.doctor_id)
+            availability = self._uow.availability.get_by_assignee(assignee)
             if availability is None:
                 raise SlotUnavailable(
-                    "doctor has no availability configured", code="slot.no_availability"
+                    "no availability configured", code="slot.no_availability"
                 )
 
-            # Appointment duration is the doctor's rule, never a caller choice.
+            # Appointment duration is the assignee's rule, never a caller choice.
             duration = availability.rules.slot_minutes
             end = cmd.scheduled_start + timedelta(minutes=duration)
             busy = _busy_intervals(
-                self._uow.appointments.find_overlapping(cmd.doctor_id, cmd.scheduled_start, end)
+                self._uow.appointments.find_overlapping(assignee, cmd.scheduled_start, end)
             )
             if not is_available(
                 availability,
@@ -258,8 +388,7 @@ class CreateAppointment:
                 now=clinic_now(self._uow, actor.tenant_id, self._clock),
             ):
                 raise SlotUnavailable(
-                    f"{cmd.scheduled_start.isoformat()} is not bookable for doctor "
-                    f"{cmd.doctor_id}",
+                    f"{cmd.scheduled_start.isoformat()} is not bookable for {assignee.owner}",
                     code="slot.not_bookable",
                 )
 
@@ -269,6 +398,7 @@ class CreateAppointment:
                 code=self._codes.next_appointment_code(),
                 patient_id=cmd.patient_id,
                 doctor_id=cmd.doctor_id,
+                agenda_id=cmd.agenda_id,
                 location_id=cmd.location_id,
                 type=cmd.type,
                 scheduled_start=cmd.scheduled_start,
@@ -277,8 +407,7 @@ class CreateAppointment:
                 created_by_id=actor.user_id,
                 room=cmd.room,
                 insurance_id=cmd.insurance_id,
-                # The doctor's price for this type right now; later price changes don't touch it.
-                charge=Charge.at_list_price(list_price(self._uow, cmd.doctor_id, cmd.type)),
+                charge=_charge_for(self._uow, assignee, cmd.type),
                 created_at=self._clock.now(),
                 updated_at=self._clock.now(),
             )
@@ -293,6 +422,7 @@ class CreateAppointment:
                     subject=_appt_subject(self._uow, appointment),
                 )
             )
+            # An agenda has no doctor to tell: the notification skips a missing recipient.
             notify(
                 self._uow, actor, self._clock.now(), APPOINTMENT_CREATED,
                 [appointment.doctor_id], **appointment_payload(self._uow, appointment),
@@ -316,49 +446,38 @@ class RegisterWalkIn:
     def execute(self, actor: ActorContext, cmd: WalkInCommand) -> Appointment:
         ensure_permission(actor, Permission.APPOINTMENTS_WALK_IN)
 
-        patient = self._uow.patients.get_by_id(cmd.patient_id)
-        if patient is None:
-            raise EntityNotFound("Patient", cmd.patient_id)
-        if patient.status != PatientStatus.ACTIVE:
-            raise ValidationError(
-                "the patient is not active", code="walk_in.patient_inactive"
-            )
-        doctor = self._uow.users.get_by_id(cmd.doctor_id)
-        if doctor is None or doctor.role != Role.DOCTOR or not doctor.is_active:
-            raise ValidationError(
-                "the doctor must be an active doctor", code="walk_in.invalid_doctor"
-            )
-        tenant = self._uow.tenants.get_by_id(actor.tenant_id)
-        if tenant is None:
-            raise EntityNotFound("Tenant", actor.tenant_id)
-        if cmd.type == AppointmentType.PROCEDURE and not tenant.subscription.has_module(
-            AddonModule.PROCEDURES
-        ):
-            raise PermissionDenied(
-                "the procedures module is not contracted",
-                code="walk_in.module_required", module=str(AddonModule.PROCEDURES),
-            )
+        _ensure_patient(self._uow, cmd.patient_id, "walk_in.patient_inactive")
+        assignee = Assignee(cmd.doctor_id, cmd.agenda_id)
+        _ensure_doctor_attendable(self._uow, actor, cmd.doctor_id, "walk_in.invalid_doctor")
+        agenda = _bookable_agenda(self._uow, assignee, cmd.type)
+        tenant = _ensure_module(
+            self._uow, actor, _required_module(cmd.type, agenda), "walk_in.module_required"
+        )
         location_id = cmd.location_id or tenant.primary_location.id
+        _ensure_location_and_insurer(
+            self._uow, tenant, location_id, cmd.insurance_id,
+            "walk_in.invalid_location", "walk_in.invalid_insurer",
+        )
 
-        availability = self._uow.availability.get_by_doctor(cmd.doctor_id)
+        availability = self._uow.availability.get_by_assignee(assignee)
         duration = (availability.rules if availability else BookingRules()).slot_minutes
         now = clinic_now(self._uow, actor.tenant_id, self._clock).replace(second=0, microsecond=0)
 
         with self._uow:
-            # The doctor's bookings first, so a walk-in and a booking of the same doctor see
-            # each other; then the counter, which serializes this tenant's creations so two
-            # simultaneous registrations of the same patient see each other below.
-            self._uow.appointments.lock_doctor_bookings(cmd.doctor_id)
+            # The assignee's bookings first, so a walk-in and a booking of the same doctor or
+            # agenda see each other; then the counter, which serializes this tenant's creations
+            # so two simultaneous registrations of the same patient see each other below.
+            self._uow.appointments.lock_bookings(assignee)
             code = self._codes.next_appointment_code()
             end = now + timedelta(minutes=duration)
             same_patient = [
                 a
-                for a in self._uow.appointments.find_overlapping(cmd.doctor_id, now, end)
+                for a in self._uow.appointments.find_overlapping(assignee, now, end)
                 if a.patient_id == cmd.patient_id
             ]
             if same_patient:
                 raise SlotUnavailable(
-                    "the patient already has an active appointment with this doctor now",
+                    "the patient already has an active appointment here now",
                     code="walk_in.duplicate", appointment_code=same_patient[0].code,
                 )
             appointment = Appointment.walk_in(
@@ -367,6 +486,7 @@ class RegisterWalkIn:
                 code=code,
                 patient_id=cmd.patient_id,
                 doctor_id=cmd.doctor_id,
+                agenda_id=cmd.agenda_id,
                 location_id=location_id,
                 type=cmd.type,
                 reason=cmd.reason,
@@ -374,7 +494,7 @@ class RegisterWalkIn:
                 created_by_id=actor.user_id,
                 now=now,
                 insurance_id=cmd.insurance_id,
-                charge=Charge.at_list_price(list_price(self._uow, cmd.doctor_id, cmd.type)),
+                charge=_charge_for(self._uow, assignee, cmd.type),
             )
             appointment.created_at = appointment.updated_at = self._clock.now()
             self._uow.appointments.save(appointment)
@@ -407,23 +527,23 @@ class RescheduleAppointment:
         with self._uow:
             appointment = self._require(appointment_id)
             # After the appointment, before the overlap check: serializes against bookings
-            # and other moves of this doctor. The doctor never changes on a reschedule.
-            self._uow.appointments.lock_doctor_bookings(appointment.doctor_id)
+            # and other moves of this assignee. The assignee never changes on a reschedule.
+            ensure_own_appointment(actor, appointment)
+            assignee = appointment.assignee
+            self._uow.appointments.lock_bookings(assignee)
 
-            availability = self._uow.availability.get_by_doctor(appointment.doctor_id)
+            availability = self._uow.availability.get_by_assignee(assignee)
             if availability is None:
                 raise SlotUnavailable(
-                    "doctor has no availability configured", code="slot.no_availability"
+                    "no availability configured", code="slot.no_availability"
                 )
-            # Duration is recomputed from the doctor's current rules, not carried over.
+            # Duration is recomputed from the assignee's current rules, not carried over.
             duration = availability.rules.slot_minutes
             end = new_start + timedelta(minutes=duration)
             # Existing appointments excluding the one being moved.
             overlapping = [
                 a
-                for a in self._uow.appointments.find_overlapping(
-                    appointment.doctor_id, new_start, end
-                )
+                for a in self._uow.appointments.find_overlapping(assignee, new_start, end)
                 if a.id != appointment.id
             ]
             if not is_available(
@@ -481,6 +601,7 @@ class _AppointmentTransition:
             appointment = self._uow.appointments.get_for_update(appointment_id)
             if appointment is None:
                 raise EntityNotFound("Appointment", appointment_id)
+            ensure_own_appointment(actor, appointment)
             self._apply(appointment)
             self._uow.appointments.save(appointment)
             self._uow.audit.append(

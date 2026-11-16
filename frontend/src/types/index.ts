@@ -365,7 +365,13 @@ export type AppointmentStatus =
   | 'completed'
   | 'cancelled'
   | 'no_show'
-export type AppointmentType = 'consult' | 'follow_up' | 'check_up' | 'procedure' | 'emergency'
+export type AppointmentType =
+  | 'consult'
+  | 'follow_up'
+  | 'check_up'
+  | 'procedure'
+  | 'emergency'
+  | 'vaccination'
 export type ConsultationStatus = 'draft' | 'signed'
 export type RecordStatus = 'draft' | 'signed' | 'amended'
 export type ClinicalRecordType =
@@ -502,7 +508,9 @@ export interface Appointment {
   tenant_id: string
   code: string
   patient_id: string
-  doctor_id: string
+  /** Exactly one of doctor_id / agenda_id is set: a service agenda has no doctor. */
+  doctor_id: string | null
+  agenda_id: string | null
   location_id: string
   type: AppointmentType
   status: AppointmentStatus
@@ -514,6 +522,7 @@ export interface Appointment {
   insurance_id: string | null
   patient_name: string | null
   doctor_name: string | null
+  agenda_name: string | null
   insurer_name: string | null
   created_by_id: string
   /** The doctor's price when booked and what is charged ("25.00", USD); null: no price. */
@@ -814,7 +823,8 @@ export interface BookingRules {
 
 export interface Availability {
   id: string
-  doctor_id: string
+  doctor_id: string | null
+  agenda_id: string | null
   weekly: WeeklyDay[]
   exceptions: AvailabilityException[]
   rules: BookingRules

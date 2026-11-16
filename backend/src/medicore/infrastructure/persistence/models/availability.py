@@ -5,7 +5,16 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import Date, ForeignKey, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,13 +25,28 @@ class DoctorAvailabilityModel(Base):
     __tablename__ = "doctor_availability"
     __table_args__ = (
         UniqueConstraint("tenant_id", "doctor_id", name="uq_availability_tenant_doctor"),
+        Index(
+            "uq_availability_tenant_agenda", "tenant_id", "agenda_id", unique=True,
+            postgresql_where=text("agenda_id IS NOT NULL"),
+        ),
+        ForeignKeyConstraint(
+            ["tenant_id", "agenda_id"], ["service_agendas.tenant_id", "service_agendas.id"],
+            name="fk_availability_tenant_agenda",
+        ),
+        # The schedule is a doctor's or a service agenda's, never both and never neither.
+        CheckConstraint(
+            "num_nonnulls(doctor_id, agenda_id) = 1", name="ck_availability_one_assignee"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    doctor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    doctor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    agenda_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     # weekly: list of {day_of_week, enabled, blocks:[{start,end}]}
     weekly: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     # rules: {slot_minutes, min_advance_hours, allow_same_day} — legacy keys in stored JSON

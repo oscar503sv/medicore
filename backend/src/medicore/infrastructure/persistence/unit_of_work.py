@@ -61,6 +61,9 @@ from medicore.infrastructure.persistence.repositories.reports import SqlReportRe
 from medicore.infrastructure.persistence.repositories.role_permission_override import (
     SqlRolePermissionOverrideRepository,
 )
+from medicore.infrastructure.persistence.repositories.service_agenda import (
+    SqlServiceAgendaRepository,
+)
 from medicore.infrastructure.persistence.repositories.subscription import (
     SqlAddonPricingRepository,
     SqlPlanRepository,
@@ -94,6 +97,7 @@ class SqlAlchemyUnitOfWork:
         self.prescriptions = SqlPrescriptionRepository(session, tenant_id)
         self.documents = SqlMedicalDocumentRepository(session, tenant_id)
         self.availability = SqlDoctorAvailabilityRepository(session, tenant_id)
+        self.service_agendas = SqlServiceAgendaRepository(session, tenant_id)
         self.fees = SqlFeeScheduleRepository(session, tenant_id)
         self.certificates = SqlMedicalCertificateRepository(session, tenant_id)
         self.users = SqlUserRepository(session, tenant_id)

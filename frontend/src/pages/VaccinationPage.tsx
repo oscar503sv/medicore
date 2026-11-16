@@ -28,12 +28,18 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
+import { TodayAppointments } from '@/components/vaccination/TodayAppointments'
+import {
+  VaccinationVisitModal,
+  type VisitTarget,
+} from '@/components/vaccination/VaccinationVisitModal'
 import { cn } from '@/lib/cn'
 import { fmtDate } from '@/lib/format'
 import { useT } from '@/lib/i18n'
 import { STATUS_TONE, doseLabel, vaccineName } from '@/lib/vaccination'
+import { useAuthStore } from '@/stores/auth'
 
-type View = 'pending' | 'upcoming' | 'today'
+type View = 'pending' | 'upcoming' | 'today' | 'appointments'
 type Horizon = '30' | '60' | '90'
 
 /** Severity order: the worst dose decides a patient's row status. */
@@ -94,9 +100,13 @@ export function VaccinationPage() {
   const t = useT()
   const navigate = useNavigate()
   const ageOf = useAgeLabel()
-  const [view, setView] = useState<View>('pending')
+  const canSeeAppointments = useAuthStore((s) => s.can('appointments.view'))
+  // The day's appointments are what whoever vaccinates opens first.
+  const [view, setView] = useState<View>(canSeeAppointments ? 'appointments' : 'pending')
   const [horizon, setHorizon] = useState<Horizon>('30')
   const [q, setQ] = useState('')
+  const [visitTarget, setVisitTarget] = useState<VisitTarget | null>(null)
+  const canRecord = useAuthStore((s) => s.can('vaccinations.record'))
 
   const { data: catalog } = useQuery({
     queryKey: ['vaccination-catalog'],
@@ -158,6 +168,20 @@ export function VaccinationPage() {
           value={view}
           onChange={setView}
           options={[
+            ...(canSeeAppointments
+              ? [
+                  {
+                    value: 'appointments' as const,
+                    label: (
+                      <Count
+                        label={t('vax.tab_appointments')}
+                        n={data?.appointments_today.length ?? 0}
+                        active={view === 'appointments'}
+                      />
+                    ),
+                  },
+                ]
+              : []),
             {
               value: 'pending',
               label: (
@@ -215,6 +239,12 @@ export function VaccinationPage() {
       <Card className={cn('transition-opacity', isFetching && !isLoading && 'opacity-70')}>
         {isLoading || !data ? (
           <PageLoader />
+        ) : view === 'appointments' ? (
+          <TodayAppointments
+            rows={data.appointments_today.filter((r) => matches(r.patient, []))}
+            canRecord={canRecord}
+            onRecord={setVisitTarget}
+          />
         ) : view === 'today' ? (
           <GivenToday
             rows={data.given_today.filter((g) => matches(g.patient, [g.record.vaccine_code]))}
@@ -237,6 +267,8 @@ export function VaccinationPage() {
           />
         )}
       </Card>
+
+      <VaccinationVisitModal target={visitTarget} onClose={() => setVisitTarget(null)} />
     </div>
   )
 }

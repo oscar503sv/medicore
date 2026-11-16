@@ -117,6 +117,7 @@ class ProcedurePrint:
 class AppointmentPrint:
     context: PrintContext
     appointment: Appointment
+    agenda_name: str | None = None  # the service attending it, in place of a doctor
 
 
 @dataclass(frozen=True, slots=True)
@@ -373,7 +374,13 @@ class PrintAppointmentSlip(_Printer):
         )
         self._audit(actor, "appointment_slip", "Appointment", str(appointment.id),
                     appointment.code, patient)
-        return AppointmentPrint(context=context, appointment=appointment)
+        agenda = (
+            self._uow.service_agendas.get_by_id(appointment.agenda_id)
+            if appointment.agenda_id else None
+        )
+        return AppointmentPrint(
+            context=context, appointment=appointment, agenda_name=agenda.name if agenda else None
+        )
 
 
 class PrintAgenda(_Printer):

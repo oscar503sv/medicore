@@ -44,12 +44,12 @@ class SqlReportReadModel:
         a, p = AppointmentModel, PatientModel
         q = (
             self._s.query(
-                a.code, a.scheduled_start, a.doctor_id, a.type, a.status, a.insurance_id,
-                a.listed_fee, a.fee, a.fee_note,
+                a.code, a.scheduled_start, a.doctor_id, a.agenda_id, a.type, a.status,
+                a.insurance_id, a.listed_fee, a.fee, a.fee_note,
                 p.code.label("patient_code"), p.first_name, p.last_name,
                 p.contact["phone"].astext.label("phone"),
             )
-            .join(p, p.id == a.patient_id)
+            .join(p, (p.id == a.patient_id) & (p.tenant_id == a.tenant_id))
             .filter(a.tenant_id == self._tid, a.scheduled_start >= start,
                     a.scheduled_start < end)
             .order_by(a.scheduled_start, a.code)
@@ -60,7 +60,9 @@ class SqlReportReadModel:
             AppointmentReportRow(
                 code=r.code, scheduled_start=r.scheduled_start, patient_code=r.patient_code,
                 patient_name=_name(r.first_name, r.last_name), patient_phone=r.phone or None,
-                doctor_id=str(r.doctor_id), type=r.type, status=r.status,
+                doctor_id=str(r.doctor_id) if r.doctor_id else None,
+                agenda_id=str(r.agenda_id) if r.agenda_id else None,
+                type=r.type, status=r.status,
                 insurer_id=str(r.insurance_id) if r.insurance_id else None,
                 listed=r.listed_fee, charged=r.fee, fee_note=r.fee_note,
             )
@@ -77,7 +79,7 @@ class SqlReportReadModel:
                 pr.listed_fee, pr.fee, pr.fee_included,
                 p.code.label("patient_code"), p.first_name, p.last_name,
             )
-            .join(p, p.id == pr.patient_id)
+            .join(p, (p.id == pr.patient_id) & (p.tenant_id == pr.tenant_id))
             .filter(pr.tenant_id == self._tid, pr.status == "completed",
                     pr.performed_at >= since, pr.performed_at < until)
             .order_by(pr.performed_at)
@@ -106,7 +108,7 @@ class SqlReportReadModel:
                 p.code.label("patient_code"), p.first_name, p.last_name, p.sex,
                 p.date_of_birth,
             )
-            .join(p, p.id == v.patient_id)
+            .join(p, (p.id == v.patient_id) & (p.tenant_id == v.tenant_id))
             .filter(v.tenant_id == self._tid, v.voided_at.is_(None),
                     v.outcome == "administered", v.source == "clinic",
                     v.occurred_on >= first, v.occurred_on <= last)
@@ -134,8 +136,8 @@ class SqlReportReadModel:
                 o.drug, o.dose, o.route,
                 p.code.label("patient_code"), p.first_name, p.last_name,
             )
-            .join(o, o.id == r.order_id)
-            .join(p, p.id == r.patient_id)
+            .join(o, (o.id == r.order_id) & (o.tenant_id == r.tenant_id))
+            .join(p, (p.id == r.patient_id) & (p.tenant_id == r.tenant_id))
             .filter(r.tenant_id == self._tid, r.voided_at.is_(None), r.outcome == "applied",
                     r.recorded_at >= since, r.recorded_at < until)
             .order_by(r.recorded_at)

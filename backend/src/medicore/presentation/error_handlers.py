@@ -23,6 +23,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from medicore.application.common.errors import (
     ApplicationError,
     AuthenticationFailed,
+    ConflictError,
     EntityNotFound,
     TooManyLoginAttempts,
     ValidationError,
@@ -156,6 +157,10 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(EntityNotFound)
     async def handle_not_found(request: Request, exc: EntityNotFound):
         return _json(404, exc)
+
+    @app.exception_handler(ConflictError)
+    async def handle_conflict(request: Request, exc: ConflictError):
+        return _json(409, exc)
 
     @app.exception_handler(ValidationError)
     async def handle_validation(request: Request, exc: ValidationError):

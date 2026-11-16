@@ -6,7 +6,7 @@ from datetime import date
 from typing import Protocol
 
 from medicore.domain.entities.vaccination_record import VaccinationRecord
-from medicore.domain.shared.identifiers import PatientId, VaccinationRecordId
+from medicore.domain.shared.identifiers import AppointmentId, PatientId, VaccinationRecordId
 
 
 class VaccinationRecordRepository(Protocol):
@@ -24,6 +24,10 @@ class VaccinationRecordRepository(Protocol):
 
     def list_administered_on(self, day: date) -> list[VaccinationRecord]:
         """Non-voided doses given at the clinic on ``day``."""
+        ...
+
+    def list_by_appointment(self, appointment_id: AppointmentId) -> list[VaccinationRecord]:
+        """Every record given in the appointment, voided ones included."""
         ...
 
     def save(self, record: VaccinationRecord) -> None: ...

@@ -183,3 +183,8 @@ class FeeScheduleId(Identifier):
 @dataclass(frozen=True, slots=True)
 class CertificateId(Identifier):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceAgendaId(Identifier):
+    pass

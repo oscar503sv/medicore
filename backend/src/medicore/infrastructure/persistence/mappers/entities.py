@@ -12,6 +12,7 @@ from medicore.domain.entities.notification import Notification
 from medicore.domain.entities.patient import Patient
 from medicore.domain.entities.prescription import Prescription
 from medicore.domain.entities.role_permission_override import RolePermissionOverride
+from medicore.domain.entities.service_agenda import ServiceAgenda
 from medicore.domain.entities.tenant import Location, Tenant
 from medicore.domain.entities.user import DoctorProfile, User
 from medicore.domain.enums import (
@@ -29,6 +30,7 @@ from medicore.domain.enums import (
     PrescriptionStatus,
     RecordStatus,
     Role,
+    ServiceAgendaKind,
     Sex,
     TenantStatus,
     ThemePref,
@@ -48,6 +50,7 @@ from medicore.domain.shared.identifiers import (
     PrescriptionId,
     RecordId,
     RolePermissionOverrideId,
+    ServiceAgendaId,
     TenantId,
     UserId,
 )
@@ -88,6 +91,7 @@ from medicore.infrastructure.persistence.models.prescription import Prescription
 from medicore.infrastructure.persistence.models.role_permission_override import (
     RolePermissionOverrideModel,
 )
+from medicore.infrastructure.persistence.models.service_agenda import ServiceAgendaModel
 from medicore.infrastructure.persistence.models.tenant import LocationModel, TenantModel
 from medicore.infrastructure.persistence.models.user import DoctorProfileModel, UserModel
 
@@ -266,7 +270,8 @@ def to_appointment(row: AppointmentModel) -> Appointment:
         tenant_id=TenantId.parse(row.tenant_id),
         code=row.code,
         patient_id=PatientId.parse(row.patient_id),
-        doctor_id=UserId.parse(row.doctor_id),
+        doctor_id=UserId.parse(row.doctor_id) if row.doctor_id else None,
+        agenda_id=ServiceAgendaId.parse(row.agenda_id) if row.agenda_id else None,
         location_id=LocationId.parse(row.location_id),
         type=AppointmentType(row.type),
         status=AppointmentStatus(row.status),
@@ -280,6 +285,19 @@ def to_appointment(row: AppointmentModel) -> Appointment:
         is_walk_in=row.is_walk_in,
         pre_vitals=dict_to_vitals(row.pre_vitals or {}),
         pre_vitals_saved_at=row.pre_vitals_saved_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def to_service_agenda(row: ServiceAgendaModel) -> ServiceAgenda:
+    return ServiceAgenda(
+        id=ServiceAgendaId.parse(row.id),
+        tenant_id=TenantId.parse(row.tenant_id),
+        name=row.name,
+        kind=ServiceAgendaKind(row.kind),
+        location_id=LocationId.parse(row.location_id) if row.location_id else None,
+        active=row.active,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )

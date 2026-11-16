@@ -19,6 +19,7 @@ import {
   Printer,
   Search,
   Stethoscope,
+  Syringe,
   UserX,
   X,
 } from 'lucide-react'
@@ -27,10 +28,12 @@ import { openPrint } from '@/api/printing'
 import { consultationsApi } from '@/api/consultations'
 import { errorMessage } from '@/api/client'
 import { ConsultationVitalsModal } from '@/components/consultation/ConsultationVitalsModal'
+import { AssigneeFilter } from '@/components/appointments/AssigneeFilter'
 import { NewAppointmentModal } from '@/components/appointments/NewAppointmentModal'
 import { WalkInBadge } from '@/components/appointments/WalkInBadge'
 import { WalkInButton } from '@/components/appointments/WalkInButton'
 import { RescheduleAppointmentModal } from '@/components/appointments/RescheduleAppointmentModal'
+import { VaccinationVisitModal, type VisitTarget } from '@/components/vaccination/VaccinationVisitModal'
 import { AdjustFeeModal } from '@/components/fees/AdjustFeeModal'
 import { FeeCell } from '@/components/fees/FeeCell'
 import { PageHeader } from '@/components/PageHeader'
@@ -40,7 +43,6 @@ import { statusTone } from '@/components/ui/badgeTone'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { Select } from '@/components/ui/Input'
 import { Menu, type MenuItem } from '@/components/ui/Menu'
 import { Modal } from '@/components/ui/Modal'
 import { Pager, PAGE_SIZE } from '@/components/ui/Pager'
@@ -48,6 +50,7 @@ import { Segmented } from '@/components/ui/Segmented'
 import { PageLoader } from '@/components/ui/Spinner'
 import { Table, Td, Th, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
+import { assigneeName, matchesAssignee } from '@/lib/assignee'
 import { cn } from '@/lib/cn'
 import { useCanPrice } from '@/lib/fees'
 import { clinicNowTime, clinicToday, fmtDate, fmtTime } from '@/lib/format'
@@ -77,6 +80,7 @@ export function AppointmentsPage() {
   const myId = useAuthStore((s) => s.session?.user_id)
   const canManage = useAuthStore((s) => s.can('appointments.manage'))
   const isDoctor = useAuthStore((s) => s.hasRole('doctor'))
+  const canRecordVaccines = useAuthStore((s) => s.can('vaccinations.record'))
   const today = clinicToday()
   // The date lives in the URL: deep links (notifications, dashboard, agenda) and the back
   // button land on the right day.
@@ -89,9 +93,10 @@ export function AppointmentsPage() {
   const [rescheduleTarget, setRescheduleTarget] = useState<Appointment | null>(null)
   const [feeTarget, setFeeTarget] = useState<Appointment | null>(null)
   const [vitalsTarget, setVitalsTarget] = useState<Appointment | null>(null)
+  const [visitTarget, setVisitTarget] = useState<VisitTarget | null>(null)
   const canPrice = useCanPrice()
   const [statusFilter, setStatusFilter] = useState<'all' | AppointmentStatus>('all')
-  const [doctorId, setDoctorId] = useState('')
+  const [assignee, setAssignee] = useState('')
   const [q, setQ] = useState('')
   const [offset, setOffset] = useState(0)
   const dateInput = useRef<HTMLInputElement>(null)
@@ -108,15 +113,19 @@ export function AppointmentsPage() {
     queryFn: () => appointmentsApi.listForDay(date),
   })
 
-  // Doctors only see their own appointments; the doctor filter is for the front desk.
+  // A doctor manages only their own appointments (the backend refuses the rest).
+  const canManageAppt = (a: Appointment) => canManage && (!isDoctor || a.doctor_id === myId)
+
+  // Doctors only see their own appointments; the doctor/agenda filter is for the front desk.
   const { data: options } = useQuery({
     queryKey: ['booking-options'],
     queryFn: () => appointmentsApi.bookingOptions(),
     enabled: canManage && !isDoctor,
   })
   const doctors = options?.doctors ?? []
+  const agendas = options?.agendas ?? []
 
-  const ofDoctor = (data ?? []).filter((a) => !doctorId || a.doctor_id === doctorId)
+  const ofDoctor = (data ?? []).filter((a) => matchesAssignee(a, assignee))
   const countBy = (s: AppointmentStatus) => ofDoctor.filter((a) => a.status === s).length
   const term = q.trim().toLowerCase()
   const visible = ofDoctor.filter(
@@ -128,7 +137,7 @@ export function AppointmentsPage() {
         a.code.toLowerCase().includes(term)),
   )
   const paged = visible.slice(offset, offset + PAGE_SIZE)
-  const showDoctorCol = !isDoctor && !doctorId
+  const showDoctorCol = !isDoctor && !assignee
 
   // On today's list, flag the appointment happening now and the next one due.
   const now = date === today ? clinicNowTime() : null
@@ -283,23 +292,17 @@ export function AppointmentsPage() {
             className="h-10 w-full rounded-lg border border-line bg-bg pl-9 pr-3 text-sm text-tx placeholder:text-tx-4 focus:border-accent focus:outline-none"
           />
         </div>
-        {doctors.length > 0 && (
-          <Select
-            value={doctorId}
-            onChange={(e) => {
-              setDoctorId(e.target.value)
+        {doctors.length + agendas.length > 0 && (
+          <AssigneeFilter
+            value={assignee}
+            onChange={(v) => {
+              setAssignee(v)
               setOffset(0)
             }}
+            doctors={doctors}
+            agendas={agendas}
             className="w-56"
-            aria-label={t('sched.doctor')}
-          >
-            <option value="">{t('sched.all_doctors')}</option>
-            {doctors.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </Select>
+          />
         )}
       </div>
 
@@ -357,7 +360,7 @@ export function AppointmentsPage() {
                 <tr>
                   <Th>{t('appt.col_time')}</Th>
                   <Th>{t('appt.col_patient')}</Th>
-                  {showDoctorCol && <Th>{t('appt.col_doctor')}</Th>}
+                  {showDoctorCol && <Th>{t('appt.attends')}</Th>}
                   <Th>{t('appt.col_reason')}</Th>
                   <Th>{t('appt.col_status')}</Th>
                   <Th className="text-right">{t('fee.col_fee')}</Th>
@@ -367,7 +370,7 @@ export function AppointmentsPage() {
               <tbody>
                 {paged.map((a) => {
                   const inactive = a.status === 'cancelled' || a.status === 'no_show'
-                  const manageable = canManage && PENDING.has(a.status)
+                  const manageable = canManageAppt(a) && PENDING.has(a.status)
                   const menu: MenuItem[] = [
                     ...(PENDING.has(a.status)
                       ? [
@@ -378,7 +381,10 @@ export function AppointmentsPage() {
                           },
                         ]
                       : []),
-                    ...(a.status !== 'cancelled' && canPrice(a.doctor_id)
+                    ...(a.status !== 'cancelled' &&
+                    a.type !== 'vaccination' &&
+                    canManageAppt(a) &&
+                    canPrice(a.doctor_id)
                       ? [
                           {
                             label: t('fee.adjust'),
@@ -459,7 +465,7 @@ export function AppointmentsPage() {
                         </Link>
                         <p className="font-mono text-xs text-tx-3">{a.code}</p>
                       </Td>
-                      {showDoctorCol && <Td>{a.doctor_name ?? '—'}</Td>}
+                      {showDoctorCol && <Td>{assigneeName(a, t)}</Td>}
                       <Td>
                         <p className="text-tx-2">{a.reason}</p>
                         <p className="text-xs text-tx-3">{t(`apptype.${a.type}`)}</p>
@@ -473,7 +479,7 @@ export function AppointmentsPage() {
                       <Td className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           {/* One clear next step per status; the rest lives in the ⋯ menu. */}
-                          {canManage && a.status === 'scheduled' && (
+                          {canManageAppt(a) && a.status === 'scheduled' && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -484,7 +490,7 @@ export function AppointmentsPage() {
                               {t('appt.confirm_appt')}
                             </Button>
                           )}
-                          {canConsult && a.status === 'confirmed' && (
+                          {canConsult && !a.agenda_id && a.status === 'confirmed' && (
                             <Button
                               size="sm"
                               loading={startConsult.isPending && startConsult.variables === a.id}
@@ -503,7 +509,24 @@ export function AppointmentsPage() {
                               {t('appt.continue')}
                             </Button>
                           )}
-                          {canVitals && (a.status === 'confirmed' || a.status === 'in_progress') && (
+                          {canRecordVaccines && a.type === 'vaccination' && date === today && ACTIVE.has(a.status) && (
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                setVisitTarget({
+                                  appointmentId: a.id,
+                                  patientId: a.patient_id,
+                                  patientName: a.patient_name,
+                                })
+                              }
+                            >
+                              <Syringe className="h-3.5 w-3.5" />
+                              {t('vax.visit_cta')}
+                            </Button>
+                          )}
+                          {canVitals &&
+                            !a.agenda_id &&
+                            (a.status === 'confirmed' || a.status === 'in_progress') && (
                             <Button size="sm" variant="outline" onClick={() => setVitalsTarget(a)}>
                               <HeartPulse className="h-3.5 w-3.5" />
                               {t('appt.vitals')}
@@ -594,6 +617,8 @@ export function AppointmentsPage() {
           </div>
         </div>
       </Modal>
+
+      <VaccinationVisitModal target={visitTarget} onClose={() => setVisitTarget(null)} />
 
       <ConsultationVitalsModal appointment={vitalsTarget} onClose={() => setVitalsTarget(null)} />
 

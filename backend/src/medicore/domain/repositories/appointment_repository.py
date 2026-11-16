@@ -6,13 +6,26 @@ from datetime import date, datetime
 from typing import Protocol
 
 from medicore.domain.entities.appointment import Appointment
-from medicore.domain.shared.identifiers import AppointmentId, PatientId, UserId
+from medicore.domain.shared.identifiers import (
+    AppointmentId,
+    PatientId,
+    ServiceAgendaId,
+    UserId,
+)
+from medicore.domain.value_objects.assignee import Assignee
 
 
 class AppointmentRepository(Protocol):
     def get_by_id(self, appointment_id: AppointmentId) -> Appointment | None: ...
 
-    def list_by_day(self, on: date, doctor_id: UserId | None = None) -> list[Appointment]: ...
+    def list_by_day(
+        self,
+        on: date,
+        doctor_id: UserId | None = None,
+        agenda_id: ServiceAgendaId | None = None,
+    ) -> list[Appointment]:
+        """The day's appointments, optionally of one doctor or of one service agenda."""
+        ...
 
     def list_by_patient(self, patient_id: PatientId) -> list[Appointment]: ...
 
@@ -43,9 +56,9 @@ class AppointmentRepository(Protocol):
         ...
 
     def find_overlapping(
-        self, doctor_id: UserId, start: datetime, end: datetime
+        self, assignee: Assignee, start: datetime, end: datetime
     ) -> list[Appointment]:
-        """Appointments for the doctor intersecting ``[start, end)`` (for slot checks)."""
+        """Appointments of the doctor or agenda intersecting ``[start, end)`` (for slot checks)."""
         ...
 
     def get_for_update(self, appointment_id: AppointmentId) -> Appointment | None:
@@ -57,18 +70,18 @@ class AppointmentRepository(Protocol):
         1. a clinical document: a consultation or a procedure (never both in one
            transaction);
         2. the appointment;
-        3. the doctor's bookings (``lock_doctor_bookings``);
+        3. the assignee's bookings (``lock_bookings``);
         4. a counter (record code, appointment code, ...), always last.
         Never lock a consultation or a procedure while holding an appointment, and never
         lock anything while holding a counter. Plain reads do not lock.
         """
         ...
 
-    def lock_doctor_bookings(self, doctor_id: UserId) -> None:
+    def lock_bookings(self, assignee: Assignee) -> None:
         """Serialize, until the transaction ends, everything that books or moves an
-        appointment of this doctor, so the overlap check that follows sees what concurrent
-        bookings committed. Level 3 of the lock order: after the appointment being moved,
-        before any counter."""
+        appointment of this doctor or service agenda, so the overlap check that follows sees
+        what concurrent bookings committed. Level 3 of the lock order: after the appointment
+        being moved, before any counter."""
         ...
 
     def save(self, appointment: Appointment) -> None: ...

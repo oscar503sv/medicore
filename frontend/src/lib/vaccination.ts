@@ -1,4 +1,9 @@
-import type { DoseStatus, ScheduledDose } from '@/api/vaccinations'
+import type {
+  DoseState,
+  DoseStatus,
+  ScheduledDose,
+  VaccinationCatalog,
+} from '@/api/vaccinations'
 import type { Tone } from '@/components/ui/badgeTone'
 
 type T = (key: string) => string
@@ -44,3 +49,18 @@ export const STATUS_TONE: Record<DoseStatus, Tone> = {
 
 /** Doses still to be chased (drive the counters and the worklist). */
 export const isPending = (s: DoseStatus) => s === 'due' || s === 'overdue'
+
+/** Doses of a vaccine that apply to this patient and can still be recorded (periodic doses
+ * repeat, so they are always offered; a dose with no state belongs to the other sex). */
+export function openDoses(
+  catalog: VaccinationCatalog,
+  states: DoseState[],
+  vaccine: string,
+): ScheduledDose[] {
+  const stateByKey = new Map(states.map((s) => [s.key, s]))
+  return catalog.doses.filter((d) => {
+    if (d.vaccine !== vaccine) return false
+    const st = stateByKey.get(d.key)
+    return !!st && (d.repeat_months != null || st.status !== 'administered')
+  })
+}
